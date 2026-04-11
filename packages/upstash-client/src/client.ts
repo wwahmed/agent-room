@@ -26,7 +26,7 @@ export function createClient(env: UpstashEnv): UpstashClient {
     }
     if (resp.status === 429) throw new RateLimitError();
     if (!resp.ok) throw new UpstashError(`Upstash HTTP ${resp.status}`);
-    return resp.json();
+    return resp.clone().json();
   }
 
   return {
