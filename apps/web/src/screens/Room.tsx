@@ -6,6 +6,7 @@ import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import type { Message } from '@agent-room/shared';
+import { draftReply } from '../lib/ai.js';
 
 export function Room() {
   const { code = '' } = useParams();
@@ -13,7 +14,27 @@ export function Room() {
   const self = stored ? JSON.parse(stored) as { name: string; role: string } : { name: 'Guest', role: '' };
   const { room, messages, error, sendMessage } = useRoom(code, self.name);
   const [text, setText] = useState('');
+  const [drafting, setDrafting] = useState(false);
+  const [draftErr, setDraftErr] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
+
+  async function handleDraft() {
+    if (!room) return;
+    setDrafting(true); setDraftErr(null);
+    try {
+      const suggestion = await draftReply({
+        topic: room.topic,
+        userName: self.name,
+        userRole: self.role,
+        history: messages,
+      });
+      setText(suggestion);
+    } catch (e) {
+      setDraftErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   useEffect(() => {
     feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
@@ -70,15 +91,25 @@ export function Room() {
           {messages.map(m => <Bubble key={m.id} message={m} self={m.name === self.name} />)}
         </div>
 
-        <div className="border-t border-border-faint p-3 bg-surface flex items-center gap-2">
-          <input
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Message the room…"
-            className="flex-1 px-3 py-2 bg-surface-softer border border-border rounded-lg text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
-          />
-          <button onClick={send} className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-semibold">Send</button>
+        <div className="border-t border-border-faint p-3 bg-surface flex flex-col gap-2">
+          {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDraft}
+              disabled={drafting}
+              className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-1 rounded disabled:opacity-50"
+            >
+              {drafting ? 'Drafting…' : '✨ Draft'}
+            </button>
+            <input
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+              placeholder="Message the room…"
+              className="flex-1 px-3 py-2 bg-surface-softer border border-border rounded-lg text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+            />
+            <button onClick={send} className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-semibold">Send</button>
+          </div>
         </div>
       </div>
     </div>
