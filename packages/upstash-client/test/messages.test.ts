@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message } from '@agent-room/shared';
-import { MAX_MESSAGES_PER_ROOM } from '@agent-room/shared';
+import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { createClient, appendMessage, listMessages } from '../src/index.js';
 
 const ENV = { url: 'https://example.upstash.io', token: 't' };
@@ -9,8 +9,10 @@ function mockResp(body: unknown) { return new Response(JSON.stringify(body)); }
 describe('appendMessage', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('RPUSHes a JSON-encoded message then LTRIMs to the cap', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResp([{ result: 1 }, { result: 'OK' }]));
+  it('RPUSHes the message, LTRIMs to the cap, and refreshes TTL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResp([{ result: 1 }, { result: 'OK' }, { result: 1 }])
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = createClient(ENV);
@@ -24,13 +26,16 @@ describe('appendMessage', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toMatch(/\/pipeline$/);
     const cmds = JSON.parse((init as any).body);
-    expect(cmds).toHaveLength(2);
+    expect(cmds).toHaveLength(3);
     expect(cmds[0][0]).toBe('RPUSH');
     expect(cmds[0][1]).toBe('room-msgs:ABC-DEF-GHJ');
     expect(JSON.parse(cmds[0][2])).toEqual(msg);
     expect(cmds[1][0]).toBe('LTRIM');
     expect(cmds[1][2]).toBe(-MAX_MESSAGES_PER_ROOM);
     expect(cmds[1][3]).toBe(-1);
+    expect(cmds[2][0]).toBe('EXPIRE');
+    expect(cmds[2][1]).toBe('room-msgs:ABC-DEF-GHJ');
+    expect(cmds[2][2]).toBe(ROOM_TTL_SECONDS);
   });
 });
 

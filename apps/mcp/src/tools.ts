@@ -73,6 +73,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
             code: { type: 'string' },
             name: { type: 'string' },
             text: { type: 'string' },
+            role: { type: 'string' },
           },
         },
       },
@@ -150,13 +151,22 @@ export function registerTools(server: Server, env: UpstashEnv) {
     }
 
     if (name === 'room_send') {
+      // If role is not provided, try to look it up from the current participants list
+      // so the sender's messages display consistently with how they joined.
+      let role: string = a.role ?? '';
+      if (!role) {
+        try {
+          const room = await getRoom(client, a.code);
+          role = room.participants.find((p) => p.name === a.name)?.role ?? '';
+        } catch { /* fall through with empty role */ }
+      }
       const msg: Message = {
         id: Date.now(),
         type: 'msg',
         name: a.name,
         initials: initialsFor(a.name),
         color: colorForName(a.name),
-        role: '',
+        role,
         text: a.text,
         client: 'cc',
         time: Date.now(),

@@ -6,3 +6,9 @@ dist
 *.tsbuildinfo
 .DS_Store
 .superpowers
+
+# tsc strays from pre-noEmit era (see apps/web/tsconfig.json)
+apps/web/src/**/*.js
+apps/web/src/**/*.js.map
+apps/web/src/**/*.d.ts
+apps/web/src/**/*.d.ts.map

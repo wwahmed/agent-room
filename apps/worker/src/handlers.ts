@@ -52,7 +52,7 @@ export async function handleAI(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: isDraft ? 400 : 1200,
+      max_tokens: isDraft ? 500 : 1200,
       system,
       messages: [{ role: 'user', content: user }],
     }),

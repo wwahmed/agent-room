@@ -44,14 +44,40 @@ export function useRoom(code: string, selfName: string) {
   useEffect(() => {
     cursor.current = 0;
     setState({ room: null, messages: [], error: null });
-    pullRoom();
-    pullMessages();
-    const msgTimer = setInterval(pullMessages, MESSAGE_POLL_MS);
-    const roomTimer = setInterval(pullRoom, ROOM_POLL_MS);
-    const hbTimer = setInterval(() => {
-      updatePresence(clientRef.current, code, selfName, Date.now()).catch(() => {});
-    }, HEARTBEAT_MS);
-    return () => { clearInterval(msgTimer); clearInterval(roomTimer); clearInterval(hbTimer); };
+
+    let msgTimer: ReturnType<typeof setInterval> | null = null;
+    let roomTimer: ReturnType<typeof setInterval> | null = null;
+    let hbTimer: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (msgTimer) return; // already running
+      pullRoom();
+      pullMessages();
+      msgTimer = setInterval(pullMessages, MESSAGE_POLL_MS);
+      roomTimer = setInterval(pullRoom, ROOM_POLL_MS);
+      hbTimer = setInterval(() => {
+        updatePresence(clientRef.current, code, selfName, Date.now()).catch(() => {});
+      }, HEARTBEAT_MS);
+    };
+    const stop = () => {
+      if (msgTimer) { clearInterval(msgTimer); msgTimer = null; }
+      if (roomTimer) { clearInterval(roomTimer); roomTimer = null; }
+      if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+    };
+
+    // Pause polling when the tab is hidden to conserve Upstash quota (spec §5.5)
+    const onVis = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    if (!document.hidden) start();
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      stop();
+    };
   }, [code, selfName, pullRoom, pullMessages]);
 
   const sendMessage = useCallback(async (msg: Message) => {

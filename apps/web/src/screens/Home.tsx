@@ -2,12 +2,25 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { isValidCode } from '@agent-room/shared';
 
+// Accept ABC-DEF-GHJ or ABCDEFGHJ — strip dashes then re-insert at segment boundaries
+function normalize(raw: string): string {
+  const bare = raw.replace(/-/g, '').trim().toUpperCase();
+  if (bare.length !== 9) return raw.trim().toUpperCase();
+  return `${bare.slice(0, 3)}-${bare.slice(3, 6)}-${bare.slice(6)}`;
+}
+
 export function Home() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
+  const [err, setErr] = useState<string | null>(null);
   function go() {
-    const normalized = code.trim().toUpperCase();
-    if (isValidCode(normalized)) navigate(`/j/${normalized}`);
+    const normalized = normalize(code);
+    if (isValidCode(normalized)) {
+      setErr(null);
+      navigate(`/j/${normalized}`);
+    } else {
+      setErr('Invalid code');
+    }
   }
   return (
     <div className="max-w-md mx-auto mt-24 p-8 bg-surface border border-border rounded-xl shadow-card">
@@ -24,12 +37,14 @@ export function Home() {
         <div className="flex gap-2">
           <input
             value={code}
-            onChange={e => setCode(e.target.value.toUpperCase())}
+            onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
             placeholder="ABC-DEF-GHJ"
             className="flex-1 font-mono text-sm px-3 py-2 bg-surface-softer border border-border rounded-lg outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
           />
           <button onClick={go} className="bg-surface border border-border px-4 rounded-lg text-sm font-semibold text-ink-muted">Join</button>
         </div>
+        {err && <div className="text-[11px] text-red-600 mt-2">{err}</div>}
       </div>
     </div>
   );
