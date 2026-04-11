@@ -62,6 +62,10 @@ export async function casRoom(
   throw lastError instanceof ConcurrencyError ? lastError : new ConcurrencyError();
 }
 
+// Name is the participant identity in MVP (spec §14: no user accounts).
+// Same name re-joining replaces the prior entry — this makes browser refresh
+// idempotent. Two different humans choosing the same name is a known MVP
+// collision; acceptable until real accounts land in Phase 2+.
 export async function joinRoom(
   client: UpstashClient,
   code: string,
@@ -76,6 +80,10 @@ export async function joinRoom(
   }));
 }
 
+// Silent no-op if the named participant is not in the room. In practice the
+// caller passes its own name from session state, so a miss means the user was
+// removed externally — we just skip the heartbeat. version still bumps so
+// drift remains visible if it ever matters.
 export async function updatePresence(
   client: UpstashClient,
   code: string,
