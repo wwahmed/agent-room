@@ -6,7 +6,9 @@ import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import type { Message } from '@agent-room/shared';
-import { draftReply } from '../lib/ai.js';
+import { draftReply, generateMinutes } from '../lib/ai.js';
+import { createClient } from '@agent-room/upstash-client';
+import { ENV } from '../env.js';
 
 export function Room() {
   const { code = '' } = useParams();
@@ -33,6 +35,34 @@ export function Room() {
       setDraftErr(e instanceof Error ? e.message : String(e));
     } finally {
       setDrafting(false);
+    }
+  }
+
+  const [tab, setTab] = useState<'discussion' | 'minutes'>('discussion');
+  const [minutesText, setMinutesText] = useState<string>('');
+  const [minutesBusy, setMinutesBusy] = useState(false);
+
+  // Hydrate cached minutes from Redis on mount (spec §3.3 — room-min:{code})
+  useEffect(() => {
+    const client = createClient(ENV.upstash);
+    client.command<string | null>(['GET', `room-min:${code}`])
+      .then(cached => { if (cached) setMinutesText(cached); })
+      .catch(() => {});
+  }, [code]);
+
+  async function handleMinutes() {
+    if (!room) return;
+    setMinutesBusy(true);
+    try {
+      const text = await generateMinutes({ topic: room.topic, history: messages });
+      setMinutesText(text);
+      // Cache the minutes so other clients see the same version (spec §3.3)
+      const client = createClient(ENV.upstash);
+      await client.command(['SET', `room-min:${code}`, text, 'EX', 86400]);
+    } catch (e) {
+      setMinutesText(e instanceof Error ? `Error: ${e.message}` : String(e));
+    } finally {
+      setMinutesBusy(false);
     }
   }
 
@@ -87,9 +117,27 @@ export function Room() {
           </div>
         </header>
 
-        <div ref={feedRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-surface-soft">
-          {messages.map(m => <Bubble key={m.id} message={m} self={m.name === self.name} />)}
+        <div className="flex gap-4 px-4 py-2 border-b border-border-faint bg-surface text-[11px]">
+          <button onClick={() => setTab('discussion')} className={tab === 'discussion' ? 'font-semibold text-ink' : 'text-ink-soft'}>Discussion</button>
+          <button onClick={() => setTab('minutes')} className={tab === 'minutes' ? 'font-semibold text-ink' : 'text-ink-soft'}>Minutes</button>
         </div>
+
+        {tab === 'discussion' ? (
+          <div ref={feedRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-surface-soft">
+            {messages.map(m => <Bubble key={m.id} message={m} self={m.name === self.name} />)}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-5 bg-surface-soft">
+            <button
+              onClick={handleMinutes}
+              disabled={minutesBusy}
+              className="mb-4 bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50"
+            >
+              {minutesBusy ? 'Generating…' : 'Generate minutes'}
+            </button>
+            <pre className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{minutesText}</pre>
+          </div>
+        )}
 
         <div className="border-t border-border-faint p-3 bg-surface flex flex-col gap-2">
           {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
