@@ -1,0 +1,7 @@
+name = "agent-room-worker"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+
+[vars]
+# ANTHROPIC_API_KEY is set via `wrangler secret put ANTHROPIC_API_KEY`
+ALLOWED_ORIGIN = "http://localhost:5173"
