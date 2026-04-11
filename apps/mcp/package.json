@@ -1,0 +1,23 @@
+{
+  "name": "@agent-room/mcp",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": { "agent-room-mcp": "./bin.js" },
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-room/shared": "*",
+    "@agent-room/upstash-client": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
