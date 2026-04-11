@@ -34,4 +34,27 @@ describe('createClient', () => {
     const client = createClient(ENV);
     await expect(client.command(['GET', 'x'])).rejects.toBeInstanceOf(RateLimitError);
   });
+
+  it('pipeline POSTs to /pipeline and unpacks the result array', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([{ result: 1 }, { result: 'OK' }]))
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    const results = await client.pipeline([
+      ['RPUSH', 'key', 'a'],
+      ['LTRIM', 'key', -5, -1],
+    ]);
+
+    expect(results).toEqual([1, 'OK']);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('https://example.upstash.io/pipeline');
+    expect((init as RequestInit).method).toBe('POST');
+    const body = JSON.parse((init as any).body);
+    expect(body).toEqual([
+      ['RPUSH', 'key', 'a'],
+      ['LTRIM', 'key', -5, -1],
+    ]);
+  });
 });
