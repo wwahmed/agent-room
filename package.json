@@ -1,0 +1,18 @@
+{
+  "name": "agent-room",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm -ws run test --if-present",
+    "build": "npm -ws run build --if-present",
+    "dev:web": "npm -w apps/web run dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0"
+  }
+}
