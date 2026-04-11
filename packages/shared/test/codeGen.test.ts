@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateCode, isValidCode, CODE_CHARS, CODE_LEN } from '../src/index.js';
+import { generateCode, isValidCode, CODE_CHARS } from '../src/index.js';
 
 describe('generateCode', () => {
   it('returns a string in XXX-XXX-XXX format', () => {
