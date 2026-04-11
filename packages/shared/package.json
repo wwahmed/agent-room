@@ -1,0 +1,18 @@
+{
+  "name": "@agent-room/shared",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0"
+  }
+}
