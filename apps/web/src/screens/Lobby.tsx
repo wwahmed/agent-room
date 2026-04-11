@@ -1,0 +1,102 @@
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { createClient, getRoom, joinRoom, RoomNotFoundError } from '@agent-room/upstash-client';
+import type { Room } from '@agent-room/shared';
+import { ROOM_POLL_MS } from '@agent-room/shared';
+import { ENV } from '../env.js';
+import { Avatar } from '../components/Avatar.js';
+import { colorForName, initialsFor } from '../lib/colors.js';
+import { copyText } from '../lib/copy.js';
+
+export function Lobby() {
+  const { code = '' } = useParams();
+  const navigate = useNavigate();
+  const [room, setRoom] = useState<Room | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const client = createClient(ENV.upstash);
+    const stored = sessionStorage.getItem(`room:${code}:self`);
+    const self = stored ? JSON.parse(stored) as { name: string; role: string } : null;
+
+    let cancelled = false;
+
+    async function ensureJoined() {
+      try {
+        if (self && !cancelled) {
+          await joinRoom(client, code, {
+            name: self.name,
+            role: self.role,
+            color: colorForName(self.name),
+            initials: initialsFor(self.name),
+            client: 'web',
+            joinedAt: Date.now(),
+            lastSeenAt: Date.now(),
+          });
+        }
+        await refresh();
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e));
+      }
+    }
+
+    async function refresh() {
+      try {
+        const r = await getRoom(client, code);
+        if (!cancelled) setRoom(r);
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e));
+      }
+    }
+
+    ensureJoined();
+    const t = setInterval(refresh, ROOM_POLL_MS);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [code]);
+
+  if (err) return <div className="p-10 text-red-600">{err}</div>;
+  if (!room) return <div className="p-10 text-ink-soft">Loading…</div>;
+
+  const inviteText = `Room invite · ${room.topic}\nCode: ${code}\nOpen Room and enter the code to join.`;
+
+  return (
+    <div className="max-w-md mx-auto mt-20 p-8 bg-surface border border-border rounded-xl shadow-card">
+      <h1 className="text-lg font-semibold tracking-tight">Share the room</h1>
+      <p className="text-xs text-ink-soft mt-1 mb-5">Anyone with the code can join.</p>
+
+      <div className="bg-surface-soft border border-border rounded-xl p-5 text-center mb-4 relative">
+        <div className="text-[9px] uppercase tracking-widest font-semibold text-ink-faint mb-1.5">Meeting code</div>
+        <div className="font-mono text-2xl font-bold tracking-[0.06em]">{code}</div>
+        <button onClick={() => copyText(code, 'Meeting code copied')}
+          className="absolute top-2.5 right-2.5 bg-surface border border-border w-7 h-7 rounded-md text-ink-soft text-xs">⎘</button>
+      </div>
+
+      <div className="bg-surface-softer border border-dashed border-border rounded-lg p-3 text-[10px] text-ink-soft leading-relaxed mb-4 relative whitespace-pre-line">
+        <button onClick={() => copyText(inviteText, 'Invite copied')}
+          className="absolute top-2 right-2 bg-surface border border-border px-2 py-0.5 rounded text-[9px] font-semibold text-ink-muted">⎘ Copy</button>
+        {inviteText}
+      </div>
+
+      <div className="mb-6">
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+          <span className="text-[10px] font-semibold text-ink-muted">Participants · {room.participants.length} here</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {room.participants.map(p => (
+            <div key={p.name} className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-soft rounded-md text-xs">
+              <Avatar initials={p.initials} color={p.color} size="md" />
+              <span className="font-semibold">{p.name}</span>
+              {p.role && <span className="text-[9px] text-ink-faint">· {p.role}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={() => navigate('/')} className="flex-1 bg-surface border border-border py-2.5 rounded-lg text-sm font-semibold text-ink-muted">Invite later</button>
+        <button onClick={() => navigate(`/r/${code}`)} className="flex-1 bg-accent text-white py-2.5 rounded-lg text-sm font-semibold">Enter room →</button>
+      </div>
+    </div>
+  );
+}
