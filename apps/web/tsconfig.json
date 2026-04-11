@@ -4,6 +4,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
+    "noEmit": true,
     "paths": {
       "@agent-room/shared": ["../../packages/shared/src/index.ts"],
       "@agent-room/upstash-client": ["../../packages/upstash-client/src/index.ts"]
