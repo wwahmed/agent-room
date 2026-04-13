@@ -5,6 +5,8 @@ import {
   createRoom,
   getRoom,
   joinRoom,
+  endRoom,
+  reactivateRoom,
   appendMessage,
   listMessages,
   type UpstashEnv,
@@ -27,10 +29,13 @@ function colorForName(name: string): string {
 function ok(value: unknown) {
   return {
     content: [
-      { type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) },
+      { type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) },
     ],
   };
 }
+
+// Active watchers — one per room code
+const watchers = new Map<string, { stop: () => void }>();
 
 export function registerTools(server: Server, env: UpstashEnv) {
   const client = createClient(env);
@@ -39,74 +44,117 @@ export function registerTools(server: Server, env: UpstashEnv) {
     tools: [
       {
         name: 'room_create',
-        description: 'Create a new meeting room and return the 9-char code.',
+        description:
+          'Create a new AI Room meeting and join it. Returns room code, join URL, and cursor for listening. After creating, use CronCreate to poll room_list_messages every minute for real-time monitoring.',
         inputSchema: {
           type: 'object',
           required: ['topic', 'name'],
           properties: {
-            topic: { type: 'string' },
-            name: { type: 'string' },
-            role: { type: 'string' },
+            topic: { type: 'string', description: 'Meeting topic' },
+            name: { type: 'string', description: 'Your display name' },
+            role: { type: 'string', description: 'Your role (optional)' },
           },
         },
       },
       {
         name: 'room_join',
-        description: 'Join an existing meeting as the named participant.',
+        description:
+          'Join an existing AI Room meeting. Returns room info and cursor for listening. After joining, use CronCreate to poll room_list_messages every minute for real-time monitoring.',
         inputSchema: {
           type: 'object',
           required: ['code', 'name'],
           properties: {
-            code: { type: 'string' },
-            name: { type: 'string' },
-            role: { type: 'string' },
+            code: { type: 'string', description: '9-char room code (e.g. ABC-DEF-GHJ)' },
+            name: { type: 'string', description: 'Your display name' },
+            role: { type: 'string', description: 'Your role (optional)' },
           },
         },
       },
       {
         name: 'room_send',
-        description: 'Send a message to a meeting room as the joined participant.',
+        description: 'Send a message to the room.',
         inputSchema: {
           type: 'object',
           required: ['code', 'name', 'text'],
           properties: {
-            code: { type: 'string' },
-            name: { type: 'string' },
-            text: { type: 'string' },
-            role: { type: 'string' },
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name' },
+            text: { type: 'string', description: 'Message text' },
+            role: { type: 'string', description: 'Your role (optional)' },
           },
         },
       },
       {
         name: 'room_list_messages',
-        description: 'List messages from a room starting at an index.',
+        description: 'Get all messages from a room, optionally starting from a cursor.',
         inputSchema: {
           type: 'object',
           required: ['code'],
           properties: {
             code: { type: 'string' },
-            since: { type: 'number' },
+            since: { type: 'number', description: 'Cursor index (0 = from beginning)' },
           },
         },
       },
       {
         name: 'room_listen',
         description:
-          'Long-poll for new messages. Polls every 2s until a message arrives or timeoutMs elapses.',
+          'Poll for new messages once. Returns new messages and updated cursor. For continuous monitoring, use room_watch instead.',
         inputSchema: {
           type: 'object',
           required: ['code', 'since'],
           properties: {
             code: { type: 'string' },
-            since: { type: 'number' },
-            timeoutMs: { type: 'number' },
+            since: { type: 'number', description: 'Cursor from previous call' },
+            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 30000)' },
           },
+        },
+      },
+      {
+        name: 'room_watch',
+        description:
+          'Start continuous background monitoring of a room. New messages are pushed as logging notifications (works in Cursor/Windsurf). For Claude Code, logging notifications are not surfaced to the model — use CronCreate to poll room_list_messages every minute instead. Only one watcher per room. Returns immediately.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'since'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            since: { type: 'number', description: 'Cursor to start watching from' },
+            name: { type: 'string', description: 'Your name (to filter out own messages)' },
+          },
+        },
+      },
+      {
+        name: 'room_unwatch',
+        description: 'Stop watching a room.',
+        inputSchema: {
+          type: 'object',
+          required: ['code'],
+          properties: { code: { type: 'string' } },
+        },
+      },
+      {
+        name: 'room_end',
+        description: 'End a meeting. The room becomes read-only but can be reactivated within 24h.',
+        inputSchema: {
+          type: 'object',
+          required: ['code'],
+          properties: { code: { type: 'string' } },
+        },
+      },
+      {
+        name: 'room_reactivate',
+        description: 'Reactivate an ended meeting.',
+        inputSchema: {
+          type: 'object',
+          required: ['code'],
+          properties: { code: { type: 'string' } },
         },
       },
       {
         name: 'room_minutes',
         description:
-          "Return the room's topic, participants and full transcript so the CC agent can summarize it.",
+          "Get room topic, participants and full transcript for summarization.",
         inputSchema: {
           type: 'object',
           required: ['code'],
@@ -133,7 +181,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
         lastSeenAt: Date.now(),
       };
       await joinRoom(client, code, participant);
-      return ok({ code, topic: room.topic });
+      const msgs = await listMessages(client, code, 0);
+      return ok({
+        code,
+        topic: room.topic,
+        cursor: msgs.length,
+        joinUrl: `https://ai-room.vercel.app/j/${code}`,
+        hint: 'Room created. Call room_watch to start monitoring messages.',
+      });
     }
 
     if (name === 'room_join') {
@@ -147,18 +202,23 @@ export function registerTools(server: Server, env: UpstashEnv) {
         lastSeenAt: Date.now(),
       };
       const updated = await joinRoom(client, a.code, participant);
-      return ok({ topic: updated.topic, participants: updated.participants.map((p) => p.name) });
+      const msgs = await listMessages(client, a.code, 0);
+      return ok({
+        code: a.code,
+        topic: updated.topic,
+        participants: updated.participants.map((p: Participant) => p.name),
+        cursor: msgs.length,
+        hint: 'Joined. Call room_watch to start monitoring messages.',
+      });
     }
 
     if (name === 'room_send') {
-      // If role is not provided, try to look it up from the current participants list
-      // so the sender's messages display consistently with how they joined.
       let role: string = a.role ?? '';
       if (!role) {
         try {
           const room = await getRoom(client, a.code);
-          role = room.participants.find((p) => p.name === a.name)?.role ?? '';
-        } catch { /* fall through with empty role */ }
+          role = room.participants.find((p: Participant) => p.name === a.name)?.role ?? '';
+        } catch { /* fall through */ }
       }
       const msg: Message = {
         id: Date.now(),
@@ -172,25 +232,110 @@ export function registerTools(server: Server, env: UpstashEnv) {
         time: Date.now(),
       };
       await appendMessage(client, a.code, msg);
-      return ok('sent');
+      const msgs = await listMessages(client, a.code, 0);
+      return ok({ sent: true, cursor: msgs.length });
     }
 
     if (name === 'room_list_messages') {
       const since = typeof a.since === 'number' ? a.since : 0;
       const msgs = await listMessages(client, a.code, since);
-      return ok(msgs);
+      return ok({ messages: msgs, cursor: since + msgs.length });
     }
 
     if (name === 'room_listen') {
       const since = a.since ?? 0;
-      const timeoutMs = a.timeoutMs ?? 10000;
+      const timeoutMs = a.timeoutMs ?? 30000;
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         const msgs = await listMessages(client, a.code, since);
-        if (msgs.length > 0) return ok(msgs);
+        if (msgs.length > 0) {
+          return ok({ messages: msgs, cursor: since + msgs.length });
+        }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      return ok([]);
+      return ok({ messages: [], cursor: since });
+    }
+
+    if (name === 'room_watch') {
+      const code = a.code;
+      const selfName = a.name || '';
+
+      // Stop existing watcher for this room
+      if (watchers.has(code)) {
+        watchers.get(code)!.stop();
+      }
+
+      let cursor = a.since ?? 0;
+      let running = true;
+
+      const poll = async () => {
+        while (running) {
+          try {
+            const msgs = await listMessages(client, code, cursor);
+            if (msgs.length > 0) {
+              cursor += msgs.length;
+              // Filter out own messages
+              const others = msgs.filter((m: Message) => !(m.client === 'cc' && m.name === selfName));
+              if (others.length > 0) {
+                const summary = others.map((m: Message) => `${m.name}: ${m.text}`).join('\n');
+                try {
+                  await server.sendLoggingMessage({
+                    level: 'info',
+                    logger: `room:${code}`,
+                    data: JSON.stringify({
+                      type: 'new_messages',
+                      code,
+                      cursor,
+                      messages: others.map((m: Message) => ({
+                        name: m.name,
+                        text: m.text,
+                        time: m.time,
+                        client: m.client,
+                      })),
+                      summary,
+                    }),
+                  });
+                } catch { /* client may not support logging */ }
+              }
+            }
+          } catch { /* network error, retry */ }
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      };
+
+      poll(); // fire and forget
+
+      watchers.set(code, { stop: () => { running = false; } });
+
+      return ok({
+        watching: true,
+        code,
+        cursor,
+        hint: 'Background watcher started. Logging notifications will be pushed for clients that support it. For Claude Code, use CronCreate with room_list_messages for reliable polling.',
+      });
+    }
+
+    if (name === 'room_unwatch') {
+      const w = watchers.get(a.code);
+      if (w) {
+        w.stop();
+        watchers.delete(a.code);
+        return ok({ stopped: true, code: a.code });
+      }
+      return ok({ stopped: false, message: 'No active watcher for this room' });
+    }
+
+    if (name === 'room_end') {
+      await endRoom(client, a.code);
+      // Stop watcher if active
+      const w = watchers.get(a.code);
+      if (w) { w.stop(); watchers.delete(a.code); }
+      return ok({ ended: true, code: a.code });
+    }
+
+    if (name === 'room_reactivate') {
+      await reactivateRoom(client, a.code);
+      return ok({ reactivated: true, code: a.code });
     }
 
     if (name === 'room_minutes') {
@@ -198,8 +343,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
       const room = await getRoom(client, a.code);
       return ok({
         topic: room.topic,
-        participants: room.participants.map((p) => p.name),
-        transcript: all.map((m) => `${m.name}: ${m.text}`).join('\n'),
+        participants: room.participants.map((p: Participant) => p.name),
+        transcript: all.map((m: Message) => `${m.name}: ${m.text}`).join('\n'),
       });
     }
 

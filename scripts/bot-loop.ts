@@ -1,0 +1,182 @@
+// Bot auto-reply loop. Polls a room every 2s, replies to any new non-Bot message.
+//
+// Reply strategies, in priority order:
+//  1. ANTHROPIC_API_KEY set → call api.anthropic.com directly
+//  2. WORKER_URL set       → POST /api/draft to the deployed Worker
+//  3. Otherwise            → rule-based templated reply
+//
+// Usage:
+//   UPSTASH_REDIS_REST_URL=... UPSTASH_REDIS_REST_TOKEN=... CODE=XXX-XXX-XXX \
+//   [ANTHROPIC_API_KEY=sk-ant-...] [WORKER_URL=https://...] \
+//   npx tsx scripts/bot-loop.ts
+
+import {
+  createClient,
+  getRoom,
+  joinRoom,
+  appendMessage,
+  listMessages,
+} from '../packages/upstash-client/src/index.ts';
+import type { Message, Participant } from '../packages/shared/src/types.ts';
+
+const env = {
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+};
+const code = process.env.CODE;
+const workerUrl = process.env.WORKER_URL;
+const anthropicKey = process.env.ANTHROPIC_API_KEY;
+if (!env.url || !env.token || !code) {
+  console.error('Set UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, CODE');
+  process.exit(1);
+}
+const mode = anthropicKey ? 'anthropic-direct' : workerUrl ? 'worker-proxy' : 'rule-based';
+
+const BOT_NAME = 'Bot';
+const BOT_COLOR = '#10B981';
+const BOT_INITIALS = 'BO';
+const BOT_ROLE = 'Integration tester';
+
+const client = createClient(env);
+
+const TEMPLATES = [
+  (name: string, text: string) => `@${name} got it — "${truncate(text)}". acknowledged.`,
+  (name: string, text: string) => `interesting take, @${name}. "${truncate(text)}" — i'll note that.`,
+  (name: string, text: string) => `@${name} received: "${truncate(text)}" ✓`,
+  (name: string, text: string) => `roger that @${name}. reacting to: "${truncate(text)}"`,
+  (name: string, text: string) => `@${name} thanks for "${truncate(text)}". back to work.`,
+];
+let templateIdx = 0;
+
+function truncate(s: string, max = 40): string {
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+const ANTHROPIC_MODEL = 'claude-sonnet-4-5-20250929';
+const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+
+async function generateReplyAnthropic(topic: string, history: Message[]): Promise<string> {
+  const historyText = history.slice(-20).map(m => `${m.name}: ${m.text}`).join('\n');
+  const system = `You are Bot, an AI agent sitting in a multi-agent meeting room. Your role is "${BOT_ROLE}". The meeting topic is "${topic}". Keep replies short (1-2 sentences), conversational, first-person, and natural. Output only the message text, no labels, no quoting.`;
+  const user = `Discussion so far:\n${historyText}\n\nWrite your next message to the room.`;
+
+  const r = await fetch(ANTHROPIC_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'x-api-key': anthropicKey!,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 300,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  });
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Anthropic HTTP ${r.status}: ${body.slice(0, 200)}`);
+  }
+  const data = await r.json() as { content: Array<{ type: string; text?: string }> };
+  return data.content.map(c => c.text ?? '').join('').trim();
+}
+
+async function generateReplyWorker(topic: string, history: Message[]): Promise<string> {
+  const r = await fetch(`${workerUrl}/api/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      topic,
+      userName: BOT_NAME,
+      userRole: BOT_ROLE,
+      history: history.slice(-20).map(m => ({ name: m.name, text: m.text })),
+    }),
+  });
+  if (!r.ok) throw new Error(`Worker HTTP ${r.status}`);
+  const { text } = (await r.json()) as { text: string };
+  return text.trim();
+}
+
+function generateReplyTemplate(sender: string, text: string): string {
+  const tmpl = TEMPLATES[templateIdx % TEMPLATES.length]!;
+  templateIdx++;
+  return tmpl(sender, text);
+}
+
+async function generateReply(topic: string, sender: string, text: string, history: Message[]): Promise<string> {
+  if (anthropicKey) {
+    try {
+      return await generateReplyAnthropic(topic, history);
+    } catch (e) {
+      console.error(`[anthropic] ${String(e)} — falling back`);
+    }
+  }
+  if (workerUrl) {
+    try {
+      return await generateReplyWorker(topic, history);
+    } catch (e) {
+      console.error(`[worker] ${String(e)} — falling back to template`);
+    }
+  }
+  return generateReplyTemplate(sender, text);
+}
+
+async function main() {
+  console.log(`[bot] connecting to room ${code} [mode: ${mode}]`);
+
+  const room = await getRoom(client, code!);
+  console.log(`[bot] joined "${room.topic}" hosted by ${room.createdBy}`);
+
+  const botParticipant: Participant = {
+    name: BOT_NAME,
+    role: BOT_ROLE,
+    color: BOT_COLOR,
+    initials: BOT_INITIALS,
+    client: 'cc',
+    joinedAt: Date.now(),
+    lastSeenAt: Date.now(),
+  };
+  await joinRoom(client, code!, botParticipant);
+
+  // Start cursor at the end of existing messages — we only respond to NEW stuff
+  const existing = await listMessages(client, code!, 0);
+  let cursor = existing.length;
+  console.log(`[bot] starting cursor at index ${cursor} (${existing.length} existing messages)`);
+  console.log(`[bot] watching for new messages... (Ctrl+C to stop)`);
+
+  while (true) {
+    try {
+      const fresh = await listMessages(client, code!, cursor);
+      for (const msg of fresh) {
+        cursor++;
+        if (msg.name === BOT_NAME) continue; // skip our own messages
+
+        const t = new Date(msg.time).toLocaleTimeString();
+        console.log(`[${t}] ← ${msg.name}: ${msg.text}`);
+
+        const replyText = await generateReply(room.topic, msg.name, msg.text, existing.concat(fresh));
+        const reply: Message = {
+          id: Date.now(),
+          type: 'msg',
+          name: BOT_NAME,
+          initials: BOT_INITIALS,
+          color: BOT_COLOR,
+          role: BOT_ROLE,
+          text: replyText,
+          client: 'cc',
+          time: Date.now(),
+        };
+        await appendMessage(client, code!, reply);
+        cursor++; // account for our own reply we just RPUSHed
+        const rt = new Date(reply.time).toLocaleTimeString();
+        console.log(`[${rt}] → ${BOT_NAME}: ${replyText}`);
+      }
+    } catch (e) {
+      console.error(`[bot] poll error: ${String(e)}`);
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+main().catch(e => { console.error(e); process.exit(2); });

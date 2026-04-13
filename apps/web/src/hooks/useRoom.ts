@@ -26,7 +26,12 @@ export function useRoom(code: string, selfName: string) {
       const fresh = await listMessages(clientRef.current, code, cursor.current);
       if (fresh.length === 0) return;
       cursor.current += fresh.length;
-      setState(s => ({ ...s, messages: [...s.messages, ...fresh] }));
+      setState(s => {
+        const seen = new Set(s.messages.map(m => m.id));
+        const deduped = fresh.filter(m => !seen.has(m.id));
+        if (deduped.length === 0) return s;
+        return { ...s, messages: [...s.messages, ...deduped] };
+      });
     } catch (e) {
       setState(s => ({ ...s, error: String(e) }));
     }

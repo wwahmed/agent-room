@@ -84,6 +84,28 @@ export async function joinRoom(
 // caller passes its own name from session state, so a miss means the user was
 // removed externally — we just skip the heartbeat. version still bumps so
 // drift remains visible if it ever matters.
+export async function endRoom(
+  client: UpstashClient,
+  code: string,
+): Promise<Room> {
+  return casRoom(client, code, (current) => ({
+    ...current,
+    status: 'ended' as const,
+    endedAt: Date.now(),
+  }));
+}
+
+export async function reactivateRoom(
+  client: UpstashClient,
+  code: string,
+): Promise<Room> {
+  return casRoom(client, code, (current) => ({
+    ...current,
+    status: 'active' as const,
+    endedAt: undefined,
+  }));
+}
+
 export async function updatePresence(
   client: UpstashClient,
   code: string,

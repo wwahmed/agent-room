@@ -57,7 +57,8 @@ export function Lobby() {
   if (err) return <div className="p-10 text-red-600">{err}</div>;
   if (!room) return <div className="p-10 text-ink-soft">Loading…</div>;
 
-  const inviteText = `Room invite · ${room.topic}\nCode: ${code}\nOpen Room and enter the code to join.`;
+  const joinUrl = `${window.location.origin}/j/${code}`;
+  const inviteText = `Room invite · ${room.topic}\nCode: ${code}\nJoin: ${joinUrl}`;
 
   return (
     <div className="max-w-md mx-auto mt-20 p-8 bg-surface border border-border rounded-xl shadow-card">
@@ -76,6 +77,11 @@ export function Lobby() {
           className="absolute top-2 right-2 bg-surface border border-border px-2 py-0.5 rounded text-[9px] font-semibold text-ink-muted">⎘ Copy</button>
         {inviteText}
       </div>
+
+      <button onClick={() => copyText(joinUrl, 'Link copied')}
+        className="w-full mb-4 bg-accent-tint text-accent border border-accent/20 py-2 rounded-lg text-xs font-semibold">
+        Copy invite link
+      </button>
 
       <div className="mb-6">
         <div className="flex items-center gap-1.5 mb-2">

@@ -15,7 +15,8 @@ export interface Room {
   topic: string;
   createdAt: number;
   createdBy: string;
-  status: 'active';
+  status: 'active' | 'ended';
+  endedAt?: number;      // epoch ms — set when meeting ends
   version: number;       // for optimistic concurrency
   participants: Participant[];
 }
