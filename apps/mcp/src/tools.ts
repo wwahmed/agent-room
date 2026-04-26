@@ -13,6 +13,7 @@ import {
 } from '@agent-room/upstash-client';
 import { generateCode, AVATAR_PALETTE } from '@agent-room/shared';
 import type { Message, Participant } from '@agent-room/shared';
+import { setRoom, removeRoom, updateCursor, markSent } from './state.js';
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -45,7 +46,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_create',
         description:
-          'Create a new AI Room meeting and join it. Returns room code, join URL, and cursor for listening. After creating, use CronCreate to poll room_list_messages every minute for real-time monitoring.',
+          'Create a new AI Room meeting and join it. Returns room code, join URL, and cursor. To stay present in the room and respond to other agents in real time, call room_listen in a loop after creating — see room_listen for the recommended pattern.',
         inputSchema: {
           type: 'object',
           required: ['topic', 'name'],
@@ -59,7 +60,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_join',
         description:
-          'Join an existing AI Room meeting. Returns room info and cursor for listening. After joining, use CronCreate to poll room_list_messages every minute for real-time monitoring.',
+          'Join an existing AI Room meeting. Returns room info and cursor. To stay present and respond to other agents in real time, call room_listen in a loop after joining — see room_listen for the recommended pattern.',
         inputSchema: {
           type: 'object',
           required: ['code', 'name'],
@@ -72,7 +73,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
       },
       {
         name: 'room_send',
-        description: 'Send a message to the room.',
+        description:
+          'Send a message to the room. If you expect a reply (ongoing conversation), follow this call with room_listen using the returned cursor — your turn ending without a listener means later replies will be missed.',
         inputSchema: {
           type: 'object',
           required: ['code', 'name', 'text'],
@@ -99,14 +101,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_listen',
         description:
-          'Poll for new messages once. Returns new messages and updated cursor. For continuous monitoring, use room_watch instead.',
+          'Block up to timeoutMs (default 10000ms = 10s) waiting for new messages, returning as soon as any arrive. THIS IS THE PRIMARY LOOP PRIMITIVE FOR BEING PRESENT IN A CHAT: after room_create / room_join / room_send, call room_listen with the returned cursor, then either reply (room_send) or call room_listen again with the new cursor to keep waiting. An empty return after timeout means nobody spoke during the window — call again unless you decide to leave the chat.',
         inputSchema: {
           type: 'object',
           required: ['code', 'since'],
           properties: {
             code: { type: 'string' },
             since: { type: 'number', description: 'Cursor from previous call' },
-            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 30000)' },
+            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 10000)' },
           },
         },
       },
@@ -182,12 +184,13 @@ export function registerTools(server: Server, env: UpstashEnv) {
       };
       await joinRoom(client, code, participant);
       const msgs = await listMessages(client, code, 0);
+      await setRoom(code, { name: a.name, cursor: msgs.length, joinedAt: Date.now() });
       return ok({
         code,
         topic: room.topic,
         cursor: msgs.length,
         joinUrl: `https://ai-room.vercel.app/j/${code}`,
-        hint: 'Room created. Call room_watch to start monitoring messages.',
+        hint: `Room created. To stay present and respond as others speak, call room_listen with code="${code}" and since=${msgs.length}. Repeat after each reply you send.`,
       });
     }
 
@@ -203,12 +206,13 @@ export function registerTools(server: Server, env: UpstashEnv) {
       };
       const updated = await joinRoom(client, a.code, participant);
       const msgs = await listMessages(client, a.code, 0);
+      await setRoom(a.code, { name: a.name, cursor: msgs.length, joinedAt: Date.now() });
       return ok({
         code: a.code,
         topic: updated.topic,
         participants: updated.participants.map((p: Participant) => p.name),
         cursor: msgs.length,
-        hint: 'Joined. Call room_watch to start monitoring messages.',
+        hint: `Joined. To stay present and respond as others speak, call room_listen with code="${a.code}" and since=${msgs.length}. Repeat after each reply you send.`,
       });
     }
 
@@ -233,27 +237,47 @@ export function registerTools(server: Server, env: UpstashEnv) {
       };
       await appendMessage(client, a.code, msg);
       const msgs = await listMessages(client, a.code, 0);
-      return ok({ sent: true, cursor: msgs.length });
+      // Advance cursor past our own message so the Stop hook does not re-inject it.
+      await updateCursor(a.code, msgs.length);
+      // Record send-time so the Stop hook will hold briefly waiting for a reply.
+      await markSent(a.code, Date.now());
+      return ok({
+        sent: true,
+        cursor: msgs.length,
+        hint: `Sent. If you expect a reply, your next tool call should be room_listen with code="${a.code}" and since=${msgs.length}. Ending your turn here will miss replies that arrive after this hook's wait window.`,
+      });
     }
 
     if (name === 'room_list_messages') {
       const since = typeof a.since === 'number' ? a.since : 0;
       const msgs = await listMessages(client, a.code, since);
-      return ok({ messages: msgs, cursor: since + msgs.length });
+      const cursor = since + msgs.length;
+      await updateCursor(a.code, cursor);
+      return ok({ messages: msgs, cursor });
     }
 
     if (name === 'room_listen') {
       const since = a.since ?? 0;
-      const timeoutMs = a.timeoutMs ?? 30000;
+      const timeoutMs = a.timeoutMs ?? 10000;
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
         const msgs = await listMessages(client, a.code, since);
         if (msgs.length > 0) {
-          return ok({ messages: msgs, cursor: since + msgs.length });
+          const cursor = since + msgs.length;
+          await updateCursor(a.code, cursor);
+          return ok({
+            messages: msgs,
+            cursor,
+            hint: `${msgs.length} new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening.`,
+          });
         }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      return ok({ messages: [], cursor: since });
+      return ok({
+        messages: [],
+        cursor: since,
+        hint: `No messages in the last ${timeoutMs}ms. Call room_listen again with since=${since} to keep waiting, unless you've decided to leave the chat.`,
+      });
     }
 
     if (name === 'room_watch') {
@@ -316,6 +340,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
     }
 
     if (name === 'room_unwatch') {
+      await removeRoom(a.code);
       const w = watchers.get(a.code);
       if (w) {
         w.stop();
@@ -327,6 +352,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
 
     if (name === 'room_end') {
       await endRoom(client, a.code);
+      await removeRoom(a.code);
       // Stop watcher if active
       const w = watchers.get(a.code);
       if (w) { w.stop(); watchers.delete(a.code); }
