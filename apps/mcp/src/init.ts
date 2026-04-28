@@ -96,6 +96,59 @@ async function installCursor(): Promise<InstallResult> {
   return { changes: [], unchanged: [`${path} (already configured)`] };
 }
 
+function ensureTrailingBlankLine(s: string): string {
+  if (!s) return '';
+  let out = s;
+  if (!out.endsWith('\n')) out += '\n';
+  if (!out.endsWith('\n\n')) out += '\n';
+  return out;
+}
+
+async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
+  const result: InstallResult = { changes: [], unchanged: [] };
+  const codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex');
+  const path = join(codexHome, 'config.toml');
+
+  let content = '';
+  try {
+    content = await fs.readFile(path, 'utf8');
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e;
+  }
+
+  let modified = content;
+
+  if (/^\[mcp_servers\.ai-room\]/m.test(modified)) {
+    result.unchanged.push(`${path} (mcp_servers.ai-room already present)`);
+  } else {
+    modified = ensureTrailingBlankLine(modified);
+    modified += '[mcp_servers.ai-room]\ncommand = "npx"\nargs = ["-y", "ai-room-mcp"]\n';
+    result.changes.push(`installed [mcp_servers.ai-room] in ${path}`);
+  }
+
+  if (opts.hooks) {
+    if (modified.includes(`command = "${HOOK_COMMAND}"`)) {
+      result.unchanged.push(`${path} (hooks already installed)`);
+    } else {
+      for (const event of HOOK_EVENTS) {
+        modified = ensureTrailingBlankLine(modified);
+        modified += `[[hooks.${event}]]\nmatcher = ""\n`;
+        modified += `[[hooks.${event}.hooks]]\ntype = "command"\ncommand = "${HOOK_COMMAND}"\n`;
+      }
+      result.changes.push(`installed Stop / UserPromptSubmit / SessionStart hooks in ${path}`);
+    }
+  }
+
+  if (result.changes.length > 0) {
+    await fs.mkdir(dirname(path), { recursive: true });
+    const tmp = path + '.tmp';
+    await fs.writeFile(tmp, modified, 'utf8');
+    await fs.rename(tmp, path);
+  }
+
+  return result;
+}
+
 function printConfigs() {
   const mcp = JSON.stringify({ mcpServers: { 'ai-room': MCP_ENTRY } }, null, 2);
   const hooks = JSON.stringify({
@@ -115,11 +168,20 @@ function printConfigs() {
   console.log(mcp);
 
   console.log('\n--- Codex CLI ---');
-  console.log('~/.config/codex/config.toml:');
+  console.log('~/.codex/config.toml:');
   console.log('[mcp_servers.ai-room]');
   console.log('command = "npx"');
   console.log('args = ["-y", "ai-room-mcp"]');
   console.log('');
+  console.log('# autonomous chat hooks (optional)');
+  for (const event of HOOK_EVENTS) {
+    console.log(`[[hooks.${event}]]`);
+    console.log('matcher = ""');
+    console.log(`[[hooks.${event}.hooks]]`);
+    console.log('type = "command"');
+    console.log(`command = "${HOOK_COMMAND}"`);
+    console.log('');
+  }
 }
 
 function reportResult(target: string, result: InstallResult) {
@@ -155,10 +217,15 @@ export async function runInit(argv: string[]): Promise<void> {
     console.log('Where to install?');
     console.log('  1. Claude Code   (default — adds MCP server + autonomous-chat hooks)');
     console.log('  2. Cursor');
-    console.log('  3. Print configs (paste them yourself)');
+    console.log('  3. Codex CLI     (adds MCP server + hooks)');
+    console.log('  4. Print configs (paste them yourself)');
     const ans = (await rl.question('\n[1]: ')).trim();
     rl.close();
-    target = ans === '2' ? 'cursor' : ans === '3' ? 'print' : 'claude-code';
+    target =
+      ans === '2' ? 'cursor' :
+      ans === '3' ? 'codex' :
+      ans === '4' ? 'print' :
+      'claude-code';
   }
 
   if (target === 'print') {
@@ -173,6 +240,16 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
+  if (target === 'codex') {
+    const result = await installCodex({ hooks: !noHooks });
+    reportResult('Codex CLI', result);
+    if (noHooks) {
+      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
+    }
+    nextSteps('Codex CLI');
+    return;
+  }
+
   if (target === 'claude-code' || target === 'claude') {
     const result = await installClaudeCode({ hooks: !noHooks });
     reportResult('Claude Code', result);
@@ -183,6 +260,6 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  console.error(`Unknown target: ${target}. Try: claude-code, cursor, print`);
+  console.error(`Unknown target: ${target}. Try: claude-code, cursor, codex, print`);
   process.exit(1);
 }
