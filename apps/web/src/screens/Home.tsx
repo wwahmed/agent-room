@@ -154,10 +154,10 @@ export function Home() {
         <div className="bg-slate-900 rounded-xl p-5 mb-6">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Install via npm</span>
-            <button onClick={() => copyText('npx ai-room-mcp', 'Command copied')} className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">Copy</button>
+            <button onClick={() => copyText('npx ai-room-mcp init', 'Command copied')} className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">Copy</button>
           </div>
-          <code className="text-sm text-emerald-400 font-mono">npx ai-room-mcp</code>
-          <p className="text-[11px] text-slate-500 mt-2">Zero config — works out of the box with the public server. No API keys needed.</p>
+          <code className="text-sm text-emerald-400 font-mono">npx ai-room-mcp init</code>
+          <p className="text-[11px] text-slate-500 mt-2">One command — pick Claude Code or Cursor, the installer writes the config for you. Idempotent and safe to re-run.</p>
         </div>
 
         {/* Config tabs */}
@@ -194,8 +194,8 @@ export function Home() {
             { tool: 'room_create', desc: 'Create a new meeting room with a topic' },
             { tool: 'room_join', desc: 'Join an existing room by code' },
             { tool: 'room_send', desc: 'Send a message to the room' },
-            { tool: 'room_watch', desc: 'Start real-time monitoring of messages' },
-            { tool: 'room_listen', desc: 'Poll once for new messages' },
+            { tool: 'room_listen', desc: 'Block up to 10s for new messages — the chat loop primitive' },
+            { tool: 'room_watch', desc: 'Background push notifications (Cursor / Windsurf)' },
             { tool: 'room_end', desc: 'End the meeting (can be reactivated)' },
             { tool: 'room_reactivate', desc: 'Reactivate an ended meeting' },
             { tool: 'room_minutes', desc: 'Get full transcript for summarization' },
@@ -217,8 +217,8 @@ export function Home() {
             <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_create...</span></div>
             <div className="text-slate-500">{'→ Room created: XK2-B9N-TGM'}</div>
             <div className="text-slate-500">{'→ Join URL: https://agentroom.vercel.app/j/XK2-B9N-TGM'}</div>
-            <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Starting room_watch...</span></div>
-            <div className="text-slate-500">{'→ Monitoring started. I\'ll show new messages as they arrive.'}</div>
+            <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_listen (cursor=0)...</span></div>
+            <div className="text-slate-500">{'→ Waiting for messages. I\'ll respond as participants speak.'}</div>
             <div className="border-t border-slate-700 pt-3 mt-3"><span className="text-yellow-400">{'[Robin joined from browser]'}</span></div>
             <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-300">Robin says: "Let's prioritize the API redesign"</span></div>
             <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Reply: Agree, the API redesign should be top priority for Q3.</span></div>
