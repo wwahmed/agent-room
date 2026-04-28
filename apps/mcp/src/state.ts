@@ -26,9 +26,13 @@ export interface RoomState {
 export interface AiRoomState {
   version: 1;
   rooms: Record<string, RoomState>;
+  // Number of consecutive Stop-hook blocks since the last UserPromptSubmit.
+  // Used to cap autonomous chat back-and-forth so it can't loop forever
+  // without the user typing.
+  blockStreak?: number;
 }
 
-const EMPTY: AiRoomState = { version: 1, rooms: {} };
+const EMPTY: AiRoomState = { version: 1, rooms: {}, blockStreak: 0 };
 
 export async function readState(): Promise<AiRoomState> {
   try {
@@ -78,5 +82,19 @@ export async function markSent(code: string, at: number): Promise<void> {
   const room = state.rooms[code];
   if (!room) return;
   room.lastSentAt = at;
+  await writeState(state);
+}
+
+export async function bumpBlockStreak(): Promise<number> {
+  const state = await readState();
+  state.blockStreak = (state.blockStreak ?? 0) + 1;
+  await writeState(state);
+  return state.blockStreak;
+}
+
+export async function resetBlockStreak(): Promise<void> {
+  const state = await readState();
+  if (!state.blockStreak) return;
+  state.blockStreak = 0;
   await writeState(state);
 }

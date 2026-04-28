@@ -11,8 +11,8 @@ import { createClient, endRoom as endRoomApi, reactivateRoom as reactivateRoomAp
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const AUTO_CLOSE_COUNTDOWN = 5;         // seconds
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
+const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
 
 export function Room() {
   const { code = '' } = useParams();
@@ -36,9 +36,11 @@ export function Room() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastMsgTimeRef = useRef(Date.now());
 
-  // Sync ended state from room
+  // Sync ended state from room — both directions, so a server-side reactivation
+  // (or another client reactivating) flips us back to active too.
   useEffect(() => {
     if (room?.status === 'ended') setEnded(true);
+    else if (room?.status === 'active') setEnded(false);
   }, [room?.status]);
 
   // Track last message time for idle detection
@@ -296,6 +298,16 @@ export function Room() {
                 try {
                   const client = createClient(ENV.upstash);
                   await reactivateRoomApi(client, code);
+                  // Reset the full idle pipeline. Without these the idle timer
+                  // would immediately re-fire (lastMsgTimeRef is still hours
+                  // old, showIdlePrompt may still be true) and the room would
+                  // close again 5 seconds later — the "reactivate → close →
+                  // reactivate → close" loop users hit.
+                  lastMsgTimeRef.current = Date.now();
+                  setShowIdlePrompt(false);
+                  setCountdown(AUTO_CLOSE_COUNTDOWN);
+                  if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+                  if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
                   setEnded(false);
                 } catch {}
               }} className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg">Reactivate</button>

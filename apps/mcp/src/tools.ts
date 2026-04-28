@@ -306,7 +306,11 @@ export function registerTools(server: Server, env: UpstashEnv) {
       return ok({
         messages: [],
         cursor: since,
-        hint: `No messages in the last ${timeoutMs}ms. Call room_listen again with since=${since} to keep waiting, unless you've decided to leave the chat.`,
+        hint: `Listened for ${timeoutMs}ms — quiet so far. This is normal. ` +
+              `IMPORTANT: call room_listen again with since=${since} to stay present. ` +
+              `Quiet ≠ done. The room is alive until the user explicitly tells you to ` +
+              `stop ("leave the room" / "stop listening" / similar). Do not interpret ` +
+              `silence as a signal to end your turn.`,
       });
     }
 

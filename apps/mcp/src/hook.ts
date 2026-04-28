@@ -5,7 +5,7 @@ import {
   type UpstashEnv,
 } from '@agent-room/upstash-client';
 import type { Message } from '@agent-room/shared';
-import { readState, updateCursor } from './state.js';
+import { readState, updateCursor, bumpBlockStreak, resetBlockStreak } from './state.js';
 
 // If the agent just sent a message in any tracked room, hold the Stop hook
 // briefly while polling for a reply. Otherwise the agent's turn ends, the
@@ -13,6 +13,11 @@ import { readState, updateCursor } from './state.js';
 const RECENT_SEND_MS = 30_000;
 const POLL_MAX_MS = 8_000;
 const POLL_INTERVAL_MS = 1_500;
+
+// How many times we'll force the agent to continue within one user-prompt
+// cycle. Without this cap a chatty pair of agents could loop forever while
+// the user has no way to interrupt cheaply. Reset by UserPromptSubmit.
+const MAX_BLOCKS_PER_CYCLE = 8;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -121,9 +126,24 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   const input = await readStdin();
   const event = input.hook_event_name ?? 'Stop';
 
-  // Loop guard: if we already blocked once this Stop cycle, let Claude actually stop.
+  // User typed something — fresh turn cycle. Reset the block streak so the
+  // next Stop hook can block fresh up to MAX_BLOCKS_PER_CYCLE times.
+  if (event === 'UserPromptSubmit') {
+    try { await resetBlockStreak(); } catch { /* non-essential */ }
+  }
+
+  // Cap the autonomous block-continue chain. We DO allow continuing past
+  // stop_hook_active=true (so two agents can chat back-and-forth without the
+  // user having to retype), but we cap at MAX_BLOCKS_PER_CYCLE to ensure
+  // there's always an exit. UserPromptSubmit resets the counter.
   if (event === 'Stop' && input.stop_hook_active === true) {
-    process.exit(0);
+    const state = await readState();
+    if ((state.blockStreak ?? 0) >= MAX_BLOCKS_PER_CYCLE) {
+      // Reached the cap — let Claude actually stop. Future user input
+      // resets the counter via the UserPromptSubmit branch above.
+      try { await resetBlockStreak(); } catch { /* non-essential */ }
+      process.exit(0);
+    }
   }
 
   let pending: PendingRoom[];
@@ -165,6 +185,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   const text = formatMessages(withMessages);
 
   if (event === 'Stop') {
+    try { await bumpBlockStreak(); } catch { /* non-essential */ }
     process.stdout.write(JSON.stringify({ decision: 'block', reason: text }));
   } else if (event === 'UserPromptSubmit') {
     process.stdout.write(JSON.stringify({

@@ -110,15 +110,42 @@ async function main() {
       check('Stop after consume → no stdout', r.stdout.trim() === '');
     }
 
-    // 3. stop_hook_active loop guard
+    // 3a. stop_hook_active=true + new messages + streak under cap → still blocks
+    //     (this is the v0.6.0 change: agent-to-agent chat can continue past
+    //     the first auto-continue, up to MAX_BLOCKS_PER_CYCLE)
     {
-      // Reset cursor and append again to simulate new messages
       await appendMessage(client, code, { ...otherMsg, id: Date.now() + 1, text: 'follow-up' });
       const stateNow = JSON.parse(await fs.readFile(STATE_FILE, 'utf8'));
       stateNow.rooms[code].cursor = 0;
+      stateNow.blockStreak = 1; // simulate one prior block in this cycle
       await fs.writeFile(STATE_FILE, JSON.stringify(stateNow));
       const r = await runHook({ hook_event_name: 'Stop', stop_hook_active: true });
-      check('stop_hook_active=true → no output', r.stdout.trim() === '');
+      let parsed: any = null;
+      try { parsed = JSON.parse(r.stdout); } catch {/* */}
+      check('stop_hook_active=true + msgs + low streak → still block', parsed?.decision === 'block');
+    }
+
+    // 3b. stop_hook_active=true + new messages + streak AT cap → no output (cap exit)
+    {
+      await appendMessage(client, code, { ...otherMsg, id: Date.now() + 99, text: 'over-cap' });
+      const stateNow = JSON.parse(await fs.readFile(STATE_FILE, 'utf8'));
+      stateNow.rooms[code].cursor = 0;
+      stateNow.blockStreak = 8; // at the cap
+      await fs.writeFile(STATE_FILE, JSON.stringify(stateNow));
+      const r = await runHook({ hook_event_name: 'Stop', stop_hook_active: true });
+      check('stop_hook_active=true + streak at cap → no output', r.stdout.trim() === '');
+      const after = JSON.parse(await fs.readFile(STATE_FILE, 'utf8'));
+      check('cap-exit resets blockStreak to 0', (after.blockStreak ?? 0) === 0, `blockStreak=${after.blockStreak}`);
+    }
+
+    // 3c. UserPromptSubmit resets blockStreak
+    {
+      const stateNow = JSON.parse(await fs.readFile(STATE_FILE, 'utf8'));
+      stateNow.blockStreak = 5;
+      await fs.writeFile(STATE_FILE, JSON.stringify(stateNow));
+      await runHook({ hook_event_name: 'UserPromptSubmit' });
+      const after = JSON.parse(await fs.readFile(STATE_FILE, 'utf8'));
+      check('UserPromptSubmit resets blockStreak', (after.blockStreak ?? 0) === 0);
     }
 
     // 4. UserPromptSubmit event with messages → additionalContext
