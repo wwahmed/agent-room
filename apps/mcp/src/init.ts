@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { spawn } from 'node:child_process';
 
 const MCP_ENTRY = {
   command: 'npx',
@@ -44,9 +45,48 @@ interface InstallResult {
   unchanged: string[];
 }
 
+function which(cmd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const p = spawn('which', [cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    p.stdout.on('data', (d) => { out += d.toString(); });
+    p.on('close', (code) => resolve(code === 0 && out.trim() ? out.trim() : null));
+    p.on('error', () => resolve(null));
+  });
+}
+
+function tryClaudeMcpAdd(): Promise<boolean> {
+  // `claude mcp add --scope user ai-room -- npx -y ai-room-mcp`
+  // Lets Claude Code's own CLI write the registration in whatever location
+  // / format the installed version prefers. Falls back silently on error.
+  return new Promise((resolve) => {
+    const p = spawn(
+      'claude',
+      ['mcp', 'add', '--scope', 'user', 'ai-room', '--', 'npx', '-y', 'ai-room-mcp'],
+      { stdio: 'ignore' }
+    );
+    p.on('close', (code) => resolve(code === 0));
+    p.on('error', () => resolve(false));
+  });
+}
+
 async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResult> {
   const result: InstallResult = { changes: [], unchanged: [] };
 
+  // Path 1 (preferred): use `claude` CLI if available, so Claude Code's own
+  // registration logic decides the storage format / location. Avoids the
+  // "wrote .mcp.json but new sessions don't pick it up" failure mode.
+  const claudeBin = await which('claude');
+  let registeredViaCli = false;
+  if (claudeBin) {
+    registeredViaCli = await tryClaudeMcpAdd();
+    if (registeredViaCli) {
+      result.changes.push(`registered ai-room via \`claude mcp add --scope user\``);
+    }
+  }
+
+  // Path 2 (always): write ~/.claude/.mcp.json as a fallback so Claude Code
+  // versions that read user-scope JSON directly still pick it up.
   const mcpPath = join(homedir(), '.claude', '.mcp.json');
   const mcp = (await readJson(mcpPath)) ?? {};
   const servers = ((mcp.mcpServers as Record<string, unknown>) ?? {});
@@ -55,8 +95,10 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
   mcp.mcpServers = servers;
   if (JSON.stringify(servers['ai-room']) !== before) {
     await writeJsonAtomic(mcpPath, mcp);
-    result.changes.push(`wrote ${mcpPath} (ai-room MCP server)`);
-  } else {
+    if (!registeredViaCli) {
+      result.changes.push(`wrote ${mcpPath} (ai-room MCP server)`);
+    }
+  } else if (!registeredViaCli) {
     result.unchanged.push(`${mcpPath} (already configured)`);
   }
 

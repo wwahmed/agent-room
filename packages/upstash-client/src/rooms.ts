@@ -62,10 +62,10 @@ export async function casRoom(
   throw lastError instanceof ConcurrencyError ? lastError : new ConcurrencyError();
 }
 
-// Name is the participant identity in MVP (spec §14: no user accounts).
-// Same name re-joining replaces the prior entry — this makes browser refresh
-// idempotent. Two different humans choosing the same name is a known MVP
-// collision; acceptable until real accounts land in Phase 2+.
+// Identity is (name, client). Same name + same client replaces the previous
+// entry (browser refresh / agent reconnect = idempotent). Same name on a
+// DIFFERENT client coexists — e.g. "Robin · web" and "Robin · cc" can both
+// be present. The web UI disambiguates the display when this happens.
 export async function joinRoom(
   client: UpstashClient,
   code: string,
@@ -74,7 +74,9 @@ export async function joinRoom(
   return casRoom(client, code, (current) => ({
     ...current,
     participants: [
-      ...current.participants.filter(p => p.name !== participant.name),
+      ...current.participants.filter(
+        p => !(p.name === participant.name && p.client === participant.client)
+      ),
       participant,
     ],
   }));
@@ -116,6 +118,23 @@ export async function updatePresence(
     ...current,
     participants: current.participants.map(p =>
       p.name === name ? { ...p, lastSeenAt: at } : p
+    ),
+  }));
+}
+
+// Stamp how long this participant intends to stay in their current room_listen
+// window. Other participants can read this from the room's participant list
+// to know who's actively listening vs just present-but-idle.
+export async function setListenUntil(
+  client: UpstashClient,
+  code: string,
+  name: string,
+  until: number
+): Promise<void> {
+  await casRoom(client, code, (current) => ({
+    ...current,
+    participants: current.participants.map(p =>
+      p.name === name ? { ...p, listenUntil: until, lastSeenAt: Date.now() } : p
     ),
   }));
 }

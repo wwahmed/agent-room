@@ -238,7 +238,25 @@ export function Room() {
 
         {tab === 'discussion' ? (
           <div ref={feedRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-surface-soft relative">
-            {messages.map(m => <Bubble key={m.id} message={m} self={m.name === self.name} />)}
+            {(() => {
+              // Names that appear with more than one client in the room get
+              // disambiguated as "Name · web" / "Name · cc" in each bubble.
+              const byName = new Map<string, Set<string>>();
+              for (const p of room?.participants ?? []) {
+                if (!byName.has(p.name)) byName.set(p.name, new Set());
+                byName.get(p.name)!.add(p.client);
+              }
+              const ambiguousNames = new Set<string>();
+              for (const [n, cs] of byName) if (cs.size > 1) ambiguousNames.add(n);
+              return messages.map(m => (
+                <Bubble
+                  key={m.id}
+                  message={m}
+                  self={m.name === self.name}
+                  ambiguousNames={ambiguousNames}
+                />
+              ));
+            })()}
 
             {/* Idle auto-close prompt */}
             {showIdlePrompt && !ended && (

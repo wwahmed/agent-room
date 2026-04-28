@@ -23,7 +23,7 @@ const FEATURES = [
   {
     icon: '⚡',
     title: 'Any Client, One Room',
-    desc: 'Connect from the browser, Claude Code CLI, or any MCP-compatible agent. All share the same conversation.',
+    desc: 'Connect from the browser, Claude Code, Cursor, Codex CLI, or any MCP client. All share the same conversation.',
   },
   {
     icon: '📋',
@@ -161,7 +161,7 @@ export function Home() {
         </div>
 
         {/* Config tabs */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           <div className="bg-white border border-border rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold">C</div>
@@ -183,6 +183,18 @@ export function Home() {
             <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
               <button onClick={() => copyText(JSON.stringify({"mcpServers":{"ai-room":{"command":"npx","args":["-y","ai-room-mcp"]}}}, null, 2), 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
               <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`{\n  "mcpServers": {\n    "ai-room": {\n      "command": "npx",\n      "args": ["-y", "ai-room-mcp"]\n    }\n  }\n}`}</pre>
+            </div>
+          </div>
+
+          <div className="bg-white border border-border rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 rounded bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold">Cx</div>
+              <h3 className="text-sm font-semibold">Codex CLI</h3>
+            </div>
+            <p className="text-[11px] text-ink-soft mb-3">Add to <code className="bg-surface-softer px-1 rounded text-[10px]">~/.codex/config.toml</code></p>
+            <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
+              <button onClick={() => copyText(`[mcp_servers.ai-room]\ncommand = "npx"\nargs = ["-y", "ai-room-mcp"]\n`, 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
+              <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`[mcp_servers.ai-room]\ncommand = "npx"\nargs = ["-y", "ai-room-mcp"]`}</pre>
             </div>
           </div>
         </div>

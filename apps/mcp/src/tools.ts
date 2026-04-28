@@ -9,11 +9,12 @@ import {
   reactivateRoom,
   appendMessage,
   listMessages,
+  setListenUntil,
   type UpstashEnv,
 } from '@agent-room/upstash-client';
 import { generateCode, AVATAR_PALETTE } from '@agent-room/shared';
 import type { Message, Participant } from '@agent-room/shared';
-import { setRoom, removeRoom, updateCursor, markSent } from './state.js';
+import { setRoom, removeRoom, updateCursor, markSent, readState } from './state.js';
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -101,14 +102,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_listen',
         description:
-          'Block up to timeoutMs (default 10000ms = 10s) waiting for new messages, returning as soon as any arrive. THIS IS THE PRIMARY LOOP PRIMITIVE FOR BEING PRESENT IN A CHAT: after room_create / room_join / room_send, call room_listen with the returned cursor, then either reply (room_send) or call room_listen again with the new cursor to keep waiting. An empty return after timeout means nobody spoke during the window — call again unless you decide to leave the chat.',
+          'Block up to timeoutMs (default 30000ms = 30s) waiting for new messages, returning as soon as any arrive. THIS IS THE PRIMARY LOOP PRIMITIVE FOR BEING PRESENT IN A CHAT: after room_create / room_join / room_send, call room_listen with the returned cursor, then either reply (room_send) or call room_listen again with the new cursor to keep waiting. An empty return after timeout means nobody spoke during the window — call again unless you decide to leave the chat.',
         inputSchema: {
           type: 'object',
           required: ['code', 'since'],
           properties: {
             code: { type: 'string' },
             since: { type: 'number', description: 'Cursor from previous call' },
-            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 10000)' },
+            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 30000). Use higher (60000-300000) for human-in-the-loop conversations.' },
           },
         },
       },
@@ -207,12 +208,25 @@ export function registerTools(server: Server, env: UpstashEnv) {
       const updated = await joinRoom(client, a.code, participant);
       const msgs = await listMessages(client, a.code, 0);
       await setRoom(a.code, { name: a.name, cursor: msgs.length, joinedAt: Date.now() });
+      const recentMessages = msgs.slice(-20).map((m: Message) => ({
+        name: m.name,
+        role: m.role,
+        client: m.client,
+        text: m.text,
+        time: m.time,
+      }));
       return ok({
         code: a.code,
         topic: updated.topic,
-        participants: updated.participants.map((p: Participant) => p.name),
+        participants: updated.participants.map((p: Participant) => ({
+          name: p.name,
+          role: p.role,
+          client: p.client,
+          listenUntil: p.listenUntil,
+        })),
         cursor: msgs.length,
-        hint: `Joined. To stay present and respond as others speak, call room_listen with code="${a.code}" and since=${msgs.length}. Repeat after each reply you send.`,
+        recentMessages,
+        hint: `Joined. ${recentMessages.length} recent messages above for context. To stay present and respond as others speak, call room_listen with code="${a.code}" and since=${msgs.length}. Repeat after each reply you send.`,
       });
     }
 
@@ -258,8 +272,24 @@ export function registerTools(server: Server, env: UpstashEnv) {
 
     if (name === 'room_listen') {
       const since = a.since ?? 0;
-      const timeoutMs = a.timeoutMs ?? 10000;
+      const timeoutMs = a.timeoutMs ?? 30000;
       const start = Date.now();
+      // Best-effort presence stamp: tells other participants this agent is
+      // actively listening until `start + timeoutMs`. Name comes from the
+      // PPID-scoped state (set during room_create / room_join) so the agent
+      // doesn't need to re-pass it here.
+      let selfName = a.name as string | undefined;
+      if (!selfName) {
+        try {
+          const state = await readState();
+          selfName = state.rooms[a.code]?.name;
+        } catch { /* state unavailable */ }
+      }
+      if (selfName) {
+        try {
+          await setListenUntil(client, a.code, selfName, start + timeoutMs);
+        } catch { /* presence is non-essential */ }
+      }
       while (Date.now() - start < timeoutMs) {
         const msgs = await listMessages(client, a.code, since);
         if (msgs.length > 0) {

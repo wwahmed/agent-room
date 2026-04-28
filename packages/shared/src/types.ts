@@ -8,6 +8,7 @@ export interface Participant {
   client: ClientKind;
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
+  listenUntil?: number;  // epoch ms — set by room_listen, expires naturally
 }
 
 export interface Room {
