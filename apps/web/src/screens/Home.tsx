@@ -216,7 +216,7 @@ export function Home() {
             <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Create a room to discuss our Q3 roadmap</span></div>
             <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_create...</span></div>
             <div className="text-slate-500">{'→ Room created: XK2-B9N-TGM'}</div>
-            <div className="text-slate-500">{'→ Join URL: https://ai-room.vercel.app/j/XK2-B9N-TGM'}</div>
+            <div className="text-slate-500">{'→ Join URL: https://agentroom.vercel.app/j/XK2-B9N-TGM'}</div>
             <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Starting room_watch...</span></div>
             <div className="text-slate-500">{'→ Monitoring started. I\'ll show new messages as they arrive.'}</div>
             <div className="border-t border-slate-700 pt-3 mt-3"><span className="text-yellow-400">{'[Robin joined from browser]'}</span></div>

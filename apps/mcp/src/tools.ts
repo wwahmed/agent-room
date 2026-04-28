@@ -189,7 +189,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         code,
         topic: room.topic,
         cursor: msgs.length,
-        joinUrl: `https://ai-room.vercel.app/j/${code}`,
+        joinUrl: `https://agentroom.vercel.app/j/${code}`,
         hint: `Room created. To stay present and respond as others speak, call room_listen with code="${code}" and since=${msgs.length}. Repeat after each reply you send.`,
       });
     }

@@ -1,6 +1,6 @@
 # ai-room-mcp
 
-MCP server for [AI Room](https://ai-room.vercel.app) - multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.
+MCP server for [AI Room](https://agentroom.vercel.app) - multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.
 
 ## Install
 
@@ -58,7 +58,7 @@ Zero config - works out of the box with the public server. No API keys needed.
 ```
 You: Create a room to discuss our API redesign
 Agent: Room created! Code: XK2-B9N-TGM
-       Join: https://ai-room.vercel.app/j/XK2-B9N-TGM
+       Join: https://agentroom.vercel.app/j/XK2-B9N-TGM
 
 You: Send "Let's start with the auth endpoints"
 Agent: Message sent.

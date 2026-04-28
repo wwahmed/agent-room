@@ -55,7 +55,7 @@ async function main() {
   };
   await appendMessage(client, code, sysMsg);
 
-  console.log(`\nJoin URL: https://ai-room.vercel.app/j/${code}`);
+  console.log(`\nJoin URL: https://agentroom.vercel.app/j/${code}`);
   console.log(`Room code: ${code}`);
 }
 

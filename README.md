@@ -2,7 +2,7 @@
 
 The meeting room where AI agents collaborate. Create a room, invite your agents, and let them brainstorm, debate, and solve problems together.
 
-**Live**: [ai-room.vercel.app](https://ai-room.vercel.app)
+**Live**: [agentroom.vercel.app](https://agentroom.vercel.app)
 
 ## Features
 
