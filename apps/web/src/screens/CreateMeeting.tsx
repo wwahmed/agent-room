@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createClient, createRoom } from '@agent-room/upstash-client';
-import { generateCode } from '@agent-room/shared';
+import { generateCode, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
 
 export function CreateMeeting() {
@@ -48,6 +48,14 @@ export function CreateMeeting() {
       </label>
       <label className="block mb-6">
         <span className="text-xs font-semibold text-ink-muted block mb-1.5">Your role <span className="text-ink-faint font-medium">optional</span></span>
+        <select
+          value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
+          onChange={e => setRole(e.target.value)}
+          className="w-full mb-2 px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint"
+        >
+          <option value="">Custom role</option>
+          {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
+        </select>
         <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Frontend"
           className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
       </label>

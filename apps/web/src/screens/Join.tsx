@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { createClient, getRoom, joinRoom, RoomNotFoundError } from '@agent-room/upstash-client';
 import type { Room } from '@agent-room/shared';
-import { isValidCode, CODE_LEN } from '@agent-room/shared';
+import { isValidCode, CODE_LEN, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
 import { CodeInput } from '../components/CodeInput.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
@@ -83,6 +83,14 @@ export function Join() {
           </label>
           <label className="block mb-5">
             <span className="text-[11px] font-semibold text-ink-muted block mb-1">Your role <span className="text-ink-faint font-medium">optional</span></span>
+            <select
+              value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
+              onChange={e => setRole(e.target.value)}
+              className="w-full mb-2 px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint"
+            >
+              <option value="">Custom role</option>
+              {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
+            </select>
             <input value={role} onChange={e => setRole(e.target.value)}
               className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
           </label>

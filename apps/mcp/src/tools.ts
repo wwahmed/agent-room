@@ -13,7 +13,7 @@ import {
   setListenUntil,
   type UpstashEnv,
 } from '@agent-room/upstash-client';
-import { generateCode, AVATAR_PALETTE } from '@agent-room/shared';
+import { generateCode, AVATAR_PALETTE, roleBriefFor } from '@agent-room/shared';
 import type { Message, Participant } from '@agent-room/shared';
 import { setRoom, removeRoom, updateCursor, markSent, readState } from './state.js';
 
@@ -204,6 +204,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         topic: room.topic,
         cursor: msgs.length,
         joinUrl: `https://agentroom.vercel.app/j/${code}`,
+        roleBrief: roleBriefFor(a.role ?? ''),
         hint: `Room created. To stay present and respond as others speak, call room_listen with code="${code}" and since=${msgs.length}. Repeat after each reply you send.`,
       });
     }
@@ -239,6 +240,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         })),
         cursor: msgs.length,
         recentMessages,
+        roleBrief: roleBriefFor(a.role ?? ''),
         hint: `Joined. ${recentMessages.length} recent messages above for context. To stay present and respond as others speak, call room_listen with code="${a.code}" and since=${msgs.length}. Repeat after each reply you send.`,
       });
     }
