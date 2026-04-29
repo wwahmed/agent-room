@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { Bubble } from '../components/Bubble.js';
+import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
@@ -416,7 +417,7 @@ export function Room() {
                 </div>
               </div>
             ) : (
-              <div className="border-t border-border-faint p-3 bg-surface flex flex-col gap-2">
+              <div className="relative border-t border-border-faint p-3 bg-surface flex flex-col gap-2">
                 {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
                 <div className="flex items-center gap-2">
                   <button
@@ -426,6 +427,10 @@ export function Room() {
                   >
                     {drafting ? 'Drafting…' : 'Draft'}
                   </button>
+                  <VoiceButton
+                    onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
+                    disabled={ended}
+                  />
                   <textarea
                     value={text}
                     onChange={e => setText(e.target.value)}
