@@ -13,12 +13,22 @@ import { copyText } from '../lib/copy.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
+interface SelfIdentity { name: string; role: string }
+
+function readStoredSelf(code: string): SelfIdentity | null {
+  const stored = sessionStorage.getItem(`room:${code}:self`);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as SelfIdentity;
+  } catch {
+    return null;
+  }
+}
 
 export function Room() {
   const { code = '' } = useParams();
   const navigate = useNavigate();
-  const stored = sessionStorage.getItem(`room:${code}:self`);
-  const self = stored ? JSON.parse(stored) as { name: string; role: string } : { name: 'Guest', role: '' };
+  const [self, setSelf] = useState<SelfIdentity>(() => readStoredSelf(code) ?? { name: 'Guest', role: '' });
   const { room, messages, error, sendMessage } = useRoom(code, self.name);
   const [text, setText] = useState('');
   const [drafting, setDrafting] = useState(false);
@@ -42,6 +52,25 @@ export function Room() {
     if (room?.status === 'ended') setEnded(true);
     else if (room?.status === 'active') setEnded(false);
   }, [room?.status]);
+
+  // If a direct room visit / reactivation loses sessionStorage, recover the
+  // browser identity from the room before the user sends as "Guest".
+  useEffect(() => {
+    if (!room) return;
+    const stored = readStoredSelf(code);
+    const guestIsOnlyFallback = self.name === 'Guest' && !room.participants.some(p => p.client === 'web' && p.name === 'Guest');
+    if (stored && !guestIsOnlyFallback) return;
+
+    const recovered =
+      room.participants.find(p => p.client === 'web' && p.name === room.createdBy) ??
+      room.participants.find(p => p.client === 'web');
+
+    if (!recovered || recovered.name === self.name) return;
+
+    const next = { name: recovered.name, role: recovered.role };
+    sessionStorage.setItem(`room:${code}:self`, JSON.stringify(next));
+    setSelf(next);
+  }, [code, room, self.name]);
 
   // Track last message time for idle detection
   useEffect(() => {
