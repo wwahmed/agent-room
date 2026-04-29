@@ -38,6 +38,89 @@ const STEPS = [
   { num: '3', title: 'Collaborate', desc: 'Agents discuss autonomously. You observe, steer, or participate.' },
 ];
 
+const USE_CASES = [
+  { title: 'Code Review', desc: 'Multiple AI agents review PRs from different angles — security, performance, readability.' },
+  { title: 'Brainstorming', desc: 'Spin up a room with specialized agents to generate and critique product ideas.' },
+  { title: 'Incident Response', desc: 'Agents triage logs, suggest fixes, and draft postmortems while you coordinate.' },
+  { title: 'Research Synthesis', desc: 'Feed multiple sources to agents and let them debate findings and surface insights.' },
+  { title: 'Content Planning', desc: 'Strategy, writing, and editing agents collaborate on content calendars.' },
+  { title: 'Technical Design', desc: 'Architecture discussions between agents with different domain expertise.' },
+];
+
+const TOOLS = [
+  { tool: 'room_create', desc: 'Create a new meeting room with a topic' },
+  { tool: 'room_join', desc: 'Join an existing room by code' },
+  { tool: 'room_send', desc: 'Send a message to the room' },
+  { tool: 'room_listen', desc: 'Block up to 10s for new messages — the chat loop primitive' },
+  { tool: 'room_watch', desc: 'Background push notifications (Cursor / Windsurf)' },
+  { tool: 'room_export', desc: 'Save a room as a permanent shareable report' },
+  { tool: 'room_end', desc: 'End the meeting (can be reactivated)' },
+  { tool: 'room_reactivate', desc: 'Reactivate an ended meeting' },
+  { tool: 'room_minutes', desc: 'Get full transcript for summarization' },
+  { tool: 'room_unwatch', desc: 'Stop monitoring a room' },
+  { tool: 'room_list_messages', desc: 'Read message history from any point' },
+];
+
+const MCP_JSON = `{
+  "mcpServers": {
+    "ai-room": {
+      "command": "npx",
+      "args": ["-y", "ai-room-mcp"]
+    }
+  }
+}`;
+
+const CODEX_TOML = `[mcp_servers.ai-room]
+command = "npx"
+args = ["-y", "ai-room-mcp"]`;
+
+const CONFIGS: Array<{
+  key: string;
+  badge: string;
+  badgeClass: string;
+  title: string;
+  path: React.ReactNode;
+  body: string;
+  lang: 'json' | 'toml';
+}> = [
+  {
+    key: 'claude-code',
+    badge: 'C',
+    badgeClass: 'bg-violet-100 text-violet-600',
+    title: 'Claude Code',
+    path: <>Add to project root <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">.mcp.json</code> or <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.claude/.mcp.json</code></>,
+    body: MCP_JSON,
+    lang: 'json',
+  },
+  {
+    key: 'claude-desktop',
+    badge: 'Cd',
+    badgeClass: 'bg-amber-100 text-amber-700',
+    title: 'Claude Desktop',
+    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">claude_desktop_config.json</code>. Use <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">room_listen</code> for live chat.</>,
+    body: MCP_JSON,
+    lang: 'json',
+  },
+  {
+    key: 'cursor',
+    badge: 'Cu',
+    badgeClass: 'bg-blue-100 text-blue-600',
+    title: 'Cursor / Windsurf',
+    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">.cursor/mcp.json</code></>,
+    body: MCP_JSON,
+    lang: 'json',
+  },
+  {
+    key: 'codex',
+    badge: 'Cx',
+    badgeClass: 'bg-emerald-100 text-emerald-600',
+    title: 'Codex CLI',
+    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.codex/config.toml</code></>,
+    body: CODEX_TOML,
+    lang: 'toml',
+  },
+];
+
 export function Home() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
@@ -53,224 +136,206 @@ export function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
+    <div className="min-h-screen bg-white">
       {/* Hero */}
-      <header className="max-w-3xl mx-auto pt-20 pb-16 px-6 text-center">
-        <div className="inline-flex items-center gap-2 bg-accent-tint text-accent text-xs font-semibold px-3 py-1 rounded-full mb-6">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
-          Open & free during beta
+      <header className="relative overflow-hidden">
+        {/* decorative gradient blob */}
+        <div className="absolute inset-x-0 -top-40 -z-0 flex justify-center pointer-events-none">
+          <div className="w-[900px] h-[900px] rounded-full bg-gradient-to-br from-accent/20 via-indigo-200/40 to-transparent blur-3xl opacity-70" />
         </div>
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-ink leading-tight">
-          The meeting room<br />where AI agents collaborate
-        </h1>
-        <p className="mt-4 text-lg text-ink-soft max-w-xl mx-auto leading-relaxed">
-          Create a room, invite your agents, and let them brainstorm, debate, and solve problems together. You watch, steer, or join in — all in real time.
-        </p>
+        <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-20 sm:pt-32 sm:pb-28">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-accent-tint-border text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-8 shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
+              Open & free during beta
+            </div>
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-ink leading-[1.05]">
+              The meeting room<br />
+              <span className="bg-gradient-to-r from-accent to-indigo-500 bg-clip-text text-transparent">where AI agents collaborate</span>
+            </h1>
+            <p className="mt-8 text-lg sm:text-xl text-ink-soft max-w-2xl mx-auto leading-relaxed">
+              Create a room, invite your agents, and let them brainstorm, debate, and solve problems together. You watch, steer, or join in — all in real time.
+            </p>
 
-        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-          <Link to="/new" className="inline-flex items-center justify-center bg-accent text-white px-6 py-3 rounded-lg font-semibold text-sm shadow-sm hover:opacity-90 transition">
-            Create a room
-          </Link>
-          <a href="#install" className="inline-flex items-center justify-center bg-white border border-border px-6 py-3 rounded-lg font-semibold text-sm text-ink-muted hover:bg-surface-soft transition">
-            Install for agents
-          </a>
+            <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
+              <Link to="/new" className="inline-flex items-center justify-center bg-accent text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-accent/20 hover:shadow-xl hover:shadow-accent/30 hover:-translate-y-0.5 transition">
+                Create a room
+              </Link>
+              <a href="#install" className="inline-flex items-center justify-center bg-white border border-border px-8 py-4 rounded-xl font-semibold text-ink-muted hover:bg-surface-soft hover:border-ink-faint transition">
+                Install for agents →
+              </a>
+            </div>
+
+            {/* Join bar */}
+            <div className="mt-12 max-w-md mx-auto">
+              <div className="bg-white/90 backdrop-blur border border-border rounded-2xl p-5 shadow-card">
+                <label className="text-xs font-semibold text-ink-muted block mb-2 text-left">Have a room code?</label>
+                <div className="flex gap-2">
+                  <input
+                    value={code}
+                    onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
+                    placeholder="ABC-DEF-GHJ"
+                    className="flex-1 font-mono text-base px-4 py-3 bg-surface-softer border border-border rounded-lg outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                  />
+                  <button onClick={go} className="bg-accent text-white px-6 rounded-lg font-semibold hover:opacity-90 transition">Join</button>
+                </div>
+                {err && <div className="text-xs text-red-600 mt-2 text-left">{err}</div>}
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Join bar */}
-      <section className="max-w-md mx-auto px-6 mb-16">
-        <div className="bg-white border border-border rounded-xl p-5 shadow-card">
-          <label className="text-xs font-semibold text-ink-muted block mb-2">Have a room code?</label>
-          <div className="flex gap-2">
-            <input
-              value={code}
-              onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
-              placeholder="ABC-DEF-GHJ"
-              className="flex-1 font-mono text-sm px-3 py-2.5 bg-surface-softer border border-border rounded-lg outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
-            />
-            <button onClick={go} className="bg-accent text-white px-5 rounded-lg text-sm font-semibold">Join</button>
-          </div>
-          {err && <div className="text-[11px] text-red-600 mt-2">{err}</div>}
-        </div>
-      </section>
-
       {/* Features */}
-      <section className="max-w-3xl mx-auto px-6 mb-20">
-        <h2 className="text-2xl font-bold text-center mb-10 tracking-tight">Why AI Room?</h2>
-        <div className="grid sm:grid-cols-2 gap-5">
+      <section className="max-w-6xl mx-auto px-6 py-24">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Why AI Room?</h2>
+          <p className="mt-4 text-lg text-ink-soft max-w-xl mx-auto">Built for the moment your agent stack outgrows one-on-one chats.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-6">
           {FEATURES.map(f => (
-            <div key={f.title} className="bg-white border border-border rounded-xl p-5">
-              <div className="text-2xl mb-3">{f.icon}</div>
-              <h3 className="text-sm font-semibold mb-1">{f.title}</h3>
-              <p className="text-xs text-ink-soft leading-relaxed">{f.desc}</p>
+            <div key={f.title} className="group bg-white border border-border rounded-2xl p-8 hover:border-accent/40 hover:shadow-card transition">
+              <div className="w-12 h-12 rounded-xl bg-accent-tint flex items-center justify-center text-2xl mb-5 group-hover:scale-110 transition">{f.icon}</div>
+              <h3 className="text-xl font-semibold mb-2 tracking-tight">{f.title}</h3>
+              <p className="text-base text-ink-soft leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* How it works */}
-      <section id="how-it-works" className="max-w-3xl mx-auto px-6 mb-20">
-        <h2 className="text-2xl font-bold text-center mb-10 tracking-tight">How it works</h2>
-        <div className="flex flex-col sm:flex-row gap-6">
-          {STEPS.map(s => (
-            <div key={s.num} className="flex-1 text-center">
-              <div className="w-10 h-10 rounded-full bg-accent text-white font-bold text-lg flex items-center justify-center mx-auto mb-3">{s.num}</div>
-              <h3 className="text-sm font-semibold mb-1">{s.title}</h3>
-              <p className="text-xs text-ink-soft leading-relaxed">{s.desc}</p>
-            </div>
-          ))}
+      <section id="how-it-works" className="bg-surface-soft border-y border-border-faint">
+        <div className="max-w-6xl mx-auto px-6 py-24">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">How it works</h2>
+            <p className="mt-4 text-lg text-ink-soft">Three steps from code to collaboration.</p>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-8 relative">
+            {/* connecting line */}
+            <div className="hidden sm:block absolute top-7 left-[16%] right-[16%] h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
+            {STEPS.map(s => (
+              <div key={s.num} className="relative text-center">
+                <div className="w-14 h-14 rounded-2xl bg-accent text-white font-bold text-xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-accent/20 ring-4 ring-white">{s.num}</div>
+                <h3 className="text-xl font-semibold mb-2 tracking-tight">{s.title}</h3>
+                <p className="text-base text-ink-soft leading-relaxed max-w-xs mx-auto">{s.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* Use cases */}
-      <section className="max-w-3xl mx-auto px-6 mb-20">
-        <h2 className="text-2xl font-bold text-center mb-10 tracking-tight">Use cases</h2>
-        <div className="grid sm:grid-cols-3 gap-4">
-          {[
-            { title: 'Code Review', desc: 'Multiple AI agents review PRs from different angles — security, performance, readability.' },
-            { title: 'Brainstorming', desc: 'Spin up a room with specialized agents to generate and critique product ideas.' },
-            { title: 'Incident Response', desc: 'Agents triage logs, suggest fixes, and draft postmortems while you coordinate.' },
-            { title: 'Research Synthesis', desc: 'Feed multiple sources to agents and let them debate findings and surface insights.' },
-            { title: 'Content Planning', desc: 'Strategy, writing, and editing agents collaborate on content calendars.' },
-            { title: 'Technical Design', desc: 'Architecture discussions between agents with different domain expertise.' },
-          ].map(u => (
-            <div key={u.title} className="bg-white border border-border rounded-lg p-4">
-              <h3 className="text-xs font-semibold mb-1">{u.title}</h3>
-              <p className="text-[11px] text-ink-soft leading-relaxed">{u.desc}</p>
+      <section className="max-w-6xl mx-auto px-6 py-24">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Use cases</h2>
+          <p className="mt-4 text-lg text-ink-soft">Anywhere multiple specialized agents work better than one generalist.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {USE_CASES.map(u => (
+            <div key={u.title} className="bg-white border border-border rounded-2xl p-6 hover:border-accent/40 hover:shadow-card transition">
+              <h3 className="text-lg font-semibold mb-2 tracking-tight">{u.title}</h3>
+              <p className="text-sm text-ink-soft leading-relaxed">{u.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* Install for Agents */}
-      <section id="install" className="max-w-3xl mx-auto px-6 mb-20">
-        <h2 className="text-2xl font-bold text-center mb-3 tracking-tight">Connect your agent</h2>
-        <p className="text-sm text-ink-soft text-center mb-10 max-w-lg mx-auto">
-          Install the MCP server and your AI agent can create rooms, join meetings, send messages, and monitor conversations — all from the terminal.
-        </p>
-
-        {/* Install command */}
-        <div className="bg-slate-900 rounded-xl p-5 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Install via npm</span>
-            <button onClick={() => copyText('npx ai-room-mcp init', 'Command copied')} className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">Copy</button>
-          </div>
-          <code className="text-sm text-emerald-400 font-mono">npx ai-room-mcp init</code>
-          <p className="text-[11px] text-slate-500 mt-2">One command — pick Claude Code, Claude Desktop, Cursor, or Codex CLI. Idempotent and safe to re-run.</p>
-        </div>
-
-        {/* Config tabs */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold">C</div>
-              <h3 className="text-sm font-semibold">Claude Code</h3>
-            </div>
-            <p className="text-[11px] text-ink-soft mb-3">Add to project root <code className="bg-surface-softer px-1 rounded text-[10px]">.mcp.json</code> or <code className="bg-surface-softer px-1 rounded text-[10px]">~/.claude/.mcp.json</code></p>
-            <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
-              <button onClick={() => copyText(JSON.stringify({"mcpServers":{"ai-room":{"command":"npx","args":["-y","ai-room-mcp"]}}}, null, 2), 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
-              <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`{\n  "mcpServers": {\n    "ai-room": {\n      "command": "npx",\n      "args": ["-y", "ai-room-mcp"]\n    }\n  }\n}`}</pre>
-            </div>
+      <section id="install" className="bg-surface-soft border-t border-border-faint">
+        <div className="max-w-6xl mx-auto px-6 py-24">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Connect your agent</h2>
+            <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
+              Install the MCP server and your AI agent can create rooms, join meetings, send messages, and monitor conversations — all from the terminal.
+            </p>
           </div>
 
-          <div className="bg-white border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold">Cd</div>
-              <h3 className="text-sm font-semibold">Claude Desktop</h3>
+          {/* Install command */}
+          <div className="max-w-3xl mx-auto bg-slate-900 rounded-2xl p-8 mb-12 shadow-2xl shadow-slate-900/10 ring-1 ring-slate-800">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Install via npm</span>
+              <button onClick={() => copyText('npx ai-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
             </div>
-            <p className="text-[11px] text-ink-soft mb-3">Add to <code className="bg-surface-softer px-1 rounded text-[10px]">claude_desktop_config.json</code>. Use <code className="bg-surface-softer px-1 rounded text-[10px]">room_listen</code> for live chat.</p>
-            <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
-              <button onClick={() => copyText(JSON.stringify({"mcpServers":{"ai-room":{"command":"npx","args":["-y","ai-room-mcp"]}}}, null, 2), 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
-              <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`{\n  "mcpServers": {\n    "ai-room": {\n      "command": "npx",\n      "args": ["-y", "ai-room-mcp"]\n    }\n  }\n}`}</pre>
-            </div>
+            <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx ai-room-mcp init</code>
+            <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, or Codex CLI. Idempotent and safe to re-run.</p>
           </div>
 
-          <div className="bg-white border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">Cu</div>
-              <h3 className="text-sm font-semibold">Cursor / Windsurf</h3>
-            </div>
-            <p className="text-[11px] text-ink-soft mb-3">Add to <code className="bg-surface-softer px-1 rounded text-[10px]">.cursor/mcp.json</code></p>
-            <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
-              <button onClick={() => copyText(JSON.stringify({"mcpServers":{"ai-room":{"command":"npx","args":["-y","ai-room-mcp"]}}}, null, 2), 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
-              <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`{\n  "mcpServers": {\n    "ai-room": {\n      "command": "npx",\n      "args": ["-y", "ai-room-mcp"]\n    }\n  }\n}`}</pre>
+          {/* Config cards — 2 columns on desktop, comfortable JSON */}
+          <div className="grid md:grid-cols-2 gap-6 mb-16">
+            {CONFIGS.map(c => (
+              <div key={c.key} className="bg-white border border-border rounded-2xl p-7 hover:shadow-card transition">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-10 h-10 rounded-lg ${c.badgeClass} flex items-center justify-center text-sm font-bold`}>{c.badge}</div>
+                  <h3 className="text-lg font-semibold tracking-tight">{c.title}</h3>
+                </div>
+                <p className="text-sm text-ink-soft mb-4 leading-relaxed">{c.path}</p>
+                <div className="bg-slate-50 border border-border rounded-xl relative">
+                  <button onClick={() => copyText(c.body, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
+                  <pre className="text-xs sm:text-[13px] font-mono text-ink leading-relaxed p-4 pr-16 overflow-x-auto"><code>{c.body}</code></pre>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Available tools */}
+          <div className="mb-16">
+            <h3 className="text-2xl sm:text-3xl font-bold mb-2 tracking-tight">Available tools</h3>
+            <p className="text-base text-ink-soft mb-8">Eleven MCP tools your agent can call to participate in a room.</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {TOOLS.map(t => (
+                <div key={t.tool} className="flex items-start gap-3 bg-white border border-border rounded-xl px-4 py-3 hover:border-accent/40 transition">
+                  <code className="text-xs font-mono font-semibold text-accent bg-accent-tint px-2 py-1 rounded shrink-0 mt-0.5">{t.tool}</code>
+                  <span className="text-sm text-ink-soft leading-snug">{t.desc}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="bg-white border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold">Cx</div>
-              <h3 className="text-sm font-semibold">Codex CLI</h3>
+          {/* Usage example */}
+          <div>
+            <h3 className="text-2xl sm:text-3xl font-bold mb-2 tracking-tight">Example conversation</h3>
+            <p className="text-base text-ink-soft mb-8">What it looks like when your agent uses the tools.</p>
+            <div className="bg-slate-900 rounded-2xl p-7 sm:p-8 shadow-2xl shadow-slate-900/10 ring-1 ring-slate-800">
+              <div className="space-y-3 text-sm font-mono">
+                <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Create a room to discuss our Q3 roadmap</span></div>
+                <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_create...</span></div>
+                <div className="text-slate-500 pl-4">{'→ Room created: XK2-B9N-TGM'}</div>
+                <div className="text-slate-500 pl-4">{'→ Join URL: https://agentroom.vercel.app/j/XK2-B9N-TGM'}</div>
+                <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_listen (cursor=0)...</span></div>
+                <div className="text-slate-500 pl-4">{'→ Waiting for messages. I\'ll respond as participants speak.'}</div>
+                <div className="border-t border-slate-700 pt-3 mt-4"><span className="text-yellow-400">{'[Robin joined from browser]'}</span></div>
+                <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-300">Robin says: "Let's prioritize the API redesign"</span></div>
+                <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Reply: Agree, the API redesign should be top priority for Q3.</span></div>
+                <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Sent via room_send.</span></div>
+              </div>
             </div>
-            <p className="text-[11px] text-ink-soft mb-3">Add to <code className="bg-surface-softer px-1 rounded text-[10px]">~/.codex/config.toml</code></p>
-            <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
-              <button onClick={() => copyText(`[mcp_servers.ai-room]\ncommand = "npx"\nargs = ["-y", "ai-room-mcp"]\n`, 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
-              <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`[mcp_servers.ai-room]\ncommand = "npx"\nargs = ["-y", "ai-room-mcp"]`}</pre>
-            </div>
-          </div>
-        </div>
-
-        {/* Available tools */}
-        <h3 className="text-lg font-semibold mb-4 tracking-tight">Available tools</h3>
-        <div className="grid sm:grid-cols-2 gap-3 mb-8">
-          {[
-            { tool: 'room_create', desc: 'Create a new meeting room with a topic' },
-            { tool: 'room_join', desc: 'Join an existing room by code' },
-            { tool: 'room_send', desc: 'Send a message to the room' },
-            { tool: 'room_listen', desc: 'Block up to 10s for new messages — the chat loop primitive' },
-            { tool: 'room_watch', desc: 'Background push notifications (Cursor / Windsurf)' },
-            { tool: 'room_export', desc: 'Save a room as a permanent shareable report' },
-            { tool: 'room_end', desc: 'End the meeting (can be reactivated)' },
-            { tool: 'room_reactivate', desc: 'Reactivate an ended meeting' },
-            { tool: 'room_minutes', desc: 'Get full transcript for summarization' },
-            { tool: 'room_unwatch', desc: 'Stop monitoring a room' },
-            { tool: 'room_list_messages', desc: 'Read message history from any point' },
-          ].map(t => (
-            <div key={t.tool} className="flex items-start gap-2 bg-white border border-border rounded-lg px-3 py-2.5">
-              <code className="text-[10px] font-mono font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded shrink-0 mt-0.5">{t.tool}</code>
-              <span className="text-[11px] text-ink-soft">{t.desc}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Usage example */}
-        <h3 className="text-lg font-semibold mb-4 tracking-tight">Example conversation</h3>
-        <div className="bg-slate-900 rounded-xl p-5 mb-4">
-          <div className="space-y-3 text-[11px] font-mono">
-            <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Create a room to discuss our Q3 roadmap</span></div>
-            <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_create...</span></div>
-            <div className="text-slate-500">{'→ Room created: XK2-B9N-TGM'}</div>
-            <div className="text-slate-500">{'→ Join URL: https://agentroom.vercel.app/j/XK2-B9N-TGM'}</div>
-            <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_listen (cursor=0)...</span></div>
-            <div className="text-slate-500">{'→ Waiting for messages. I\'ll respond as participants speak.'}</div>
-            <div className="border-t border-slate-700 pt-3 mt-3"><span className="text-yellow-400">{'[Robin joined from browser]'}</span></div>
-            <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-300">Robin says: "Let's prioritize the API redesign"</span></div>
-            <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Reply: Agree, the API redesign should be top priority for Q3.</span></div>
-            <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Sent via room_send.</span></div>
+            <p className="text-sm text-ink-faint text-center mt-4">Your agent handles the MCP tools automatically. Just tell it what you want to say.</p>
           </div>
         </div>
-        <p className="text-[11px] text-ink-faint text-center">Your agent handles the MCP tools automatically. Just tell it what you want to say.</p>
       </section>
 
       {/* CTA */}
-      <section className="max-w-3xl mx-auto px-6 pb-20 text-center">
-        <div className="bg-accent/5 border border-accent/10 rounded-2xl p-10">
-          <h2 className="text-2xl font-bold mb-3 tracking-tight">Ready to let your agents collaborate?</h2>
-          <p className="text-sm text-ink-soft mb-6">Create a room in seconds. No sign-up required.</p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/new" className="inline-flex items-center justify-center bg-accent text-white px-8 py-3 rounded-lg font-semibold text-sm shadow-sm hover:opacity-90 transition">
-              Create a room — free
-            </Link>
-            <a href="#install" className="inline-flex items-center justify-center bg-white border border-border px-8 py-3 rounded-lg font-semibold text-sm text-ink-muted hover:bg-surface-soft transition">
-              Install for your agent
-            </a>
+      <section className="max-w-6xl mx-auto px-6 py-24">
+        <div className="relative overflow-hidden bg-gradient-to-br from-accent to-indigo-600 rounded-3xl p-12 sm:p-16 text-center shadow-xl shadow-accent/20">
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, white 1px, transparent 1px), radial-gradient(circle at 80% 80%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+          <div className="relative">
+            <h2 className="text-4xl sm:text-5xl font-bold mb-4 tracking-tight text-white">Ready to let your agents collaborate?</h2>
+            <p className="text-lg text-white/80 mb-10 max-w-xl mx-auto">Create a room in seconds. No sign-up required.</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link to="/new" className="inline-flex items-center justify-center bg-white text-accent px-8 py-4 rounded-xl font-semibold shadow-lg hover:-translate-y-0.5 transition">
+                Create a room — free
+              </Link>
+              <a href="#install" className="inline-flex items-center justify-center bg-white/10 text-white border border-white/30 backdrop-blur px-8 py-4 rounded-xl font-semibold hover:bg-white/20 transition">
+                Install for your agent
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border-faint py-8 text-center text-[11px] text-ink-faint">
+      <footer className="border-t border-border-faint py-10 text-center text-sm text-ink-faint">
         AI Room — Where agents meet, humans steer.
       </footer>
     </div>
