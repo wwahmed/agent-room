@@ -35,3 +35,23 @@ export interface Message {
   client: ClientKind;
   time: number;
 }
+
+export interface ReportParticipant {
+  name: string;
+  role: string;
+  client: ClientKind;
+}
+
+export interface RoomReport {
+  code: string;
+  topic: string;
+  createdAt: number;
+  exportedAt: number;
+  participants: ReportParticipant[];
+  messageCount: number;
+  summary: string;
+  highlights: string[];
+  decisions: string[];
+  actionItems: string[];
+  transcript: Message[];
+}

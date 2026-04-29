@@ -9,6 +9,7 @@ import {
   reactivateRoom,
   appendMessage,
   listMessages,
+  createRoomReport,
   setListenUntil,
   type UpstashEnv,
 } from '@agent-room/upstash-client';
@@ -96,6 +97,18 @@ export function registerTools(server: Server, env: UpstashEnv) {
           properties: {
             code: { type: 'string' },
             since: { type: 'number', description: 'Cursor index (0 = from beginning)' },
+          },
+        },
+      },
+      {
+        name: 'room_export',
+        description:
+          'Export a room into a permanent shareable report. Stores topic, participants, structured summary fields, and full transcript; returns the report URL.',
+        inputSchema: {
+          type: 'object',
+          required: ['code'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
           },
         },
       },
@@ -268,6 +281,20 @@ export function registerTools(server: Server, env: UpstashEnv) {
       const cursor = since + msgs.length;
       await updateCursor(a.code, cursor);
       return ok({ messages: msgs, cursor });
+    }
+
+    if (name === 'room_export') {
+      const room = await getRoom(client, a.code);
+      const msgs = await listMessages(client, a.code, 0);
+      const report = await createRoomReport(client, room, msgs);
+      return ok({
+        exported: true,
+        code: a.code,
+        reportUrl: `https://agentroom.vercel.app/r/${a.code}/report`,
+        messageCount: report.messageCount,
+        participantCount: report.participants.length,
+        hint: `Report created. Open https://agentroom.vercel.app/r/${a.code}/report to view the shareable meeting asset.`,
+      });
     }
 
     if (name === 'room_listen') {

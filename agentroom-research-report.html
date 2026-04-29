@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Room 竞品调研与产品路线报告</title>
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #5f6f80;
+      --line: #d9e0e7;
+      --paper: #f7f9fb;
+      --panel: #ffffff;
+      --navy: #102033;
+      --teal: #0f8b8d;
+      --gold: #d99b28;
+      --coral: #d95d39;
+      --green: #2f8f5b;
+      --blue: #2d6cdf;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    header {
+      color: #fff;
+      background:
+        linear-gradient(135deg, rgba(16, 32, 51, .98), rgba(15, 139, 141, .84)),
+        radial-gradient(circle at 70% 20%, rgba(217, 155, 40, .28), transparent 32%);
+      padding: 56px 28px 48px;
+    }
+
+    .wrap {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: #b9f3eb;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 860px;
+      margin: 22px 0 0;
+      color: #e8f6f4;
+      font-size: 20px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 34px;
+    }
+
+    .hero-stat {
+      border: 1px solid rgba(255, 255, 255, .22);
+      background: rgba(255, 255, 255, .08);
+      padding: 18px;
+      border-radius: 8px;
+    }
+
+    .hero-stat strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .hero-stat span {
+      display: block;
+      margin-top: 6px;
+      color: #d9eeee;
+      font-size: 14px;
+    }
+
+    main {
+      padding: 38px 0 64px;
+    }
+
+    section {
+      margin-top: 34px;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 28px;
+      line-height: 1.25;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 19px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+    }
+
+    .panel,
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 10px 28px rgba(23, 32, 42, .06);
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .callout {
+      border-left: 5px solid var(--teal);
+      background: #eef9f8;
+      padding: 18px 20px;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      padding: 20px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tag.gold {
+      background: var(--gold);
+      color: #221600;
+    }
+
+    .tag.green {
+      background: var(--green);
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .yes {
+      border-top: 5px solid var(--green);
+    }
+
+    .no {
+      border-top: 5px solid var(--coral);
+    }
+
+    .roadmap {
+      display: grid;
+      gap: 14px;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 90px 1fr 145px;
+      gap: 16px;
+      align-items: start;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .phase-code {
+      color: #fff;
+      background: var(--navy);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .time {
+      color: var(--muted);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .roles {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+
+    .role {
+      min-height: 118px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .role strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--teal);
+    }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 12px;
+    }
+
+    .step {
+      position: relative;
+      padding: 18px 18px 18px 58px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .step:before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--teal);
+      text-align: center;
+      line-height: 28px;
+      font-weight: 800;
+    }
+
+    footer {
+      padding: 28px 0 42px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid,
+      .summary,
+      .matrix,
+      .split,
+      .roles {
+        grid-template-columns: 1fr;
+      }
+
+      .phase {
+        grid-template-columns: 1fr;
+      }
+
+      .time {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">AI Room Research Report · KC5-8W3-DRY</p>
+      <h1>把 AI Room 做成 MCP 原生的 agent 会议层，而不是另一个 agent runner</h1>
+      <p class="lead">任何 MCP agent 都能进入同一个房间开会，并把会议过程沉淀成可分享的报告资产。</p>
+      <div class="hero-grid">
+        <div class="hero-stat">
+          <strong>P0</strong>
+          <span>报告 + transcript + replay 分享页</span>
+        </div>
+        <div class="hero-stat">
+          <strong>P1</strong>
+          <span>角色预设与 role brief 自动注入</span>
+        </div>
+        <div class="hero-stat">
+          <strong>P2</strong>
+          <span>live presence，让协作状态可见</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="summary">
+      <div class="panel">
+        <h2>一句话结论</h2>
+        <div class="callout">不要做 agent runner，也不要做工作流平台；要做 MCP-native agent meeting layer + report/replay asset layer。</div>
+      </div>
+      <div class="panel">
+        <h2>最终判断</h2>
+        <p>AI Room 的机会不在于替用户运行 agent，而在于让不同来源的 agent 能进入同一个会议空间，完成讨论、互相质疑、形成结论，并把过程变成可分享、可复盘、可传播的资产。</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>竞品矩阵</h2>
+      <div class="matrix">
+        <article class="card">
+          <span class="tag">deepgram/AgentRooms</span>
+          <h3>工程基础设施型 room demo</h3>
+          <p><strong>亮点：</strong>房间生命周期、参与者身份、实时事件、后端状态管理、鉴权与 rate limit 思路、battle/voting/judging 状态机。</p>
+          <p><strong>可吸收：</strong>room event schema、participant lifecycle、API key / rate limit、可观测 room state。</p>
+          <p><strong>不吸收：</strong>battle 赛事模型、复杂裁判流程、过重后端状态机。</p>
+          <p><strong>启示：</strong>AI Room 应该有稳定协议，而不是只是一层聊天 UI。</p>
+        </article>
+
+        <article class="card">
+          <span class="tag gold">agentsroom.dev</span>
+          <h3>多 CLI agent 控制台</h3>
+          <p><strong>亮点：</strong>多 agent 并行、角色/模板、任务编排、人类可视化管理 agent、状态可见。</p>
+          <p><strong>可吸收：</strong>预设角色、agent presence、谁在工作/谁在等待、prompt library、任务分工视图。</p>
+          <p><strong>不吸收：</strong>桌面端、手机端、工作流画布、终端 runner、git worktree 管理。</p>
+          <p><strong>启示：</strong>用户买的不是低延迟消息，而是“我能看懂多个 agent 正在如何协作”。</p>
+        </article>
+
+        <article class="card">
+          <span class="tag green">agentroom.app / replay</span>
+          <h3>执行过程资产化产品</h3>
+          <p><strong>亮点：</strong>任务过程资产化、可回放、可分享、结果导出。</p>
+          <p><strong>可吸收：</strong>permanent report、replay link、share page、transcript as asset。</p>
+          <p><strong>不吸收：</strong>VM 执行环境、录屏级回放、重型 sandbox。</p>
+          <p><strong>启示：</strong>会议结束不是终点，报告链接才是传播起点。</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>吸收与克制</h2>
+      <div class="split">
+        <div class="card yes">
+          <h3>应该吸收的精华</h3>
+          <ul>
+            <li>稳定的 room event schema：message、participant_joined、room_ended、report_created。</li>
+            <li>agent presence：谁在线、谁在听、谁刚发言、谁需要回应。</li>
+            <li>高质量角色预设，降低用户组织多 agent 会议的成本。</li>
+            <li>永久报告链接，让一次会议变成可分享资产。</li>
+            <li>轻量 API key、rate limit、room lifecycle，为外部 agent 接入做准备。</li>
+          </ul>
+        </div>
+        <div class="card no">
+          <h3>不应该照搬的范围</h3>
+          <ul>
+            <li>battle / voting / judging 赛事状态机。</li>
+            <li>桌面端、手机端、工作流画布、终端管理器。</li>
+            <li>VM 执行环境、录屏级回放、重型 sandbox。</li>
+            <li>把 AI Room 做成大而全的 agent operating system。</li>
+            <li>只优化 WebSocket 延迟，却没有产品层面的协作状态表达。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>P0-P3 产品路线</h2>
+      <div class="roadmap">
+        <div class="phase">
+          <div class="phase-code">P0</div>
+          <div>
+            <h3>会议资产化：report + transcript + replay</h3>
+            <p>新增 room_export / Save & Share，把房间讨论冻结成永久报告链接。报告包含背景、参与者、核心结论、争议点、最终决策、行动项和完整 transcript。</p>
+          </div>
+          <div class="time">0.5-1 天</div>
+        </div>
+        <div class="phase">
+          <div class="phase-code">P1</div>
+          <div>
+            <h3>角色预设与 role brief 自动注入</h3>
+            <p>提供 6 个默认角色，让 agent 进入房间时天然有分工。角色服务于报告质量，而不是装饰性标签。</p>
+          </div>
+          <div class="time">2-4 小时</div>
+        </div>
+        <div class="phase">
+          <div class="phase-code">P2</div>
+          <div>
+            <h3>live presence</h3>
+            <p>让用户看见“谁在线、谁在听、谁刚说过话、谁需要回应”。技术实现可以是 SSE 或 WebSocket，但产品表达应该是会议状态。</p>
+          </div>
+          <div class="time">0.5-1 天</div>
+        </div>
+        <div class="phase">
+          <div class="phase-code">P3</div>
+          <div>
+            <h3>协议、安全与配额</h3>
+            <p>轻量吸收 deepgram/AgentRooms 的工程化能力：API key、rate limit、room lifecycle、event schema、外部 agent 接入边界。</p>
+          </div>
+          <div class="time">1-2 天</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>v0 角色预设</h2>
+      <div class="roles">
+        <div class="role"><strong>Facilitator</strong>控节奏、收敛议题、推动决策。</div>
+        <div class="role"><strong>Researcher</strong>查资料、提炼竞品、提供证据。</div>
+        <div class="role"><strong>Skeptic</strong>质疑假设、指出风险、避免自嗨。</div>
+        <div class="role"><strong>Builder</strong>把想法落到工程拆分和工时。</div>
+        <div class="role"><strong>Writer</strong>整理结构、形成可读报告。</div>
+        <div class="role"><strong>QA Reviewer</strong>检查遗漏、验证结论、发现边界问题。</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>v0 实施拆分</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>新增 room_export MCP 工具</h3>
+          <p>读取 room metadata 与 messages，把 transcript 冻结到 long-term key，并返回 reportId / reportUrl。</p>
+        </div>
+        <div class="step">
+          <h3>生成结构化报告</h3>
+          <p>由 Worker 或服务端函数根据 transcript 生成背景、核心结论、争议点、决策、行动项。首版可先用模板生成，后续接 LLM。</p>
+        </div>
+        <div class="step">
+          <h3>新增 /r/:code/report 页面</h3>
+          <p>页面展示报告摘要、路线图、完整 transcript 和参与者信息。样式参考本 HTML，目标是“可直接分享给外部人”。</p>
+        </div>
+        <div class="step">
+          <h3>加入 Save & Share CTA</h3>
+          <p>在房间结束或会议中后段出现主按钮，把一次实时聊天转成可传播资产。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p><strong>Co-authored by Claude + Codex.</strong> Source room: KC5-8W3-DRY. This report summarizes the joint discussion on AI Room positioning and roadmap.</p>
+    </div>
+  </footer>
+</body>
+</html>

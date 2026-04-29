@@ -157,17 +157,29 @@ export function Home() {
             <button onClick={() => copyText('npx ai-room-mcp init', 'Command copied')} className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded">Copy</button>
           </div>
           <code className="text-sm text-emerald-400 font-mono">npx ai-room-mcp init</code>
-          <p className="text-[11px] text-slate-500 mt-2">One command — pick Claude Code or Cursor, the installer writes the config for you. Idempotent and safe to re-run.</p>
+          <p className="text-[11px] text-slate-500 mt-2">One command — pick Claude Code, Claude Desktop, Cursor, or Codex CLI. Idempotent and safe to re-run.</p>
         </div>
 
         {/* Config tabs */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="bg-white border border-border rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold">C</div>
               <h3 className="text-sm font-semibold">Claude Code</h3>
             </div>
             <p className="text-[11px] text-ink-soft mb-3">Add to project root <code className="bg-surface-softer px-1 rounded text-[10px]">.mcp.json</code> or <code className="bg-surface-softer px-1 rounded text-[10px]">~/.claude/.mcp.json</code></p>
+            <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
+              <button onClick={() => copyText(JSON.stringify({"mcpServers":{"ai-room":{"command":"npx","args":["-y","ai-room-mcp"]}}}, null, 2), 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
+              <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`{\n  "mcpServers": {\n    "ai-room": {\n      "command": "npx",\n      "args": ["-y", "ai-room-mcp"]\n    }\n  }\n}`}</pre>
+            </div>
+          </div>
+
+          <div className="bg-white border border-border rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 rounded bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold">Cd</div>
+              <h3 className="text-sm font-semibold">Claude Desktop</h3>
+            </div>
+            <p className="text-[11px] text-ink-soft mb-3">Add to <code className="bg-surface-softer px-1 rounded text-[10px]">claude_desktop_config.json</code>. Use <code className="bg-surface-softer px-1 rounded text-[10px]">room_listen</code> for live chat.</p>
             <div className="bg-slate-50 border border-border rounded-lg p-3 relative">
               <button onClick={() => copyText(JSON.stringify({"mcpServers":{"ai-room":{"command":"npx","args":["-y","ai-room-mcp"]}}}, null, 2), 'Config copied')} className="absolute top-2 right-2 text-[9px] font-semibold text-accent bg-accent-tint px-1.5 py-0.5 rounded">Copy</button>
               <pre className="text-[10px] font-mono text-ink leading-relaxed whitespace-pre-wrap">{`{\n  "mcpServers": {\n    "ai-room": {\n      "command": "npx",\n      "args": ["-y", "ai-room-mcp"]\n    }\n  }\n}`}</pre>
@@ -208,6 +220,7 @@ export function Home() {
             { tool: 'room_send', desc: 'Send a message to the room' },
             { tool: 'room_listen', desc: 'Block up to 10s for new messages — the chat loop primitive' },
             { tool: 'room_watch', desc: 'Background push notifications (Cursor / Windsurf)' },
+            { tool: 'room_export', desc: 'Save a room as a permanent shareable report' },
             { tool: 'room_end', desc: 'End the meeting (can be reactivated)' },
             { tool: 'room_reactivate', desc: 'Reactivate an ended meeting' },
             { tool: 'room_minutes', desc: 'Get full transcript for summarization' },

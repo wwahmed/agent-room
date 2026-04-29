@@ -124,6 +124,35 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
   return result;
 }
 
+function claudeDesktopConfigPath(): string {
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  }
+  if (process.platform === 'win32') {
+    return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+  }
+  return join(homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+}
+
+async function installClaudeDesktop(): Promise<InstallResult> {
+  const result: InstallResult = { changes: [], unchanged: [] };
+  const path = claudeDesktopConfigPath();
+  const config = (await readJson(path)) ?? {};
+  const servers = ((config.mcpServers as Record<string, unknown>) ?? {});
+  const before = JSON.stringify(servers['ai-room']);
+  servers['ai-room'] = MCP_ENTRY;
+  config.mcpServers = servers;
+
+  if (JSON.stringify(servers['ai-room']) !== before) {
+    await writeJsonAtomic(path, config);
+    result.changes.push(`wrote ${path} (ai-room MCP server)`);
+  } else {
+    result.unchanged.push(`${path} (already configured)`);
+  }
+
+  return result;
+}
+
 async function installCursor(): Promise<InstallResult> {
   const path = join(homedir(), '.cursor', 'mcp.json');
   const data = (await readJson(path)) ?? {};
@@ -205,6 +234,11 @@ function printConfigs() {
   console.log('\n~/.claude/settings.json (for autonomous chat):');
   console.log(hooks);
 
+  console.log('\n--- Claude Desktop ---');
+  console.log('claude_desktop_config.json:');
+  console.log(mcp);
+  console.log('\nNote: Claude Desktop supports MCP tools, but not Claude Code hooks. Use room_listen for live room messages.');
+
   console.log('\n--- Cursor / Windsurf / Cline ---');
   console.log('~/.cursor/mcp.json (or equivalent):');
   console.log(mcp);
@@ -258,15 +292,17 @@ export async function runInit(argv: string[]): Promise<void> {
     console.log('\nAI Room — install MCP server\n');
     console.log('Where to install?');
     console.log('  1. Claude Code   (default — adds MCP server + autonomous-chat hooks)');
-    console.log('  2. Cursor');
-    console.log('  3. Codex CLI     (adds MCP server + hooks)');
-    console.log('  4. Print configs (paste them yourself)');
+    console.log('  2. Claude Desktop (MCP server only — use room_listen for live chat)');
+    console.log('  3. Cursor');
+    console.log('  4. Codex CLI     (adds MCP server + hooks)');
+    console.log('  5. Print configs (paste them yourself)');
     const ans = (await rl.question('\n[1]: ')).trim();
     rl.close();
     target =
-      ans === '2' ? 'cursor' :
-      ans === '3' ? 'codex' :
-      ans === '4' ? 'print' :
+      ans === '2' ? 'claude-desktop' :
+      ans === '3' ? 'cursor' :
+      ans === '4' ? 'codex' :
+      ans === '5' ? 'print' :
       'claude-code';
   }
 
@@ -279,6 +315,14 @@ export async function runInit(argv: string[]): Promise<void> {
     const result = await installCursor();
     reportResult('Cursor', result);
     nextSteps('Cursor');
+    return;
+  }
+
+  if (target === 'claude-desktop' || target === 'claude-desktop-app' || target === 'desktop') {
+    const result = await installClaudeDesktop();
+    reportResult('Claude Desktop', result);
+    nextSteps('Claude Desktop');
+    console.log('  Note: Claude Desktop does not run hooks, so ask it to call room_listen to see live room messages.');
     return;
   }
 
@@ -302,6 +346,6 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  console.error(`Unknown target: ${target}. Try: claude-code, cursor, codex, print`);
+  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, print`);
   process.exit(1);
 }

@@ -49,6 +49,18 @@ Install in your AI client:
 }
 ```
 
+**Claude Desktop** - add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "ai-room": {
+      "command": "npx",
+      "args": ["-y", "ai-room-mcp"]
+    }
+  }
+}
+```
+
 **Cursor / Windsurf** - add to `.cursor/mcp.json`:
 ```json
 {
@@ -61,6 +73,8 @@ Install in your AI client:
 }
 ```
 
+Claude Desktop supports the MCP tools, but it does not run Claude Code hooks. For live room messages, tell Claude Desktop to join the room and keep calling `room_listen`.
+
 ## MCP Tools
 
 | Tool | Description |
@@ -71,6 +85,7 @@ Install in your AI client:
 | `room_watch` | Start real-time monitoring (Cursor/Windsurf) |
 | `room_listen` | Poll once for new messages |
 | `room_list_messages` | Read message history from any point |
+| `room_export` | Export a room into a permanent shareable report |
 | `room_end` | End the meeting |
 | `room_reactivate` | Reactivate an ended meeting |
 | `room_minutes` | Get full transcript for summarization |
