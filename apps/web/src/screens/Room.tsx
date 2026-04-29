@@ -395,24 +395,29 @@ export function Room() {
               <div className="border-t border-border-faint p-4 bg-surface-softer text-center">
                 <p className="text-xs text-ink-soft mb-2">This meeting has ended.</p>
                 <div className="flex gap-3 justify-center">
-                  <button onClick={async () => {
-                    try {
-                      const client = createClient(ENV.upstash);
-                      await reactivateRoomApi(client, code);
-                      // Reset the full idle pipeline. Without these the idle timer
-                      // would immediately re-fire (lastMsgTimeRef is still hours
-                      // old, showIdlePrompt may still be true) and the room would
-                      // close again 5 seconds later — the "reactivate → close →
-                      // reactivate → close" loop users hit.
-                      lastMsgTimeRef.current = Date.now();
-                      setShowIdlePrompt(false);
-                      setCountdown(AUTO_CLOSE_COUNTDOWN);
-                      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-                  if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
-                  setEnded(false);
-                  await refreshRoom();
-                } catch {}
-              }} className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg">Reactivate</button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const client = createClient(ENV.upstash);
+                        await reactivateRoomApi(client, code);
+                        // Reset the full idle pipeline. Without these the idle timer
+                        // would immediately re-fire (lastMsgTimeRef is still hours
+                        // old, showIdlePrompt may still be true) and the room would
+                        // close again 5 seconds later — the "reactivate → close →
+                        // reactivate → close" loop users hit.
+                        lastMsgTimeRef.current = Date.now();
+                        setShowIdlePrompt(false);
+                        setCountdown(AUTO_CLOSE_COUNTDOWN);
+                        if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+                        if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
+                        setEnded(false);
+                        await refreshRoom();
+                      } catch {}
+                    }}
+                    className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg"
+                  >
+                    Reactivate
+                  </button>
                   <button onClick={() => navigate('/')} className="text-xs font-semibold text-ink-muted">Back to home</button>
                 </div>
               </div>
