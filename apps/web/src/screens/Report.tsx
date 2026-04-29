@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { RoomReport } from '@agent-room/shared';
-import { createClient, getRoomReport } from '@agent-room/upstash-client';
+import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 
 export function Report() {
@@ -9,6 +9,7 @@ export function Report() {
   const [report, setReport] = useState<RoomReport | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const client = createClient(ENV.upstash);
@@ -19,6 +20,23 @@ export function Report() {
       })
       .catch(e => setError(e instanceof Error ? e.message : String(e)));
   }, [code]);
+
+  async function refreshReport() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const client = createClient(ENV.upstash);
+      const room = await getRoom(client, code);
+      const messages = await listMessages(client, code, 0);
+      const next = await createRoomReport(client, room, messages);
+      setReport(next);
+      setMissing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   if (error) return <div className="p-10 text-red-600">{error}</div>;
   if (missing) {
@@ -45,6 +63,18 @@ export function Report() {
             <span>{report.messageCount} messages</span>
             <span>{report.participants.length} participants</span>
             <span>Exported {new Date(report.exportedAt).toLocaleString()}</span>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              onClick={refreshReport}
+              disabled={refreshing}
+              className="rounded-lg bg-white text-slate-950 px-4 py-2 text-xs font-semibold disabled:opacity-60"
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh from latest'}
+            </button>
+            <Link to={`/r/${report.code}`} className="rounded-lg border border-white/25 px-4 py-2 text-xs font-semibold text-white">
+              Open room
+            </Link>
           </div>
         </div>
       </header>
