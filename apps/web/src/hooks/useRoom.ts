@@ -95,5 +95,5 @@ export function useRoom(code: string, selfName: string) {
     }
   }, [code, pullMessages]);
 
-  return { ...state, sendMessage };
+  return { ...state, sendMessage, refreshRoom: pullRoom };
 }

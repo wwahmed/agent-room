@@ -29,7 +29,7 @@ export function Room() {
   const { code = '' } = useParams();
   const navigate = useNavigate();
   const [self, setSelf] = useState<SelfIdentity>(() => readStoredSelf(code) ?? { name: 'Guest', role: '' });
-  const { room, messages, error, sendMessage } = useRoom(code, self.name);
+  const { room, messages, error, sendMessage, refreshRoom } = useRoom(code, self.name);
   const [text, setText] = useState('');
   const [drafting, setDrafting] = useState(false);
   const [draftErr, setDraftErr] = useState<string | null>(null);
@@ -407,10 +407,11 @@ export function Room() {
                       setShowIdlePrompt(false);
                       setCountdown(AUTO_CLOSE_COUNTDOWN);
                       if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-                      if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
-                      setEnded(false);
-                    } catch {}
-                  }} className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg">Reactivate</button>
+                  if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
+                  setEnded(false);
+                  await refreshRoom();
+                } catch {}
+              }} className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg">Reactivate</button>
                   <button onClick={() => navigate('/')} className="text-xs font-semibold text-ink-muted">Back to home</button>
                 </div>
               </div>
