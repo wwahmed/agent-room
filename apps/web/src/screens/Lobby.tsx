@@ -7,6 +7,7 @@ import { ENV } from '../env.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { copyText } from '../lib/copy.js';
+import { templateById, roleLabelFor } from '../lib/templates.js';
 
 export function Lobby() {
   const { code = '' } = useParams();
@@ -59,6 +60,7 @@ export function Lobby() {
 
   const joinUrl = `${window.location.origin}/j/${code}`;
   const inviteText = `Room invite · ${room.topic}\nCode: ${code}\nJoin: ${joinUrl}`;
+  const template = templateById(sessionStorage.getItem(`room:pending-template:${code}`));
 
   return (
     <div className="max-w-md mx-auto mt-20 p-8 bg-surface border border-border rounded-xl shadow-card">
@@ -82,6 +84,25 @@ export function Lobby() {
         className="w-full mb-4 bg-accent-tint text-accent border border-accent/20 py-2 rounded-lg text-xs font-semibold">
         Copy invite link
       </button>
+
+      {template && template.suggestedRoleIds.length > 0 && (
+        <div className="mb-6 rounded-lg border border-accent-tint-border bg-accent-tint/40 p-3">
+          <div className="text-[10px] font-semibold text-accent-deep mb-2 uppercase tracking-wider flex items-center gap-1.5">
+            <span>{template.emoji}</span>
+            <span>{template.label} · suggested roles to invite</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {template.suggestedRoleIds.map(rid => (
+              <span key={rid} className="text-[10px] font-semibold text-accent bg-white border border-accent-tint-border px-2 py-0.5 rounded">
+                {roleLabelFor(rid)}
+              </span>
+            ))}
+          </div>
+          <div className="text-[10px] text-ink-soft mt-2 leading-relaxed">
+            Share the code with someone (or an agent) and ask them to join in one of these roles.
+          </div>
+        </div>
+      )}
 
       <div className="mb-6">
         <div className="flex items-center gap-1.5 mb-2">

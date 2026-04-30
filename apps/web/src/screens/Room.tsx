@@ -11,6 +11,7 @@ import { draftReply, generateMinutes } from '../lib/ai.js';
 import { createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
+import { templateById } from '../lib/templates.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -84,6 +85,40 @@ export function Room() {
     if (room?.status === 'ended') setEnded(true);
     else if (room?.status === 'active') setEnded(false);
   }, [room?.status]);
+
+  // Template opener: if CreateMeeting stashed a template id for this room and
+  // the host is opening an empty room, post the template's opening message
+  // once and clear the marker. Guarded by `messages.length === 0` so a host
+  // re-entering an active room doesn't re-post the opener.
+  const openerSentRef = useRef(false);
+  useEffect(() => {
+    if (!room || !self || ended || openerSentRef.current) return;
+    if (room.createdBy !== self.name) return;
+    if (messages.length !== 0) return;
+    const key = `room:pending-template:${code}`;
+    const tplId = sessionStorage.getItem(key);
+    const tpl = templateById(tplId);
+    if (!tpl || !tpl.openingMessage) return;
+    openerSentRef.current = true;
+    sessionStorage.removeItem(key);
+    const msg: Message = {
+      id: Date.now(),
+      type: 'msg',
+      name: self.name,
+      role: self.role || 'host',
+      initials: initialsFor(self.name),
+      color: colorForName(self.name),
+      client: 'web',
+      text: tpl.openingMessage,
+      time: Date.now(),
+    };
+    sendMessage(msg).catch(() => {
+      // If sending fails, give the user another shot on next mount by
+      // clearing our local guard. The sessionStorage key is already gone,
+      // so they'd need to re-create the room — acceptable miss for v1.
+      openerSentRef.current = false;
+    });
+  }, [room, self, ended, messages.length, code, sendMessage]);
 
   // Detect being kicked: once we've seen ourselves in the participants list
   // (so we know the room poll is working), if we then disappear from it we

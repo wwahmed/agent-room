@@ -3,14 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import { createClient, createRoom } from '@agent-room/upstash-client';
 import { generateCode, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
+import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
+
+const TEMPLATE_KEY = 'room:pending-template:';
 
 export function CreateMeeting() {
+  const [templateId, setTemplateId] = useState<string>('blank');
   const [topic, setTopic] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const template = templateById(templateId);
+
+  function pickTemplate(id: string) {
+    setTemplateId(id);
+    const t = templateById(id);
+    // Only autofill the topic if the user hasn't typed something yet — picking
+    // a different template after typing shouldn't clobber their work.
+    if (t && !topic.trim()) setTopic(t.topicSeed);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -21,6 +35,12 @@ export function CreateMeeting() {
       const code = generateCode();
       await createRoom(client, { code, topic: topic.trim(), createdBy: name.trim() });
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
+      // Stash the chosen template so Lobby (and the room itself) can post the
+      // opening message + show suggested roles. We use sessionStorage and not
+      // a route param so re-opens or refreshes don't re-trigger the opener.
+      if (template && template.id !== 'blank') {
+        sessionStorage.setItem(`${TEMPLATE_KEY}${code}`, template.id);
+      }
       navigate(`/r/${code}/lobby`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
@@ -30,16 +50,58 @@ export function CreateMeeting() {
   }
 
   return (
-    <form onSubmit={submit} className="max-w-md mx-auto mt-24 p-8 bg-surface border border-border rounded-xl shadow-card">
+    <form onSubmit={submit} className="max-w-2xl mx-auto mt-16 p-8 bg-surface border border-border rounded-xl shadow-card">
       <h1 className="text-lg font-semibold tracking-tight">New meeting</h1>
-      <p className="text-xs text-ink-soft mt-1 mb-6">Start a room and invite others with the code.</p>
+      <p className="text-xs text-ink-soft mt-1 mb-6">Pick a room shape, then a topic.</p>
 
       {error && <div className="text-[11px] text-red-600 mb-3">{error}</div>}
+
+      <div className="mb-6">
+        <span className="text-xs font-semibold text-ink-muted block mb-2">Template</span>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {ROOM_TEMPLATES.map(t => {
+            const active = t.id === templateId;
+            return (
+              <button
+                type="button"
+                key={t.id}
+                onClick={() => pickTemplate(t.id)}
+                className={`text-left rounded-lg border px-3 py-2.5 transition ${
+                  active
+                    ? 'border-accent bg-accent-tint ring-2 ring-accent/20'
+                    : 'border-border bg-white hover:border-accent/40'
+                }`}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <span className="text-base leading-none">{t.emoji}</span>
+                  <span>{t.label}</span>
+                </div>
+                <div className="text-[11px] text-ink-soft leading-snug mt-1">{t.description}</div>
+                {t.suggestedRoleIds.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {t.suggestedRoleIds.map(rid => (
+                      <span key={rid} className="text-[9px] font-semibold text-accent bg-white border border-accent-tint-border px-1.5 py-px rounded">
+                        {roleLabelFor(rid)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <label className="block mb-4">
         <span className="text-xs font-semibold text-ink-muted block mb-1.5">Topic</span>
         <input value={topic} onChange={e => setTopic(e.target.value)} required
+          placeholder={template?.topicSeed || 'What are we discussing?'}
           className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
+        {template && template.id !== 'blank' && (
+          <span className="text-[10px] text-ink-faint mt-1 block">
+            Tip: replace <code className="bg-surface-softer px-1 rounded text-[10px]">{'{...}'}</code> placeholders with the real subject.
+          </span>
+        )}
       </label>
       <label className="block mb-4">
         <span className="text-xs font-semibold text-ink-muted block mb-1.5">Your name</span>
