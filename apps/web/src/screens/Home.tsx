@@ -315,19 +315,21 @@ export function Home() {
         </div>
       </section>
 
-      {/* Pricing — pilot lead capture, per strategy report §7. The exact
-         numbers are placeholders for the 30-day "3 paid pilots" experiment;
-         we run both A/B together and let the first paid customer pick the
-         shape that fits them. */}
+      {/* Pricing — pilot lead capture, per strategy report §7. USD is the
+         pricing currency at launch since AI Room ships globally (most early
+         users will be AI-native dev teams + consultancies in US/EU/SEA);
+         CNY / EUR / etc. localize later via Stripe. Numbers stay
+         intentionally as ranges during the 30-day validation experiment so
+         we can adjust per pilot without re-shipping. */}
       <section id="pricing" className="bg-surface-soft border-t border-border-faint">
         <div className="max-w-6xl mx-auto px-6 py-24">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 bg-accent-tint text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
-              <span>Pilot pricing</span>
+              <span>Pilot pricing · USD</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Run a pilot with us</h2>
             <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
-              We're working with 10 teams to validate AI Room as a delivery surface for AI consultants and AI-native dev teams. Pick the shape that fits — first 3 pilots get founder-level support.
+              We're onboarding 10 teams worldwide — AI consultants, AI-native dev teams, automation studios — to validate AI Room as a project delivery surface. Pick the shape that fits; first 3 pilots get founder-level support.
             </p>
           </div>
 
@@ -338,7 +340,7 @@ export function Home() {
                 <span className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-0.5 rounded uppercase tracking-wider">Consultants</span>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold tracking-tight">¥99 — ¥499</span>
+                <span className="text-4xl font-bold tracking-tight">$19 — $99</span>
                 <span className="text-ink-soft text-sm"> / project room</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
@@ -350,7 +352,7 @@ export function Home() {
                 <li className="flex gap-2"><span className="text-accent">✓</span> Pilot support via founder DM</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Pay only when you ship</li>
               </ul>
-              <a href="mailto:ebin198351@gmail.com?subject=AI%20Room%20pilot%20%E2%80%94%20per%20project&body=Hi%20Robin%2C%20I'd%20like%20to%20run%20an%20AI%20Room%20pilot%20on%20a%20project.%20Project%20description%3A%20" className="inline-flex w-full items-center justify-center bg-accent text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition">
+              <a href="mailto:ebin198351@gmail.com?subject=AI%20Room%20pilot%20%E2%80%94%20per%20project&body=Hi%2C%20I%27d%20like%20to%20run%20an%20AI%20Room%20pilot%20on%20a%20project.%0A%0AProject%20description%3A%0A%0ATimezone%20%26%20preferred%20currency%3A" className="inline-flex w-full items-center justify-center bg-accent text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition">
                 Start a pilot project →
               </a>
             </div>
@@ -361,7 +363,7 @@ export function Home() {
                 <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded uppercase tracking-wider">SaaS teams</span>
               </div>
               <div className="mb-6">
-                <span className="text-4xl font-bold tracking-tight">¥299 — ¥999</span>
+                <span className="text-4xl font-bold tracking-tight">$99 — $299</span>
                 <span className="text-ink-soft text-sm"> / month</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
@@ -373,14 +375,19 @@ export function Home() {
                 <li className="flex gap-2"><span className="text-accent">✓</span> Agent presence + listening status</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Direct line to the team building it</li>
               </ul>
-              <a href="mailto:ebin198351@gmail.com?subject=AI%20Room%20pilot%20%E2%80%94%20per%20team&body=Hi%20Robin%2C%20our%20team%20wants%20to%20pilot%20AI%20Room%20monthly.%20Team%20size%20%26%20use%20case%3A%20" className="inline-flex w-full items-center justify-center bg-white border border-accent text-accent px-6 py-3 rounded-xl font-semibold hover:bg-accent-tint transition">
+              <a href="mailto:ebin198351@gmail.com?subject=AI%20Room%20pilot%20%E2%80%94%20per%20team&body=Hi%2C%20our%20team%20wants%20to%20pilot%20AI%20Room%20monthly.%0A%0ATeam%20size%20%26%20use%20case%3A%0A%0ATimezone%20%26%20preferred%20currency%3A" className="inline-flex w-full items-center justify-center bg-white border border-accent text-accent px-6 py-3 rounded-xl font-semibold hover:bg-accent-tint transition">
                 Start a team pilot →
               </a>
             </div>
           </div>
 
-          <div className="text-center text-sm text-ink-soft max-w-2xl mx-auto">
-            Want to keep tinkering for free? <Link to="/new" className="font-semibold text-accent">Just open a room</Link> — no sign-up, no card, 24-hour TTL. Pricing kicks in when you want delivery support, custom templates, or something we can put on an invoice.
+          <div className="text-center text-sm text-ink-soft max-w-2xl mx-auto space-y-2">
+            <p>
+              Want to keep tinkering for free? <Link to="/new" className="font-semibold text-accent">Just open a room</Link> — no sign-up, no card, 24-hour TTL. Pricing kicks in when you want delivery support, custom templates, or something we can put on an invoice.
+            </p>
+            <p className="text-xs text-ink-faint">
+              Pilots invoiced in USD via Stripe / wire / WeChat / Alipay — local currency on request. CNY ≈ ¥7×USD, EUR ≈ €0.92×USD.
+            </p>
           </div>
         </div>
       </section>
