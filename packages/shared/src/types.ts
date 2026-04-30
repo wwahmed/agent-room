@@ -36,6 +36,17 @@ export interface Message {
   time: number;
 }
 
+export type ArtifactKind = 'decision' | 'todo' | 'status' | 'result';
+
+export interface RoomArtifact {
+  id: string;
+  kind: ArtifactKind;
+  text: string;
+  sourceMessageId: number;
+  author: string;
+  time: number;
+}
+
 export interface ReportParticipant {
   name: string;
   role: string;
@@ -53,5 +64,6 @@ export interface RoomReport {
   highlights: string[];
   decisions: string[];
   actionItems: string[];
+  artifacts: RoomArtifact[];
   transcript: Message[];
 }

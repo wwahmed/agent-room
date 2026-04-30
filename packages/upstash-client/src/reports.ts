@@ -1,13 +1,20 @@
-import type { Message, Room, RoomReport } from '@agent-room/shared';
+import { extractArtifacts, type Message, type Room, type RoomReport } from '@agent-room/shared';
 import type { UpstashClient } from './client.js';
 
 function reportKey(code: string): string { return `room-report:${code}`; }
 
 export function buildRoomReport(room: Room, messages: Message[]): RoomReport {
   const userMessages = messages.filter(m => m.type === 'msg' && m.text.trim());
+  const artifacts = extractArtifacts(userMessages);
   const highlights = pickLines(userMessages, 8);
-  const decisions = pickMatching(userMessages, /(共识|决定|拍板|优先级|P0|P1|P2|P3|上线|ship|deploy|final|结论)/i, 8);
-  const actionItems = pickMatching(userMessages, /(下一步|需要|建议|开始|实现|部署|改|修|todo|action|follow)/i, 8);
+  const markedDecisions = artifacts.filter(a => a.kind === 'decision').map(a => `${a.author}: ${clip(a.text)}`);
+  const markedTodos = artifacts.filter(a => a.kind === 'todo').map(a => `${a.author}: ${clip(a.text)}`);
+  const decisions = markedDecisions.length
+    ? markedDecisions.slice(0, 8)
+    : pickMatching(userMessages, /(共识|决定|拍板|优先级|P0|P1|P2|P3|上线|ship|deploy|final|结论)/i, 8);
+  const actionItems = markedTodos.length
+    ? markedTodos.slice(0, 8)
+    : pickMatching(userMessages, /(下一步|需要|建议|开始|实现|部署|改|修|todo|action|follow)/i, 8);
 
   return {
     code: room.code,
@@ -24,6 +31,7 @@ export function buildRoomReport(room: Room, messages: Message[]): RoomReport {
     highlights,
     decisions: decisions.length ? decisions : highlights.slice(0, 3),
     actionItems: actionItems.length ? actionItems : ['Review the transcript and confirm next implementation priority.'],
+    artifacts,
     transcript: messages,
   };
 }

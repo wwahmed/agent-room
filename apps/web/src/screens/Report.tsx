@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { RoomReport } from '@agent-room/shared';
+import { artifactLabel, extractArtifacts, type ArtifactKind, type RoomArtifact, type RoomReport } from '@agent-room/shared';
 import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 
@@ -51,6 +51,7 @@ export function Report() {
     );
   }
   if (!report) return <div className="p-10 text-ink-soft">Loading…</div>;
+  const artifacts = report.artifacts ?? extractArtifacts(report.transcript);
 
   return (
     <div className="min-h-full bg-surface-soft">
@@ -72,6 +73,12 @@ export function Report() {
             >
               {refreshing ? 'Refreshing…' : 'Refresh from latest'}
             </button>
+            <button
+              onClick={() => downloadMarkdown(report, artifacts)}
+              className="rounded-lg border border-white/25 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+            >
+              Download Markdown
+            </button>
             <Link to={`/r/${report.code}`} className="rounded-lg border border-white/25 px-4 py-2 text-xs font-semibold text-white">
               Open room
             </Link>
@@ -92,6 +99,7 @@ export function Report() {
         <ReportSection title="Highlights" items={report.highlights} />
         <ReportSection title="Decisions" items={report.decisions} />
         <ReportSection title="Action Items" items={report.actionItems} />
+        <ArtifactSection artifacts={artifacts} />
 
         <section className="bg-white border border-border rounded-xl p-5">
           <div className="flex items-center justify-between gap-4 mb-4">
@@ -116,6 +124,38 @@ export function Report() {
   );
 }
 
+function ArtifactSection({ artifacts }: { artifacts: RoomArtifact[] }) {
+  const groups: ArtifactKind[] = ['decision', 'todo', 'status', 'result'];
+  return (
+    <section className="bg-white border border-border rounded-xl p-5">
+      <h2 className="text-lg font-semibold mb-3">Structured Artifacts</h2>
+      {artifacts.length ? (
+        <div className="grid md:grid-cols-2 gap-3">
+          {groups.map(kind => {
+            const items = artifacts.filter(a => a.kind === kind);
+            if (!items.length) return null;
+            return (
+              <div key={kind} className="border border-border-faint bg-surface-softer rounded-lg p-3">
+                <h3 className={`text-xs font-semibold uppercase mb-2 ${artifactTone(kind)}`}>{artifactLabel(kind)}</h3>
+                <ul className="space-y-2">
+                  {items.map(item => (
+                    <li key={item.id} className="text-sm leading-relaxed">
+                      <span>{item.text}</span>
+                      <span className="block text-[11px] text-ink-soft mt-0.5">{item.author} · {new Date(item.time).toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-ink-soft">No structured markers were found in this room.</p>
+      )}
+    </section>
+  );
+}
+
 function ReportSection({ title, items }: { title: string; items: string[] }) {
   return (
     <section className="bg-white border border-border rounded-xl p-5">
@@ -129,4 +169,121 @@ function ReportSection({ title, items }: { title: string; items: string[] }) {
       </ul>
     </section>
   );
+}
+
+function artifactTone(kind: ArtifactKind): string {
+  switch (kind) {
+    case 'decision':
+      return 'text-emerald-700';
+    case 'todo':
+      return 'text-amber-700';
+    case 'status':
+      return 'text-blue-700';
+    case 'result':
+      return 'text-violet-700';
+  }
+}
+
+// Plain-Markdown export of the report. Front-matter holds metadata so this
+// file slots cleanly into delivery emails / git repos. Order matches the
+// on-screen sections so the printed and downloaded artifact tell the same
+// story.
+function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[]): string {
+  const lines: string[] = [];
+  const fmt = (t: number) => new Date(t).toLocaleString();
+
+  lines.push('---');
+  lines.push(`title: ${escapeYaml(report.topic)}`);
+  lines.push(`room: ${report.code}`);
+  lines.push(`exported: ${new Date(report.exportedAt).toISOString()}`);
+  lines.push(`messages: ${report.messageCount}`);
+  lines.push(`participants: ${report.participants.length}`);
+  lines.push('---');
+  lines.push('');
+  lines.push(`# ${report.topic}`);
+  lines.push('');
+  lines.push(`> AI Room Report · \`${report.code}\` · exported ${fmt(report.exportedAt)}`);
+  lines.push('');
+  lines.push(report.summary || '_(no summary)_');
+  lines.push('');
+
+  lines.push('## Participants');
+  lines.push('');
+  for (const p of report.participants) {
+    const meta = [p.role, p.client].filter(Boolean).join(' · ');
+    lines.push(`- **${p.name}**${meta ? ` — ${meta}` : ''}`);
+  }
+  lines.push('');
+
+  if (report.highlights.length) {
+    lines.push('## Highlights');
+    lines.push('');
+    for (const h of report.highlights) lines.push(`- ${h}`);
+    lines.push('');
+  }
+
+  if (report.decisions.length) {
+    lines.push('## Decisions');
+    lines.push('');
+    for (const d of report.decisions) lines.push(`- ${d}`);
+    lines.push('');
+  }
+
+  if (report.actionItems.length) {
+    lines.push('## Action Items');
+    lines.push('');
+    for (const a of report.actionItems) lines.push(`- [ ] ${a}`);
+    lines.push('');
+  }
+
+  if (artifacts.length) {
+    lines.push('## Structured Artifacts');
+    lines.push('');
+    const kinds: ArtifactKind[] = ['decision', 'todo', 'status', 'result'];
+    for (const k of kinds) {
+      const group = artifacts.filter(a => a.kind === k);
+      if (!group.length) continue;
+      lines.push(`### ${artifactLabel(k)}`);
+      lines.push('');
+      for (const a of group) {
+        lines.push(`- ${a.text} _(${a.author} · ${fmt(a.time)})_`);
+      }
+      lines.push('');
+    }
+  }
+
+  lines.push('## Transcript');
+  lines.push('');
+  for (const m of report.transcript) {
+    const who = `${m.name}${m.role ? ` · ${m.role}` : ''}`;
+    lines.push(`**${who}** — _${fmt(m.time)}_`);
+    lines.push('');
+    // Indent message body so existing markdown inside the message keeps its
+    // structure but is visually nested under the speaker line.
+    for (const line of m.text.split('\n')) lines.push(`> ${line}`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+function escapeYaml(value: string): string {
+  if (/[:#&*!|>%@`'"\n]/.test(value)) {
+    return `"${value.replace(/"/g, '\\"')}"`;
+  }
+  return value;
+}
+
+function downloadMarkdown(report: RoomReport, artifacts: RoomArtifact[]) {
+  const md = buildMarkdown(report, artifacts);
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeTopic = report.topic.replace(/[^\w一-鿿-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'report';
+  a.href = url;
+  a.download = `${safeTopic}-${report.code}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -154,17 +154,46 @@ function parseBlocks(text: string): TextBlock[] {
   return blocks.length ? blocks : [{ type: 'paragraph', text }];
 }
 
+// Inline patterns recognized inside a paragraph/list-item:
+//   `code`           — monospace
+//   **bold**         — strong
+//   https://...      — autolinked
+//   [DECISION] x     — chip-style artifact marker (also TODO / STATUS / RESULT)
+// The artifact marker chip mirrors extractArtifacts, which recognizes markers
+// anywhere on a message line.
+const INLINE_PATTERN = /(\[(?:DECISION|TODO|STATUS|RESULT)\])|(`[^`]+`|\*\*[^*]+\*\*|https?:\/\/[^\s]+)/gi;
+
+const ARTIFACT_TONE: Record<string, string> = {
+  DECISION: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+  TODO:     'bg-amber-100 text-amber-800 ring-amber-200',
+  STATUS:   'bg-blue-100 text-blue-800 ring-blue-200',
+  RESULT:   'bg-violet-100 text-violet-800 ring-violet-200',
+};
+
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|https?:\/\/[^\s]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
+  INLINE_PATTERN.lastIndex = 0;
 
-  while ((match = pattern.exec(text))) {
+  while ((match = INLINE_PATTERN.exec(text))) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
 
-    const value = match[0];
-    if (value.startsWith('`')) {
+    const artifactMarker = match[1];
+    const value = match[2] ?? artifactMarker ?? match[0];
+
+    if (artifactMarker) {
+      const kind = artifactMarker.slice(1, -1).toUpperCase();
+      const tone = ARTIFACT_TONE[kind] ?? 'bg-black/10 text-current ring-black/10';
+      nodes.push(
+        <span
+          key={nodes.length}
+          className={`inline-flex items-center rounded-md px-1.5 py-0.5 mr-1 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${tone}`}
+        >
+          {kind}
+        </span>,
+      );
+    } else if (value.startsWith('`')) {
       nodes.push(
         <code key={nodes.length} className="rounded bg-black/10 px-1 py-0.5 text-[.92em]">
           {value.slice(1, -1)}
@@ -183,7 +212,7 @@ function renderInline(text: string): ReactNode[] {
       if (trailing) nodes.push(trailing);
     }
 
-    lastIndex = match.index + value.length;
+    lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex));

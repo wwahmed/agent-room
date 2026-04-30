@@ -6,7 +6,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import type { Message } from '@agent-room/shared';
+import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type RoomArtifact } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
 import { createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
@@ -218,6 +218,7 @@ export function Room() {
   const [minutesText, setMinutesText] = useState<string>('');
   const [minutesBusy, setMinutesBusy] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const artifacts = extractArtifacts(messages);
 
   // Hydrate cached minutes from Redis on mount (spec §3.3 — room-min:{code})
   useEffect(() => {
@@ -550,7 +551,7 @@ export function Room() {
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
               <div className="mb-5 rounded-xl border border-accent-tint-border bg-accent-tint p-4">
                 <h2 className="text-sm font-semibold text-accent-deep mb-2">Report</h2>
-                <p className="text-[11px] leading-relaxed text-accent-deep/80 mb-3">Freeze this room into a shareable meeting report.</p>
+                <p className="text-[11px] leading-relaxed text-accent-deep/80 mb-3">Freeze this room into a shareable delivery report.</p>
                 <button
                   onClick={handleExportReport}
                   disabled={reportBusy || messages.length === 0}
@@ -558,6 +559,24 @@ export function Room() {
                 >
                   {reportBusy ? 'Saving…' : 'Save & Share'}
                 </button>
+              </div>
+
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold">Artifacts</h2>
+                  <span className="text-[10px] text-ink-soft">{artifacts.length}</span>
+                </div>
+                {artifacts.length ? (
+                  <div className="space-y-2">
+                    {artifacts.slice(-8).reverse().map(artifact => (
+                      <ArtifactCard key={artifact.id} artifact={artifact} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[11px] leading-relaxed text-ink-soft">
+                    Use [DECISION], [TODO], [STATUS], or [RESULT] in messages to build the delivery log.
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between mb-3">
@@ -577,4 +596,31 @@ export function Room() {
       </div>
     </div>
   );
+}
+
+function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {
+  return (
+    <div className="rounded-lg border border-border-faint bg-surface-softer p-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className={`text-[9px] font-semibold uppercase ${artifactTone(artifact.kind)}`}>
+          {artifactLabel(artifact.kind)}
+        </span>
+        <span className="text-[9px] text-ink-faint">{artifact.author}</span>
+      </div>
+      <p className="text-[11px] leading-relaxed text-ink">{artifact.text}</p>
+    </div>
+  );
+}
+
+function artifactTone(kind: ArtifactKind): string {
+  switch (kind) {
+    case 'decision':
+      return 'text-emerald-700';
+    case 'todo':
+      return 'text-amber-700';
+    case 'status':
+      return 'text-blue-700';
+    case 'result':
+      return 'text-violet-700';
+  }
 }
