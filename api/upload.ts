@@ -7,115 +7,216 @@
 // model — anyone with the code can join). The roomCode prefix in the blob
 // path lets us batch-delete by room when the meeting ends or TTLs out.
 
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
+import { randomUUID } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 
-const MAX_BYTES = 10 * 1024 * 1024;     // 10 MB per file
+const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIMES = new Set([
-  // Images
   'image/png',
   'image/jpeg',
   'image/jpg',
   'image/webp',
   'image/gif',
   'image/svg+xml',
-  // Documents
   'application/pdf',
   'text/plain',
   'text/markdown',
   'text/csv',
   'application/json',
   'application/zip',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',       // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
-export const config = { runtime: 'nodejs' };
+// Disable Vercel's default body parser so we can read raw multipart.
+// `req` then carries the raw stream; we buffer it ourselves and parse
+// with a tiny multipart reader. Avoids pulling in `busboy`/`formidable`
+// for a single-file-per-request endpoint.
+export const config = { api: { bodyParser: false } };
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
-    return jsonError(405, `method_not_allowed`, `Use POST.`);
+    res.status(405).json({ error: 'method_not_allowed', message: 'Use POST.' });
+    return;
   }
 
-  // The blob token is auto-injected by Vercel when a Blob store is connected
-  // to the project. Without it, we can't talk to Blob — bail with a clear
-  // message so the operator knows to provision the store.
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return jsonError(503, 'blob_not_configured', 'Vercel Blob store not connected. Owner: open the project in Vercel → Storage → Create → Blob, then redeploy.');
+    res.status(503).json({
+      error: 'blob_not_configured',
+      message: 'Vercel Blob store not connected. Owner: open the project in Vercel → Storage → Create → Blob, then redeploy.',
+    });
+    return;
   }
 
-  let formData: FormData;
+  const contentType = String(req.headers['content-type'] ?? '');
+  const boundaryMatch = /boundary=("?)([^";]+)\1/.exec(contentType);
+  if (!boundaryMatch) {
+    res.status(400).json({ error: 'invalid_multipart', message: 'Body must be multipart/form-data with a boundary.' });
+    return;
+  }
+  const boundary = boundaryMatch[2]!;
+
+  // Buffer the raw body. Hard cap at MAX_BYTES + a small headroom for
+  // multipart envelope overhead so a malicious or malformed upload can't
+  // OOM the function.
+  let body: Buffer;
   try {
-    formData = await req.formData();
-  } catch {
-    return jsonError(400, 'invalid_multipart', 'Body must be multipart/form-data.');
+    body = await readRequestBody(req, MAX_BYTES + 1 * 1024 * 1024);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'read failed';
+    res.status(413).json({ error: 'body_too_large', message: msg });
+    return;
   }
 
-  const file = formData.get('file');
-  const roomCode = formData.get('roomCode');
-  const widthRaw = formData.get('width');
-  const heightRaw = formData.get('height');
-
-  if (!(file instanceof File)) {
-    return jsonError(400, 'missing_file', 'No file field in form data.');
-  }
-  if (typeof roomCode !== 'string' || !/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(roomCode)) {
-    return jsonError(400, 'bad_room_code', 'Missing or malformed roomCode.');
+  let parts: ParsedPart[];
+  try {
+    parts = parseMultipart(body, boundary);
+  } catch (e) {
+    res.status(400).json({ error: 'invalid_multipart', message: e instanceof Error ? e.message : 'parse failed' });
+    return;
   }
 
-  if (file.size === 0) {
-    return jsonError(400, 'empty_file', 'File is empty.');
+  const filePart = parts.find(p => p.name === 'file' && p.filename !== undefined);
+  const roomCodePart = parts.find(p => p.name === 'roomCode');
+  const widthPart = parts.find(p => p.name === 'width');
+  const heightPart = parts.find(p => p.name === 'height');
+
+  if (!filePart) {
+    res.status(400).json({ error: 'missing_file', message: 'No file field in form data.' });
+    return;
   }
-  if (file.size > MAX_BYTES) {
-    return jsonError(413, 'file_too_large', `File exceeds ${MAX_BYTES} bytes (10 MB).`);
-  }
-  if (!ALLOWED_MIMES.has(file.type)) {
-    return jsonError(415, 'mime_not_allowed', `Unsupported MIME type: ${file.type}`);
+  const roomCode = roomCodePart ? roomCodePart.data.toString('utf8') : '';
+  if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(roomCode)) {
+    res.status(400).json({ error: 'bad_room_code', message: 'Missing or malformed roomCode.' });
+    return;
   }
 
-  // Stable, opaque attachment id. Used by clients as the React key, by the
-  // delete path to remove the right blob, and (eventually) by a cron sweep
-  // that lists blobs and matches them to live rooms.
-  const id = crypto.randomUUID();
+  if (filePart.data.length === 0) {
+    res.status(400).json({ error: 'empty_file', message: 'File is empty.' });
+    return;
+  }
+  if (filePart.data.length > MAX_BYTES) {
+    res.status(413).json({ error: 'file_too_large', message: `File exceeds ${MAX_BYTES} bytes (10 MB).` });
+    return;
+  }
+  const mime = filePart.contentType ?? 'application/octet-stream';
+  if (!ALLOWED_MIMES.has(mime)) {
+    res.status(415).json({ error: 'mime_not_allowed', message: `Unsupported MIME type: ${mime}` });
+    return;
+  }
 
-  // Sanitize filename: keep extension, strip path parts. Blob names are not
-  // user-facing — the original name comes back on the MessageAttachment.
-  const safeName = file.name.replace(/[/\\]/g, '_').slice(0, 200) || 'file';
+  const id = randomUUID();
+  const safeName = (filePart.filename ?? 'file').replace(/[/\\]/g, '_').slice(0, 200) || 'file';
   const path = `rooms/${roomCode}/${id}/${safeName}`;
 
   let blob: { url: string };
   try {
-    blob = await put(path, file, {
+    blob = await put(path, filePart.data, {
       access: 'public',
-      contentType: file.type,
+      contentType: mime,
       addRandomSuffix: false,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown';
-    return jsonError(500, 'blob_put_failed', `Blob upload failed: ${msg}`);
+    res.status(500).json({ error: 'blob_put_failed', message: `Blob upload failed: ${msg}` });
+    return;
   }
 
-  const isImage = file.type.startsWith('image/');
-  const widthNum = typeof widthRaw === 'string' ? Number(widthRaw) : NaN;
-  const heightNum = typeof heightRaw === 'string' ? Number(heightRaw) : NaN;
+  const isImage = mime.startsWith('image/');
+  const widthNum = widthPart ? Number(widthPart.data.toString('utf8')) : NaN;
+  const heightNum = heightPart ? Number(heightPart.data.toString('utf8')) : NaN;
 
   const attachment = {
     id,
-    type: isImage ? ('image' as const) : ('file' as const),
+    type: isImage ? 'image' : 'file',
     url: blob.url,
-    // Echo the blob path so callers (e.g. UI delete buttons) have a stable
-    // handle independent of the public URL.
     storageKey: path,
-    name: file.name,
-    size: file.size,
-    mime: file.type,
+    name: filePart.filename ?? 'file',
+    size: filePart.data.length,
+    mime,
     uploadedAt: Date.now(),
     ...(isImage && Number.isFinite(widthNum) && widthNum > 0 ? { width: widthNum } : {}),
     ...(isImage && Number.isFinite(heightNum) && heightNum > 0 ? { height: heightNum } : {}),
   };
 
-  return Response.json(attachment, { status: 201 });
+  res.status(201).json(attachment);
 }
 
-function jsonError(status: number, code: string, message: string): Response {
-  return Response.json({ error: code, message }, { status });
+// --- Multipart helpers ---
+
+function readRequestBody(req: VercelRequest, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on('data', (chunk: Buffer | string) => {
+      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      total += buf.length;
+      if (total > maxBytes) {
+        reject(new Error(`Request body too large (${total} bytes > ${maxBytes}).`));
+        req.destroy();
+        return;
+      }
+      chunks.push(buf);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+interface ParsedPart {
+  name: string;
+  filename?: string;
+  contentType?: string;
+  data: Buffer;
+}
+
+// Minimal multipart/form-data parser. Spec compliant for the common case
+// (CRLF line endings, single-level multipart, no nested mixed parts).
+// Robust enough for browser-driven uploads from our own composer.
+function parseMultipart(body: Buffer, boundary: string): ParsedPart[] {
+  const dashBoundary = Buffer.from(`--${boundary}`);
+  const parts: ParsedPart[] = [];
+
+  let i = body.indexOf(dashBoundary);
+  if (i < 0) throw new Error('Boundary not found in body.');
+  i += dashBoundary.length;
+  // Skip CRLF after first boundary
+  if (body[i] === 0x0d && body[i + 1] === 0x0a) i += 2;
+
+  while (i < body.length) {
+    // Find next boundary
+    const next = body.indexOf(dashBoundary, i);
+    if (next < 0) throw new Error('Truncated multipart body.');
+
+    // headers \r\n\r\n body
+    const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), i);
+    if (headerEnd < 0 || headerEnd > next) throw new Error('Malformed part headers.');
+    const headersRaw = body.slice(i, headerEnd).toString('utf8');
+    let dataEnd = next - 2; // strip trailing CRLF before boundary
+    if (dataEnd < headerEnd + 4) dataEnd = headerEnd + 4;
+    const data = body.slice(headerEnd + 4, dataEnd);
+
+    const part: ParsedPart = { name: '', data };
+    for (const line of headersRaw.split('\r\n')) {
+      const lower = line.toLowerCase();
+      if (lower.startsWith('content-disposition:')) {
+        const nameMatch = /name="([^"]*)"/.exec(line);
+        const fileMatch = /filename="([^"]*)"/.exec(line);
+        if (nameMatch) part.name = nameMatch[1]!;
+        if (fileMatch) part.filename = fileMatch[1]!;
+      } else if (lower.startsWith('content-type:')) {
+        part.contentType = line.slice(line.indexOf(':') + 1).trim();
+      }
+    }
+    parts.push(part);
+
+    i = next + dashBoundary.length;
+    // Trailing "--" means end of body
+    if (body[i] === 0x2d && body[i + 1] === 0x2d) break;
+    if (body[i] === 0x0d && body[i + 1] === 0x0a) i += 2;
+  }
+
+  return parts;
 }
