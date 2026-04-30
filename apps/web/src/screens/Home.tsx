@@ -261,18 +261,21 @@ export function Home() {
             <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, or Codex CLI. Idempotent and safe to re-run.</p>
           </div>
 
-          {/* Config cards — 2 columns on desktop, comfortable JSON */}
+          {/* Config cards — 2 columns on desktop. Cards are flex-col so the
+              code block stretches to fill the same height across all four:
+              the Codex TOML is ~3 lines but should still bottom out at the
+              same vertical line as the longer JSON config next to it. */}
           <div className="grid md:grid-cols-2 gap-6 mb-16">
             {CONFIGS.map(c => (
-              <div key={c.key} className="bg-white border border-border rounded-2xl p-7 hover:shadow-card transition">
+              <div key={c.key} className="bg-white border border-border rounded-2xl p-7 hover:shadow-card transition flex flex-col">
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-10 h-10 rounded-lg ${c.badgeClass} flex items-center justify-center text-sm font-bold`}>{c.badge}</div>
                   <h3 className="text-lg font-semibold tracking-tight">{c.title}</h3>
                 </div>
                 <p className="text-sm text-ink-soft mb-4 leading-relaxed">{c.path}</p>
-                <div className="bg-slate-50 border border-border rounded-xl relative">
+                <div className="bg-slate-50 border border-border rounded-xl relative flex-1 flex flex-col">
                   <button onClick={() => copyText(c.body, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
-                  <pre className="text-xs sm:text-[13px] font-mono text-ink leading-relaxed p-4 pr-16 overflow-x-auto"><code>{c.body}</code></pre>
+                  <pre className="text-xs sm:text-[13px] font-mono text-ink leading-relaxed p-4 pr-16 overflow-x-auto flex-1"><code>{c.body}</code></pre>
                 </div>
               </div>
             ))}
