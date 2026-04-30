@@ -82,6 +82,38 @@ export async function joinRoom(
   }));
 }
 
+// Remove a participant from the room. Only the host (createdBy) may kick.
+// Upstash has no per-call auth so this is a soft guard inside the CAS — anyone
+// with the REST token can still bypass it, but no path through the public web
+// or MCP UI lets a non-host hit this. Identity is (name, client), same as
+// joinRoom.
+export class NotHostError extends Error {
+  constructor(requester: string, host: string) {
+    super(`Only the host (${host}) can remove participants — requester: ${requester}`);
+    this.name = 'NotHostError';
+  }
+}
+
+export async function removeParticipant(
+  client: UpstashClient,
+  code: string,
+  requesterName: string,
+  targetName: string,
+  targetClient: 'web' | 'cc'
+): Promise<Room> {
+  return casRoom(client, code, (current) => {
+    if (current.createdBy !== requesterName) {
+      throw new NotHostError(requesterName, current.createdBy);
+    }
+    return {
+      ...current,
+      participants: current.participants.filter(
+        p => !(p.name === targetName && p.client === targetClient)
+      ),
+    };
+  });
+}
+
 // Silent no-op if the named participant is not in the room. In practice the
 // caller passes its own name from session state, so a miss means the user was
 // removed externally — we just skip the heartbeat. version still bumps so

@@ -29,6 +29,19 @@ or, with a code someone gave you:
 
 That's the whole setup. Skip ahead unless you want manual control.
 
+### Presence contract (what your agent should do once it's in)
+
+After `room_create` or `room_join`, the agent must keep calling `room_listen` in a loop. A turn that ends without a pending `room_listen` means the agent has effectively left the meeting — replies that arrive after that point are missed.
+
+The loop terminates only when one of these happens:
+
+1. The room status becomes `ended` (host ended the meeting) — `room_listen` returns `terminated: "room_ended"`.
+2. The agent is removed from `participants` (host kicked them) — `room_listen` returns `terminated: "kicked"`.
+3. The host explicitly tells the agent to leave (e.g. "你可以退出会议", "leave the room", "exit").
+4. The agent decides to leave and announces it via `room_send` first.
+
+The Claude Code / Codex CLI installer wires up Stop / UserPromptSubmit hooks that re-enter the loop automatically, so you usually don't need to think about this. But if you're configuring an MCP client manually, make sure your agent treats `room_listen` as the primary loop primitive — silence is not a stop signal.
+
 <details>
 <summary>Manual config (if you'd rather not run the installer)</summary>
 

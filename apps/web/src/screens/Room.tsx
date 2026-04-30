@@ -8,7 +8,7 @@ import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import type { Message } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
-import { createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi } from '@agent-room/upstash-client';
+import { createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 
@@ -26,15 +26,40 @@ function readStoredSelf(code: string): SelfIdentity | null {
   }
 }
 
+// Cap auto-grow at ~8 lines so the input never eats the whole feed.
+const TEXTAREA_MAX_HEIGHT = 200;
+const TEXTAREA_MIN_HEIGHT = 42;
+
 export function Room() {
   const { code = '' } = useParams();
   const navigate = useNavigate();
-  const [self, setSelf] = useState<SelfIdentity>(() => readStoredSelf(code) ?? { name: 'Guest', role: '' });
-  const { room, messages, error, sendMessage, refreshRoom } = useRoom(code, self.name);
+  // Identity is whatever Join wrote into sessionStorage. If it's missing
+  // (visiting /r/CODE without going through Join — e.g. an invite link
+  // someone forwarded after pruning the path), we redirect to /j/CODE
+  // below. We previously "recovered" by becoming room.createdBy, which
+  // silently impersonated the host for any unknown visitor.
+  const [self, _setSelf] = useState<SelfIdentity | null>(() => readStoredSelf(code));
+  useEffect(() => {
+    if (!self) navigate(`/j/${code}`, { replace: true });
+  }, [self, code, navigate]);
+  const { room, messages, error, sendMessage, refreshRoom } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   const [drafting, setDrafting] = useState(false);
   const [draftErr, setDraftErr] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow the textarea: shrink to min, then expand to scrollHeight up to max.
+  // Runs after every value change (typed, pasted, Draft injected, voice transcript).
+  function autoGrow(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = 'auto';
+    const next = Math.min(Math.max(el.scrollHeight, TEXTAREA_MIN_HEIGHT), TEXTAREA_MAX_HEIGHT);
+    el.style.height = `${next}px`;
+  }
+  useEffect(() => {
+    autoGrow(textareaRef.current);
+  }, [text]);
 
   // --- Share ---
   const joinUrl = `${window.location.origin}/j/${code}`;
@@ -54,24 +79,28 @@ export function Room() {
     else if (room?.status === 'active') setEnded(false);
   }, [room?.status]);
 
-  // If a direct room visit / reactivation loses sessionStorage, recover the
-  // browser identity from the room before the user sends as "Guest".
+  // Detect being kicked: once we've seen ourselves in the participants list
+  // (so we know the room poll is working), if we then disappear from it we
+  // were removed. Redirect to /j/CODE so the user can rejoin if they want,
+  // and show a toast to make it not feel like a network glitch.
+  const sawSelfRef = useRef(false);
   useEffect(() => {
-    if (!room) return;
-    const stored = readStoredSelf(code);
-    const guestIsOnlyFallback = self.name === 'Guest' && !room.participants.some(p => p.client === 'web' && p.name === 'Guest');
-    if (stored && !guestIsOnlyFallback) return;
-
-    const recovered =
-      room.participants.find(p => p.client === 'web' && p.name === room.createdBy) ??
-      room.participants.find(p => p.client === 'web');
-
-    if (!recovered || recovered.name === self.name) return;
-
-    const next = { name: recovered.name, role: recovered.role };
-    sessionStorage.setItem(`room:${code}:self`, JSON.stringify(next));
-    setSelf(next);
-  }, [code, room, self.name]);
+    if (!room || !self || ended) return;
+    const presentNow = room.participants.some(p => p.name === self.name && p.client === 'web');
+    if (presentNow) {
+      sawSelfRef.current = true;
+      return;
+    }
+    if (sawSelfRef.current) {
+      // We were here, now we're not — host kicked us.
+      sessionStorage.removeItem(`room:${code}:self`);
+      (async () => {
+        const { showToast } = await import('../components/Toast.js');
+        showToast('You were removed from the meeting by the host');
+      })();
+      navigate(`/j/${code}`, { replace: true });
+    }
+  }, [room, self, ended, code, navigate]);
 
   // Track last message time for idle detection
   useEffect(() => {
@@ -137,6 +166,23 @@ export function Room() {
     lastMsgTimeRef.current = Date.now(); // reset idle clock
   }, []);
 
+  // Host-only. Removes (name, client) from the room. The kicked client will
+  // notice it's gone on its next room poll / room_listen and can be told to
+  // leave by their UI. Reconnection is not blocked — they'd need to be re-joined.
+  async function handleKick(p: { name: string; client: 'web' | 'cc' }) {
+    if (!room || !self || room.createdBy !== self.name) return;
+    if (p.name === self.name && p.client === 'web') return; // host can't kick themselves
+    if (!confirm(`Remove ${p.name} (${p.client}) from the room?`)) return;
+    try {
+      const client = createClient(ENV.upstash);
+      await removeParticipant(client, code, self.name, p.name, p.client);
+      await refreshRoom();
+    } catch (e) {
+      const { showToast } = await import('../components/Toast.js');
+      showToast(e instanceof Error ? `Kick failed: ${e.message}` : 'Kick failed');
+    }
+  }
+
   async function handleEndMeeting() {
     try {
       const client = createClient(ENV.upstash);
@@ -151,7 +197,7 @@ export function Room() {
   }
 
   async function handleDraft() {
-    if (!room) return;
+    if (!room || !self) return;
     setDrafting(true); setDraftErr(null);
     try {
       const suggestion = await draftReply({
@@ -227,7 +273,12 @@ export function Room() {
   }, []);
 
   if (error) return <div className="p-10 text-red-600">{error}</div>;
+  if (!self) return <div className="p-10 text-ink-soft">Redirecting to join…</div>;
   if (!room) return <div className="p-10 text-ink-soft">Loading…</div>;
+
+  // From here down `self` is non-null (early-returned above). Capture it in a
+  // narrowed const so closures inside JSX don't have to re-check.
+  const me = self;
 
   async function send() {
     const body = text.trim();
@@ -235,10 +286,10 @@ export function Room() {
     const msg: Message = {
       id: Date.now(),
       type: 'msg',
-      name: self.name,
-      role: self.role,
-      initials: initialsFor(self.name),
-      color: colorForName(self.name),
+      name: me.name,
+      role: me.role,
+      initials: initialsFor(me.name),
+      color: colorForName(me.name),
       client: 'web',
       text: body,
       time: Date.now(),
@@ -316,17 +367,34 @@ export function Room() {
             <div className="flex-1 overflow-y-auto p-4">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-3">Participants</div>
               <div className="space-y-2">
-                {room.participants.map(p => (
-                  <div key={`${p.name}-${p.client}`} className="flex items-center gap-2 rounded-lg border border-border-faint bg-surface-softer px-2.5 py-2">
-                    <Avatar initials={p.initials} color={p.color} size="sm" />
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold truncate">{p.name}</div>
-                      <div className="text-[10px] text-ink-soft truncate">
-                        {[p.role, p.client].filter(Boolean).join(' · ')}
+                {room.participants.map(p => {
+                  const isHost = room.createdBy === self.name;
+                  const isSelf = p.name === self.name && p.client === 'web';
+                  const canKick = isHost && !isSelf && !ended;
+                  return (
+                    <div key={`${p.name}-${p.client}`} className="group flex items-center gap-2 rounded-lg border border-border-faint bg-surface-softer px-2.5 py-2">
+                      <Avatar initials={p.initials} color={p.color} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold truncate flex items-center gap-1">
+                          {p.name}
+                          {p.name === room.createdBy && <span className="text-[9px] font-semibold text-accent bg-accent-tint px-1 py-px rounded">host</span>}
+                        </div>
+                        <div className="text-[10px] text-ink-soft truncate">
+                          {[p.role, p.client].filter(Boolean).join(' · ')}
+                        </div>
                       </div>
+                      {canKick && (
+                        <button
+                          onClick={() => handleKick({ name: p.name, client: p.client })}
+                          title={`Remove ${p.name}`}
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-[10px] font-semibold text-red-600 hover:bg-red-50 w-6 h-6 rounded transition"
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -437,11 +505,20 @@ export function Room() {
                     disabled={ended}
                   />
                   <textarea
+                    ref={textareaRef}
                     value={text}
                     onChange={e => setText(e.target.value)}
-                    placeholder="Message the room…"
-                    rows={2}
-                    className="flex-1 max-h-36 min-h-[42px] resize-y px-3 py-2 bg-surface-softer border border-border rounded-lg text-sm leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                    onKeyDown={e => {
+                      // Enter sends; Shift+Enter / IME composition lets newlines through.
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                    placeholder="Message the room… (Enter to send, Shift+Enter for newline)"
+                    rows={1}
+                    style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
+                    className="flex-1 resize-none overflow-y-auto px-3 py-2 bg-surface-softer border border-border rounded-lg text-sm leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
                   />
                   <button
                     onClick={send}

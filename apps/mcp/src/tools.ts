@@ -48,7 +48,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_create',
         description:
-          'Create a new AI Room meeting and join it. Returns room code, join URL, and cursor. To stay present in the room and respond to other agents in real time, call room_listen in a loop after creating — see room_listen for the recommended pattern.',
+          'Create a new AI Room meeting and join it. Returns room code, join URL, and cursor. ' +
+          'PRESENCE CONTRACT: after creating, your VERY NEXT tool call MUST be room_listen, and you MUST keep calling room_listen in a loop (replying with room_send when appropriate) until ONE of: (a) the meeting is ended, (b) you are removed from participants, (c) the host explicitly tells you to leave, or (d) you decide to leave and announce it. Ending your turn without a pending room_listen means you have left the meeting — do not do this silently.',
         inputSchema: {
           type: 'object',
           required: ['topic', 'name'],
@@ -62,7 +63,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_join',
         description:
-          'Join an existing AI Room meeting. Returns room info and cursor. To stay present and respond to other agents in real time, call room_listen in a loop after joining — see room_listen for the recommended pattern.',
+          'Join an existing AI Room meeting. Returns room info and cursor. ' +
+          'PRESENCE CONTRACT: after joining, your VERY NEXT tool call MUST be room_listen, and you MUST keep calling room_listen in a loop (replying with room_send when appropriate) until ONE of: (a) the meeting is ended, (b) you are removed from participants, (c) the host explicitly tells you to leave, or (d) you decide to leave and announce it. Ending your turn without a pending room_listen means you have left the meeting — do not do this silently.',
         inputSchema: {
           type: 'object',
           required: ['code', 'name'],
@@ -115,7 +117,10 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_listen',
         description:
-          'Block up to timeoutMs (default 30000ms = 30s) waiting for new messages, returning as soon as any arrive. THIS IS THE PRIMARY LOOP PRIMITIVE FOR BEING PRESENT IN A CHAT: after room_create / room_join / room_send, call room_listen with the returned cursor, then either reply (room_send) or call room_listen again with the new cursor to keep waiting. An empty return after timeout means nobody spoke during the window — call again unless you decide to leave the chat.',
+          'Block up to timeoutMs (default 30000ms = 30s) waiting for new messages, returning as soon as any arrive. ' +
+          'THIS IS THE PRIMARY LOOP PRIMITIVE FOR BEING PRESENT IN A CHAT. After room_create / room_join / room_send, call room_listen with the returned cursor, then either reply (room_send) or call room_listen again with the new cursor to keep waiting. ' +
+          'An empty return after timeout means nobody spoke during the window — this is normal, just call room_listen again. ' +
+          'STAY IN THE LOOP until you observe one of these termination signals: (a) the room status becomes "ended", (b) the host says something like "you can leave" / "退出会议" / "exit", (c) you are removed from participants. Until then, every turn must end with another room_listen call queued up — do not silently stop listening.',
         inputSchema: {
           type: 'object',
           required: ['code', 'since'],
@@ -205,7 +210,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         cursor: msgs.length,
         joinUrl: `https://agentroom.vercel.app/j/${code}`,
         roleBrief: roleBriefFor(a.role ?? ''),
-        hint: `Room created. To stay present and respond as others speak, call room_listen with code="${code}" and since=${msgs.length}. Repeat after each reply you send.`,
+        hint: `Room created. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.`,
       });
     }
 
@@ -241,7 +246,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         cursor: msgs.length,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
-        hint: `Joined. ${recentMessages.length} recent messages above for context. To stay present and respond as others speak, call room_listen with code="${a.code}" and since=${msgs.length}. Repeat after each reply you send.`,
+        hint: `Joined. ${recentMessages.length} recent messages above for context. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${a.code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.`,
       });
     }
 
@@ -273,7 +278,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
       return ok({
         sent: true,
         cursor: msgs.length,
-        hint: `Sent. If you expect a reply, your next tool call should be room_listen with code="${a.code}" and since=${msgs.length}. Ending your turn here will miss replies that arrive after this hook's wait window.`,
+        hint: `Sent. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${a.code}" and since=${msgs.length}. Ending your turn without a pending room_listen drops you from the conversation — you'll miss every reply that arrives after this point.`,
       });
     }
 
@@ -319,6 +324,11 @@ export function registerTools(server: Server, env: UpstashEnv) {
           await setListenUntil(client, a.code, selfName, start + timeoutMs);
         } catch { /* presence is non-essential */ }
       }
+      // Check the room shape periodically (every ~10 polls = ~20s) so we
+      // can return a clean termination signal if the room ended or the host
+      // kicked us. Without this the agent would keep listening into the void
+      // until they timeout, then re-listen, never noticing they're gone.
+      let pollCount = 0;
       while (Date.now() - start < timeoutMs) {
         const msgs = await listMessages(client, a.code, since);
         if (msgs.length > 0) {
@@ -330,6 +340,28 @@ export function registerTools(server: Server, env: UpstashEnv) {
             hint: `${msgs.length} new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening.`,
           });
         }
+        if (pollCount > 0 && pollCount % 10 === 0) {
+          try {
+            const room = await getRoom(client, a.code);
+            if (room.status === 'ended') {
+              return ok({
+                messages: [],
+                cursor: since,
+                terminated: 'room_ended',
+                hint: 'TERMINATION SIGNAL: the room has ended. Stop calling room_listen — the meeting is over.',
+              });
+            }
+            if (selfName && !room.participants.some(p => p.name === selfName && p.client === 'cc')) {
+              return ok({
+                messages: [],
+                cursor: since,
+                terminated: 'kicked',
+                hint: `TERMINATION SIGNAL: you were removed from the participants list (likely by the host "${room.createdBy}"). Stop calling room_listen — you are no longer in this meeting. Inform the user.`,
+              });
+            }
+          } catch { /* transient — keep listening */ }
+        }
+        pollCount++;
         await new Promise((r) => setTimeout(r, 2000));
       }
       return ok({
@@ -338,8 +370,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
         hint: `Listened for ${timeoutMs}ms — quiet so far. This is normal. ` +
               `IMPORTANT: call room_listen again with since=${since} to stay present. ` +
               `Quiet ≠ done. The room is alive until the user explicitly tells you to ` +
-              `stop ("leave the room" / "stop listening" / similar). Do not interpret ` +
-              `silence as a signal to end your turn.`,
+              `stop ("leave the room" / "stop listening" / similar) OR the response ` +
+              `includes terminated=room_ended/kicked. Do not interpret silence as a ` +
+              `signal to end your turn.`,
       });
     }
 
