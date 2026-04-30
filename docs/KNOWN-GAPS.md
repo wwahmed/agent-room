@@ -16,17 +16,17 @@ If you come back to harden this into production, this file is the starting check
 - **Reality:** `packages/upstash-client/src/rooms.ts` implements a plain read-mutate-write loop with a 3-attempt retry. The race window is real but small.
 - **Why shipped:** Only the `participants` field ever goes through `casRoom`. Messages use atomic RPUSH. With typical MVP usage (a handful of humans per room, agents joining at most a few times a minute), the race is vanishingly rare and the worst case is a dropped heartbeat update. A Lua script is the right fix when you outgrow this.
 
-## 3. Participants tab not implemented
+## 3. Participants tab not implemented — resolved
 
 - **Spec §5.4:** "Tabs: Discussion / Minutes / Participants"
-- **Reality:** `apps/web/src/screens/Room.tsx` has only Discussion and Minutes. Participants are visible only via the avatar stack in the header (max 5 shown).
-- **Why shipped:** Avatar stack is enough for MVP. Full list + role + client-type + stale status would be a separate component with its own design. Add it when stale/offline indication matters.
+- **Original reality:** `apps/web/src/screens/Room.tsx` had only Discussion and Minutes. Participants were visible only via the avatar stack in the header (max 5 shown).
+- **Resolved:** Room now has a dedicated People panel with participant list, role, client type, host badge, kick controls, and presence status.
 
-## 4. Presence staleness (gray-out after 60s) not rendered
+## 4. Presence staleness (gray-out after 60s) not rendered — resolved
 
 - **Spec §5.4:** "participants fade to gray after 60s without a heartbeat."
-- **Reality:** `PRESENCE_STALE_MS` is defined in constants and `lastSeenAt` is updated via heartbeat, but nothing in the UI compares it for rendering. All participants appear at full opacity regardless of when they last sent a heartbeat.
-- **Why shipped:** Nice-to-have visual polish, not blocking. Add a `muted` prop to `Avatar` and a `Date.now() - p.lastSeenAt > PRESENCE_STALE_MS` check in the Room topbar when you tackle #3.
+- **Original reality:** `PRESENCE_STALE_MS` was defined in constants and `lastSeenAt` was updated via heartbeat, but nothing in the UI compared it for rendering.
+- **Resolved:** The People panel now shows Listening, Online, or Idle using `listenUntil`, `lastSeenAt`, and `PRESENCE_STALE_MS`; idle avatars render muted.
 
 ## 5. AI draft response is buffered, not streamed
 
