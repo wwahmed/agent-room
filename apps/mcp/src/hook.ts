@@ -7,17 +7,21 @@ import {
 import type { Message } from '@agent-room/shared';
 import { readState, updateCursor, bumpBlockStreak, resetBlockStreak } from './state.js';
 
-// If the agent just sent a message in any tracked room, hold the Stop hook
-// briefly while polling for a reply. Otherwise the agent's turn ends, the
-// agent goes idle, and no future hook event will fire to deliver the reply.
-const RECENT_SEND_MS = 30_000;
-const POLL_MAX_MS = 8_000;
+// Stop-hook long-poll: how long the hook holds the turn open looking for new
+// room messages before letting the agent stop. Increased from the original
+// 8s to a full 30s so the hook + the agent's room_listen window line up —
+// without this, an agent that finished a turn without a recent send would
+// only get an 8-second window to catch a web user's reply before sleeping.
+const POLL_MAX_MS = 30_000;
 const POLL_INTERVAL_MS = 1_500;
 
-// How many times we'll force the agent to continue within one user-prompt
-// cycle. Without this cap a chatty pair of agents could loop forever while
-// the user has no way to interrupt cheaply. Reset by UserPromptSubmit.
-const MAX_BLOCKS_PER_CYCLE = 8;
+// How many CONSECUTIVE no-message blocks we issue before letting the agent
+// actually stop. Each block runs for up to POLL_MAX_MS, so 12 × 30s = 6 min
+// of guaranteed presence after the agent's last meaningful action. The
+// streak resets whenever a real message arrives (productive activity is
+// not penalized) and on UserPromptSubmit. This is the practical bound on
+// how long an idle agent stays "listening" after a quiet stretch.
+const MAX_BLOCKS_PER_CYCLE = 12;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -156,16 +160,16 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   let withMessages = pending.filter((r) => r.messages.length > 0);
   await commitCursors(pending); // advance cursors even when only own-messages were skipped
 
-  // Long-poll fallback: only on Stop, when nothing arrived yet, and the agent
-  // sent a message recently (so we're plausibly waiting on a reply).
+  // Long-poll fallback (Fix A): on Stop, if there's any active room at all,
+  // hold the turn open and watch for incoming messages. This used to fire
+  // ONLY when the agent had recently sent a message, leaving a death zone
+  // where a passively-listening agent would sleep instantly the moment its
+  // turn ended — and any later web user reply would be missed.
   if (withMessages.length === 0 && event === 'Stop') {
     const state = await readState();
-    const now = Date.now();
-    const waiting = Object.values(state.rooms).some(
-      (r) => typeof r.lastSentAt === 'number' && now - r.lastSentAt < RECENT_SEND_MS
-    );
-    if (waiting) {
-      const deadline = now + POLL_MAX_MS;
+    const hasActiveRoom = Object.keys(state.rooms).length > 0;
+    if (hasActiveRoom) {
+      const deadline = Date.now() + POLL_MAX_MS;
       while (Date.now() < deadline) {
         await sleep(POLL_INTERVAL_MS);
         let p: PendingRoom[];
@@ -178,16 +182,58 @@ export async function runHook(env: UpstashEnv): Promise<void> {
     }
   }
 
+  // Fix A continued: if we got messages, deliver them and RESET the block
+  // streak (productive activity isn't penalized — the cap exists to bound
+  // pure idle loops, not real conversations).
+  if (withMessages.length > 0 && event === 'Stop') {
+    try { await resetBlockStreak(); } catch { /* non-essential */ }
+    const text = formatMessages(withMessages);
+    process.stdout.write(JSON.stringify({ decision: 'block', reason: text }));
+    process.exit(0);
+  }
+
+  // Fix A + B: still no messages, but there are active rooms. Force the
+  // agent to call room_listen again instead of letting it sleep silently.
+  // bumpBlockStreak() advances the cap; we already short-circuited on the
+  // cap up top (`stop_hook_active && streak >= MAX`), so reaching this
+  // branch means we have budget for one more keep-alive nudge.
+  if (withMessages.length === 0 && event === 'Stop') {
+    let activeRooms: Array<{ code: string; topic: string; selfName: string; cursor: number }> = [];
+    try {
+      const state = await readState();
+      activeRooms = Object.entries(state.rooms).map(([code, r]) => ({
+        code,
+        topic: '',
+        selfName: r.name,
+        cursor: r.cursor,
+      }));
+    } catch { /* fall through to plain exit */ }
+
+    if (activeRooms.length > 0) {
+      try { await bumpBlockStreak(); } catch { /* non-essential */ }
+      const lines: string[] = [];
+      lines.push('[ai-room] No new messages during the long-poll, but you are still in an active room.');
+      lines.push('');
+      lines.push('Call room_listen NOW to stay present. Do NOT call any other tool, do NOT "give a status update" — silence is normal during pauses, the conversation may resume any moment.');
+      lines.push('');
+      for (const r of activeRooms) {
+        lines.push(`  • room_listen({ code: "${r.code}", since: ${r.cursor} })  // joined as "${r.selfName}"`);
+      }
+      lines.push('');
+      lines.push('After the listen returns, decide: reply with room_send (and queue another room_listen), or call room_listen again to keep waiting. The only valid reasons to stop are: room ended, you were removed from participants, or the host explicitly said you can leave.');
+      process.stdout.write(JSON.stringify({ decision: 'block', reason: lines.join('\n') }));
+      process.exit(0);
+    }
+    process.exit(0);
+  }
+
   if (withMessages.length === 0) {
     process.exit(0);
   }
 
   const text = formatMessages(withMessages);
 
-  if (event === 'Stop') {
-    try { await bumpBlockStreak(); } catch { /* non-essential */ }
-    process.stdout.write(JSON.stringify({ decision: 'block', reason: text }));
-  } else if (event === 'UserPromptSubmit') {
+  if (event === 'UserPromptSubmit') {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
