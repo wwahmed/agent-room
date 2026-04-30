@@ -5,7 +5,7 @@ import {
   type UpstashEnv,
 } from '@agent-room/upstash-client';
 import type { Message } from '@agent-room/shared';
-import { readState, updateCursor, bumpBlockStreak, resetBlockStreak } from './state.js';
+import { readState, updateCursor, bumpBlockStreak, resetBlockStreak, removeRoom } from './state.js';
 
 // Stop-hook long-poll: how long the hook holds the turn open looking for new
 // room messages before letting the agent stop. Increased from the original
@@ -201,12 +201,26 @@ export async function runHook(env: UpstashEnv): Promise<void> {
     let activeRooms: Array<{ code: string; topic: string; selfName: string; cursor: number }> = [];
     try {
       const state = await readState();
-      activeRooms = Object.entries(state.rooms).map(([code, r]) => ({
-        code,
-        topic: '',
-        selfName: r.name,
-        cursor: r.cursor,
-      }));
+      const upstashClient = createClient(env);
+      // Best-effort cleanup: drop rooms from local state that are gone
+      // server-side (TTL expired) or marked ended, or where this agent is
+      // no longer in the participants list. Without this, a left-over
+      // entry would keep the Stop hook looping "call room_listen" forever
+      // after the meeting closes — Codex caught this in 0.12.0 review.
+      for (const [code, r] of Object.entries(state.rooms)) {
+        try {
+          const room = await getRoom(upstashClient, code);
+          const stillIn = room.participants.some(p => p.name === r.name && p.client === 'cc');
+          if (room.status !== 'active' || !stillIn) {
+            try { await removeRoom(code); } catch { /* non-essential */ }
+            continue;
+          }
+          activeRooms.push({ code, topic: room.topic, selfName: r.name, cursor: r.cursor });
+        } catch {
+          // Room not found / TTL expired — drop it from state too.
+          try { await removeRoom(code); } catch { /* non-essential */ }
+        }
+      }
     } catch { /* fall through to plain exit */ }
 
     if (activeRooms.length > 0) {

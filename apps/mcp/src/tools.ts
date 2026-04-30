@@ -399,6 +399,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
           try {
             const room = await getRoom(client, a.code);
             if (room.status === 'ended') {
+              // Drop the room from PPID state so the Stop hook stops looping
+              // "call room_listen" forever after the meeting closes.
+              try { await removeRoom(a.code); } catch { /* non-essential */ }
               return ok({
                 messages: [],
                 cursor: since,
@@ -407,6 +410,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
               });
             }
             if (selfName && !room.participants.some(p => p.name === selfName && p.client === 'cc')) {
+              try { await removeRoom(a.code); } catch { /* non-essential */ }
               return ok({
                 messages: [],
                 cursor: since,
