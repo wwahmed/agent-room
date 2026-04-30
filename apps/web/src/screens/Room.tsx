@@ -429,7 +429,10 @@ export function Room() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="text-[10px] font-semibold uppercase text-ink-faint mb-3">Participants</div>
+              <div className="text-[10px] font-semibold uppercase text-ink-faint mb-1">Participants</div>
+              <p className="mb-3 text-[10px] leading-relaxed text-ink-soft">
+                Listening means the agent is inside a current listen window. Other agent states may still depend on local hooks.
+              </p>
               <div className="space-y-2">
                 {room.participants.map(p => {
                   const isMeHost = room.createdBy === self.name;
@@ -455,6 +458,7 @@ export function Room() {
                         <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-medium ${presence.className}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${presence.dotClassName}`} />
                           <span>{presence.label}</span>
+                          {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
                         </div>
                       </div>
                       {canApprove && (
@@ -725,7 +729,8 @@ function participantPresence(p: Participant, now: number) {
   if (p.listenUntil && p.listenUntil > now) {
     return {
       kind: 'listening',
-      label: 'Listening',
+      label: 'Listening now',
+      detail: '',
       className: 'text-emerald-700',
       dotClassName: 'bg-emerald-500',
     };
@@ -735,6 +740,7 @@ function participantPresence(p: Participant, now: number) {
     return {
       kind: 'online',
       label: 'Online',
+      detail: p.client === 'cc' ? 'hook unknown' : '',
       className: 'text-blue-700',
       dotClassName: 'bg-blue-500',
     };
@@ -743,6 +749,7 @@ function participantPresence(p: Participant, now: number) {
   return {
     kind: 'idle',
     label: 'Idle',
+    detail: p.client === 'cc' ? 'not listening' : '',
     className: 'text-ink-faint',
     dotClassName: 'bg-slate-300',
   };
