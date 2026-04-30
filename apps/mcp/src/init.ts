@@ -184,6 +184,38 @@ async function installGemini(): Promise<InstallResult> {
   return { changes: [], unchanged: [`${path} (already configured)`] };
 }
 
+// Cline lives inside VS Code's user globalStorage, namespaced by the
+// extension publisher id. We target stable VS Code by default; users on
+// Code-Insiders / VSCodium / Cursor-with-Cline can copy the same JSON
+// from `init print` into the equivalent path under their VSCode-derived
+// app's User/globalStorage directory.
+function clineSettingsPath(): string {
+  const home = homedir();
+  const filename = 'cline_mcp_settings.json';
+  const segs = ['Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'settings', filename];
+  if (process.platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', ...segs);
+  }
+  if (process.platform === 'win32') {
+    return join(process.env.APPDATA ?? join(home, 'AppData', 'Roaming'), ...segs);
+  }
+  return join(home, '.config', ...segs);
+}
+
+async function installCline(): Promise<InstallResult> {
+  const path = clineSettingsPath();
+  const data = (await readJson(path)) ?? {};
+  const servers = ((data.mcpServers as Record<string, unknown>) ?? {});
+  const before = JSON.stringify(servers['ai-room']);
+  servers['ai-room'] = MCP_ENTRY;
+  data.mcpServers = servers;
+  if (JSON.stringify(servers['ai-room']) !== before) {
+    await writeJsonAtomic(path, data);
+    return { changes: [`wrote ${path} (ai-room MCP server)`], unchanged: [] };
+  }
+  return { changes: [], unchanged: [`${path} (already configured)`] };
+}
+
 function ensureTrailingBlankLine(s: string): string {
   if (!s) return '';
   let out = s;
@@ -264,6 +296,10 @@ function printConfigs() {
   console.log('~/.gemini/settings.json:');
   console.log(mcp);
 
+  console.log('\n--- Cline (VS Code extension) ---');
+  console.log('Open Cline\'s MCP Servers panel and paste, or edit cline_mcp_settings.json directly:');
+  console.log(mcp);
+
   console.log('\n--- Codex CLI ---');
   console.log('~/.codex/config.toml:');
   console.log('[mcp_servers.ai-room]');
@@ -317,7 +353,8 @@ export async function runInit(argv: string[]): Promise<void> {
     console.log('  3. Cursor');
     console.log('  4. Codex CLI     (adds MCP server + hooks)');
     console.log('  5. Gemini CLI');
-    console.log('  6. Print configs (paste them yourself)');
+    console.log('  6. Cline (VS Code extension)');
+    console.log('  7. Print configs (paste them yourself)');
     const ans = (await rl.question('\n[1]: ')).trim();
     rl.close();
     target =
@@ -325,7 +362,8 @@ export async function runInit(argv: string[]): Promise<void> {
       ans === '3' ? 'cursor' :
       ans === '4' ? 'codex' :
       ans === '5' ? 'gemini' :
-      ans === '6' ? 'print' :
+      ans === '6' ? 'cline' :
+      ans === '7' ? 'print' :
       'claude-code';
   }
 
@@ -346,6 +384,14 @@ export async function runInit(argv: string[]): Promise<void> {
     reportResult('Gemini CLI', result);
     nextSteps('Gemini CLI');
     console.log('  Note: Gemini CLI does not currently support Claude Code-style hooks, so ask it to call room_listen explicitly to stay present in the room.');
+    return;
+  }
+
+  if (target === 'cline') {
+    const result = await installCline();
+    reportResult('Cline (VS Code)', result);
+    nextSteps('Cline');
+    console.log('  Note: targeted stable VS Code. If you use VS Code Insiders / VSCodium / Cursor-with-Cline, run `npx ai-room-mcp init print` and paste the snippet into Cline\'s MCP Servers panel instead.');
     return;
   }
 
@@ -377,6 +423,6 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, gemini, print`);
+  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, gemini, cline, print`);
   process.exit(1);
 }

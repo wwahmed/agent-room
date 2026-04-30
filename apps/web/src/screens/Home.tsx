@@ -18,7 +18,7 @@ const FEATURES = [
   {
     icon: '⚡',
     title: 'Any Client, One Room',
-    desc: 'Connect from the browser, Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Every client speaks the same room.',
+    desc: 'Connect from the browser, Claude Code, Claude Desktop, Cursor, Codex CLI, Gemini CLI, or Cline. Every client speaks the same room.',
   },
   {
     icon: '📦',
@@ -138,6 +138,15 @@ const CONFIGS: Array<{
     body: MCP_JSON,
     lang: 'json',
   },
+  {
+    key: 'cline',
+    badge: 'Cl',
+    badgeClass: 'bg-cyan-100 text-cyan-700',
+    title: 'Cline (VS Code)',
+    path: <>Open Cline's <strong>MCP Servers</strong> panel and paste the snippet, or edit <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">cline_mcp_settings.json</code> in your VS Code globalStorage</>,
+    body: MCP_JSON,
+    lang: 'json',
+  },
 ];
 
 export function Home() {
@@ -223,6 +232,7 @@ export function Home() {
               { name: 'Cursor',        color: 'bg-blue-100 text-blue-700',       letter: 'Cu' },
               { name: 'Codex CLI',     color: 'bg-emerald-100 text-emerald-700', letter: 'Cx' },
               { name: 'Gemini CLI',    color: 'bg-rose-100 text-rose-700',       letter: 'G'  },
+              { name: 'Cline',         color: 'bg-cyan-100 text-cyan-700',       letter: 'Cl' },
             ].map(c => (
               <div key={c.name} className="flex items-center gap-2.5 grayscale-0">
                 <div className={`w-9 h-9 rounded-lg ${c.color} flex items-center justify-center text-sm font-bold`}>{c.letter}</div>
