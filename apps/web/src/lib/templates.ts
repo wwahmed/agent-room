@@ -55,6 +55,36 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
       "Paste the diff or PR link to start.",
   },
   {
+    id: 'feature-build',
+    label: 'Feature Build',
+    emoji: '🛠️',
+    description: 'Greenfield development room — design, implement, and verify a new feature with Builder + QA + Facilitator.',
+    topicSeed: 'Build: {feature-name}',
+    suggestedRoleIds: ['facilitator', 'builder', 'qa-reviewer'],
+    openingMessage:
+      "Feature build room. Walk the work through: user story → design → tasks → implementation → tests. Mark output with:\n\n" +
+      "- `[DECISION]` for scope / API shape / library choices\n" +
+      "- `[TODO]` for each implementation task with an owner\n" +
+      "- `[STATUS]` for progress (\"WIP\", \"PR up\", \"deployed to staging\")\n" +
+      "- `[RESULT]` for shipped artifacts (PR link, deployed URL, test results)\n\n" +
+      "Kickoff: what's the user story, what's the smallest shippable slice, who owns it?",
+  },
+  {
+    id: 'bug-fix',
+    label: 'Bug Fix',
+    emoji: '🐛',
+    description: 'Reproduce → root-cause → fix → verify. Builder + QA + Skeptic make sure the fix actually holds.',
+    topicSeed: 'Bug: {short-description}',
+    suggestedRoleIds: ['builder', 'qa-reviewer', 'skeptic'],
+    openingMessage:
+      "Bug-fix room. Step through: reproduce → narrow down → root cause → fix → verify. Mark each phase:\n\n" +
+      "- `[STATUS]` reproducible / not-reproducible / intermittent + repro steps\n" +
+      "- `[DECISION]` chosen fix approach (and what we explicitly rejected)\n" +
+      "- `[TODO]` the fix work, the regression test to add, the cleanup\n" +
+      "- `[RESULT]` verified resolution + commit/PR link, plus blast-radius note\n\n" +
+      "Open with: minimal repro, observed vs expected behavior, environment, when it started.",
+  },
+  {
     id: 'incident',
     label: 'Incident Response',
     emoji: '🚨',
