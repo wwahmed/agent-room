@@ -6,7 +6,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type RoomArtifact } from '@agent-room/shared';
+import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type Participant, type RoomArtifact } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
 import { createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
@@ -46,6 +46,7 @@ export function Room() {
   const [text, setText] = useState('');
   const [drafting, setDrafting] = useState(false);
   const [draftErr, setDraftErr] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
   const feedRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -60,6 +61,11 @@ export function Room() {
   useEffect(() => {
     autoGrow(textareaRef.current);
   }, [text]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // --- Share ---
   const joinUrl = `${window.location.origin}/j/${code}`;
@@ -372,9 +378,12 @@ export function Room() {
                   const isHost = room.createdBy === self.name;
                   const isSelf = p.name === self.name && p.client === 'web';
                   const canKick = isHost && !isSelf && !ended;
+                  const presence = participantPresence(p, now);
                   return (
                     <div key={`${p.name}-${p.client}`} className="group flex items-center gap-2 rounded-lg border border-border-faint bg-surface-softer px-2.5 py-2">
-                      <Avatar initials={p.initials} color={p.color} size="sm" />
+                      <div className={presence.kind === 'idle' ? 'opacity-45' : ''}>
+                        <Avatar initials={p.initials} color={p.color} size="sm" />
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold truncate flex items-center gap-1">
                           {p.name}
@@ -382,6 +391,10 @@ export function Room() {
                         </div>
                         <div className="text-[10px] text-ink-soft truncate">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
+                        </div>
+                        <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-medium ${presence.className}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${presence.dotClassName}`} />
+                          <span>{presence.label}</span>
                         </div>
                       </div>
                       {canKick && (
@@ -623,4 +636,31 @@ function artifactTone(kind: ArtifactKind): string {
     case 'result':
       return 'text-violet-700';
   }
+}
+
+function participantPresence(p: Participant, now: number) {
+  if (p.listenUntil && p.listenUntil > now) {
+    return {
+      kind: 'listening',
+      label: 'Listening',
+      className: 'text-emerald-700',
+      dotClassName: 'bg-emerald-500',
+    };
+  }
+
+  if (now - p.lastSeenAt <= PRESENCE_STALE_MS) {
+    return {
+      kind: 'online',
+      label: 'Online',
+      className: 'text-blue-700',
+      dotClassName: 'bg-blue-500',
+    };
+  }
+
+  return {
+    kind: 'idle',
+    label: 'Idle',
+    className: 'text-ink-faint',
+    dotClassName: 'bg-slate-300',
+  };
 }
