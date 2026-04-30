@@ -11,6 +11,9 @@
     "build": "npm -ws run build --if-present",
     "dev:web": "npm -w apps/web run dev"
   },
+  "dependencies": {
+    "@vercel/blob": "^2.3.3"
+  },
   "devDependencies": {
     "typescript": "^5.4.0",
     "vitest": "^1.5.0"

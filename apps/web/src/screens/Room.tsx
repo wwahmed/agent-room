@@ -12,7 +12,7 @@ import { approveParticipant, createClient, createRoomReport, endRoom as endRoomA
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
-import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, formatBytes, uploadAttachment } from '../lib/upload.js';
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -248,6 +248,10 @@ export function Room() {
       setEnded(true);
       setShowIdlePrompt(false);
       if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+      // Per Robin: attachments shouldn't outlive the meeting. Fire-and-
+      // forget so a Blob hiccup doesn't keep the user staring at a spinner.
+      // Best-effort only — TTL expiry is handled by a cron sweep later.
+      void deleteRoomBlobs(code);
     } catch {
       // ignore — room may already be ended
       setEnded(true);
@@ -388,7 +392,7 @@ export function Room() {
       }
       const prepared: MessageAttachment[] = [];
       for (const file of selected) {
-        prepared.push(await uploadAttachment(file));
+        prepared.push(await uploadAttachment(file, code));
       }
       setAttachments(prev => [...prev, ...prepared].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
     } catch (e) {
