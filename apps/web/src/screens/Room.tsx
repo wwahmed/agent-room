@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, type ClipboardEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { Bubble } from '../components/Bubble.js';
@@ -6,12 +6,13 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type Participant, type RoomArtifact } from '@agent-room/shared';
+import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type RoomArtifact } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
 import { approveParticipant, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, formatBytes, uploadAttachment } from '../lib/upload.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -45,11 +46,14 @@ export function Room() {
   }, [self, code, navigate]);
   const { room, messages, error, sendMessage, refreshRoom } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftErr, setDraftErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const feedRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-grow the textarea: shrink to min, then expand to scrollHeight up to max.
   // Runs after every value change (typed, pasted, Draft injected, voice transcript).
@@ -346,7 +350,7 @@ export function Room() {
 
   async function send() {
     const body = text.trim();
-    if (!body || ended) return;
+    if ((!body && attachments.length === 0) || ended) return;
     const msg: Message = {
       id: Date.now(),
       type: 'msg',
@@ -357,15 +361,50 @@ export function Room() {
       client: 'web',
       text: body,
       time: Date.now(),
+      attachments: attachments.length ? attachments : undefined,
     };
     setText('');
+    setAttachments([]);
     try {
       await sendMessage(msg);
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
       showToast(e instanceof Error ? `Send failed: ${e.message}` : 'Send failed');
       setText(body); // restore draft
+      setAttachments(attachments);
     }
+  }
+
+  async function addFiles(files: FileList | File[]) {
+    const incoming = Array.from(files);
+    if (!incoming.length) return;
+    setAttachBusy(true);
+    try {
+      const slots = Math.max(0, MAX_ATTACHMENTS_PER_MESSAGE - attachments.length);
+      const selected = incoming.slice(0, slots);
+      if (incoming.length > slots) {
+        const { showToast } = await import('../components/Toast.js');
+        showToast(`Only ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message`);
+      }
+      const prepared: MessageAttachment[] = [];
+      for (const file of selected) {
+        prepared.push(await uploadAttachment(file));
+      }
+      setAttachments(prev => [...prev, ...prepared].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
+    } catch (e) {
+      const { showToast } = await import('../components/Toast.js');
+      showToast(e instanceof Error ? e.message : 'Attachment failed');
+    } finally {
+      setAttachBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(e.clipboardData.files).filter(file => file.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    await addFiles(files);
   }
 
   return (
@@ -593,6 +632,17 @@ export function Room() {
                   </div>
                 )}
                 {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
+                {attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {attachments.map(attachment => (
+                      <PendingAttachment
+                        key={attachment.id}
+                        attachment={attachment}
+                        onRemove={() => setAttachments(prev => prev.filter(item => item.id !== attachment.id))}
+                      />
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleDraft}
@@ -605,10 +655,27 @@ export function Room() {
                     onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
                     disabled={ended}
                   />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept={Array.from(ALLOWED_ATTACHMENT_TYPES).join(',')}
+                    onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
+                    title="Attach files"
+                    className="h-9 rounded-lg bg-surface-softer border border-border px-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
+                  >
+                    {attachBusy ? '...' : 'Attach'}
+                  </button>
                   <textarea
                     ref={textareaRef}
                     value={text}
                     onChange={e => setText(e.target.value)}
+                    onPaste={e => { void handlePaste(e); }}
                     onKeyDown={e => {
                       // Enter sends; Shift+Enter / IME composition lets newlines through.
                       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -623,7 +690,7 @@ export function Room() {
                   />
                   <button
                     onClick={send}
-                    disabled={!text.trim()}
+                    disabled={!text.trim() && attachments.length === 0}
                     className="self-end bg-accent text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Send
@@ -708,6 +775,27 @@ function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {
         <span className="text-[9px] text-ink-faint">{artifact.author}</span>
       </div>
       <p className="text-[11px] leading-relaxed text-ink">{artifact.text}</p>
+    </div>
+  );
+}
+
+function PendingAttachment({ attachment, onRemove }: { attachment: MessageAttachment; onRemove: () => void }) {
+  return (
+    <div className="flex max-w-[220px] items-center gap-2 rounded-lg border border-border bg-surface-softer px-2 py-1.5">
+      {attachment.type === 'image' && (
+        <img src={attachment.url} alt="" className="h-8 w-8 rounded object-cover" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[11px] font-semibold text-ink">{attachment.name}</div>
+        <div className="text-[10px] text-ink-soft">{formatBytes(attachment.size)}</div>
+      </div>
+      <button
+        onClick={onRemove}
+        className="h-6 w-6 rounded text-xs font-bold text-ink-soft hover:bg-surface"
+        title={`Remove ${attachment.name}`}
+      >
+        x
+      </button>
     </div>
   );
 }

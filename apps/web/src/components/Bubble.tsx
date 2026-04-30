@@ -1,6 +1,6 @@
 import { Avatar } from './Avatar.js';
 import { useMemo, type ReactNode } from 'react';
-import type { Message } from '@agent-room/shared';
+import type { Message, MessageAttachment } from '@agent-room/shared';
 
 interface Props {
   message: Message;
@@ -29,11 +29,54 @@ export function Bubble({ message, self, ambiguousNames }: Props) {
           <span>· {new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <div className={`px-3 py-2 text-[13px] leading-relaxed rounded-t-[14px] break-words ${bubble}`}>
-          <MessageText text={message.text} />
+          {message.text.trim() && <MessageText text={message.text} />}
+          {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
       </div>
     </div>
   );
+}
+
+function AttachmentList({ attachments }: { attachments: MessageAttachment[] }) {
+  return (
+    <div className="mt-2 space-y-2">
+      {attachments.map(attachment => (
+        attachment.type === 'image'
+          ? <ImageAttachment key={attachment.id} attachment={attachment} />
+          : <FileAttachment key={attachment.id} attachment={attachment} />
+      ))}
+    </div>
+  );
+}
+
+function ImageAttachment({ attachment }: { attachment: MessageAttachment }) {
+  return (
+    <a href={attachment.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-black/10 bg-black/5">
+      <img src={attachment.url} alt={attachment.name} className="max-h-64 w-full object-contain" />
+      <div className="truncate px-2 py-1 text-[10px] font-medium opacity-70">
+        {attachment.name} · {formatBytes(attachment.size)}
+      </div>
+    </a>
+  );
+}
+
+function FileAttachment({ attachment }: { attachment: MessageAttachment }) {
+  return (
+    <a
+      href={attachment.url}
+      download={attachment.name}
+      className="flex items-center justify-between gap-3 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-[11px] hover:bg-black/10"
+    >
+      <span className="min-w-0 truncate font-semibold">{attachment.name}</span>
+      <span className="shrink-0 opacity-60">{formatBytes(attachment.size)}</span>
+    </a>
+  );
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function MessageText({ text }: { text: string }) {

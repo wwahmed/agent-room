@@ -43,6 +43,20 @@ export interface Message {
   text: string;
   client: ClientKind;
   time: number;
+  attachments?: MessageAttachment[];
+}
+
+export interface MessageAttachment {
+  id: string;
+  type: 'file' | 'image';
+  url: string;
+  storageKey?: string;
+  name: string;
+  size: number;
+  mime: string;
+  uploadedAt: number;
+  width?: number;
+  height?: number;
 }
 
 export type ArtifactKind = 'decision' | 'todo' | 'status' | 'result';
