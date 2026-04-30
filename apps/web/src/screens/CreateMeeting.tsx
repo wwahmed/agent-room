@@ -33,8 +33,13 @@ export function CreateMeeting() {
     try {
       const client = createClient(ENV.upstash);
       const code = generateCode();
-      await createRoom(client, { code, topic: topic.trim(), createdBy: name.trim() });
+      const created = await createRoom(client, { code, topic: topic.trim(), createdBy: name.trim() });
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
+      // Stash the host key — required to claim the host's display name on
+      // any future join (refresh, second tab, reactivation). Without this
+      // sessionStorage entry, even the original host has to pick a new
+      // display name to rejoin.
+      sessionStorage.setItem(`room:${code}:hostKey`, created.hostKey);
       // Stash the chosen template so Lobby (and the room itself) can post the
       // opening message + show suggested roles. We use sessionStorage and not
       // a route param so re-opens or refreshes don't re-trigger the opener.

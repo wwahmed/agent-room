@@ -8,7 +8,7 @@ import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type Participant, type RoomArtifact } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
-import { createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
+import { approveParticipant, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
@@ -207,6 +207,19 @@ export function Room() {
     lastMsgTimeRef.current = Date.now(); // reset idle clock
   }, []);
 
+  // Host-only. Approve a pending participant so they can send messages.
+  async function handleApprove(p: { name: string; client: 'web' | 'cc' }) {
+    if (!room || !self || room.createdBy !== self.name) return;
+    try {
+      const client = createClient(ENV.upstash);
+      await approveParticipant(client, code, self.name, p.name, p.client);
+      await refreshRoom();
+    } catch (e) {
+      const { showToast } = await import('../components/Toast.js');
+      showToast(e instanceof Error ? `Approve failed: ${e.message}` : 'Approve failed');
+    }
+  }
+
   // Host-only. Removes (name, client) from the room. The kicked client will
   // notice it's gone on its next room poll / room_listen and can be told to
   // leave by their UI. Reconnection is not blocked — they'd need to be re-joined.
@@ -322,6 +335,15 @@ export function Room() {
   // narrowed const so closures inside JSX don't have to re-check.
   const me = self;
 
+  // Speaking gate: the host is always allowed; other participants need the
+  // host to flip their `canSpeak`. Legacy rooms that pre-date the field
+  // (canSpeak === undefined) are treated as approved so already-running
+  // meetings don't break.
+  const isHost = room.createdBy === me.name;
+  const myParticipant = room.participants.find(p => p.name === me.name && p.client === 'web');
+  const myCanSpeak = isHost || myParticipant?.canSpeak !== false;
+  const pendingCount = room.participants.filter(p => p.canSpeak === false).length;
+
   async function send() {
     const body = text.trim();
     if (!body || ended) return;
@@ -410,19 +432,22 @@ export function Room() {
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-3">Participants</div>
               <div className="space-y-2">
                 {room.participants.map(p => {
-                  const isHost = room.createdBy === self.name;
+                  const isMeHost = room.createdBy === self.name;
                   const isSelf = p.name === self.name && p.client === 'web';
-                  const canKick = isHost && !isSelf && !ended;
+                  const canKick = isMeHost && !isSelf && !ended;
+                  const isPending = p.canSpeak === false;
+                  const canApprove = isMeHost && !isSelf && isPending && !ended;
                   const presence = participantPresence(p, now);
                   return (
-                    <div key={`${p.name}-${p.client}`} className="group flex items-center gap-2 rounded-lg border border-border-faint bg-surface-softer px-2.5 py-2">
+                    <div key={`${p.name}-${p.client}`} className={`group flex items-center gap-2 rounded-lg border px-2.5 py-2 ${isPending ? 'border-amber-300 bg-amber-50/60' : 'border-border-faint bg-surface-softer'}`}>
                       <div className={presence.kind === 'idle' ? 'opacity-45' : ''}>
                         <Avatar initials={p.initials} color={p.color} size="sm" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-semibold truncate flex items-center gap-1">
+                        <div className="text-xs font-semibold truncate flex items-center gap-1 flex-wrap">
                           {p.name}
                           {p.name === room.createdBy && <span className="text-[9px] font-semibold text-accent bg-accent-tint px-1 py-px rounded">host</span>}
+                          {isPending && <span className="text-[9px] font-semibold text-amber-700 bg-amber-100 px-1 py-px rounded">pending</span>}
                         </div>
                         <div className="text-[10px] text-ink-soft truncate">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
@@ -432,6 +457,15 @@ export function Room() {
                           <span>{presence.label}</span>
                         </div>
                       </div>
+                      {canApprove && (
+                        <button
+                          onClick={() => handleApprove({ name: p.name, client: p.client })}
+                          title={`Approve ${p.name} to speak`}
+                          className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 h-6 rounded transition"
+                        >
+                          ✓ Approve
+                        </button>
+                      )}
                       {canKick && (
                         <button
                           onClick={() => handleKick({ name: p.name, client: p.client })}
@@ -538,8 +572,22 @@ export function Room() {
                   <button onClick={() => navigate('/')} className="text-xs font-semibold text-ink-muted">Back to home</button>
                 </div>
               </div>
+            ) : !myCanSpeak ? (
+              <div className="border-t border-border-faint p-5 bg-amber-50 text-center">
+                <div className="text-2xl mb-1">✋</div>
+                <p className="text-sm font-semibold text-amber-900 mb-1">Waiting for host approval</p>
+                <p className="text-xs text-amber-800/80 max-w-xs mx-auto">
+                  The host ({room.createdBy}) needs to approve you before you can send messages. You can read the conversation in the meantime.
+                </p>
+              </div>
             ) : (
               <div className="relative border-t border-border-faint p-3 bg-surface flex flex-col gap-2">
+                {isHost && pendingCount > 0 && (
+                  <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 flex items-center gap-2">
+                    <span>✋</span>
+                    <span>{pendingCount} {pendingCount === 1 ? 'person' : 'people'} waiting for your approval — open the People panel to let them in.</span>
+                  </div>
+                )}
                 {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
                 <div className="flex items-center gap-2">
                   <button

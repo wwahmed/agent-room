@@ -167,6 +167,23 @@ async function installCursor(): Promise<InstallResult> {
   return { changes: [], unchanged: [`${path} (already configured)`] };
 }
 
+// Gemini CLI uses ~/.gemini/settings.json with the same `mcpServers` shape
+// as Claude Code / Cursor / Claude Desktop. Other settings in the file
+// (theme, auth, etc.) are preserved.
+async function installGemini(): Promise<InstallResult> {
+  const path = join(homedir(), '.gemini', 'settings.json');
+  const data = (await readJson(path)) ?? {};
+  const servers = ((data.mcpServers as Record<string, unknown>) ?? {});
+  const before = JSON.stringify(servers['ai-room']);
+  servers['ai-room'] = MCP_ENTRY;
+  data.mcpServers = servers;
+  if (JSON.stringify(servers['ai-room']) !== before) {
+    await writeJsonAtomic(path, data);
+    return { changes: [`wrote ${path} (ai-room MCP server)`], unchanged: [] };
+  }
+  return { changes: [], unchanged: [`${path} (already configured)`] };
+}
+
 function ensureTrailingBlankLine(s: string): string {
   if (!s) return '';
   let out = s;
@@ -243,6 +260,10 @@ function printConfigs() {
   console.log('~/.cursor/mcp.json (or equivalent):');
   console.log(mcp);
 
+  console.log('\n--- Gemini CLI ---');
+  console.log('~/.gemini/settings.json:');
+  console.log(mcp);
+
   console.log('\n--- Codex CLI ---');
   console.log('~/.codex/config.toml:');
   console.log('[mcp_servers.ai-room]');
@@ -295,14 +316,16 @@ export async function runInit(argv: string[]): Promise<void> {
     console.log('  2. Claude Desktop (MCP server only — use room_listen for live chat)');
     console.log('  3. Cursor');
     console.log('  4. Codex CLI     (adds MCP server + hooks)');
-    console.log('  5. Print configs (paste them yourself)');
+    console.log('  5. Gemini CLI');
+    console.log('  6. Print configs (paste them yourself)');
     const ans = (await rl.question('\n[1]: ')).trim();
     rl.close();
     target =
       ans === '2' ? 'claude-desktop' :
       ans === '3' ? 'cursor' :
       ans === '4' ? 'codex' :
-      ans === '5' ? 'print' :
+      ans === '5' ? 'gemini' :
+      ans === '6' ? 'print' :
       'claude-code';
   }
 
@@ -315,6 +338,14 @@ export async function runInit(argv: string[]): Promise<void> {
     const result = await installCursor();
     reportResult('Cursor', result);
     nextSteps('Cursor');
+    return;
+  }
+
+  if (target === 'gemini' || target === 'gemini-cli') {
+    const result = await installGemini();
+    reportResult('Gemini CLI', result);
+    nextSteps('Gemini CLI');
+    console.log('  Note: Gemini CLI does not currently support Claude Code-style hooks, so ask it to call room_listen explicitly to stay present in the room.');
     return;
   }
 
@@ -346,6 +377,6 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, print`);
+  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, gemini, print`);
   process.exit(1);
 }

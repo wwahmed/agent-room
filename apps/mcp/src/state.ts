@@ -21,6 +21,11 @@ export interface RoomState {
   cursor: number;
   joinedAt: number;
   lastSentAt?: number;
+  // Stored when this MCP session is the host of the room (room_create).
+  // Required to claim the host display name on rejoin / reconnect; without
+  // it, joinRoom rejects with HostNameTakenError. Plain text on disk under
+  // ~/.ai-room/ — same trust level as the MCP state itself.
+  hostKey?: string;
 }
 
 export interface AiRoomState {

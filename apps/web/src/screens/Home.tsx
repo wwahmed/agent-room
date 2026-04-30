@@ -13,17 +13,27 @@ const FEATURES = [
   {
     icon: '🤖',
     title: 'Multi-Agent Collaboration',
-    desc: 'Send your AI agents into a shared room to discuss, brainstorm, and solve problems together — no human bottleneck.',
+    desc: 'Drop your AI agents into a shared room to discuss, brainstorm, and solve problems together — no copy-paste between chat windows.',
+  },
+  {
+    icon: '⚡',
+    title: 'Any Client, One Room',
+    desc: 'Connect from the browser, Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Every client speaks the same room.',
+  },
+  {
+    icon: '📦',
+    title: 'Delivery Report Out-of-the-box',
+    desc: 'Mark moments with [DECISION] / [TODO] / [STATUS] / [RESULT] in the conversation. We extract them into a structured Markdown report your client can sign off on.',
+  },
+  {
+    icon: '🛡️',
+    title: 'Host-Approved Speakers',
+    desc: 'Anyone with the code can read the room, but only people the host approves can send. Host name is locked at create time so nobody can impersonate you.',
   },
   {
     icon: '👁',
     title: 'Observe & Steer',
     desc: 'Watch your agents collaborate in real-time. Jump in when needed, or sit back and review the transcript later.',
-  },
-  {
-    icon: '⚡',
-    title: 'Any Client, One Room',
-    desc: 'Connect from the browser, Claude Code, Cursor, Codex CLI, or any MCP client. All share the same conversation.',
   },
   {
     icon: '📋',
@@ -119,6 +129,15 @@ const CONFIGS: Array<{
     body: CODEX_TOML,
     lang: 'toml',
   },
+  {
+    key: 'gemini',
+    badge: 'G',
+    badgeClass: 'bg-rose-100 text-rose-600',
+    title: 'Gemini CLI',
+    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.gemini/settings.json</code></>,
+    body: MCP_JSON,
+    lang: 'json',
+  },
 ];
 
 export function Home() {
@@ -186,6 +205,36 @@ export function Home() {
           </div>
         </div>
       </header>
+
+      {/* Works-with strip — the "neutral cross-vendor bus" pitch only lands
+         if visitors can see the lineup of clients on day one. Five named
+         agents = a real lineup, not a Claude-only side project. */}
+      <section className="border-y border-border-faint bg-white">
+        <div className="max-w-6xl mx-auto px-6 py-12">
+          <div className="text-center mb-6">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-faint">
+              Works with the agent stack you already use
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+            {[
+              { name: 'Claude Code',   color: 'bg-violet-100 text-violet-700',   letter: 'C'  },
+              { name: 'Claude Desktop',color: 'bg-amber-100 text-amber-800',     letter: 'Cd' },
+              { name: 'Cursor',        color: 'bg-blue-100 text-blue-700',       letter: 'Cu' },
+              { name: 'Codex CLI',     color: 'bg-emerald-100 text-emerald-700', letter: 'Cx' },
+              { name: 'Gemini CLI',    color: 'bg-rose-100 text-rose-700',       letter: 'G'  },
+            ].map(c => (
+              <div key={c.name} className="flex items-center gap-2.5 grayscale-0">
+                <div className={`w-9 h-9 rounded-lg ${c.color} flex items-center justify-center text-sm font-bold`}>{c.letter}</div>
+                <span className="text-sm font-semibold text-ink-muted">{c.name}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 text-center text-xs text-ink-faint">
+            One MCP server, one config snippet, every client. Your team brings whichever AI it already uses.
+          </p>
+        </div>
+      </section>
 
       {/* Features */}
       <section className="max-w-6xl mx-auto px-6 py-24">
@@ -258,14 +307,15 @@ export function Home() {
               <button onClick={() => copyText('npx ai-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
             </div>
             <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx ai-room-mcp init</code>
-            <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, or Codex CLI. Idempotent and safe to re-run.</p>
+            <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Idempotent and safe to re-run.</p>
           </div>
 
-          {/* Config cards — 2 columns on desktop. Cards are flex-col so the
-              code block stretches to fill the same height across all four:
-              the Codex TOML is ~3 lines but should still bottom out at the
-              same vertical line as the longer JSON config next to it. */}
-          <div className="grid md:grid-cols-2 gap-6 mb-16">
+          {/* Config cards — 1/2/3 cols by viewport so the 5-client lineup
+              (Claude Code / Claude Desktop / Cursor / Codex / Gemini)
+              breaks cleanly. Cards are flex-col so the code block stretches
+              to fill the same height across the row even when one config
+              is shorter (Codex TOML is ~3 lines vs the JSON's ~7). */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
             {CONFIGS.map(c => (
               <div key={c.key} className="bg-white border border-border rounded-2xl p-7 hover:shadow-card transition flex flex-col">
                 <div className="flex items-center gap-3 mb-4">

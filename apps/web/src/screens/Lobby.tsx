@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createClient, getRoom, joinRoom, RoomNotFoundError } from '@agent-room/upstash-client';
+import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '@agent-room/upstash-client';
 import type { Room } from '@agent-room/shared';
 import { ROOM_POLL_MS } from '@agent-room/shared';
 import { ENV } from '../env.js';
@@ -25,6 +25,16 @@ export function Lobby() {
     async function ensureJoined() {
       try {
         if (self && !cancelled) {
+          // Pre-flight: if we're claiming the host's display name, prove
+          // we own the host key. Without this, anyone with the code could
+          // pretend to be the host.
+          const room = await getRoom(client, code);
+          if (self.name === room.createdBy) {
+            const hostKey = sessionStorage.getItem(`room:${code}:hostKey`) ?? undefined;
+            await verifyHostKey(client, code, hostKey);
+          }
+          // priorIdentity tells joinRoom this is the same logical session
+          // updating its own row, so a refresh doesn't get auto-suffixed.
           await joinRoom(client, code, {
             name: self.name,
             role: self.role,
@@ -33,11 +43,22 @@ export function Lobby() {
             client: 'web',
             joinedAt: Date.now(),
             lastSeenAt: Date.now(),
+          }, {
+            priorIdentity: { name: self.name, client: 'web' },
           });
         }
         await refresh();
       } catch (e) {
-        if (!cancelled) setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e));
+        if (cancelled) return;
+        if (e instanceof HostNameTakenError) {
+          // Wipe the bogus self entry and bounce to the Join page so they
+          // can pick a different name.
+          sessionStorage.removeItem(`room:${code}:self`);
+          setErr(`The name "${self?.name ?? '?'}" is reserved for the host of this room. Please pick a different name.`);
+          setTimeout(() => navigate(`/j/${code}`, { replace: true }), 1500);
+          return;
+        }
+        setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e));
       }
     }
 

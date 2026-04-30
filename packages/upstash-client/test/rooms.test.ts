@@ -135,6 +135,31 @@ describe('joinRoom', () => {
 
     expect(updated.participants).toHaveLength(1);
     expect(updated.participants[0]!.name).toBe('Sarah');
+    expect(updated.participant.name).toBe('Sarah');
+    // Non-host first joiner defaults to canSpeak=false (host approval gate).
+    expect(updated.participants[0]!.canSpeak).toBe(false);
     expect(updated.version).toBe(2);
+  });
+
+  it('auto-suffixes a colliding name on the same client kind', async () => {
+    const before: Room = {
+      code: 'A', topic: 't', createdAt: 0, createdBy: 'host', status: 'active', version: 1,
+      participants: [
+        { name: 'Robin', role: '', color: '#000', initials: 'RO', client: 'web', joinedAt: 0, lastSeenAt: 0, canSpeak: true },
+      ],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(before) }))
+      .mockResolvedValueOnce(mockResp({ result: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    const updated = await joinRoom(client, 'A', {
+      name: 'Robin', role: '', color: '#000', initials: 'RO', client: 'web',
+      joinedAt: 100, lastSeenAt: 100,
+    });
+
+    expect(updated.participant.name).toBe('Robin (2)');
+    expect(updated.participants).toHaveLength(2);
   });
 });
