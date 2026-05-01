@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-// A self-running mock of an AI Room conversation. Lives in the hero so a
+// A self-running mock of an Agent Room conversation. Lives in the hero so a
 // visitor sees the product in motion within ~3 seconds — the
 // super-individual ICP (solo dev / consultant / indie hacker) decides
 // "is this for me?" in that window, and a static screenshot doesn't

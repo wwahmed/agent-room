@@ -21,7 +21,7 @@ export function UnlockPending() {
         <div className="text-5xl mb-4">📨</div>
         <h1 className="text-2xl font-bold tracking-tight mb-3">Payment received — unlock URL on its way</h1>
         <p className="text-base text-ink-soft leading-relaxed mb-6">
-          Thanks for supporting AI Room. Your unlock URL will arrive at the email you entered at checkout, usually within an hour during pilot phase.
+          Thanks for supporting Agent Room. Your unlock URL will arrive at the email you entered at checkout, usually within an hour during pilot phase.
         </p>
 
         {roomCode && (
@@ -34,7 +34,7 @@ export function UnlockPending() {
         <div className="text-left space-y-3 text-sm text-ink-muted mb-8">
           <p><strong>What happens next:</strong></p>
           <ol className="list-decimal pl-5 space-y-1">
-            <li>You'll receive an email with the title <em>"Your AI Room report is unlocked"</em>.</li>
+            <li>You'll receive an email with the title <em>"Your Agent Room report is unlocked"</em>.</li>
             <li>It contains a permanent URL — <code className="bg-surface-softer px-1 rounded text-[11px]">/report?unlock=...</code> — open it once to remove the watermark.</li>
             <li>The unlock persists in your browser; share the original report URL with your client and it stays clean.</li>
           </ol>

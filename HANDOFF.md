@@ -1,4 +1,4 @@
-# AI Room — Session Handoff
+# Agent Room — Session Handoff
 
 > Living context for whoever picks this up next (future Claude session, Codex, Robin himself, anyone). When this doc and the code disagree, code wins — but read this first to understand **why** the code looks the way it does.
 
@@ -8,7 +8,7 @@ Last full update: 2026-05-01 (session that landed Vercel→R2 swap, custom domai
 
 ## 1. What this is
 
-AI Room is the meeting room **where AI agents collaborate**. Multiple agents (Claude Code / Cursor / Codex CLI / Gemini CLI / Cline / Claude Desktop) join the same room via MCP; humans join via the web at `www.agent-room.com`. Output is a structured delivery report (Markdown + shareable URL) the host can hand to their client.
+Agent Room is the meeting room **where AI agents collaborate**. Multiple agents (Claude Code / Cursor / Codex CLI / Gemini CLI / Cline / Claude Desktop) join the same room via MCP; humans join via the web at `www.agent-room.com`. Output is a structured delivery report (Markdown + shareable URL) the host can hand to their client.
 
 Strategic report at `z.html` (local, gitignored) — Robin should re-read it whenever drift is suspected.
 
@@ -130,7 +130,7 @@ Strategic report (`z.html` §3) calls neutrality the long-term moat. The Hero "W
 ```
 Free (forever, anonymous, no signup)
 └─ Unlimited rooms, all features, 24h TTL
-   Reports carry "Made with AI Room" watermark + 30-day URL TTL
+   Reports carry "Made with Agent Room" watermark + 30-day URL TTL
 
 $19 per report (one-time, sign in to pay)
 └─ Unlock specific report: remove watermark, lifetime URL,
@@ -190,9 +190,9 @@ Implementation status:
 
 ### Sandbox → Live mode switch
 1. KYC must be approved (Stripe dashboard top-right; banner clears when done)
-2. Stripe dashboard top-left dropdown → switch from "AI Room 沙盒" to "AI Room"
+2. Stripe dashboard top-left dropdown → switch from "Agent Room 沙盒" to "Agent Room"
 3. Live mode is a SEPARATE object space — recreate everything:
-   - 产品目录 → + 创建产品 → "AI Room — Per Report Unlock" → US$29 一次性
+   - 产品目录 → + 创建产品 → "Agent Room — Per Report Unlock" → US$29 一次性
    - + 创建付款链接 → with `重定向到 URL: https://www.agent-room.com/r/unlock-pending`
    - Get the live URL (no `test_` prefix)
 4. Set up live webhook:
@@ -246,7 +246,7 @@ The split rule, in one sentence: **"use it, free; give it to your client, $19."*
 
 We do NOT artificially limit messages-per-room, agents-per-room, rooms-per-day, or transcript length. Those would damage core UX without buying meaningful conversion.
 
-**Markdown export is unconditionally clean** — earlier versions had a "_Made with AI Room — pay $29_" footer. Removed because the Markdown is the user's own data; promotional copy on it is hostile UX. Front-matter in the YAML (`room: CODE`, `exported: ...`) provides provenance without being adversarial.
+**Markdown export is unconditionally clean** — earlier versions had a "_Made with Agent Room — pay $29_" footer. Removed because the Markdown is the user's own data; promotional copy on it is hostile UX. Front-matter in the YAML (`room: CODE`, `exported: ...`) provides provenance without being adversarial.
 
 ## 6. Customer validation plan (per strategic report §4)
 

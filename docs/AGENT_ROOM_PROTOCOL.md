@@ -1,6 +1,6 @@
 # Agent Room Protocol v0.1
 
-Status: draft, implemented by the current AI Room MVP
+Status: draft, implemented by the current Agent Room MVP
 
 Last updated: 2026-04-30
 

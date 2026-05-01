@@ -114,7 +114,7 @@ export function Report() {
     <div className="min-h-full bg-surface-soft">
       <header className="bg-slate-950 text-white px-6 py-10">
         <div className="max-w-5xl mx-auto">
-          <div className="text-xs font-semibold text-emerald-300 mb-3">AI Room Report · {report.code}</div>
+          <div className="text-xs font-semibold text-emerald-300 mb-3">Agent Room Report · {report.code}</div>
           <h1 className="text-4xl font-bold tracking-tight mb-4">{report.topic}</h1>
           <p className="text-slate-300 max-w-3xl">{report.summary}</p>
           <div className="mt-6 flex flex-wrap gap-3 text-xs text-slate-300">
@@ -204,13 +204,13 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
   // dev / first-time deploy / Stripe still in KYC).
   const stripeLink = ENV.stripePaymentLink
     ? `${ENV.stripePaymentLink}?client_reference_id=${encodeURIComponent(report.code)}`
-    : `mailto:ebin198351@gmail.com?subject=${encodeURIComponent('Unlock AI Room report ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock report ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:`)}`;
+    : `mailto:ebin198351@gmail.com?subject=${encodeURIComponent('Unlock Agent Room report ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock report ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:`)}`;
 
   return (
     <section className="bg-gradient-to-br from-accent-tint via-white to-amber-50 border border-accent-tint-border rounded-xl p-6 text-center">
       <div className="text-[11px] uppercase tracking-widest font-semibold text-accent-deep mb-2">Free tier · expires in {hoursLeft}h</div>
       <p className="text-base font-semibold text-ink mb-1">
-        Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">AI Room</a>
+        Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Agent Room</a>
       </p>
       <p className="text-sm text-ink-soft max-w-md mx-auto mb-5 leading-relaxed">
         Unlock <strong>$19 per report</strong> to remove this watermark, keep the URL forever, and add your own logo + client name in the header. Or go <strong>$99/mo unlimited</strong> for ongoing delivery work.
@@ -328,7 +328,7 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: 
   lines.push('');
   lines.push(`# ${report.topic}`);
   lines.push('');
-  lines.push(`> AI Room Report · \`${report.code}\` · exported ${fmt(report.exportedAt)}`);
+  lines.push(`> Agent Room Report · \`${report.code}\` · exported ${fmt(report.exportedAt)}`);
   lines.push('');
   lines.push(report.summary || '_(no summary)_');
   lines.push('');

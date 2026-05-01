@@ -1,7 +1,7 @@
 {
   "name": "ai-room-mcp",
   "version": "0.14.1",
-  "description": "MCP server for AI Room — multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.",
+  "description": "MCP server for Agent Room — multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.",
   "type": "module",
   "bin": {
     "ai-room-mcp": "./dist/index.js"

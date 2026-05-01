@@ -346,7 +346,7 @@ export async function runInit(argv: string[]): Promise<void> {
   let target = positional[0];
   if (!target) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
-    console.log('\nAI Room — install MCP server\n');
+    console.log('\nAgent Room — install MCP server\n');
     console.log('Where to install?');
     console.log('  1. Claude Code   (default — adds MCP server + autonomous-chat hooks)');
     console.log('  2. Claude Desktop (MCP server only — use room_listen for live chat)');

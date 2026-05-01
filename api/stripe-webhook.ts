@@ -9,7 +9,7 @@
 //   3. Compute the HMAC unlock token for that room — same scheme as
 //      /api/unlock-verify so the URL the customer receives passes
 //      validation when they open it.
-//   4. Send a "Your AI Room report is unlocked" email via Resend.
+//   4. Send a "Your Agent Room report is unlocked" email via Resend.
 //
 // What this replaces: the manual "see Stripe payment → run Node
 // one-liner → copy URL → paste into Gmail" loop. Robin can sleep
@@ -99,14 +99,14 @@ async function sendEmail(input: SendEmailInput): Promise<void> {
 }
 
 function unlockEmailContent(roomCode: string, unlockUrl: string, amount: string): { subject: string; html: string; text: string } {
-  const subject = `Your AI Room report is unlocked (${roomCode})`;
+  const subject = `Your Agent Room report is unlocked (${roomCode})`;
 
   // Plain-text version for clients that don't render HTML or for
   // when an MUA strips it. Identical info, no styling.
   const text = [
     `Hi,`,
     ``,
-    `Thanks for unlocking your AI Room delivery report — payment of ${amount} received.`,
+    `Thanks for unlocking your Agent Room delivery report — payment of ${amount} received.`,
     ``,
     `Your unlock URL:`,
     unlockUrl,
@@ -120,7 +120,7 @@ function unlockEmailContent(roomCode: string, unlockUrl: string, amount: string)
     ``,
     `Questions? Just reply to this email.`,
     ``,
-    `— Robin, AI Room`,
+    `— Robin, Agent Room`,
     `${PUBLIC_BASE}`,
   ].join('\n');
 
@@ -137,12 +137,12 @@ function unlockEmailContent(roomCode: string, unlockUrl: string, amount: string)
 <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111318;">
   <div style="max-width:560px;margin:32px auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
     <div style="padding:24px 28px;border-bottom:1px solid #eef0f3;">
-      <div style="font-size:11px;font-weight:600;letter-spacing:0.12em;color:#5B6AFF;text-transform:uppercase;">AI Room — Delivery Report</div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.12em;color:#5B6AFF;text-transform:uppercase;">Agent Room — Delivery Report</div>
       <h1 style="font-size:22px;line-height:1.3;margin:8px 0 0;letter-spacing:-0.01em;color:#111318;">Payment received — your report is unlocked</h1>
     </div>
     <div style="padding:24px 28px;">
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">
-        Thanks for supporting AI Room. We received <strong>${amount}</strong> for room <code style="background:#f4f5f7;border:1px solid #eef0f3;padding:2px 6px;border-radius:4px;font-size:13px;">${roomCode}</code>.
+        Thanks for supporting Agent Room. We received <strong>${amount}</strong> for room <code style="background:#f4f5f7;border:1px solid #eef0f3;padding:2px 6px;border-radius:4px;font-size:13px;">${roomCode}</code>.
       </p>
       <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#374151;">
         Open the URL below once to remove the watermark. Your browser remembers, and the original report URL becomes shareable with no expiry.
@@ -166,7 +166,7 @@ function unlockEmailContent(roomCode: string, unlockUrl: string, amount: string)
       </p>
     </div>
     <div style="padding:18px 28px;background:#fafbfc;border-top:1px solid #eef0f3;font-size:12px;color:#9CA3AF;text-align:center;">
-      <a href="${PUBLIC_BASE}" style="color:#9CA3AF;text-decoration:none;">AI Room</a>
+      <a href="${PUBLIC_BASE}" style="color:#9CA3AF;text-decoration:none;">Agent Room</a>
        — multi-agent meeting rooms with structured delivery reports.
     </div>
   </div>

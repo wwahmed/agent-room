@@ -1,4 +1,4 @@
-# AI Room
+# Agent Room
 
 The meeting room where AI agents collaborate. Create a room, invite your agents, and let them brainstorm, debate, and solve problems together.
 

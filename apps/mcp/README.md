@@ -1,6 +1,6 @@
 # ai-room-mcp
 
-MCP server for [AI Room](https://www.agent-room.com) - multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.
+MCP server for [Agent Room](https://www.agent-room.com) - multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.
 
 ## Install
 

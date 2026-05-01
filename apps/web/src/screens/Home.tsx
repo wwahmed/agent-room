@@ -111,7 +111,7 @@ export function Home() {
          (solo dev / consultant / indie hacker who runs Cursor +
          Claude + Codex side-by-side and feels the context-friction
          every day). The animated room demo below the headline does
-         in 4 seconds what a paragraph of "what is AI Room" can't. */}
+         in 4 seconds what a paragraph of "what is Agent Room" can't. */}
       <header className="relative overflow-hidden">
         <div className="absolute inset-x-0 -top-40 -z-0 flex justify-center pointer-events-none">
           <div className="w-[900px] h-[900px] rounded-full bg-gradient-to-br from-accent/20 via-indigo-200/40 to-transparent blur-3xl opacity-70" />
@@ -212,7 +212,7 @@ export function Home() {
       {/* Features */}
       <section className="max-w-6xl mx-auto px-6 py-24">
         <div className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Why AI Room?</h2>
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Why Agent Room?</h2>
           <p className="mt-4 text-lg text-ink-soft max-w-xl mx-auto">Built for the moment your agent stack outgrows one-on-one chats.</p>
         </div>
         <div className="grid sm:grid-cols-2 gap-6">
@@ -249,7 +249,7 @@ export function Home() {
           <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-xl shadow-slate-900/10 ring-1 ring-slate-800">
             <iframe
               src="https://www.loom.com/embed/1af7bac956184f1a8eaeb8baf52b44e4?hide_owner=true&hide_share=true&hide_title=true&hideEmbedTopBar=true"
-              title="AI Room — founder walkthrough"
+              title="Agent Room — founder walkthrough"
               frameBorder={0}
               allowFullScreen
               className="absolute inset-0 w-full h-full"
@@ -430,7 +430,7 @@ export function Home() {
          is the pilot revenue lane (price-anchored at $19 USD per the
          decision log in HANDOFF.md §5b — revisit after 3 paid pilots);
          team plan is the path to repeat-revenue once a customer is
-         using AI Room daily. */}
+         using Agent Room daily. */}
       <section id="pricing" className="bg-surface-soft border-t border-border-faint">
         <div className="max-w-6xl mx-auto px-6 py-24">
           <div className="text-center mb-16">
@@ -439,7 +439,7 @@ export function Home() {
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Pricing</h2>
             <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
-              Use AI Room free for any room. Pay $19 once when you're ready to give your client a clean, branded delivery report. Or go unlimited for ongoing project work.
+              Use Agent Room free for any room. Pay $19 once when you're ready to give your client a clean, branded delivery report. Or go unlimited for ongoing project work.
             </p>
           </div>
 
@@ -565,7 +565,7 @@ export function Home() {
       {/* Footer */}
       <footer className="border-t border-border-faint py-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between text-sm text-ink-faint">
-          <span>AI Room — Where agents meet, humans steer.</span>
+          <span>Agent Room — Where agents meet, humans steer.</span>
           <div className="flex flex-wrap gap-4">
             <a href="https://github.com/ebin198351-akl/agent-room/blob/main/docs/AGENT_ROOM_PROTOCOL.md" target="_blank" rel="noreferrer" className="hover:text-ink-muted">Open Protocol</a>
             <a href="https://github.com/ebin198351-akl/agent-room" target="_blank" rel="noreferrer" className="hover:text-ink-muted">GitHub</a>
