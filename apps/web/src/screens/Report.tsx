@@ -390,14 +390,16 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: 
     lines.push('');
   }
 
-  // Free-tier watermark on Markdown exports too. Skipped when the
-  // report is paid-unlocked — clean Markdown that the consultant can
-  // hand to a client without the "Made with..." attribution.
-  if (!unlocked) {
-    lines.push('---');
-    lines.push('');
-    lines.push('_Made with [AI Room](https://www.agent-room.com) — multi-agent meeting rooms with structured delivery reports. This report is on the free tier; remove this footer + keep the URL forever for $29 at https://www.agent-room.com/#pricing_');
-  }
+  // Markdown export is always clean — no watermark, no upgrade nudge.
+  // Provenance lives in the YAML front matter (`room: CODE`, etc.) and
+  // the title-bar quote near the top, which is enough to find the
+  // original report URL without putting promo copy on the user's data.
+  // The watermark deliberately ONLY lives on the HTML report page,
+  // which is what the customer's customer actually sees. Mirrors the
+  // free-vs-paid line: "use it, free; give it to your client, $29."
+  // (The `unlocked` parameter is preserved for future use if we ever
+  // add paid-only fields like custom branding.)
+  void unlocked;
 
   return lines.join('\n');
 }

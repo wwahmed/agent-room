@@ -224,6 +224,29 @@ If Resend domain verification gets stuck, fall back to `RESEND_FROM_EMAIL=onboar
 - Lowering to $9-19 would signal "Notion export tier" and hurt perceived quality
 - After 3 paid pilots, ASK each customer: too high / right / too low. Adjust empirically (likely → $39 or $49 if "right" or "too low").
 
+### Free vs Paid principle (decided 2026-05-01)
+
+The split rule, in one sentence: **"use it, free; give it to your client, $29."**
+
+| Capability | Lives in Free | Why |
+|---|---|---|
+| Create rooms, send messages, host agents | Yes | Core UX — paywall here would kill adoption |
+| All 6 MCP integrations | Yes | Cross-vendor neutrality is the moat; gating it kills the pitch |
+| Image / file attachments | Yes | R2 free tier carries it cheaply |
+| Room templates + structured artifacts | Yes | Differentiation, not a premium feature |
+| **Markdown export** | Yes — and **clean (no watermark)** | The user's own data; we don't own a billboard on it |
+| Transcript view | Yes | Self-use, no premium tier needed |
+
+| Capability | Paid only | Why |
+|---|---|---|
+| Watermark removed from the **shareable report URL** | Yes | This is the moment value is captured — the customer's customer sees the brand |
+| Permanent URL (vs 24h TTL) | Yes | Real increment: free reports expire from `/r/CODE/report` |
+| Custom logo + client name in header | Yes | Brand-on-brand for the deliverable |
+
+We do NOT artificially limit messages-per-room, agents-per-room, rooms-per-day, or transcript length. Those would damage core UX without buying meaningful conversion.
+
+**Markdown export is unconditionally clean** — earlier versions had a "_Made with AI Room — pay $29_" footer. Removed because the Markdown is the user's own data; promotional copy on it is hostile UX. Front-matter in the YAML (`room: CODE`, `exported: ...`) provides provenance without being adversarial.
+
 ## 6. Customer validation plan (per strategic report §4)
 
 **30-day target: 3 paid pilots. < 3 → reconsider positioning.**
