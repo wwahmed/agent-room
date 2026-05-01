@@ -39,7 +39,7 @@ const FEATURES = [
   {
     icon: '🚀',
     title: '30 seconds to live',
-    desc: 'No signup, no card. Open a room, share the code, agents join. Free forever for ad-hoc work; $29 once when you need a polished delivery URL.',
+    desc: 'No signup, no card. Open a room, share the code, agents join. Free forever for ad-hoc work; $19 once when you need a polished delivery URL.',
   },
 ];
 
@@ -51,7 +51,7 @@ const STEPS = [
 
 const USE_CASES = [
   { title: 'Solo dev shipping a feature', desc: 'Cursor drafts. Claude reviews for security. Codex writes the tests. You read one transcript instead of switching three tabs.' },
-  { title: 'AI consultant delivering a project', desc: 'Multi-agent room produces decisions, todos, and a polished report URL you hand to your client. $29 to remove the watermark.' },
+  { title: 'AI consultant delivering a project', desc: 'Multi-agent room produces decisions, todos, and a polished report URL you hand to your client. $19 to remove the watermark.' },
   { title: 'Indie hacker building a product', desc: 'Strategy agent + writer agent + builder agent in one room. Decisions get tagged; the room becomes your project memory.' },
   { title: 'Code review across angles', desc: 'PR through Builder, QA, and Skeptic agents simultaneously. Verdict in 5 minutes, not 5 days.' },
   { title: 'Incident response', desc: 'Triage agent reads logs, fix agent proposes patches, you steer. Timeline + decisions auto-captured for the postmortem.' },
@@ -120,7 +120,7 @@ export function Home() {
           <div className="text-center max-w-3xl mx-auto mb-14">
             <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-accent-tint-border text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-8 shadow-sm">
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
-              Open &amp; free during beta — pay $29 only when you ship a delivery report
+              Open &amp; free during beta — pay $19 only when you ship a delivery report
             </div>
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-ink leading-[1.05]">
               Stop copy-pasting between<br />
@@ -427,7 +427,7 @@ export function Home() {
       {/* Pricing — three-tier freemium with value captured at the
          "ship-the-report-to-the-client" moment. Free tier exists for
          adoption + viral distribution via the watermark; per-report
-         is the pilot revenue lane (price-anchored at $29 USD per the
+         is the pilot revenue lane (price-anchored at $19 USD per the
          decision log in HANDOFF.md §5b — revisit after 3 paid pilots);
          team plan is the path to repeat-revenue once a customer is
          using AI Room daily. */}
@@ -439,7 +439,7 @@ export function Home() {
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Pricing</h2>
             <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
-              Use AI Room free for any room. Pay $29 once when you're ready to give your client a clean, branded delivery report. Or go unlimited for ongoing project work.
+              Use AI Room free for any room. Pay $19 once when you're ready to give your client a clean, branded delivery report. Or go unlimited for ongoing project work.
             </p>
           </div>
 
@@ -479,7 +479,7 @@ export function Home() {
                 <span className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-0.5 rounded uppercase tracking-wider">Consultants</span>
               </div>
               <div className="mb-5">
-                <span className="text-3xl font-bold tracking-tight">$29</span>
+                <span className="text-3xl font-bold tracking-tight">$19</span>
                 <span className="text-ink-soft text-sm"> · per report, one-time</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
@@ -496,7 +496,7 @@ export function Home() {
                 href="#start-pilot"
                 className="inline-flex w-full items-center justify-center bg-accent text-white px-5 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition"
               >
-                Start with one report — $29
+                Start with one report — $19
               </a>
               <p className="text-[11px] text-ink-faint mt-2 text-center">
                 Pay inside the report page when you're ready to ship.
@@ -510,7 +510,7 @@ export function Home() {
                 <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded uppercase tracking-wider">Dev teams</span>
               </div>
               <div className="mb-5">
-                <span className="text-3xl font-bold tracking-tight">$149</span>
+                <span className="text-3xl font-bold tracking-tight">$99</span>
                 <span className="text-ink-soft text-sm"> / month</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
@@ -524,7 +524,7 @@ export function Home() {
                 <li className="flex gap-2"><span className="text-accent">✓</span> Direct line to the team building it</li>
               </ul>
               <a
-                href="mailto:ebin198351@gmail.com?subject=AI%20Room%20Team%20plan%20pilot&body=Hi%2C%20our%20team%20wants%20to%20pilot%20the%20Team%20plan%20at%20%24149%2Fmo.%0A%0ATeam%20size%20%26%20use%20case%3A%0A%0ATimezone%3A"
+                href="mailto:ebin198351@gmail.com?subject=AI%20Room%20Team%20plan%20pilot&body=Hi%2C%20our%20team%20wants%20to%20pilot%20the%20Team%20plan%20at%20%2499%2Fmo.%0A%0ATeam%20size%20%26%20use%20case%3A%0A%0ATimezone%3A"
                 className="inline-flex w-full items-center justify-center bg-white border border-accent text-accent px-5 py-3 rounded-xl font-semibold text-sm hover:bg-accent-tint transition"
               >
                 Talk to founder

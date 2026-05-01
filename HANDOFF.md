@@ -132,12 +132,12 @@ Free (forever, anonymous, no signup)
 └─ Unlimited rooms, all features, 24h TTL
    Reports carry "Made with AI Room" watermark + 30-day URL TTL
 
-$29 per report (one-time, sign in to pay)
+$19 per report (one-time, sign in to pay)
 └─ Unlock specific report: remove watermark, lifetime URL,
    add custom logo + client name, custom short link
    Use case: AI consultant delivering a project to a client
 
-$149 / month (Team)
+$99 / month (Team)
 └─ Unlimited reports, 90-day retention, team workspace,
    Slack/飞书 webhooks, priority support
    Use case: Dev team running review/incident/planning rooms continuously
@@ -217,16 +217,17 @@ Implementation status:
 
 If Resend domain verification gets stuck, fall back to `RESEND_FROM_EMAIL=onboarding@resend.dev` for testing — emails come from a Resend-owned domain but go through fine.
 
-### Pricing decision (decided 2026-05-01, revisit after 3 paid pilots)
-- **$29 USD per report** — kept against pressure to lower
-- Strategic report §7 quoted $19-99 range; $29 sits at the low end
-- Targeting AI consultants charging $1.5k-5k per project: $29 is 0.6-2% of their bill, no friction
-- Lowering to $9-19 would signal "Notion export tier" and hurt perceived quality
-- After 3 paid pilots, ASK each customer: too high / right / too low. Adjust empirically (likely → $39 or $49 if "right" or "too low").
+### Pricing decision (decided 2026-05-01, revised same day after Stripe NZ went live)
+- **$19 USD per report** (revised down from $29 NZD — Stripe charges NZD, but landing/Payment Link priced in USD for global discoverability)
+- **$99 USD/mo Team** (revised from $149)
+- Strategic report §7 quoted $19-99 range; we now sit at both ends of it (entry + ceiling)
+- Targeting AI consultants charging $1.5k-5k per project: $19 is 0.4-1.3% of their bill, near-zero friction
+- After 3 paid pilots, ASK each customer: too high / right / too low. Adjust empirically (likely → $29 or $39 if "right" / "too low").
+- Stripe Live product MUST mirror this — if landing says $19 and Stripe charges $29, refund storm.
 
 ### Free vs Paid principle (decided 2026-05-01)
 
-The split rule, in one sentence: **"use it, free; give it to your client, $29."**
+The split rule, in one sentence: **"use it, free; give it to your client, $19."**
 
 | Capability | Lives in Free | Why |
 |---|---|---|

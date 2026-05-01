@@ -188,7 +188,7 @@ export function Report() {
 // Free-tier watermark + upgrade nudge. Placed at the very bottom of the
 // report so it shows up when a client scrolls through the delivery,
 // matching the "Made with Notion" / "Made with Linear" pattern. Pricing
-// is intentionally specific ("$29 to remove + keep") so the value swap
+// is intentionally specific ("$19 to remove + keep") so the value swap
 // is concrete: users know exactly what they get for what they pay.
 function FreeTierFooter({ report }: { report: RoomReport }) {
   // The room has a 24h TTL on the server (Redis EX), but exported reports
@@ -213,14 +213,14 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
         Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">AI Room</a>
       </p>
       <p className="text-sm text-ink-soft max-w-md mx-auto mb-5 leading-relaxed">
-        Unlock <strong>$29 per report</strong> to remove this watermark, keep the URL forever, and add your own logo + client name in the header. Or go <strong>$149/mo unlimited</strong> for ongoing delivery work.
+        Unlock <strong>$19 per report</strong> to remove this watermark, keep the URL forever, and add your own logo + client name in the header. Or go <strong>$99/mo unlimited</strong> for ongoing delivery work.
       </p>
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <a
           href={stripeLink}
           className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
         >
-          Unlock this report — $29
+          Unlock this report — $19
         </a>
         <a
           href="https://www.agent-room.com/#pricing"
@@ -396,7 +396,7 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: 
   // original report URL without putting promo copy on the user's data.
   // The watermark deliberately ONLY lives on the HTML report page,
   // which is what the customer's customer actually sees. Mirrors the
-  // free-vs-paid line: "use it, free; give it to your client, $29."
+  // free-vs-paid line: "use it, free; give it to your client, $19."
   // (The `unlocked` parameter is preserved for future use if we ever
   // add paid-only fields like custom branding.)
   void unlocked;
