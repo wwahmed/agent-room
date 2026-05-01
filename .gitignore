@@ -17,3 +17,8 @@ apps/web/src/**/*.d.ts.map
 
 .vercel
 .env*.local
+
+# Internal Claude Code state
+.claude/
+# Local-only strategic notes (z.html etc)
+z.html
