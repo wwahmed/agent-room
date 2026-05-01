@@ -6,10 +6,10 @@ import { spawn } from 'node:child_process';
 
 const MCP_ENTRY = {
   command: 'npx',
-  args: ['-y', 'ai-room-mcp'],
+  args: ['-y', 'agent-room-mcp'],
 };
 
-const HOOK_COMMAND = 'npx -y ai-room-mcp hook';
+const HOOK_COMMAND = 'npx -y agent-room-mcp hook';
 const HOOK_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart'] as const;
 
 async function readJson(path: string): Promise<Record<string, unknown> | null> {
@@ -56,13 +56,13 @@ function which(cmd: string): Promise<string | null> {
 }
 
 function tryClaudeMcpAdd(): Promise<boolean> {
-  // `claude mcp add --scope user ai-room -- npx -y ai-room-mcp`
+  // `claude mcp add --scope user agent-room -- npx -y agent-room-mcp`
   // Lets Claude Code's own CLI write the registration in whatever location
   // / format the installed version prefers. Falls back silently on error.
   return new Promise((resolve) => {
     const p = spawn(
       'claude',
-      ['mcp', 'add', '--scope', 'user', 'ai-room', '--', 'npx', '-y', 'ai-room-mcp'],
+      ['mcp', 'add', '--scope', 'user', 'agent-room', '--', 'npx', '-y', 'agent-room-mcp'],
       { stdio: 'ignore' }
     );
     p.on('close', (code) => resolve(code === 0));
@@ -81,7 +81,7 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
   if (claudeBin) {
     registeredViaCli = await tryClaudeMcpAdd();
     if (registeredViaCli) {
-      result.changes.push(`registered ai-room via \`claude mcp add --scope user\``);
+      result.changes.push(`registered agent-room via \`claude mcp add --scope user\``);
     }
   }
 
@@ -90,13 +90,13 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
   const mcpPath = join(homedir(), '.claude', '.mcp.json');
   const mcp = (await readJson(mcpPath)) ?? {};
   const servers = ((mcp.mcpServers as Record<string, unknown>) ?? {});
-  const before = JSON.stringify(servers['ai-room']);
-  servers['ai-room'] = MCP_ENTRY;
+  const before = JSON.stringify(servers['agent-room']);
+  servers['agent-room'] = MCP_ENTRY;
   mcp.mcpServers = servers;
-  if (JSON.stringify(servers['ai-room']) !== before) {
+  if (JSON.stringify(servers['agent-room']) !== before) {
     await writeJsonAtomic(mcpPath, mcp);
     if (!registeredViaCli) {
-      result.changes.push(`wrote ${mcpPath} (ai-room MCP server)`);
+      result.changes.push(`wrote ${mcpPath} (agent-room MCP server)`);
     }
   } else if (!registeredViaCli) {
     result.unchanged.push(`${mcpPath} (already configured)`);
@@ -139,13 +139,13 @@ async function installClaudeDesktop(): Promise<InstallResult> {
   const path = claudeDesktopConfigPath();
   const config = (await readJson(path)) ?? {};
   const servers = ((config.mcpServers as Record<string, unknown>) ?? {});
-  const before = JSON.stringify(servers['ai-room']);
-  servers['ai-room'] = MCP_ENTRY;
+  const before = JSON.stringify(servers['agent-room']);
+  servers['agent-room'] = MCP_ENTRY;
   config.mcpServers = servers;
 
-  if (JSON.stringify(servers['ai-room']) !== before) {
+  if (JSON.stringify(servers['agent-room']) !== before) {
     await writeJsonAtomic(path, config);
-    result.changes.push(`wrote ${path} (ai-room MCP server)`);
+    result.changes.push(`wrote ${path} (agent-room MCP server)`);
   } else {
     result.unchanged.push(`${path} (already configured)`);
   }
@@ -157,12 +157,12 @@ async function installCursor(): Promise<InstallResult> {
   const path = join(homedir(), '.cursor', 'mcp.json');
   const data = (await readJson(path)) ?? {};
   const servers = ((data.mcpServers as Record<string, unknown>) ?? {});
-  const before = JSON.stringify(servers['ai-room']);
-  servers['ai-room'] = MCP_ENTRY;
+  const before = JSON.stringify(servers['agent-room']);
+  servers['agent-room'] = MCP_ENTRY;
   data.mcpServers = servers;
-  if (JSON.stringify(servers['ai-room']) !== before) {
+  if (JSON.stringify(servers['agent-room']) !== before) {
     await writeJsonAtomic(path, data);
-    return { changes: [`wrote ${path} (ai-room MCP server)`], unchanged: [] };
+    return { changes: [`wrote ${path} (agent-room MCP server)`], unchanged: [] };
   }
   return { changes: [], unchanged: [`${path} (already configured)`] };
 }
@@ -174,12 +174,12 @@ async function installGemini(): Promise<InstallResult> {
   const path = join(homedir(), '.gemini', 'settings.json');
   const data = (await readJson(path)) ?? {};
   const servers = ((data.mcpServers as Record<string, unknown>) ?? {});
-  const before = JSON.stringify(servers['ai-room']);
-  servers['ai-room'] = MCP_ENTRY;
+  const before = JSON.stringify(servers['agent-room']);
+  servers['agent-room'] = MCP_ENTRY;
   data.mcpServers = servers;
-  if (JSON.stringify(servers['ai-room']) !== before) {
+  if (JSON.stringify(servers['agent-room']) !== before) {
     await writeJsonAtomic(path, data);
-    return { changes: [`wrote ${path} (ai-room MCP server)`], unchanged: [] };
+    return { changes: [`wrote ${path} (agent-room MCP server)`], unchanged: [] };
   }
   return { changes: [], unchanged: [`${path} (already configured)`] };
 }
@@ -206,12 +206,12 @@ async function installCline(): Promise<InstallResult> {
   const path = clineSettingsPath();
   const data = (await readJson(path)) ?? {};
   const servers = ((data.mcpServers as Record<string, unknown>) ?? {});
-  const before = JSON.stringify(servers['ai-room']);
-  servers['ai-room'] = MCP_ENTRY;
+  const before = JSON.stringify(servers['agent-room']);
+  servers['agent-room'] = MCP_ENTRY;
   data.mcpServers = servers;
-  if (JSON.stringify(servers['ai-room']) !== before) {
+  if (JSON.stringify(servers['agent-room']) !== before) {
     await writeJsonAtomic(path, data);
-    return { changes: [`wrote ${path} (ai-room MCP server)`], unchanged: [] };
+    return { changes: [`wrote ${path} (agent-room MCP server)`], unchanged: [] };
   }
   return { changes: [], unchanged: [`${path} (already configured)`] };
 }
@@ -238,12 +238,12 @@ async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
 
   let modified = content;
 
-  if (/^\[mcp_servers\.ai-room\]/m.test(modified)) {
-    result.unchanged.push(`${path} (mcp_servers.ai-room already present)`);
+  if (/^\[mcp_servers\.agent-room\]/m.test(modified)) {
+    result.unchanged.push(`${path} (mcp_servers.agent-room already present)`);
   } else {
     modified = ensureTrailingBlankLine(modified);
-    modified += '[mcp_servers.ai-room]\ncommand = "npx"\nargs = ["-y", "ai-room-mcp"]\n';
-    result.changes.push(`installed [mcp_servers.ai-room] in ${path}`);
+    modified += '[mcp_servers.agent-room]\ncommand = "npx"\nargs = ["-y", "agent-room-mcp"]\n';
+    result.changes.push(`installed [mcp_servers.agent-room] in ${path}`);
   }
 
   if (opts.hooks) {
@@ -270,7 +270,7 @@ async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
 }
 
 function printConfigs() {
-  const mcp = JSON.stringify({ mcpServers: { 'ai-room': MCP_ENTRY } }, null, 2);
+  const mcp = JSON.stringify({ mcpServers: { 'agent-room': MCP_ENTRY } }, null, 2);
   const hooks = JSON.stringify({
     hooks: Object.fromEntries(
       HOOK_EVENTS.map((e) => [e, [{ hooks: [{ type: 'command', command: HOOK_COMMAND }] }]])
@@ -302,9 +302,9 @@ function printConfigs() {
 
   console.log('\n--- Codex CLI ---');
   console.log('~/.codex/config.toml:');
-  console.log('[mcp_servers.ai-room]');
+  console.log('[mcp_servers.agent-room]');
   console.log('command = "npx"');
-  console.log('args = ["-y", "ai-room-mcp"]');
+  console.log('args = ["-y", "agent-room-mcp"]');
   console.log('');
   console.log('# autonomous chat hooks (optional)');
   for (const event of HOOK_EVENTS) {
@@ -319,7 +319,7 @@ function printConfigs() {
 
 function reportResult(target: string, result: InstallResult) {
   if (result.changes.length === 0 && result.unchanged.length === 0) return;
-  console.log(`\nai-room → ${target}`);
+  console.log(`\nagent-room → ${target}`);
   for (const line of result.changes) console.log(`  ✓ ${line}`);
   for (const line of result.unchanged) console.log(`  = ${line}`);
 }
@@ -327,8 +327,8 @@ function reportResult(target: string, result: InstallResult) {
 function nextSteps(target: string) {
   console.log('\nNext:');
   console.log(`  1. Restart ${target} so it picks up the new MCP config.`);
-  console.log('  2. Tell your agent: "create an ai-room about <topic>"');
-  console.log('     or:               "join ai-room <CODE>"');
+  console.log('  2. Tell your agent: "create an agent-room about <topic>"');
+  console.log('     or:               "join agent-room <CODE>"');
   console.log('  3. Web view of any room: https://www.agent-room.com/r/<CODE>');
   console.log('');
 }
@@ -391,7 +391,7 @@ export async function runInit(argv: string[]): Promise<void> {
     const result = await installCline();
     reportResult('Cline (VS Code)', result);
     nextSteps('Cline');
-    console.log('  Note: targeted stable VS Code. If you use VS Code Insiders / VSCodium / Cursor-with-Cline, run `npx ai-room-mcp init print` and paste the snippet into Cline\'s MCP Servers panel instead.');
+    console.log('  Note: targeted stable VS Code. If you use VS Code Insiders / VSCodium / Cursor-with-Cline, run `npx agent-room-mcp init print` and paste the snippet into Cline\'s MCP Servers panel instead.');
     return;
   }
 

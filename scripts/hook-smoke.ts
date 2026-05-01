@@ -1,4 +1,4 @@
-// Smoke test for the ai-room-mcp hook subcommand.
+// Smoke test for the agent-room-mcp hook subcommand.
 //
 // Creates a real room on the public Upstash demo, writes a state-file entry
 // for it, posts a message from a different client name, runs the hook with
@@ -27,8 +27,8 @@ const url = process.env.UPSTASH_REDIS_REST_URL || 'https://current-wasp-67710.up
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || 'gQAAAAAAAQh-AAIncDE0MTY0MDY0NDdiOWE0ODE5YTVhMzJmNmNlZTk0MTM3OHAxNjc3MTA';
 
 // Use a dedicated state file for the test so we don't touch the user's real
-// per-session state. The MCP entrypoint honors AI_ROOM_STATE_FILE.
-const STATE_FILE = join(homedir(), '.ai-room', `state-smoke-${process.pid}.json`);
+// per-session state. The MCP entrypoint honors AGENT_ROOM_STATE_FILE.
+const STATE_FILE = join(homedir(), '.agent-room', `state-smoke-${process.pid}.json`);
 const HOOK_BIN = join(__dirname, '..', 'apps', 'mcp', 'dist', 'index.js');
 
 async function cleanupState(): Promise<void> {
@@ -44,7 +44,7 @@ async function runHook(payload: object): Promise<HookResult> {
         ...process.env,
         UPSTASH_REDIS_REST_URL: url,
         UPSTASH_REDIS_REST_TOKEN: token,
-        AI_ROOM_STATE_FILE: STATE_FILE,
+        AGENT_ROOM_STATE_FILE: STATE_FILE,
       },
     });
     let stdout = '', stderr = '';
@@ -81,7 +81,7 @@ async function main() {
   await appendMessage(client, code, otherMsg);
 
   try {
-    await fs.mkdir(join(homedir(), '.ai-room'), { recursive: true });
+    await fs.mkdir(join(homedir(), '.agent-room'), { recursive: true });
     await fs.writeFile(STATE_FILE, JSON.stringify({
       version: 1,
       rooms: { [code]: { name: selfName, cursor: 0, joinedAt: Date.now() } },

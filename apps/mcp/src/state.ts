@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 
-const STATE_DIR = join(homedir(), '.ai-room');
+const STATE_DIR = join(homedir(), '.agent-room');
 
 // Scope state per Claude Code session. The MCP server and the hook command are
 // both spawned directly by Claude Code, so they share a parent PID. Two parallel
@@ -10,10 +10,10 @@ const STATE_DIR = join(homedir(), '.ai-room');
 // later writer's `name` would clobber the earlier one's, and each session's
 // hook would filter the *other* agent's messages as "own" by mistake.
 //
-// Override with AI_ROOM_STATE_FILE to share state across sessions on purpose
+// Override with AGENT_ROOM_STATE_FILE to share state across sessions on purpose
 // (e.g. integration tests).
 const STATE_FILE =
-  process.env.AI_ROOM_STATE_FILE ||
+  process.env.AGENT_ROOM_STATE_FILE ||
   join(STATE_DIR, `state-${process.ppid ?? process.pid}.json`);
 
 export interface RoomState {
@@ -24,11 +24,11 @@ export interface RoomState {
   // Stored when this MCP session is the host of the room (room_create).
   // Required to claim the host display name on rejoin / reconnect; without
   // it, joinRoom rejects with HostNameTakenError. Plain text on disk under
-  // ~/.ai-room/ — same trust level as the MCP state itself.
+  // ~/.agent-room/ — same trust level as the MCP state itself.
   hostKey?: string;
 }
 
-export interface AiRoomState {
+export interface AgentRoomState {
   version: 1;
   rooms: Record<string, RoomState>;
   // Number of consecutive Stop-hook blocks since the last UserPromptSubmit.
@@ -37,12 +37,12 @@ export interface AiRoomState {
   blockStreak?: number;
 }
 
-const EMPTY: AiRoomState = { version: 1, rooms: {}, blockStreak: 0 };
+const EMPTY: AgentRoomState = { version: 1, rooms: {}, blockStreak: 0 };
 
-export async function readState(): Promise<AiRoomState> {
+export async function readState(): Promise<AgentRoomState> {
   try {
     const raw = await fs.readFile(STATE_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as AiRoomState;
+    const parsed = JSON.parse(raw) as AgentRoomState;
     if (parsed.version !== 1 || typeof parsed.rooms !== 'object' || parsed.rooms === null) {
       return { ...EMPTY };
     }
@@ -52,7 +52,7 @@ export async function readState(): Promise<AiRoomState> {
   }
 }
 
-async function writeState(state: AiRoomState): Promise<void> {
+async function writeState(state: AgentRoomState): Promise<void> {
   await fs.mkdir(dirname(STATE_FILE), { recursive: true });
   const tmp = STATE_FILE + '.tmp';
   await fs.writeFile(tmp, JSON.stringify(state, null, 2), 'utf8');

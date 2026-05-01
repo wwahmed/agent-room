@@ -80,7 +80,7 @@ async function fetchPending(env: UpstashEnv): Promise<PendingRoom[]> {
 
 function formatMessages(rooms: PendingRoom[]): string {
   const lines: string[] = [];
-  lines.push('[ai-room] New messages received while you were idle:');
+  lines.push('[agent-room] New messages received while you were idle:');
   lines.push('');
   for (const r of rooms) {
     if (r.messages.length === 0) continue;
@@ -226,7 +226,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
     if (activeRooms.length > 0) {
       try { await bumpBlockStreak(); } catch { /* non-essential */ }
       const lines: string[] = [];
-      lines.push('[ai-room] No new messages during the long-poll, but you are still in an active room.');
+      lines.push('[agent-room] No new messages during the long-poll, but you are still in an active room.');
       lines.push('');
       lines.push('Call room_listen NOW to stay present. Do NOT call any other tool, do NOT "give a status update" — silence is normal during pauses, the conversation may resume any moment.');
       lines.push('');

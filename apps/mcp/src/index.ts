@@ -18,7 +18,7 @@ if (sub === 'hook') {
   await runInit(process.argv.slice(3));
 } else {
   const server = new Server(
-    { name: 'ai-room', version: '0.1.0' },
+    { name: 'agent-room', version: '0.1.0' },
     { capabilities: { tools: {}, logging: {} } }
   );
   registerTools(server, env);

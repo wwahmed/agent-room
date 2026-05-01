@@ -20,7 +20,7 @@ Strategic report at `z.html` (local, gitignored) — Robin should re-read it whe
 |---|---|---|
 | Web | https://www.agent-room.com | Vercel-hosted SPA. apex `agent-room.com` 307→ www |
 | Old web URL | https://agentroom.vercel.app | Still works (kept for backward compat); not advertised |
-| MCP package | `ai-room-mcp@0.14.1` on npm | Published from `apps/mcp/` |
+| MCP package | `agent-room-mcp@0.14.1` on npm | Published from `apps/mcp/` |
 | Web hosting | Vercel (project: `agent-room`, team: `robins-projects-c9021b21`) | Robin's account |
 | API routes | Vercel Functions in `/api/` (`upload.ts`, `delete-room-blobs.ts`) | Node runtime, multipart parser hand-rolled |
 | AI proxy | Cloudflare Worker `apps/worker/` | `/api/draft`, `/api/minutes` proxying Anthropic |
@@ -53,7 +53,7 @@ Browser (any visitor) ─── www.agent-room.com (Vercel SPA)
    └─ Clerk Provider (invisible until payment flow asks)
 
 MCP client (Claude Code / Cursor / Codex / Gemini / Cline / Claude Desktop)
-   └─ ai-room-mcp@0.14.1 → Upstash REST (same room state)
+   └─ agent-room-mcp@0.14.1 → Upstash REST (same room state)
         ├─ tools: room_create, room_join, room_send, room_listen, room_leave,
         │         room_list_messages, room_export, room_end, room_reactivate,
         │         room_minutes, room_watch, room_unwatch
@@ -94,7 +94,7 @@ The biggest piece of behavior we engineered. Agents previously stopped listening
 If you ever debug "agent stops listening", the order of investigation is:
 1. Is the MCP client actually running 0.12.0+? (older versions don't have the hook upgrade)
 2. Are hooks installed? (Stop / UserPromptSubmit / SessionStart in the client config)
-3. Is `~/.ai-room/state-PPID.json` showing the room? (if not, hook can't keep alive)
+3. Is `~/.agent-room/state-PPID.json` showing the room? (if not, hook can't keep alive)
 4. Is `MAX_BLOCKS_PER_CYCLE` exhausted? (state.blockStreak ≥ 12 means cap hit)
 
 ### 4.4 Storage: R2, not Vercel Blob
@@ -110,7 +110,7 @@ Bought `agent-room.com` from GoDaddy. DNS config: A `@ 216.198.79.1`, CNAME `www
 All hardcoded URLs in code (MCP `room_create` joinUrl, `room_export` reportUrl, README, INSTALL.md, scripts) point at `https://www.agent-room.com`. Verified post-deploy that `agentroom.vercel.app` shows up 0 times in production bundle.
 
 ### 4.6 Six MCP clients supported
-Claude Code, Claude Desktop, Cursor / Windsurf, Codex CLI, Gemini CLI, Cline (VS Code). All use the same `mcpServers` JSON shape; only path varies. `npx ai-room-mcp init` has 7 options (6 install targets + print-only). The "Works with the agent stack you already use" hero strip on Home.tsx shows all 6 with branded badges.
+Claude Code, Claude Desktop, Cursor / Windsurf, Codex CLI, Gemini CLI, Cline (VS Code). All use the same `mcpServers` JSON shape; only path varies. `npx agent-room-mcp init` has 7 options (6 install targets + print-only). The "Works with the agent stack you already use" hero strip on Home.tsx shows all 6 with branded badges.
 
 ### 4.7 Templates
 5 room templates in `apps/web/src/lib/templates.ts`: Blank, Code Review, Incident Response, Strategy / Brainstorm, Delivery Planning, plus Feature Build (greenfield dev) and Bug Fix (reproduce → root-cause). 7 total. CreateMeeting picker autofills topic seed and suggests roles. When the host enters an empty room, opener message is sent once with `[DECISION]/[TODO]/[STATUS]/[RESULT]` marker conventions inline.
@@ -279,11 +279,11 @@ What Robin should NOT do during pilot:
 |---|---|---|
 | Vercel Storage tab is locked behind 2FA verification on Robin's account | He lost the recovery code | Don't try to use Vercel Blob; we're on R2. Recovery: open Vercel support case (24-72h), but not urgent |
 | `agentroom.vercel.app` still resolves | Kept for backward compat after domain switch | Don't advertise it. New marketing → `www.agent-room.com` only |
-| Codex / Claude Code may run old MCP version after our publish | They cache the npm package on session start | After publishing a new ai-room-mcp version, **restart the client** to pick it up. Force-refresh: `rm -rf ~/.npm/_npx` |
-| Stop hook firing infinitely with no end | Local state still has the room after host says "exit" verbally | Newer 0.14.1 has `room_leave` tool — agents call it on host exit signal. Older versions: hand-edit `~/.ai-room/state-PPID.json` |
+| Codex / Claude Code may run old MCP version after our publish | They cache the npm package on session start | After publishing a new agent-room-mcp version, **restart the client** to pick it up. Force-refresh: `rm -rf ~/.npm/_npx` |
+| Stop hook firing infinitely with no end | Local state still has the room after host says "exit" verbally | Newer 0.14.1 has `room_leave` tool — agents call it on host exit signal. Older versions: hand-edit `~/.agent-room/state-PPID.json` |
 | Stripe NZ Tax — DON'T enable yet | Charges 0.5%/transaction or $75/mo, NZ Sole Trader < $60k/year doesn't owe GST | Uncheck Stripe Tax during onboarding. Re-enable only after passing NZ$60k threshold (and registering for GST with IRD) |
 | Stripe Payment Link KYC delay | NZ Stripe KYC takes hours-to-24h | Use PayPal me / WeChat / Alipay during the wait. Test mode keys work immediately for code integration |
-| The `npx ai-room-mcp init` command requires user to restart their MCP client | MCP servers load at parent process start | Document this in INSTALL.md (already done) |
+| The `npx agent-room-mcp init` command requires user to restart their MCP client | MCP servers load at parent process start | Document this in INSTALL.md (already done) |
 
 ---
 
@@ -325,7 +325,7 @@ Roughly chronological:
 - `bbfde51` Pilot pricing on landing
 - `d5dbd93` Pricing in USD (was CNY)
 - `b0dba4b` Install card height alignment fix
-- `e36353b` ai-room-mcp 0.10.0 bump
+- `e36353b` agent-room-mcp 0.10.0 bump
 - `0a8496f` Cline (VS Code) as 6th MCP client
 - `278e95f` Feature Build + Bug Fix templates
 - `9635e74` Durable host re-entry (localStorage hostKey) + auto-approve agents

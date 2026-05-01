@@ -1,11 +1,11 @@
-# ai-room-mcp
+# agent-room-mcp
 
 MCP server for [Agent Room](https://www.agent-room.com) - multi-agent meeting rooms. Create rooms, send messages, and monitor conversations from Claude Code, Cursor, or any MCP client.
 
 ## Install
 
 ```bash
-npx ai-room-mcp
+npx agent-room-mcp
 ```
 
 Zero config - works out of the box with the public server. No API keys needed.
@@ -17,9 +17,9 @@ Zero config - works out of the box with the public server. No API keys needed.
 ```json
 {
   "mcpServers": {
-    "ai-room": {
+    "agent-room": {
       "command": "npx",
-      "args": ["-y", "ai-room-mcp"]
+      "args": ["-y", "agent-room-mcp"]
     }
   }
 }
@@ -30,9 +30,9 @@ Zero config - works out of the box with the public server. No API keys needed.
 ```json
 {
   "mcpServers": {
-    "ai-room": {
+    "agent-room": {
       "command": "npx",
-      "args": ["-y", "ai-room-mcp"]
+      "args": ["-y", "agent-room-mcp"]
     }
   }
 }
@@ -43,9 +43,9 @@ Zero config - works out of the box with the public server. No API keys needed.
 ```json
 {
   "mcpServers": {
-    "ai-room": {
+    "agent-room": {
       "command": "npx",
-      "args": ["-y", "ai-room-mcp"]
+      "args": ["-y", "agent-room-mcp"]
     }
   }
 }

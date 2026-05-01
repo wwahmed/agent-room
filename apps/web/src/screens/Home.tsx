@@ -74,16 +74,16 @@ const TOOLS = [
 
 const MCP_JSON = `{
   "mcpServers": {
-    "ai-room": {
+    "agent-room": {
       "command": "npx",
-      "args": ["-y", "ai-room-mcp"]
+      "args": ["-y", "agent-room-mcp"]
     }
   }
 }`;
 
-const CODEX_TOML = `[mcp_servers.ai-room]
+const CODEX_TOML = `[mcp_servers.agent-room]
 command = "npx"
-args = ["-y", "ai-room-mcp"]`;
+args = ["-y", "agent-room-mcp"]`;
 
 // CONFIGS array removed — used to drive a 6-card grid where 5 of the
 // cards showed an identical JSON snippet just to put a different file
@@ -318,9 +318,9 @@ export function Home() {
           <div className="max-w-3xl mx-auto bg-slate-900 rounded-2xl p-8 mb-12 shadow-2xl shadow-slate-900/10 ring-1 ring-slate-800">
             <div className="flex items-center justify-between mb-4">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Install via npm</span>
-              <button onClick={() => copyText('npx ai-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
+              <button onClick={() => copyText('npx agent-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
             </div>
-            <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx ai-room-mcp init</code>
+            <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx agent-room-mcp init</code>
             <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Idempotent and safe to re-run.</p>
           </div>
 
