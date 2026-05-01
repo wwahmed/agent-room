@@ -8,9 +8,10 @@ import { Report } from './screens/Report.js';
 import { Join } from './screens/Join.js';
 import { UnlockPending } from './screens/UnlockPending.js';
 import { ToastHost } from './components/Toast.js';
+import { Analytics } from './components/Analytics.js';
 
 function Layout({ children }: { children: ReactNode }) {
-  return <><ToastHost />{children}</>;
+  return <><ToastHost /><Analytics />{children}</>;
 }
 
 export const router = createBrowserRouter([
