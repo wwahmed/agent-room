@@ -2,7 +2,7 @@
 
 > Living context for whoever picks this up next (future Claude session, Codex, Robin himself, anyone). When this doc and the code disagree, code wins — but read this first to understand **why** the code looks the way it does.
 
-Last full update: 2026-05-01 (session that landed Vercel→R2 swap, custom domain, mute model, freemium watermark, Clerk wiring).
+Last full update: 2026-05-01 (session that landed Vercel→R2 swap, custom domain, mute model, freemium watermark, Clerk wiring, and later logo/SEO brand refresh).
 
 ---
 
@@ -67,6 +67,33 @@ Cloudflare Worker (apps/worker)
 ---
 
 ## 4. Key design decisions (the "why")
+
+### 4.0 Brand identity and SEO refresh
+On 2026-05-01 Robin, Claude, and Codex designed and shipped the first Agent Room brand system.
+
+Final logo decision:
+- Mark: dark rounded square containing four vivid participant dots around a larger white shared center.
+- Geometry: "B Focus" variant — center radius 28, agent radius 35.
+- Palette: keep the current vivid product colors: blue `#3B82F6`, violet `#8B5CF6`, green `#10B981`, amber `#F59E0B`, white center.
+- Meaning: the colored dots are distinct agents/host in the same room; the white center is the shared topic/table/room focus.
+- Wordmark: bracketed `[ Agent Room ]` with muted gray brackets and black text, tying the brand to the product's structured marker language (`[DECISION]`, `[TODO]`, etc.).
+
+Placement decisions:
+- Home page uses a light, non-sticky top header: logo left, middle links (`Features`, `How it works`, `Pricing`), outline `Open a room` CTA right.
+- The centered hero logo was removed; the brand now lives in the header so the hero can focus on the pain-led headline and animated demo.
+- Room page uses only the compact mark in the existing room header beside the topic/participant status. Do not add a second global app header there.
+- Join, Lobby, and CreateMeeting screens use a compact logo header because they are entry surfaces and need trust/brand continuity.
+- Report pages intentionally remain clean client-delivery surfaces; do not add a full Agent Room nav/header there beyond the existing watermark model.
+
+Shipped commits:
+- `4f680a8 Add Agent Room brand logo`
+- `961c527 Improve web SEO metadata`
+
+SEO shipped in the follow-up:
+- Better title, meta description, canonical URL, Open Graph, Twitter card, PNG social card, app icons, and `site.webmanifest`.
+- OG image should use PNG (`/brand/agent-room-social.png`), not SVG, because many crawlers/social platforms do not reliably render SVG previews.
+
+Do not resurrect the discarded logo concepts unless Robin explicitly asks. We tested meeting/table, convergence, bracket, portal, large-table, muted palette, and cool-host palettes. Final owner decision was: B Focus geometry + current vivid palette.
 
 ### 4.1 Mute model, not approval model
 Earlier we shipped a "host approves new joiners" gate (canSpeak default false, host clicks ✓). Friction killed productivity in fast-moving rooms. Robin replaced it with: **everyone joins canSpeak=true; host can mute (`setMuted(target, client, muted)`) anyone they need to silence**. Same Slack/Zoom mental model.
@@ -216,6 +243,29 @@ Implementation status:
    - `RESEND_FROM_EMAIL` = `noreply@agent-room.com` (or whatever you verified)
 
 If Resend domain verification gets stuck, fall back to `RESEND_FROM_EMAIL=onboarding@resend.dev` for testing — emails come from a Resend-owned domain but go through fine.
+
+---
+
+## 6. Product roadmap memory from logo-room discussion
+
+### 6.1 Agent rental idea: defer full platform
+Robin proposed a future "agent rental" service: Agent Room could rent cloud-hosted servers with pre-installed agents so users without their own agents could rent Agent Room's agents to complete tasks.
+
+Claude and Codex reached consensus:
+- Do **not** build full self-hosted agent rental now.
+- It would turn Agent Room from a collaboration product into a compute/hosting platform with hard problems: container isolation, uptime, token cost control, billing, abuse prevention, monitoring, and data leakage risk.
+- Unit economics are weaker than selling software/IP: Agent Room would pay token/server costs and mostly resell upstream model usage.
+- The space is crowded with better-funded infra/sandbox players such as E2B, Vercel Sandbox, Modal, Replit-style agents, Daytona, etc.
+- It risks diluting the core positioning: Agent Room should be "where agents collaborate and humans steer", not an AWS-like agent hosting platform.
+
+Recommended staged path:
+1. `v1` — keep focus on BYO agents, polished rooms, structured reports, and first paying users.
+2. `v1.5` — add a low-cost "scripted demo room" or replay-style interactive demo on the landing page. This creates the onboarding aha moment without burning tokens or running real hosted agents.
+3. `v2` — sell role/persona templates or prompt packs (high-margin IP, almost no ops burden).
+4. `v3` — integrate with third-party sandbox/agent providers if users strongly request hosted agents.
+5. Only consider self-hosted agent rental after traction, stable MRR, and repeated customer pull.
+
+Short version: archive full agent rental for now; validate demand with a scripted demo first.
 
 ### Pricing decision (decided 2026-05-01, revised same day after Stripe NZ went live)
 - **$19 USD per report** (revised down from $29 NZD — Stripe charges NZD, but landing/Payment Link priced in USD for global discoverability)
