@@ -46,7 +46,7 @@ async function cmdCreate() {
   await joinRoom(client, code, p);
   // Get current message count for cursor
   const msgs = await listMessages(client, code, 0);
-  console.log(JSON.stringify({ action: 'created', code, topic, host, cursor: msgs.length, joinUrl: `https://agentroom.vercel.app/j/${code}` }));
+  console.log(JSON.stringify({ action: 'created', code, topic, host, cursor: msgs.length, joinUrl: `https://www.agent-room.com/j/${code}` }));
 }
 
 async function cmdJoin() {

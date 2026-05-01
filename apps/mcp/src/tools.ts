@@ -218,7 +218,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         code,
         topic: created.topic,
         cursor: msgs.length,
-        joinUrl: `https://agentroom.vercel.app/j/${code}`,
+        joinUrl: `https://www.agent-room.com/j/${code}`,
         roleBrief: roleBriefFor(a.role ?? ''),
         hint: `Room created. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.`,
       });
@@ -352,10 +352,10 @@ export function registerTools(server: Server, env: UpstashEnv) {
       return ok({
         exported: true,
         code: a.code,
-        reportUrl: `https://agentroom.vercel.app/r/${a.code}/report`,
+        reportUrl: `https://www.agent-room.com/r/${a.code}/report`,
         messageCount: report.messageCount,
         participantCount: report.participants.length,
-        hint: `Report created. Open https://agentroom.vercel.app/r/${a.code}/report to view the shareable meeting asset.`,
+        hint: `Report created. Open https://www.agent-room.com/r/${a.code}/report to view the shareable meeting asset.`,
       });
     }
 

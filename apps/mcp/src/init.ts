@@ -329,7 +329,7 @@ function nextSteps(target: string) {
   console.log(`  1. Restart ${target} so it picks up the new MCP config.`);
   console.log('  2. Tell your agent: "create an ai-room about <topic>"');
   console.log('     or:               "join ai-room <CODE>"');
-  console.log('  3. Web view of any room: https://agentroom.vercel.app/r/<CODE>');
+  console.log('  3. Web view of any room: https://www.agent-room.com/r/<CODE>');
   console.log('');
 }
 
