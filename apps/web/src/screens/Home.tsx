@@ -151,7 +151,7 @@ export function Home() {
           <div className="mt-2">
             <AnimatedRoomDemo />
             <p className="text-center text-xs text-ink-faint mt-4">
-              ↑ Live demo — that's what a real room looks like, looping every 16s. Want a guided 60-second walkthrough? <a href="#walkthrough" className="font-semibold text-accent underline underline-offset-2">Watch it here</a>.
+              ↑ Live demo — that's what a real room looks like, looping every 16s. Want a narrated walkthrough of the real product? <a href="#walkthrough" className="font-semibold text-accent underline underline-offset-2">Watch it here</a>.
             </p>
           </div>
 
@@ -226,39 +226,43 @@ export function Home() {
         </div>
       </section>
 
-      {/* Video walkthrough — placeholder until Robin records a Loom.
-         Once recorded, paste the embed URL into VITE_DEMO_VIDEO_URL
-         (Vercel env var) or hardcode the embed below. Until then the
-         section pitches the video and points back at the live demo. */}
+      {/* Video walkthrough — Loom embed. Real founder narration of a
+         Claude + Codex coordination loop. The video runs ~5min so we
+         drop a "watch at 2x" hint above the player; Loom's embed
+         doesn't support a default-speed URL param, so the hint is the
+         best we can do without re-recording. */}
       <section id="walkthrough" className="bg-white border-t border-border-faint">
         <div className="max-w-5xl mx-auto px-6 py-20">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-accent-tint text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
-              <span>60-second walkthrough</span>
+              <span>Founder walkthrough</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">See it run end-to-end</h2>
             <p className="mt-3 text-base text-ink-soft max-w-xl mx-auto">
-              Open a room, drop in two agents, they coordinate on a fix, you ship a delivery report. Same product the live demo above shows — just narrated.
+              I open a room, drop in Claude and Codex, they self-organize on a real bug fix, and ship a delivery report. No edits, no scripted "demo accounts" — just the product running.
+            </p>
+            <p className="mt-3 text-xs text-ink-faint">
+              Tip: hit <span className="font-mono bg-surface-soft border border-border-faint rounded px-1.5 py-0.5">1x</span> in the player to speed up to 2x — the substance kicks in around 0:30.
             </p>
           </div>
 
-          <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-xl shadow-slate-900/10 ring-1 ring-slate-800 flex items-center justify-center">
-            {/* Placeholder until video is recorded. Centered "play" tile
-               that nudges visitors back to the live demo above. Robin
-               replaces this with an <iframe src=... /> Loom/YouTube
-               embed once a recording is live. */}
-            <div className="text-center px-6">
-              <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-white/10 backdrop-blur flex items-center justify-center ring-1 ring-white/20">
-                <svg viewBox="0 0 24 24" fill="white" className="w-9 h-9 ml-1"><path d="M8 5v14l11-7z" /></svg>
-              </div>
-              <h3 className="text-white text-xl font-semibold mb-2">Walkthrough video — recording soon</h3>
-              <p className="text-slate-300 text-sm max-w-md mx-auto mb-6">
-                Founder narration of a real Cursor + Claude + Codex coordination loop. Until then the live demo at the top shows the actual UI in motion.
-              </p>
-              <Link to="/new" className="inline-flex items-center justify-center bg-white text-slate-900 px-5 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition">
-                Skip video — open a room ($0)
-              </Link>
-            </div>
+          <div className="relative aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-xl shadow-slate-900/10 ring-1 ring-slate-800">
+            <iframe
+              src="https://www.loom.com/embed/1af7bac956184f1a8eaeb8baf52b44e4?hide_owner=true&hide_share=true&hide_title=true&hideEmbedTopBar=true"
+              title="AI Room — founder walkthrough"
+              frameBorder={0}
+              allowFullScreen
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
+
+          <div className="mt-6 flex items-center justify-center">
+            <Link
+              to="/new"
+              className="inline-flex items-center justify-center bg-ink text-white px-5 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition"
+            >
+              Skip video — open a room ($0)
+            </Link>
           </div>
         </div>
       </section>
