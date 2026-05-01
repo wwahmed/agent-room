@@ -85,70 +85,11 @@ const CODEX_TOML = `[mcp_servers.ai-room]
 command = "npx"
 args = ["-y", "ai-room-mcp"]`;
 
-const CONFIGS: Array<{
-  key: string;
-  badge: string;
-  badgeClass: string;
-  title: string;
-  path: React.ReactNode;
-  body: string;
-  lang: 'json' | 'toml';
-}> = [
-  {
-    key: 'claude-code',
-    badge: 'C',
-    badgeClass: 'bg-violet-100 text-violet-600',
-    title: 'Claude Code',
-    path: <>Add to project root <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">.mcp.json</code> or <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.claude/.mcp.json</code></>,
-    body: MCP_JSON,
-    lang: 'json',
-  },
-  {
-    key: 'claude-desktop',
-    badge: 'Cd',
-    badgeClass: 'bg-amber-100 text-amber-700',
-    title: 'Claude Desktop',
-    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">claude_desktop_config.json</code>. Use <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">room_listen</code> for live chat.</>,
-    body: MCP_JSON,
-    lang: 'json',
-  },
-  {
-    key: 'cursor',
-    badge: 'Cu',
-    badgeClass: 'bg-blue-100 text-blue-600',
-    title: 'Cursor / Windsurf',
-    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">.cursor/mcp.json</code></>,
-    body: MCP_JSON,
-    lang: 'json',
-  },
-  {
-    key: 'codex',
-    badge: 'Cx',
-    badgeClass: 'bg-emerald-100 text-emerald-600',
-    title: 'Codex CLI',
-    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.codex/config.toml</code></>,
-    body: CODEX_TOML,
-    lang: 'toml',
-  },
-  {
-    key: 'gemini',
-    badge: 'G',
-    badgeClass: 'bg-rose-100 text-rose-600',
-    title: 'Gemini CLI',
-    path: <>Add to <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.gemini/settings.json</code></>,
-    body: MCP_JSON,
-    lang: 'json',
-  },
-  {
-    key: 'cline',
-    badge: 'Cl',
-    badgeClass: 'bg-cyan-100 text-cyan-700',
-    title: 'Cline (VS Code)',
-    path: <>Open Cline's <strong>MCP Servers</strong> panel and paste the snippet, or edit <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">cline_mcp_settings.json</code> in your VS Code globalStorage</>,
-    body: MCP_JSON,
-    lang: 'json',
-  },
-];
+// CONFIGS array removed — used to drive a 6-card grid where 5 of the
+// cards showed an identical JSON snippet just to put a different file
+// path next to it. Replaced by a single canonical-snippet panel + a
+// path list (see "Manual config — consolidated" section below). MCP_JSON
+// and CODEX_TOML constants above are still in use directly.
 
 export function Home() {
   const navigate = useNavigate();
@@ -379,25 +320,67 @@ export function Home() {
             <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Idempotent and safe to re-run.</p>
           </div>
 
-          {/* Config cards — 1/2/3 cols by viewport so the 5-client lineup
-              (Claude Code / Claude Desktop / Cursor / Codex / Gemini)
-              breaks cleanly. Cards are flex-col so the code block stretches
-              to fill the same height across the row even when one config
-              is shorter (Codex TOML is ~3 lines vs the JSON's ~7). */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-            {CONFIGS.map(c => (
-              <div key={c.key} className="bg-white border border-border rounded-2xl p-7 hover:shadow-card transition flex flex-col">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 rounded-lg ${c.badgeClass} flex items-center justify-center text-sm font-bold`}>{c.badge}</div>
-                  <h3 className="text-lg font-semibold tracking-tight">{c.title}</h3>
-                </div>
-                <p className="text-sm text-ink-soft mb-4 leading-relaxed">{c.path}</p>
-                <div className="bg-slate-50 border border-border rounded-xl relative flex-1 flex flex-col">
-                  <button onClick={() => copyText(c.body, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
-                  <pre className="text-xs sm:text-[13px] font-mono text-ink leading-relaxed p-4 pr-16 overflow-x-auto flex-1"><code>{c.body}</code></pre>
-                </div>
+          {/* Manual config — consolidated. Five of the six clients share
+              the same JSON snippet (only the file path differs), so showing
+              it five times was pure repetition. Render the snippet ONCE on
+              the left, then list the five drop-in paths on the right.
+              Codex CLI uses TOML so it gets its own small panel below. */}
+          <div className="grid lg:grid-cols-5 gap-6 mb-10">
+            {/* Canonical JSON */}
+            <div className="lg:col-span-3 bg-white border border-border rounded-2xl p-7 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold tracking-tight">Manual config snippet</h3>
+                <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider">JSON</span>
               </div>
-            ))}
+              <p className="text-sm text-ink-soft mb-4 leading-relaxed">
+                Same snippet works for <strong>Claude Code, Claude Desktop, Cursor / Windsurf, Gemini CLI, and Cline</strong>. Just drop it into the right config file (paths on the right).
+              </p>
+              <div className="bg-slate-50 border border-border rounded-xl relative flex-1 flex flex-col">
+                <button onClick={() => copyText(MCP_JSON, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
+                <pre className="text-xs sm:text-[13px] font-mono text-ink leading-relaxed p-4 pr-16 overflow-x-auto flex-1"><code>{MCP_JSON}</code></pre>
+              </div>
+            </div>
+
+            {/* Path list — one row per client */}
+            <div className="lg:col-span-2 bg-white border border-border rounded-2xl p-7">
+              <h3 className="text-lg font-semibold tracking-tight mb-4">Where to put it</h3>
+              <ul className="space-y-3">
+                {[
+                  { name: 'Claude Code',     badge: 'C',  badgeClass: 'bg-violet-100 text-violet-600',   path: '~/.claude/.mcp.json' },
+                  { name: 'Claude Desktop',  badge: 'Cd', badgeClass: 'bg-amber-100 text-amber-700',     path: 'claude_desktop_config.json' },
+                  { name: 'Cursor / Windsurf', badge: 'Cu', badgeClass: 'bg-blue-100 text-blue-600',     path: '~/.cursor/mcp.json' },
+                  { name: 'Gemini CLI',      badge: 'G',  badgeClass: 'bg-rose-100 text-rose-600',       path: '~/.gemini/settings.json' },
+                  { name: 'Cline (VS Code)', badge: 'Cl', badgeClass: 'bg-cyan-100 text-cyan-700',       path: 'MCP Servers panel' },
+                ].map(c => (
+                  <li key={c.name} className="flex items-center gap-3">
+                    <div className={`w-7 h-7 rounded-md ${c.badgeClass} flex items-center justify-center text-[11px] font-bold shrink-0`}>{c.badge}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold leading-tight">{c.name}</div>
+                      <code className="text-[11px] font-mono text-ink-soft break-all">{c.path}</code>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-5 pt-4 border-t border-border-faint text-[11px] text-ink-faint leading-relaxed">
+                Cline doesn't use a flat config file — open Cline's <strong>MCP Servers</strong> panel in VS Code and paste the snippet there.
+              </p>
+            </div>
+          </div>
+
+          {/* Codex CLI — special case (TOML, not JSON) */}
+          <div className="bg-white border border-border rounded-2xl p-7 mb-16">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold">Cx</div>
+              <h3 className="text-lg font-semibold tracking-tight">Codex CLI</h3>
+              <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider">TOML</span>
+            </div>
+            <p className="text-sm text-ink-soft mb-4 leading-relaxed">
+              Codex CLI uses TOML at <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.codex/config.toml</code>. Different syntax than the other five — paste this instead:
+            </p>
+            <div className="bg-slate-50 border border-border rounded-xl relative">
+              <button onClick={() => copyText(CODEX_TOML, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
+              <pre className="text-xs sm:text-[13px] font-mono text-ink leading-relaxed p-4 pr-16 overflow-x-auto"><code>{CODEX_TOML}</code></pre>
+            </div>
           </div>
 
           {/* Available tools */}
