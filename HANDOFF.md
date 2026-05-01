@@ -34,6 +34,11 @@ Required Vercel env vars (Production / Preview / Development all):
 - `VITE_WORKER_URL` (Cloudflare Worker base URL)
 - `VITE_CLERK_PUBLISHABLE_KEY` (`pk_test_...` or `pk_live_...`)
 - `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+- `VITE_STRIPE_PAYMENT_LINK` — Stripe Payment Link URL (test or live)
+- `UNLOCK_SECRET` — server-only, ~32 random hex chars; rotates invalidates ALL outstanding unlock URLs
+- `STRIPE_WEBHOOK_SECRET` — `whsec_...` from Stripe webhook config
+- `RESEND_API_KEY` — `re_...` from resend.com
+- `RESEND_FROM_EMAIL` — verified sender, e.g. `noreply@agent-room.com`
 
 ---
 
@@ -149,13 +154,75 @@ Implementation status:
 - ✅ Watermark in report HTML page (FreeTierFooter component)
 - ✅ Watermark line in Markdown export
 - ✅ Pricing section on landing page (USD, both tiers)
-- ✅ mailto: pilot CTAs (manual unlock during KYC)
 - ✅ Clerk wired (invisible until used)
-- ⏳ Stripe (Robin in NZ Sole Trader KYC)
-- ⏳ Unlock-token URL flow (`/r/CODE/report?unlock=TOKEN` to drop watermark) — **next code task**
-- ⏳ Payment Link integration
+- ✅ Unlock-token URL flow (`/r/CODE/report?unlock=TOKEN`) — HMAC-SHA256 over room code with `UNLOCK_SECRET`, validated server-side via `/api/unlock-verify`, persisted in localStorage
+- ✅ Stripe Payment Link integration in FreeTierFooter (passes room code as `client_reference_id`)
+- ✅ `/r/unlock-pending` redirect target after successful checkout
+- ✅ Stripe webhook (`/api/stripe-webhook`) — signature verified, extracts code + email, sends unlock URL via Resend
+- ✅ End-to-end manual flow tested in sandbox with test card 4242 (commit 6a971b1, validated 2026-05-01)
+- ⏳ Stripe live mode (KYC in review at handoff time)
+- ⏳ Resend account + domain verification (`agent-room.com` SPF/DKIM)
 
 ---
+
+## 5b. Payment infrastructure runbook
+
+### Pilot manual flow (when webhook isn't wired or down)
+1. Customer clicks "Unlock $29" on report page → goes to Stripe with `?client_reference_id=ROOMCODE`
+2. Customer pays
+3. Robin sees payment in Stripe dashboard → 交易 tab → click into the payment → note `client_reference_id` and `customer_email`
+4. Robin runs locally:
+   ```bash
+   ROOM=THE-ROOM-CODE
+   SECRET=$UNLOCK_SECRET   # set in shell from Vercel env
+   TOKEN=$(node -e "console.log(require('crypto').createHmac('sha256','$SECRET').update('$ROOM').digest('hex').slice(0,16))")
+   echo "https://www.agent-room.com/r/$ROOM/report?unlock=$TOKEN"
+   ```
+5. Robin emails the URL to the customer
+
+### Automated flow (with webhook + Resend)
+1. Customer clicks Unlock → pays → Stripe redirects to `/r/unlock-pending`
+2. Stripe sends `checkout.session.completed` event to `/api/stripe-webhook`
+3. Webhook verifies signature → extracts code + email → computes HMAC unlock token
+4. Webhook sends email via Resend API (templated HTML + plain text)
+5. Customer opens unlock URL → /api/unlock-verify validates → localStorage persists → watermark drops
+6. Customer shares the clean `/r/CODE/report` URL with their client
+
+### Sandbox → Live mode switch
+1. KYC must be approved (Stripe dashboard top-right; banner clears when done)
+2. Stripe dashboard top-left dropdown → switch from "AI Room 沙盒" to "AI Room"
+3. Live mode is a SEPARATE object space — recreate everything:
+   - 产品目录 → + 创建产品 → "AI Room — Per Report Unlock" → US$29 一次性
+   - + 创建付款链接 → with `重定向到 URL: https://www.agent-room.com/r/unlock-pending`
+   - Get the live URL (no `test_` prefix)
+4. Set up live webhook:
+   - 开发人员 → Webhooks → 添加端点
+   - URL: `https://www.agent-room.com/api/stripe-webhook`
+   - Events: `checkout.session.completed`
+   - Save → copy the **Signing secret** (`whsec_...`)
+5. Update Vercel env vars:
+   - `VITE_STRIPE_PAYMENT_LINK` → live URL
+   - `STRIPE_WEBHOOK_SECRET` → live `whsec_...`
+6. Vercel **Deployments** → Redeploy to inject the new env vars
+
+### Resend setup (one-time)
+1. [resend.com](https://resend.com) → sign up (5 min, free tier 3K emails/month)
+2. Domains → Add Domain → `agent-room.com` → follow the DNS instructions:
+   - In GoDaddy DNS, add the SPF / DKIM / DMARC TXT records Resend shows
+   - Wait ~30 min for propagation, then click Verify
+3. API Keys → Create API Key → copy `re_...` value
+4. Set in Vercel:
+   - `RESEND_API_KEY` = the `re_...` value
+   - `RESEND_FROM_EMAIL` = `noreply@agent-room.com` (or whatever you verified)
+
+If Resend domain verification gets stuck, fall back to `RESEND_FROM_EMAIL=onboarding@resend.dev` for testing — emails come from a Resend-owned domain but go through fine.
+
+### Pricing decision (decided 2026-05-01, revisit after 3 paid pilots)
+- **$29 USD per report** — kept against pressure to lower
+- Strategic report §7 quoted $19-99 range; $29 sits at the low end
+- Targeting AI consultants charging $1.5k-5k per project: $29 is 0.6-2% of their bill, no friction
+- Lowering to $9-19 would signal "Notion export tier" and hurt perceived quality
+- After 3 paid pilots, ASK each customer: too high / right / too low. Adjust empirically (likely → $39 or $49 if "right" or "too low").
 
 ## 6. Customer validation plan (per strategic report §4)
 
