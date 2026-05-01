@@ -136,8 +136,9 @@ describe('joinRoom', () => {
     expect(updated.participants).toHaveLength(1);
     expect(updated.participants[0]!.name).toBe('Sarah');
     expect(updated.participant.name).toBe('Sarah');
-    // Non-host first joiner defaults to canSpeak=false (host approval gate).
-    expect(updated.participants[0]!.canSpeak).toBe(false);
+    // Mute model: everyone defaults to canSpeak=true on join. Host can
+    // mute via setMuted() to flip a specific participant to false.
+    expect(updated.participants[0]!.canSpeak).toBe(true);
     expect(updated.version).toBe(2);
   });
 
@@ -163,7 +164,7 @@ describe('joinRoom', () => {
     expect(updated.participants).toHaveLength(2);
   });
 
-  it('auto-approves cc (agent) joiners while leaving web walk-ins pending', async () => {
+  it('lands cc (agent) joiners with canSpeak=true (mute model)', async () => {
     const before: Room = { code: 'A', topic: 't', createdAt: 0, createdBy: 'host', status: 'active', version: 1, participants: [] };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(mockResp({ result: JSON.stringify(before) }))
@@ -176,8 +177,8 @@ describe('joinRoom', () => {
       joinedAt: 100, lastSeenAt: 100,
     });
 
-    // Agents land approved; only web walk-ins (covered by the test above)
-    // need the host's ✓.
+    // Mute model: everyone (web + cc) defaults to true. Host mutes
+    // specific participants via setMuted() if they need to be silenced.
     expect(updated.participant.canSpeak).toBe(true);
   });
 });

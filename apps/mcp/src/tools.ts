@@ -7,7 +7,7 @@ import {
   joinRoom,
   verifyHostKey,
   HostNameTakenError,
-  NotApprovedError,
+  MutedError,
   endRoom,
   reactivateRoom,
   appendMessage,
@@ -82,7 +82,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_send',
         description:
-          'Send a message to the room. Returns sent=true on success, or sent=false with error="not_approved" if the host has not approved you to speak yet. ' +
+          'Send a message to the room. Returns sent=true on success, or sent=false with error="muted" if the host has muted you. ' +
           'If you expect a reply (ongoing conversation), follow this call with room_listen using the returned cursor — your turn ending without a listener means later replies will be missed.',
         inputSchema: {
           type: 'object',
@@ -269,13 +269,13 @@ export function registerTools(server: Server, env: UpstashEnv) {
         time: m.time,
       }));
       const myEntry = updated.participants.find((p: Participant) => p.name === finalName && p.client === 'cc');
-      const pendingApproval = myEntry?.canSpeak === false;
+      const muted = myEntry?.canSpeak === false;
       return ok({
         code: a.code,
         topic: updated.topic,
         assignedName: finalName,
         renamed: finalName !== a.name,
-        canSpeak: !pendingApproval,
+        canSpeak: !muted,
         participants: updated.participants.map((p: Participant) => ({
           name: p.name,
           role: p.role,
@@ -286,8 +286,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
         cursor: msgs.length,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
-        hint: pendingApproval
-          ? `Joined as "${finalName}" — but the host (${updated.createdBy}) hasn't approved you to speak yet. room_send will fail with NotApproved until approval. You CAN call room_listen to read the conversation; do so now and wait for approval. PRESENCE CONTRACT: next call MUST be room_listen with code="${a.code}" since=${msgs.length}.`
+        hint: muted
+          ? `Joined as "${finalName}" — but the host (${updated.createdBy}) has muted you in this room. room_send will return error="muted" until you're unmuted. Call room_listen to read the conversation while you wait. PRESENCE CONTRACT: next call MUST be room_listen with code="${a.code}" since=${msgs.length}.`
           : `Joined as "${finalName}". ${recentMessages.length} recent messages above for context. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${a.code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.`,
       });
     }
@@ -314,13 +314,13 @@ export function registerTools(server: Server, env: UpstashEnv) {
       try {
         await appendMessage(client, a.code, msg);
       } catch (e) {
-        if (e instanceof NotApprovedError) {
-          // Surface the host approval requirement clearly so the agent can
-          // tell the user "I need approval" rather than retrying silently.
+        if (e instanceof MutedError) {
+          // The host has muted this participant. Tell the user explicitly
+          // — retrying without unmute will fail again.
           return ok({
             sent: false,
-            error: 'not_approved',
-            hint: `${e.message} Tell the user the host needs to click Approve in the People panel. Then call room_listen and wait — do NOT retry room_send until you see canSpeak=true on yourself in a room_listen response.`,
+            error: 'muted',
+            hint: `${e.message} Tell the user the host needs to unmute (🔊) in the People panel. Then call room_listen and wait — do NOT retry room_send until you see canSpeak=true on yourself in a room_listen response.`,
           });
         }
         throw e;
@@ -389,10 +389,22 @@ export function registerTools(server: Server, env: UpstashEnv) {
         if (msgs.length > 0) {
           const cursor = since + msgs.length;
           await updateCursor(a.code, cursor);
+          // If any message carries attachments, nudge the agent to inspect
+          // them. The agent's tool environment usually has WebFetch / a
+          // vision-capable model, but it won't auto-read attachments
+          // without an explicit pointer.
+          const attachmentCount = msgs.reduce(
+            (acc: number, m: Message) => acc + (Array.isArray(m.attachments) ? m.attachments.length : 0),
+            0,
+          );
+          const baseHint = `${msgs.length} new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening.`;
+          const attachmentHint = attachmentCount > 0
+            ? ` ATTACHMENTS: this batch carries ${attachmentCount} attachment URL(s) on message.attachments[]. To inspect their contents (read a screenshot, parse a PDF, etc.), fetch the .url with your environment's URL/file/vision tool. Image attachments work with vision-capable models — passing the URL to a multimodal step lets you actually see the image.`
+            : '';
           return ok({
             messages: msgs,
             cursor,
-            hint: `${msgs.length} new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening.`,
+            hint: baseHint + attachmentHint,
           });
         }
         if (pollCount > 0 && pollCount % 10 === 0) {

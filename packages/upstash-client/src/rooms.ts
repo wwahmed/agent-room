@@ -173,14 +173,19 @@ export async function joinRoom(
       }
     }
 
-    // Default canSpeak: host is always approved. MCP agents (client === 'cc')
-    // are auto-approved on the assumption that you only share the room code
-    // with agents you trust — same trust model as Slack/Zoom invites. Web
-    // walk-ins (client === 'web') still land as pending until the host
-    // clicks ✓ Approve. Robin's framing: "agent 上来不用限制发言, 但是外
-    // 来的人进入的话需要批准".
+    // Default canSpeak: TRUE for everyone (host, agents, walk-ins). The
+    // earlier "host approves new joiners" gate added too much friction —
+    // someone joining a fast-moving conversation had to wait for the host
+    // to notice and click ✓ before they could even ack a message. Robin's
+    // new framing: "进入都自动允许发言 但是只有主持人才可以关闭某个参会
+    // 的 agent 或着 web 的发言也就是静音". Same Slack/Zoom mental model.
+    //
+    // Once joined, the host can mute (canSpeak → false) any participant
+    // via setMuted(); muted participants stay in the room (presence intact,
+    // can read) but room_send is rejected by appendMessage's findSpeaker
+    // gate. Unmute is just setMuted(..., false) flipping it back.
     if (next.canSpeak === undefined) {
-      next = { ...next, canSpeak: isClaimingHost || participant.client === 'cc' };
+      next = { ...next, canSpeak: true };
     }
     // Assigned AFTER the canSpeak materialization so the returned
     // `outParticipant` reflects the final stored row, including its
@@ -223,15 +228,18 @@ export async function verifyHostKey(
   if (hash !== room.hostKeyHash) throw new HostNameTakenError(room.createdBy);
 }
 
-// Approve a pending participant so they can send messages. Host-only.
-// Idempotent: approving an already-approved participant is a no-op (still
-// bumps version). Approving the host themselves is also a no-op.
-export async function approveParticipant(
+// Mute or unmute a participant. Host-only. Mute flips `canSpeak` to false
+// and the next room_send by that participant returns a MutedError;
+// presence (visibility, ability to read) is unaffected. Unmute flips back
+// to true. Idempotent — calling with the same value bumps version but is
+// a no-op for the participant row.
+export async function setMuted(
   client: UpstashClient,
   code: string,
   requesterName: string,
   targetName: string,
   targetClient: 'web' | 'cc',
+  muted: boolean,
 ): Promise<Room> {
   return casRoom(client, code, (current) => {
     if (current.createdBy !== requesterName) {
@@ -241,11 +249,25 @@ export async function approveParticipant(
       ...current,
       participants: current.participants.map(p =>
         (p.name === targetName && p.client === targetClient)
-          ? { ...p, canSpeak: true }
+          ? { ...p, canSpeak: !muted }
           : p,
       ),
     };
   });
+}
+
+/**
+ * @deprecated Use `setMuted(..., false)`. Kept as a thin alias so older
+ * callers still compile while we migrate the web UI to the mute toggle.
+ */
+export function approveParticipant(
+  client: UpstashClient,
+  code: string,
+  requesterName: string,
+  targetName: string,
+  targetClient: 'web' | 'cc',
+): Promise<Room> {
+  return setMuted(client, code, requesterName, targetName, targetClient, false);
 }
 
 // Server-side check: is this (name, client) tuple a participant who's been
@@ -265,12 +287,20 @@ export function findSpeaker(
   return p;
 }
 
-export class NotApprovedError extends Error {
+/**
+ * Thrown by `appendMessage` when the sender's `canSpeak` is false —
+ * either because the host muted them, or (legacy) because they joined a
+ * pre-mute-model room that still defaulted non-host to false.
+ */
+export class MutedError extends Error {
   constructor(name: string, host: string) {
-    super(`"${name}" hasn't been approved to speak in this room yet — ask the host (${host}) to approve.`);
-    this.name = 'NotApprovedError';
+    super(`"${name}" has been muted by the host (${host}). Ask the host to unmute (🔊) to keep talking.`);
+    this.name = 'MutedError';
   }
 }
+
+/** @deprecated Same shape as MutedError, kept for backward compat. */
+export const NotApprovedError = MutedError;
 
 // Remove a participant from the room. Only the host (createdBy) may kick.
 // Upstash has no per-call auth so this is a soft guard inside the CAS — anyone

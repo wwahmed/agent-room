@@ -8,7 +8,7 @@ import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type RoomArtifact } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
-import { approveParticipant, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
+import { setMuted, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
@@ -211,16 +211,19 @@ export function Room() {
     lastMsgTimeRef.current = Date.now(); // reset idle clock
   }, []);
 
-  // Host-only. Approve a pending participant so they can send messages.
-  async function handleApprove(p: { name: string; client: 'web' | 'cc' }) {
+  // Host-only. Toggle mute on a participant. Muted participants stay in
+  // the room (presence + read access intact) but room_send is rejected
+  // server-side until they're unmuted.
+  async function handleToggleMute(p: { name: string; client: 'web' | 'cc'; canSpeak?: boolean }) {
     if (!room || !self || room.createdBy !== self.name) return;
+    const wantMuted = p.canSpeak !== false; // currently can speak → going to mute
     try {
       const client = createClient(ENV.upstash);
-      await approveParticipant(client, code, self.name, p.name, p.client);
+      await setMuted(client, code, self.name, p.name, p.client, wantMuted);
       await refreshRoom();
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Approve failed: ${e.message}` : 'Approve failed');
+      showToast(e instanceof Error ? `Mute toggle failed: ${e.message}` : 'Mute toggle failed');
     }
   }
 
@@ -344,13 +347,14 @@ export function Room() {
   const me = self;
 
   // Speaking gate: the host is always allowed; other participants need the
-  // host to flip their `canSpeak`. Legacy rooms that pre-date the field
-  // (canSpeak === undefined) are treated as approved so already-running
-  // meetings don't break.
+  // Speaking gate: everyone joins able to speak. The host can mute via
+  // setMuted() to suspend a specific participant. canSpeak === undefined
+  // (legacy rooms before this field existed) is treated as approved so
+  // already-running meetings don't break.
   const isHost = room.createdBy === me.name;
   const myParticipant = room.participants.find(p => p.name === me.name && p.client === 'web');
   const myCanSpeak = isHost || myParticipant?.canSpeak !== false;
-  const pendingCount = room.participants.filter(p => p.canSpeak === false).length;
+  const mutedCount = room.participants.filter(p => p.canSpeak === false).length;
 
   async function send() {
     const body = text.trim();
@@ -481,11 +485,11 @@ export function Room() {
                   const isMeHost = room.createdBy === self.name;
                   const isSelf = p.name === self.name && p.client === 'web';
                   const canKick = isMeHost && !isSelf && !ended;
-                  const isPending = p.canSpeak === false;
-                  const canApprove = isMeHost && !isSelf && isPending && !ended;
+                  const isMuted = p.canSpeak === false;
+                  const canMuteToggle = isMeHost && !isSelf && !ended;
                   const presence = participantPresence(p, now);
                   return (
-                    <div key={`${p.name}-${p.client}`} className={`group flex items-center gap-2 rounded-lg border px-2.5 py-2 ${isPending ? 'border-amber-300 bg-amber-50/60' : 'border-border-faint bg-surface-softer'}`}>
+                    <div key={`${p.name}-${p.client}`} className={`group flex items-center gap-2 rounded-lg border px-2.5 py-2 ${isMuted ? 'border-amber-300 bg-amber-50/60' : 'border-border-faint bg-surface-softer'}`}>
                       <div className={presence.kind === 'idle' ? 'opacity-45' : ''}>
                         <Avatar initials={p.initials} color={p.color} size="sm" />
                       </div>
@@ -493,7 +497,7 @@ export function Room() {
                         <div className="text-xs font-semibold truncate flex items-center gap-1 flex-wrap">
                           {p.name}
                           {p.name === room.createdBy && <span className="text-[9px] font-semibold text-accent bg-accent-tint px-1 py-px rounded">host</span>}
-                          {isPending && <span className="text-[9px] font-semibold text-amber-700 bg-amber-100 px-1 py-px rounded">pending</span>}
+                          {isMuted && <span className="text-[9px] font-semibold text-amber-700 bg-amber-100 px-1 py-px rounded">muted</span>}
                         </div>
                         <div className="text-[10px] text-ink-soft truncate">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
@@ -504,13 +508,15 @@ export function Room() {
                           {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
                         </div>
                       </div>
-                      {canApprove && (
+                      {canMuteToggle && (
                         <button
-                          onClick={() => handleApprove({ name: p.name, client: p.client })}
-                          title={`Approve ${p.name} to speak`}
-                          className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 h-6 rounded transition"
+                          onClick={() => handleToggleMute({ name: p.name, client: p.client, canSpeak: p.canSpeak })}
+                          title={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
+                          className={`text-[10px] font-semibold px-2 h-6 rounded transition ${isMuted
+                            ? 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200'
+                            : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-amber-700 bg-amber-100 hover:bg-amber-200'}`}
                         >
-                          ✓ Approve
+                          {isMuted ? '🔊 Unmute' : '🔇 Mute'}
                         </button>
                       )}
                       {canKick && (
@@ -621,18 +627,18 @@ export function Room() {
               </div>
             ) : !myCanSpeak ? (
               <div className="border-t border-border-faint p-5 bg-amber-50 text-center">
-                <div className="text-2xl mb-1">✋</div>
-                <p className="text-sm font-semibold text-amber-900 mb-1">Waiting for host approval</p>
+                <div className="text-2xl mb-1">🔇</div>
+                <p className="text-sm font-semibold text-amber-900 mb-1">You've been muted by the host</p>
                 <p className="text-xs text-amber-800/80 max-w-xs mx-auto">
-                  The host ({room.createdBy}) needs to approve you before you can send messages. You can read the conversation in the meantime.
+                  The host ({room.createdBy}) has muted your messages. You can still read the conversation — ask them to unmute (🔊) when you're ready to speak again.
                 </p>
               </div>
             ) : (
               <div className="relative border-t border-border-faint p-3 bg-surface flex flex-col gap-2">
-                {isHost && pendingCount > 0 && (
+                {isHost && mutedCount > 0 && (
                   <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 flex items-center gap-2">
-                    <span>✋</span>
-                    <span>{pendingCount} {pendingCount === 1 ? 'person' : 'people'} waiting for your approval — open the People panel to let them in.</span>
+                    <span>🔇</span>
+                    <span>{mutedCount} {mutedCount === 1 ? 'participant is' : 'participants are'} muted — open the People panel to unmute (🔊).</span>
                   </div>
                 )}
                 {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
