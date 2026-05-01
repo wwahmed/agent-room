@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createClient, createRoom } from '@agent-room/upstash-client';
 import { generateCode, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
+import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 
 const TEMPLATE_KEY = 'room:pending-template:';
 
@@ -57,7 +58,15 @@ export function CreateMeeting() {
   }
 
   return (
-    <form onSubmit={submit} className="max-w-2xl mx-auto mt-16 p-8 bg-surface border border-border rounded-xl shadow-card">
+    <>
+      <div className="bg-white px-6 py-5">
+        <div className="mx-auto max-w-6xl">
+          <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
+            <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />
+          </Link>
+        </div>
+      </div>
+      <form onSubmit={submit} className="max-w-2xl mx-auto mt-8 p-8 bg-surface border border-border rounded-xl shadow-card">
       <h1 className="text-lg font-semibold tracking-tight">New meeting</h1>
       <p className="text-xs text-ink-soft mt-1 mb-6">Pick a room shape, then a topic.</p>
 
@@ -132,6 +141,7 @@ export function CreateMeeting() {
       <button disabled={busy} type="submit" className="w-full bg-accent text-white py-2.5 rounded-lg font-semibold text-sm disabled:opacity-50">
         {busy ? 'Creating…' : 'Create meeting →'}
       </button>
-    </form>
+      </form>
+    </>
   );
 }

@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { isValidCode } from '@agent-room/shared';
 import { copyText } from '../lib/copy.js';
 import { AnimatedRoomDemo } from '../components/AnimatedRoomDemo.js';
+import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
+import { TopNav } from '../components/TopNav.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -107,6 +109,7 @@ export function Home() {
 
   return (
     <div className="min-h-screen bg-white">
+      <TopNav />
       {/* Hero — pain-first copy aimed at the super-individual ICP
          (solo dev / consultant / indie hacker who runs Cursor +
          Claude + Codex side-by-side and feels the context-friction
@@ -116,7 +119,7 @@ export function Home() {
         <div className="absolute inset-x-0 -top-40 -z-0 flex justify-center pointer-events-none">
           <div className="w-[900px] h-[900px] rounded-full bg-gradient-to-br from-accent/20 via-indigo-200/40 to-transparent blur-3xl opacity-70" />
         </div>
-        <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-16 sm:pt-28 sm:pb-20">
+        <div className="relative max-w-6xl mx-auto px-6 pt-6 pb-16 sm:pt-10 sm:pb-20">
           <div className="text-center max-w-3xl mx-auto mb-14">
             <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-accent-tint-border text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-8 shadow-sm">
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
@@ -210,7 +213,7 @@ export function Home() {
       </section>
 
       {/* Features */}
-      <section className="max-w-6xl mx-auto px-6 py-24">
+      <section id="features" className="max-w-6xl mx-auto px-6 py-24">
         <div className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Why Agent Room?</h2>
           <p className="mt-4 text-lg text-ink-soft max-w-xl mx-auto">Built for the moment your agent stack outgrows one-on-one chats.</p>
@@ -289,7 +292,7 @@ export function Home() {
       </section>
 
       {/* Use cases */}
-      <section className="max-w-6xl mx-auto px-6 py-24">
+      <section id="use-cases" className="max-w-6xl mx-auto px-6 py-24">
         <div className="text-center mb-16">
           <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Use cases</h2>
           <p className="mt-4 text-lg text-ink-soft">Anywhere multiple specialized agents work better than one generalist.</p>
@@ -565,7 +568,10 @@ export function Home() {
       {/* Footer */}
       <footer className="border-t border-border-faint py-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between text-sm text-ink-faint">
-          <span>Agent Room — Where agents meet, humans steer.</span>
+          <div className="inline-flex items-center gap-2">
+            <AgentRoomLogo showWordmark={false} markClassName="h-6 w-6" />
+            <span>Agent Room — Where agents meet, humans steer.</span>
+          </div>
           <div className="flex flex-wrap gap-4">
             <a href="https://github.com/ebin198351-akl/agent-room/blob/main/docs/AGENT_ROOM_PROTOCOL.md" target="_blank" rel="noreferrer" className="hover:text-ink-muted">Open Protocol</a>
             <a href="https://github.com/ebin198351-akl/agent-room" target="_blank" rel="noreferrer" className="hover:text-ink-muted">GitHub</a>

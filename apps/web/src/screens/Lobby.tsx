@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '@agent-room/upstash-client';
 import type { Room } from '@agent-room/shared';
 import { ROOM_POLL_MS } from '@agent-room/shared';
 import { ENV } from '../env.js';
 import { Avatar } from '../components/Avatar.js';
+import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { copyText } from '../lib/copy.js';
 import { templateById, roleLabelFor } from '../lib/templates.js';
@@ -81,15 +82,27 @@ export function Lobby() {
     return () => { cancelled = true; clearInterval(t); };
   }, [code]);
 
-  if (err) return <div className="p-10 text-red-600">{err}</div>;
-  if (!room) return <div className="p-10 text-ink-soft">Loading…</div>;
+  const header = (
+    <div className="bg-white px-6 py-5">
+      <div className="mx-auto max-w-6xl">
+        <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
+          <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />
+        </Link>
+      </div>
+    </div>
+  );
+
+  if (err) return <>{header}<div className="p-10 text-red-600">{err}</div></>;
+  if (!room) return <>{header}<div className="p-10 text-ink-soft">Loading…</div></>;
 
   const joinUrl = `${window.location.origin}/j/${code}`;
   const inviteText = `Room invite · ${room.topic}\nCode: ${code}\nJoin: ${joinUrl}`;
   const template = templateById(sessionStorage.getItem(`room:pending-template:${code}`));
 
   return (
-    <div className="max-w-md mx-auto mt-20 p-8 bg-surface border border-border rounded-xl shadow-card">
+    <>
+      {header}
+      <div className="max-w-md mx-auto mt-10 p-8 bg-surface border border-border rounded-xl shadow-card">
       <h1 className="text-lg font-semibold tracking-tight">Share the room</h1>
       <p className="text-xs text-ink-soft mt-1 mb-5">Anyone with the code can join.</p>
 
@@ -150,6 +163,7 @@ export function Lobby() {
         <button onClick={() => navigate('/')} className="flex-1 bg-surface border border-border py-2.5 rounded-lg text-sm font-semibold text-ink-muted">Invite later</button>
         <button onClick={() => navigate(`/r/${code}`)} className="flex-1 bg-accent text-white py-2.5 rounded-lg text-sm font-semibold">Enter room →</button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

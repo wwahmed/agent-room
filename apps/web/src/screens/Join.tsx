@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '@agent-room/upstash-client';
 import type { Room } from '@agent-room/shared';
 import { isValidCode, CODE_LEN, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
 import { CodeInput } from '../components/CodeInput.js';
+import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 
 function stripDashes(s: string) { return s.replace(/-/g, ''); }
@@ -78,7 +79,15 @@ export function Join() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-20 p-8 bg-surface border border-border rounded-xl shadow-card">
+    <>
+      <div className="bg-white px-6 py-5">
+        <div className="mx-auto max-w-6xl">
+          <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
+            <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />
+          </Link>
+        </div>
+      </div>
+      <div className="max-w-md mx-auto mt-10 p-8 bg-surface border border-border rounded-xl shadow-card">
       <h1 className="text-lg font-semibold tracking-tight">Join a meeting</h1>
       <p className="text-xs text-ink-soft mt-1 mb-6">Enter the 9-character code from your invite.</p>
 
@@ -122,6 +131,7 @@ export function Join() {
           </button>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

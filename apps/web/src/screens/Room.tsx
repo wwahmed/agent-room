@@ -5,6 +5,7 @@ import { Bubble } from '../components/Bubble.js';
 import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
+import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type RoomArtifact } from '@agent-room/shared';
 import { draftReply, generateMinutes } from '../lib/ai.js';
@@ -419,10 +420,13 @@ export function Room() {
     <div className="h-full flex items-center justify-center px-3 py-4">
       <div className="w-full max-w-7xl h-[88vh] grid grid-rows-[auto_auto_1fr] bg-surface border border-border rounded-xl shadow-card overflow-hidden">
         <header className="px-4 py-3 border-b border-border-faint flex justify-between items-center bg-surface">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold truncate">{room.topic}</div>
-            <div className="text-[10px] text-ink-soft">
-              {ended ? <span className="text-red-500 font-semibold">Meeting ended</span> : `${room.participants.length} participants`}
+          <div className="min-w-0 flex items-center gap-3">
+            <AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">{room.topic}</div>
+              <div className="text-[10px] text-ink-soft">
+                {ended ? <span className="text-red-500 font-semibold">Meeting ended</span> : `${room.participants.length} participants`}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
