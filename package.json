@@ -11,12 +11,12 @@
     "build": "npm -ws run build --if-present",
     "dev:web": "npm -w apps/web run dev"
   },
-  "dependencies": {
-    "@vercel/blob": "^2.3.3"
-  },
   "devDependencies": {
     "@vercel/node": "^5.7.13",
     "typescript": "^5.4.0",
     "vitest": "^1.5.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1040.0"
   }
 }
