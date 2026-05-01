@@ -119,8 +119,51 @@ export function Report() {
             ))}
           </div>
         </section>
+
+        <FreeTierFooter report={report} />
       </main>
     </div>
+  );
+}
+
+// Free-tier watermark + upgrade nudge. Placed at the very bottom of the
+// report so it shows up when a client scrolls through the delivery,
+// matching the "Made with Notion" / "Made with Linear" pattern. Pricing
+// is intentionally specific ("$29 to remove + keep") so the value swap
+// is concrete: users know exactly what they get for what they pay.
+function FreeTierFooter({ report }: { report: RoomReport }) {
+  // The room has a 24h TTL on the server (Redis EX), but exported reports
+  // currently share that TTL. Until we ship persisted reports, surface
+  // the practical ceiling so the user knows when this URL stops working.
+  const expiresAt = report.exportedAt + 24 * 60 * 60 * 1000;
+  const hoursLeft = Math.max(0, Math.round((expiresAt - Date.now()) / (60 * 60 * 1000)));
+  return (
+    <section className="bg-gradient-to-br from-accent-tint via-white to-amber-50 border border-accent-tint-border rounded-xl p-6 text-center">
+      <div className="text-[11px] uppercase tracking-widest font-semibold text-accent-deep mb-2">Free tier · expires in {hoursLeft}h</div>
+      <p className="text-base font-semibold text-ink mb-1">
+        Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">AI Room</a>
+      </p>
+      <p className="text-sm text-ink-soft max-w-md mx-auto mb-5 leading-relaxed">
+        Unlock <strong>$29 per report</strong> to remove this watermark, keep the URL forever, and add your own logo + client name in the header. Or go <strong>$149/mo unlimited</strong> for ongoing delivery work.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2 justify-center">
+        <a
+          href={`mailto:ebin198351@gmail.com?subject=Unlock%20AI%20Room%20report%20${encodeURIComponent(report.code)}&body=Hi%2C%20I'd%20like%20to%20unlock%20report%20${encodeURIComponent(report.code)}.%0A%0AReport%20URL%3A%20https%3A%2F%2Fwww.agent-room.com%2Fr%2F${encodeURIComponent(report.code)}%2Freport%0A%0AMy%20client%20name%20%2F%20logo%3A`}
+          className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
+        >
+          Unlock this report — $29
+        </a>
+        <a
+          href="https://www.agent-room.com/#pricing"
+          className="inline-flex items-center justify-center bg-white border border-border px-5 py-2.5 rounded-lg text-sm font-semibold text-ink-muted hover:bg-surface-soft transition"
+        >
+          See plans
+        </a>
+      </div>
+      <p className="text-[11px] text-ink-faint mt-4">
+        First 3 pilot customers get founder support — reply to the email and we'll set you up the same day.
+      </p>
+    </section>
   );
 }
 
@@ -263,6 +306,12 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[]): string {
     for (const line of m.text.split('\n')) lines.push(`> ${line}`);
     lines.push('');
   }
+
+  // Free-tier watermark on Markdown exports too. Removed for paid users
+  // once the unlock-token flow lands; for now every Markdown carries it.
+  lines.push('---');
+  lines.push('');
+  lines.push('_Made with [AI Room](https://www.agent-room.com) — multi-agent meeting rooms with structured delivery reports. This report is on the free tier; remove this footer + keep the URL forever for $29 at https://www.agent-room.com/#pricing_');
 
   return lines.join('\n');
 }
