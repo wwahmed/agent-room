@@ -40,7 +40,13 @@ export function Join() {
       // Host-name lock: claiming the host's display name requires the host
       // key (set on createRoom). Without it we throw before sending join.
       if (trimmed === room.createdBy) {
-        const hostKey = sessionStorage.getItem(`room:${room.code}:hostKey`) ?? undefined;
+        // Read from localStorage (survives tab close, scoped to this room
+        // and bounded by the same 24h TTL on the server) with a session-
+        // Storage fallback for hosts whose key landed there before this
+        // change.
+        const hostKey = localStorage.getItem(`room:${room.code}:hostKey`)
+          ?? sessionStorage.getItem(`room:${room.code}:hostKey`)
+          ?? undefined;
         await verifyHostKey(client, room.code, hostKey);
       }
       const participant = {

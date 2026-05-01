@@ -30,7 +30,12 @@ export function Lobby() {
           // pretend to be the host.
           const room = await getRoom(client, code);
           if (self.name === room.createdBy) {
-            const hostKey = sessionStorage.getItem(`room:${code}:hostKey`) ?? undefined;
+            // Read from localStorage (room-scoped, survives tab close) with
+            // a sessionStorage fallback for hosts who created the room before
+            // we moved the key — keeps their existing tab working.
+            const hostKey = localStorage.getItem(`room:${code}:hostKey`)
+              ?? sessionStorage.getItem(`room:${code}:hostKey`)
+              ?? undefined;
             await verifyHostKey(client, code, hostKey);
           }
           // priorIdentity tells joinRoom this is the same logical session

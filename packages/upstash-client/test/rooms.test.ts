@@ -162,4 +162,22 @@ describe('joinRoom', () => {
     expect(updated.participant.name).toBe('Robin (2)');
     expect(updated.participants).toHaveLength(2);
   });
+
+  it('auto-approves cc (agent) joiners while leaving web walk-ins pending', async () => {
+    const before: Room = { code: 'A', topic: 't', createdAt: 0, createdBy: 'host', status: 'active', version: 1, participants: [] };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(before) }))
+      .mockResolvedValueOnce(mockResp({ result: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    const updated = await joinRoom(client, 'A', {
+      name: 'Codex', role: 'AI', color: '#000', initials: 'CO', client: 'cc',
+      joinedAt: 100, lastSeenAt: 100,
+    });
+
+    // Agents land approved; only web walk-ins (covered by the test above)
+    // need the host's ✓.
+    expect(updated.participant.canSpeak).toBe(true);
+  });
 });

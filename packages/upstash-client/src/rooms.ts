@@ -173,12 +173,20 @@ export async function joinRoom(
       }
     }
 
-    outParticipant = next;
-    // Default canSpeak: true for the host's own first claim, false for
-    // everyone else. Host approval (approveParticipant) flips it to true.
+    // Default canSpeak: host is always approved. MCP agents (client === 'cc')
+    // are auto-approved on the assumption that you only share the room code
+    // with agents you trust — same trust model as Slack/Zoom invites. Web
+    // walk-ins (client === 'web') still land as pending until the host
+    // clicks ✓ Approve. Robin's framing: "agent 上来不用限制发言, 但是外
+    // 来的人进入的话需要批准".
     if (next.canSpeak === undefined) {
-      next = { ...next, canSpeak: isClaimingHost };
+      next = { ...next, canSpeak: isClaimingHost || participant.client === 'cc' };
     }
+    // Assigned AFTER the canSpeak materialization so the returned
+    // `outParticipant` reflects the final stored row, including its
+    // approval state (callers like the MCP room_join handler look at this
+    // to tell the agent whether it can speak immediately).
+    outParticipant = next;
 
     // Replace the row matching priorIdentity if given, otherwise replace by
     // the (final) (name, client) tuple. This makes refreshes idempotent

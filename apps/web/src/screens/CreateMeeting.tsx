@@ -36,10 +36,12 @@ export function CreateMeeting() {
       const created = await createRoom(client, { code, topic: topic.trim(), createdBy: name.trim() });
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
       // Stash the host key — required to claim the host's display name on
-      // any future join (refresh, second tab, reactivation). Without this
-      // sessionStorage entry, even the original host has to pick a new
-      // display name to rejoin.
-      sessionStorage.setItem(`room:${code}:hostKey`, created.hostKey);
+      // any future join (refresh, second tab, accidental End → Reactivate
+      // even from a fresh browser session). Lives in localStorage instead
+      // of sessionStorage so it survives tab close — the room itself has
+      // a 24h Redis TTL, so a localStorage entry that outlives a tab but
+      // not the room is the right scope.
+      localStorage.setItem(`room:${code}:hostKey`, created.hostKey);
       // Stash the chosen template so Lobby (and the room itself) can post the
       // opening message + show suggested roles. We use sessionStorage and not
       // a route param so re-opens or refreshes don't re-trigger the opener.
