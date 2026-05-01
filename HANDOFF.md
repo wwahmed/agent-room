@@ -2,7 +2,7 @@
 
 > Living context for whoever picks this up next (future Claude session, Codex, Robin himself, anyone). When this doc and the code disagree, code wins — but read this first to understand **why** the code looks the way it does.
 
-Last full update: 2026-05-01 (session that landed Vercel→R2 swap, custom domain, mute model, freemium watermark, Clerk wiring, and later logo/SEO brand refresh).
+Last full update: 2026-05-01 (session that landed Vercel→R2 swap, custom domain, mute model, freemium watermark, Clerk wiring, logo/SEO brand refresh, and Worker→BYO-agent cleanup).
 
 ---
 
@@ -23,7 +23,6 @@ Strategic report at `z.html` (local, gitignored) — Robin should re-read it whe
 | MCP package | `agent-room-mcp@0.14.1` on npm | Published from `apps/mcp/` |
 | Web hosting | Vercel (project: `agent-room`, team: `robins-projects-c9021b21`) | Robin's account |
 | API routes | Vercel Functions in `/api/` (`upload.ts`, `delete-room-blobs.ts`) | Node runtime, multipart parser hand-rolled |
-| AI proxy | Cloudflare Worker `apps/worker/` | `/api/draft`, `/api/minutes` proxying Anthropic |
 | Room state | Upstash Redis (env: `VITE_UPSTASH_REDIS_REST_*`) | 24h TTL on rooms |
 | Attachments | Cloudflare R2 bucket `agent-room` (account `4b1d47a794061271f52edec42a5b6526`) | public R2.dev URL `https://pub-29d616a4cdcd4a5da648e83c523c3e41.r2.dev` |
 | Auth | Clerk (project `agent-room`, Robin's personal workspace) | Wired via `<ClerkProvider>` in main.tsx; **no SignInButton placed yet** — invisible until pay-to-unlock lands |
@@ -31,7 +30,6 @@ Strategic report at `z.html` (local, gitignored) — Robin should re-read it whe
 
 Required Vercel env vars (Production / Preview / Development all):
 - `VITE_UPSTASH_REDIS_REST_URL`, `VITE_UPSTASH_REDIS_REST_TOKEN`
-- `VITE_WORKER_URL` (Cloudflare Worker base URL)
 - `VITE_CLERK_PUBLISHABLE_KEY` (`pk_test_...` or `pk_live_...`)
 - `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_PUBLIC_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
 - `VITE_STRIPE_PAYMENT_LINK` — Stripe Payment Link URL (test or live)
@@ -59,9 +57,6 @@ MCP client (Claude Code / Cursor / Codex / Gemini / Cline / Claude Desktop)
         │         room_minutes, room_watch, room_unwatch
         └─ hook (Stop / UserPromptSubmit / SessionStart) keeps agents listening
               actively across turn boundaries
-
-Cloudflare Worker (apps/worker)
-   └─ /api/draft, /api/minutes → Anthropic API (server-side key)
 ```
 
 ---
@@ -94,6 +89,17 @@ SEO shipped in the follow-up:
 - OG image should use PNG (`/brand/agent-room-social.png`), not SVG, because many crawlers/social platforms do not reliably render SVG previews.
 
 Do not resurrect the discarded logo concepts unless Robin explicitly asks. We tested meeting/table, convergence, bracket, portal, large-table, muted palette, and cool-host palettes. Final owner decision was: B Focus geometry + current vivid palette.
+
+### 4.0b BYO-agent prompt chips, not hosted inference
+On 2026-05-01 the Cloudflare Worker AI proxy was removed (`apps/worker/`, `/api/draft`, `/api/minutes`, `VITE_WORKER_URL`, and the web `lib/ai.ts` client). The old "Draft reply" and "Generate minutes" buttons called an Anthropic-backed Worker path that was never central to the product.
+
+Replacement: the Room composer has two small prompt chips:
+- `Ask for minutes`
+- `Ask for reply draft`
+
+Clicking a chip pre-fills the textarea with an editable prompt targeted at the first available non-web agent in the room, then focuses the composer. It does **not** auto-send.
+
+Why: Agent Room sells the collaboration/report polish layer, not model inference. Users bring their own agents through MCP; humans stay in the loop; there is no Anthropic key to manage, no Worker ops burden, and no model-spend risk on Robin's account.
 
 ### 4.1 Mute model, not approval model
 Earlier we shipped a "host approves new joiners" gate (canSpeak default false, host clicks ✓). Friction killed productivity in fast-moving rooms. Robin replaced it with: **everyone joins canSpeak=true; host can mute (`setMuted(target, client, muted)`) anyone they need to silence**. Same Slack/Zoom mental model.

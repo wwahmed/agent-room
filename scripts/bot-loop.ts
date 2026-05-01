@@ -2,12 +2,11 @@
 //
 // Reply strategies, in priority order:
 //  1. ANTHROPIC_API_KEY set → call api.anthropic.com directly
-//  2. WORKER_URL set       → POST /api/draft to the deployed Worker
-//  3. Otherwise            → rule-based templated reply
+//  2. Otherwise            → rule-based templated reply
 //
 // Usage:
 //   UPSTASH_REDIS_REST_URL=... UPSTASH_REDIS_REST_TOKEN=... CODE=XXX-XXX-XXX \
-//   [ANTHROPIC_API_KEY=sk-ant-...] [WORKER_URL=https://...] \
+//   [ANTHROPIC_API_KEY=sk-ant-...] \
 //   npx tsx scripts/bot-loop.ts
 
 import {
@@ -24,13 +23,12 @@ const env = {
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 };
 const code = process.env.CODE;
-const workerUrl = process.env.WORKER_URL;
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
 if (!env.url || !env.token || !code) {
   console.error('Set UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, CODE');
   process.exit(1);
 }
-const mode = anthropicKey ? 'anthropic-direct' : workerUrl ? 'worker-proxy' : 'rule-based';
+const mode = anthropicKey ? 'anthropic-direct' : 'rule-based';
 
 const BOT_NAME = 'Bot';
 const BOT_COLOR = '#10B981';
@@ -82,22 +80,6 @@ async function generateReplyAnthropic(topic: string, history: Message[]): Promis
   return data.content.map(c => c.text ?? '').join('').trim();
 }
 
-async function generateReplyWorker(topic: string, history: Message[]): Promise<string> {
-  const r = await fetch(`${workerUrl}/api/draft`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      topic,
-      userName: BOT_NAME,
-      userRole: BOT_ROLE,
-      history: history.slice(-20).map(m => ({ name: m.name, text: m.text })),
-    }),
-  });
-  if (!r.ok) throw new Error(`Worker HTTP ${r.status}`);
-  const { text } = (await r.json()) as { text: string };
-  return text.trim();
-}
-
 function generateReplyTemplate(sender: string, text: string): string {
   const tmpl = TEMPLATES[templateIdx % TEMPLATES.length]!;
   templateIdx++;
@@ -110,13 +92,6 @@ async function generateReply(topic: string, sender: string, text: string, histor
       return await generateReplyAnthropic(topic, history);
     } catch (e) {
       console.error(`[anthropic] ${String(e)} — falling back`);
-    }
-  }
-  if (workerUrl) {
-    try {
-      return await generateReplyWorker(topic, history);
-    } catch (e) {
-      console.error(`[worker] ${String(e)} — falling back to template`);
     }
   }
   return generateReplyTemplate(sender, text);

@@ -4,11 +4,11 @@ Findings from the final-implementation code review that we **intentionally did n
 
 If you come back to harden this into production, this file is the starting checklist.
 
-## 1. `ALLOWED_ORIGIN` hardcoded to localhost in committed `wrangler.toml`
+## 1. Worker CORS gap — resolved by removing the Worker
 
 - **Spec §13:** "CORS on Worker allows the web app's origin only (not `*`) in production."
-- **Reality:** `apps/worker/wrangler.toml` sets `ALLOWED_ORIGIN = "http://localhost:5173"` and has no `[env.production]` stanza. Deploying to a real domain will reject browser requests.
-- **Why shipped:** MVP runs the web app from `localhost:5173` against a deployed Worker for dev. Fixing this requires deciding on a production domain, which hasn't happened. When you take the Worker to a real host, add `[env.production]` with the real origin or set it as a secret.
+- **Original reality:** `apps/worker/wrangler.toml` set `ALLOWED_ORIGIN = "http://localhost:5173"` and had no `[env.production]` stanza.
+- **Resolved:** The Worker was removed. Web AI assistance is now BYO-agent prompt chips in the composer, so there is no Worker CORS surface.
 
 ## 2. `casRoom` is not atomic — Lua script deferred
 
@@ -28,11 +28,11 @@ If you come back to harden this into production, this file is the starting check
 - **Original reality:** `PRESENCE_STALE_MS` was defined in constants and `lastSeenAt` was updated via heartbeat, but nothing in the UI compared it for rendering.
 - **Resolved:** The People panel now shows Listening, Online, or Idle using `listenUntil`, `lastSeenAt`, and `PRESENCE_STALE_MS`; idle avatars render muted.
 
-## 5. AI draft response is buffered, not streamed
+## 5. AI draft response buffered, not streamed — resolved by removing hosted drafts
 
 - **Spec §8.1:** "Response streams back; draft appears in composer."
-- **Reality:** `apps/worker/src/handlers.ts` does `await anthropicResp.json()` and returns a single JSON payload. `apps/web/src/lib/ai.ts` also awaits the full response. A 500-token draft at ~70 tokens/sec takes ~7s to appear.
-- **Why shipped:** Buffered is much simpler, works correctly, and most drafts are under 500 tokens = ~7s wait. Upgrade to SSE or a `ReadableStream` when UX latency is a real complaint.
+- **Original reality:** The Worker and web client awaited a full JSON response before showing the draft.
+- **Resolved:** Hosted draft generation was removed. The composer now pre-fills prompts that the host can send to their own agents; agent replies appear in the transcript like any other message.
 
 ## 6. `EXISTS room:{code}` collision check skipped
 
@@ -44,7 +44,7 @@ If you come back to harden this into production, this file is the starting check
 
 - **Spec §10.2:** tool "returns the cached minutes, or the full history if no cache exists"
 - **Reality:** `apps/mcp/src/tools.ts` always returns the raw transcript plus topic and participant list — never reads `room-min:{code}`.
-- **Why shipped:** The spec's "cached minutes" semantics assume the MCP server invokes AI. In the implemented design the CC user's own Claude Code agent summarizes the transcript directly (it has native Claude access), so caching on the MCP side would be redundant. The cache still serves the web app at `room-min:{code}`. The tool description in `tools.ts` accurately describes the actual behavior; only the spec framing is stale.
+- **Why shipped:** The spec's "cached minutes" semantics assume the MCP server invokes AI. In the implemented design the user's own agent summarizes the transcript directly, so caching on the MCP side would be redundant. The web app also asks agents via prompt chips and no longer caches generated minutes. The tool description in `tools.ts` accurately describes the actual behavior; only the spec framing is stale.
 
 ## 8. `any` cast in MCP tool dispatch
 

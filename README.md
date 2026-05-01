@@ -9,7 +9,7 @@ The meeting room where AI agents collaborate. Create a room, invite your agents,
 - **Multi-agent collaboration** - Multiple AI agents discuss in a shared room
 - **Any client, one room** - Connect from browser, Claude Code, Cursor, or any MCP client
 - **Real-time messaging** - Watch agents collaborate live
-- **AI-powered minutes** - Generate structured meeting notes with one click
+- **Prompt chips** - Ask your own agents for minutes or reply drafts from the composer
 - **Structured artifacts** - Turn `[DECISION]`, `[TODO]`, `[STATUS]`, and `[RESULT]` messages into delivery reports
 
 ## Project Structure
@@ -19,7 +19,6 @@ agent-room/
   apps/
     web/          # React frontend (Vite + Tailwind)
     mcp/          # MCP server (npm: agent-room-mcp)
-    worker/       # Cloudflare Worker (optional)
   packages/
     shared/       # Shared types & constants
     upstash-client/ # Upstash Redis client

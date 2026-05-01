@@ -8,7 +8,6 @@ import { Avatar } from '../components/Avatar.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type RoomArtifact } from '@agent-room/shared';
-import { draftReply, generateMinutes } from '../lib/ai.js';
 import { setMuted, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
@@ -49,8 +48,6 @@ export function Room() {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [attachBusy, setAttachBusy] = useState(false);
-  const [drafting, setDrafting] = useState(false);
-  const [draftErr, setDraftErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const feedRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -262,53 +259,9 @@ export function Room() {
     }
   }
 
-  async function handleDraft() {
-    if (!room || !self) return;
-    setDrafting(true); setDraftErr(null);
-    try {
-      const suggestion = await draftReply({
-        topic: room.topic,
-        userName: self.name,
-        userRole: self.role,
-        history: messages,
-      });
-      setText(suggestion);
-    } catch (e) {
-      setDraftErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDrafting(false);
-    }
-  }
-
   const [mobilePanel, setMobilePanel] = useState<'chat' | 'people' | 'outputs'>('chat');
-  const [minutesText, setMinutesText] = useState<string>('');
-  const [minutesBusy, setMinutesBusy] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
   const artifacts = extractArtifacts(messages);
-
-  // Hydrate cached minutes from Redis on mount (spec §3.3 — room-min:{code})
-  useEffect(() => {
-    const client = createClient(ENV.upstash);
-    client.command<string | null>(['GET', `room-min:${code}`])
-      .then(cached => { if (cached) setMinutesText(cached); })
-      .catch(() => {});
-  }, [code]);
-
-  async function handleMinutes() {
-    if (!room) return;
-    setMinutesBusy(true);
-    try {
-      const text = await generateMinutes({ topic: room.topic, history: messages });
-      setMinutesText(text);
-      // Cache the minutes so other clients see the same version (spec §3.3)
-      const client = createClient(ENV.upstash);
-      await client.command(['SET', `room-min:${code}`, text, 'EX', 86400]);
-    } catch (e) {
-      setMinutesText(e instanceof Error ? `Error: ${e.message}` : String(e));
-    } finally {
-      setMinutesBusy(false);
-    }
-  }
 
   async function handleExportReport() {
     if (!room) return;
@@ -346,6 +299,7 @@ export function Room() {
   // From here down `self` is non-null (early-returned above). Capture it in a
   // narrowed const so closures inside JSX don't have to re-check.
   const me = self;
+  const activeRoom = room;
 
   // Speaking gate: the host is always allowed; other participants need the
   // Speaking gate: everyone joins able to speak. The host can mute via
@@ -356,6 +310,19 @@ export function Room() {
   const myParticipant = room.participants.find(p => p.name === me.name && p.client === 'web');
   const myCanSpeak = isHost || myParticipant?.canSpeak !== false;
   const mutedCount = room.participants.filter(p => p.canSpeak === false).length;
+
+  function fillPrompt(kind: 'minutes' | 'reply') {
+    const agent = activeRoom.participants.find(p => p.client !== 'web' && p.canSpeak !== false)?.name ?? 'Claude';
+    const target = `@${agent}`;
+    const prompt = kind === 'minutes'
+      ? `${target} Please generate concise meeting minutes for this room. Include topic, participants, key decisions, open questions, and action items. Use markdown.`
+      : `${target} Please draft a concise reply to the latest message in this room. Keep it practical and mention any assumptions.`;
+    setText(prompt);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      autoGrow(textareaRef.current);
+    });
+  }
 
   async function send() {
     const body = text.trim();
@@ -645,7 +612,6 @@ export function Room() {
                     <span>{mutedCount} {mutedCount === 1 ? 'participant is' : 'participants are'} muted — open the People panel to unmute (🔊).</span>
                   </div>
                 )}
-                {draftErr && <div className="text-[10px] text-red-600">{draftErr}</div>}
                 {attachments.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {attachments.map(attachment => (
@@ -657,14 +623,25 @@ export function Room() {
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                  <span className="font-semibold text-ink-faint">Ask your agents:</span>
                   <button
-                    onClick={handleDraft}
-                    disabled={drafting}
-                    className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-1 rounded disabled:opacity-50"
+                    type="button"
+                    onClick={() => fillPrompt('minutes')}
+                    className="rounded-full border border-accent-tint-border bg-accent-tint px-2.5 py-1 font-semibold text-accent hover:bg-accent-tint-border transition"
                   >
-                    {drafting ? 'Drafting…' : 'Draft'}
+                    Ask for minutes
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => fillPrompt('reply')}
+                    className="rounded-full border border-border bg-surface-softer px-2.5 py-1 font-semibold text-ink-muted hover:border-accent/40 hover:text-accent transition"
+                  >
+                    Ask for reply draft
+                  </button>
+                  <span className="hidden sm:inline text-ink-faint">Prefills your message. You choose the agent and send.</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <VoiceButton
                     onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
                     disabled={ended}
@@ -762,15 +739,10 @@ export function Room() {
 
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold">Minutes</h2>
-                <button
-                  onClick={handleMinutes}
-                  disabled={minutesBusy}
-                  className="bg-accent text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50"
-                >
-                  {minutesBusy ? 'Generating…' : 'Generate'}
-                </button>
               </div>
-              <pre className="whitespace-pre-wrap text-xs leading-relaxed text-ink">{minutesText || 'No minutes yet.'}</pre>
+              <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[11px] leading-relaxed text-ink-soft">
+                Ask an agent to generate minutes from the composer. The result will appear in the transcript and can be captured in the delivery report.
+              </div>
             </div>
           </aside>
         </div>
