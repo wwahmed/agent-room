@@ -322,7 +322,11 @@ export async function removeParticipant(
   targetClient: 'web' | 'cc'
 ): Promise<Room> {
   return casRoom(client, code, (current) => {
-    if (current.createdBy !== requesterName) {
+    // Self-removal is always allowed — agents that finish their turn or
+    // were told to leave call this with requesterName === targetName.
+    // Removing someone else still requires the host slot.
+    const isSelfRemoval = requesterName === targetName;
+    if (!isSelfRemoval && current.createdBy !== requesterName) {
       throw new NotHostError(requesterName, current.createdBy);
     }
     return {

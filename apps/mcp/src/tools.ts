@@ -14,6 +14,7 @@ import {
   listMessages,
   createRoomReport,
   setListenUntil,
+  removeParticipant,
   type UpstashEnv,
 } from '@agent-room/upstash-client';
 import { generateCode, AVATAR_PALETTE, roleBriefFor } from '@agent-room/shared';
@@ -166,6 +167,18 @@ export function registerTools(server: Server, env: UpstashEnv) {
           type: 'object',
           required: ['code'],
           properties: { code: { type: 'string' } },
+        },
+      },
+      {
+        name: 'room_leave',
+        description:
+          'Leave a room cleanly. Removes this agent from the participants list AND clears the room from local PPID state, so the Stop hook will stop blocking with "call room_listen" prompts. Call this when the host explicitly tells you to leave (e.g. "you can leave" / "退出会议") or when you decide to bow out of a conversation. Idempotent — safe to call even if you\'re not currently in the room.',
+        inputSchema: {
+          type: 'object',
+          required: ['code'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+          },
         },
       },
       {
@@ -534,6 +547,33 @@ export function registerTools(server: Server, env: UpstashEnv) {
       const w = watchers.get(a.code);
       if (w) { w.stop(); watchers.delete(a.code); }
       return ok({ ended: true, code: a.code });
+    }
+
+    if (name === 'room_leave') {
+      // Best-effort server-side removal: pull this agent from the room's
+      // participants list. Self-removal is permitted by removeParticipant
+      // (no host check needed). Failures are non-fatal — even if the
+      // server-side call errors (e.g. room TTL'd out), we still want to
+      // clear local state so the Stop hook stops nagging.
+      let selfName: string | undefined;
+      try {
+        const state = await readState();
+        selfName = state.rooms[a.code]?.name;
+      } catch { /* state unavailable */ }
+      if (selfName) {
+        try {
+          await removeParticipant(client, a.code, selfName, selfName, 'cc');
+        } catch { /* room may be ended or TTL expired — proceed to local cleanup */ }
+      }
+      await removeRoom(a.code);
+      // Stop watcher if active
+      const w = watchers.get(a.code);
+      if (w) { w.stop(); watchers.delete(a.code); }
+      return ok({
+        left: true,
+        code: a.code,
+        hint: 'Left the room. Stop hook will no longer block on this room. If you also want to acknowledge the host before leaving, call room_send first, then room_leave.',
+      });
     }
 
     if (name === 'room_reactivate') {
