@@ -1,15 +1,72 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { artifactLabel, extractArtifacts, type ArtifactKind, type RoomArtifact, type RoomReport } from '@agent-room/shared';
 import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 
+// localStorage key for a per-room unlocked state. Once a customer hits
+// /r/CODE/report?unlock=TOKEN and the server validates, we drop the
+// token here so future visits to /r/CODE/report (no query param) still
+// render watermark-free. Cleared if the token ever stops verifying
+// (e.g. UNLOCK_SECRET rotated).
+function unlockKey(code: string): string {
+  return `room:${code}:unlocked`;
+}
+
+function readStoredUnlock(code: string): string | null {
+  try { return localStorage.getItem(unlockKey(code)); } catch { return null; }
+}
+
 export function Report() {
   const { code = '' } = useParams();
+  const [searchParams] = useSearchParams();
   const [report, setReport] = useState<RoomReport | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Unlock state has three values: null (not yet checked), 'unlocked'
+  // (verified), 'locked' (no token / invalid). Renders the watermark
+  // unless 'unlocked'.
+  const [unlockStatus, setUnlockStatus] = useState<'pending' | 'unlocked' | 'locked'>('pending');
+
+  useEffect(() => {
+    // 1. If localStorage already has a token from a previous visit,
+    //    re-verify it server-side (in case secret rotated). Until the
+    //    re-verify completes, optimistically render unlocked so the
+    //    page doesn't flash watermark on every visit.
+    // 2. If URL has ?unlock=TOKEN, verify and persist on success.
+    // 3. Otherwise, lock.
+    const urlToken = searchParams.get('unlock');
+    const stored = readStoredUnlock(code);
+    const token = urlToken ?? stored ?? '';
+
+    if (!token || !code) {
+      setUnlockStatus('locked');
+      return;
+    }
+
+    // Optimistic: if we have a stored token already, render unlocked
+    // immediately while we re-verify in the background.
+    if (stored) setUnlockStatus('unlocked');
+
+    fetch(`/api/unlock-verify?code=${encodeURIComponent(code)}&token=${encodeURIComponent(token)}`)
+      .then(r => r.json().then(body => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        if (ok && body.valid) {
+          try { localStorage.setItem(unlockKey(code), token); } catch { /* private mode */ }
+          setUnlockStatus('unlocked');
+        } else {
+          // Token invalid — wipe stored to force re-paying or re-asking.
+          try { localStorage.removeItem(unlockKey(code)); } catch { /* private mode */ }
+          setUnlockStatus('locked');
+        }
+      })
+      .catch(() => {
+        // Network failure: don't punish the user — fall back to whatever
+        // the optimistic decision was.
+        if (!stored) setUnlockStatus('locked');
+      });
+  }, [code, searchParams]);
 
   useEffect(() => {
     const client = createClient(ENV.upstash);
@@ -74,7 +131,7 @@ export function Report() {
               {refreshing ? 'Refreshing…' : 'Refresh from latest'}
             </button>
             <button
-              onClick={() => downloadMarkdown(report, artifacts)}
+              onClick={() => downloadMarkdown(report, artifacts, unlockStatus === 'unlocked')}
               className="rounded-lg border border-white/25 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
             >
               Download Markdown
@@ -120,7 +177,9 @@ export function Report() {
           </div>
         </section>
 
-        <FreeTierFooter report={report} />
+        {unlockStatus === 'unlocked'
+          ? <UnlockedFooter report={report} />
+          : <FreeTierFooter report={report} />}
       </main>
     </div>
   );
@@ -137,6 +196,16 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
   // the practical ceiling so the user knows when this URL stops working.
   const expiresAt = report.exportedAt + 24 * 60 * 60 * 1000;
   const hoursLeft = Math.max(0, Math.round((expiresAt - Date.now()) / (60 * 60 * 1000)));
+
+  // Stripe Payment Link with the room code attached as
+  // `client_reference_id` so when the customer pays, Robin sees the
+  // room code right next to the payment in the Stripe dashboard.
+  // Falls back to a mailto: when the env var isn't configured (early
+  // dev / first-time deploy / Stripe still in KYC).
+  const stripeLink = ENV.stripePaymentLink
+    ? `${ENV.stripePaymentLink}?client_reference_id=${encodeURIComponent(report.code)}`
+    : `mailto:ebin198351@gmail.com?subject=${encodeURIComponent('Unlock AI Room report ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock report ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:`)}`;
+
   return (
     <section className="bg-gradient-to-br from-accent-tint via-white to-amber-50 border border-accent-tint-border rounded-xl p-6 text-center">
       <div className="text-[11px] uppercase tracking-widest font-semibold text-accent-deep mb-2">Free tier · expires in {hoursLeft}h</div>
@@ -148,7 +217,7 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
       </p>
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <a
-          href={`mailto:ebin198351@gmail.com?subject=Unlock%20AI%20Room%20report%20${encodeURIComponent(report.code)}&body=Hi%2C%20I'd%20like%20to%20unlock%20report%20${encodeURIComponent(report.code)}.%0A%0AReport%20URL%3A%20https%3A%2F%2Fwww.agent-room.com%2Fr%2F${encodeURIComponent(report.code)}%2Freport%0A%0AMy%20client%20name%20%2F%20logo%3A`}
+          href={stripeLink}
           className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
         >
           Unlock this report — $29
@@ -162,6 +231,20 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
       </div>
       <p className="text-[11px] text-ink-faint mt-4">
         First 3 pilot customers get founder support — reply to the email and we'll set you up the same day.
+      </p>
+    </section>
+  );
+}
+
+// Replacement footer rendered when the unlock token verifies. Quiet
+// confirmation so the page doesn't feel "stamped" — the absence of the
+// watermark is the real signal.
+function UnlockedFooter({ report }: { report: RoomReport }) {
+  return (
+    <section className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center">
+      <div className="text-[11px] uppercase tracking-widest font-semibold text-emerald-700 mb-1">✓ Unlocked report</div>
+      <p className="text-sm text-emerald-900">
+        This report has been unlocked. Share <code className="font-mono bg-white border border-emerald-200 rounded px-2 py-0.5 text-[12px]">https://www.agent-room.com/r/{report.code}/report</code> with your client — no watermark, no expiry.
       </p>
     </section>
   );
@@ -231,7 +314,7 @@ function artifactTone(kind: ArtifactKind): string {
 // file slots cleanly into delivery emails / git repos. Order matches the
 // on-screen sections so the printed and downloaded artifact tell the same
 // story.
-function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[]): string {
+function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: boolean = false): string {
   const lines: string[] = [];
   const fmt = (t: number) => new Date(t).toLocaleString();
 
@@ -307,11 +390,14 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[]): string {
     lines.push('');
   }
 
-  // Free-tier watermark on Markdown exports too. Removed for paid users
-  // once the unlock-token flow lands; for now every Markdown carries it.
-  lines.push('---');
-  lines.push('');
-  lines.push('_Made with [AI Room](https://www.agent-room.com) — multi-agent meeting rooms with structured delivery reports. This report is on the free tier; remove this footer + keep the URL forever for $29 at https://www.agent-room.com/#pricing_');
+  // Free-tier watermark on Markdown exports too. Skipped when the
+  // report is paid-unlocked — clean Markdown that the consultant can
+  // hand to a client without the "Made with..." attribution.
+  if (!unlocked) {
+    lines.push('---');
+    lines.push('');
+    lines.push('_Made with [AI Room](https://www.agent-room.com) — multi-agent meeting rooms with structured delivery reports. This report is on the free tier; remove this footer + keep the URL forever for $29 at https://www.agent-room.com/#pricing_');
+  }
 
   return lines.join('\n');
 }
@@ -323,8 +409,8 @@ function escapeYaml(value: string): string {
   return value;
 }
 
-function downloadMarkdown(report: RoomReport, artifacts: RoomArtifact[]) {
-  const md = buildMarkdown(report, artifacts);
+function downloadMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: boolean = false) {
+  const md = buildMarkdown(report, artifacts, unlocked);
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

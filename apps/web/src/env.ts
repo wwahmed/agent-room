@@ -15,4 +15,8 @@ export const ENV = {
   // checks for ENV.clerkPublishableKey and falls back to a "sign in
   // unavailable" message if it's missing.
   clerkPublishableKey: (import.meta.env as Record<string, string | undefined>).VITE_CLERK_PUBLISHABLE_KEY ?? '',
+  // Stripe Payment Link for the per-report $29 unlock. Test-mode URL
+  // during KYC; swap to the live-mode URL after Stripe approves the
+  // account. Falls back to a mailto: in the FreeTierFooter when not set.
+  stripePaymentLink: (import.meta.env as Record<string, string | undefined>).VITE_STRIPE_PAYMENT_LINK ?? '',
 };
