@@ -28,10 +28,42 @@ export function useRoom(code: string, selfName: string) {
   const cursor = useRef(0);
   const clientRef = useRef(createClient(ENV.upstash));
 
+  // Concurrent-fire guard. setInterval can re-fire pullMessages while a
+  // prior call is still awaiting Redis on a slow network. Two parallel
+  // pullMessages calls both reading cursor=N + both running
+  // `cursor.current += fresh.length` blindly will over-advance the cursor
+  // (each adds N+1, so cursor ends at N+2 with only 1 actual new message).
+  // Once cursor sits past the server's totalCount, every subsequent poll
+  // returns [] and the user sees a frozen room until they hit ⟳ Sync or
+  // re-focus the tab. The inFlightRef bails second-comers, and the
+  // total-count canonicalization below guarantees cursor never drifts
+  // past the server-side counter even if the increment math is wrong.
+  const inFlightRef = useRef(false);
   const pullMessages = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       const fresh = await listMessages(clientRef.current, code, cursor.current);
-      if (fresh.length === 0) return;
+      if (fresh.length === 0) {
+        // Self-heal: if our local cursor has somehow over-advanced past
+        // the server's absolute counter (race / earlier bug / clock skew),
+        // every future poll returns [] forever. Detect and reset.
+        const total = await getMessageTotalCount(clientRef.current, code);
+        if (total !== null && cursor.current > total) {
+          cursor.current = 0;
+          const recover = await listMessages(clientRef.current, code, 0);
+          cursor.current = total;
+          setState(s => {
+            const seen = new Set(s.messages.map(m => m.id));
+            const deduped = recover.filter(m => !seen.has(m.id));
+            if (deduped.length === 0) return s;
+            return { ...s, messages: [...s.messages, ...deduped] };
+          });
+        }
+        return;
+      }
+      // Sequential with inFlightRef: advancing by batch length stays aligned
+      // with listMessages' logical cursor semantics (legacy rooms: counter null).
       cursor.current += fresh.length;
       setState(s => {
         const seen = new Set(s.messages.map(m => m.id));
@@ -41,6 +73,8 @@ export function useRoom(code: string, selfName: string) {
       });
     } catch (e) {
       setState(s => ({ ...s, error: String(e) }));
+    } finally {
+      inFlightRef.current = false;
     }
   }, [code]);
 
