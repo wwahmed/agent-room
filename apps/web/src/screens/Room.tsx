@@ -44,7 +44,7 @@ export function Room() {
   useEffect(() => {
     if (!self) navigate(`/j/${code}`, { replace: true });
   }, [self, code, navigate]);
-  const { room, messages, error, sendMessage, refreshRoom, forceRefresh } = useRoom(code, self?.name ?? '');
+  const { room, messages, error, sendMessage, refreshRoom } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [attachBusy, setAttachBusy] = useState(false);
@@ -409,18 +409,6 @@ export function Room() {
               className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-1 rounded hover:bg-accent/20"
             >
               Share
-            </button>
-            {/* Manual sync recovery — visible escape hatch when the polling
-               loop misses messages (e.g. tab transitioned through ended →
-               new room without a clean unmount). One-click re-sync from
-               cursor 0 instead of forcing the user to hard-refresh. */}
-            <button
-              onClick={() => { void forceRefresh(); }}
-              title="Re-sync messages from server"
-              className="text-[10px] font-semibold text-ink-soft bg-surface-softer px-2 py-1 rounded hover:bg-surface-softer/70"
-              aria-label="Reconnect and re-sync messages"
-            >
-              ⟳ Sync
             </button>
             <MeetingCodePill code={code} />
           </div>
