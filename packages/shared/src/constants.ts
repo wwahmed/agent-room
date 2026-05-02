@@ -13,9 +13,9 @@ export const MAX_MESSAGES_PER_ROOM = 500;
 // Polling cadence (ms)
 export const MESSAGE_POLL_MS = 3000;
 export const ROOM_POLL_MS = 5000;
-/** When the browser tab is hidden (e.g. user is in the IDE next to the room), keep polling slowly instead of stopping entirely — otherwise the room looks \"stuck\" until a full refresh. */
-export const MESSAGE_POLL_HIDDEN_MS = 12000;
-export const ROOM_POLL_HIDDEN_MS = 12000;
+/** When the browser tab is hidden, poll slower than foreground but still often enough that IDE-adjacent workflows feel responsive (not "stuck until tab switch"). */
+export const MESSAGE_POLL_HIDDEN_MS = 4000;
+export const ROOM_POLL_HIDDEN_MS = 4000;
 export const HEARTBEAT_MS = 30000;
 export const PRESENCE_STALE_MS = 60000;
 // Past this many ms with no heartbeat AND no active listen window we treat

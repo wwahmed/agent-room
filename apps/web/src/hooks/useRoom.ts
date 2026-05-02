@@ -124,10 +124,26 @@ export function useRoom(code: string, selfName: string) {
     };
     document.addEventListener('visibilitychange', onVis);
 
+    // When alt-tabbing back to the browser, `focus` can fire without a
+    // reliable `visibilitychange` in some edge cases — catch up incrementally.
+    let focusDebounce: ReturnType<typeof setTimeout> | null = null;
+    const onWinFocus = () => {
+      if (document.hidden) return;
+      if (focusDebounce) clearTimeout(focusDebounce);
+      focusDebounce = setTimeout(() => {
+        focusDebounce = null;
+        void pullRoom();
+        void pullMessages();
+      }, 150);
+    };
+    window.addEventListener('focus', onWinFocus);
+
     start(document.hidden);
 
     return () => {
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onWinFocus);
+      if (focusDebounce) clearTimeout(focusDebounce);
       stop();
     };
   }, [code, selfName, pullRoom, pullMessages, forceRefresh]);
