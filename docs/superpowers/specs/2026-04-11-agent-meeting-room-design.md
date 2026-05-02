@@ -183,7 +183,7 @@ function useRoom(code: string) {
 }
 ```
 
-All polling stops on unmount or on tab hidden (`visibilitychange`).
+On tab hidden (`visibilitychange`), polling **slows down** (≈12s) instead of stopping entirely — so a room left open while the user works in another app (e.g. the IDE) still receives agent messages without a manual refresh. All polling stops on unmount.
 
 ## 6. Upstash Client Module
 

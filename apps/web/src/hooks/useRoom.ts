@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message, Room } from '@agent-room/shared';
-import { HEARTBEAT_MS, MESSAGE_POLL_MS, ROOM_POLL_MS } from '@agent-room/shared';
+import {
+  HEARTBEAT_MS,
+  MESSAGE_POLL_MS,
+  MESSAGE_POLL_HIDDEN_MS,
+  ROOM_POLL_MS,
+  ROOM_POLL_HIDDEN_MS,
+} from '@agent-room/shared';
 import {
   createClient,
   getRoom,
@@ -84,39 +90,41 @@ export function useRoom(code: string, selfName: string) {
     let roomTimer: ReturnType<typeof setInterval> | null = null;
     let hbTimer: ReturnType<typeof setInterval> | null = null;
 
-    const start = () => {
-      if (msgTimer) return; // already running
-      pullRoom();
-      pullMessages();
-      msgTimer = setInterval(pullMessages, MESSAGE_POLL_MS);
-      roomTimer = setInterval(pullRoom, ROOM_POLL_MS);
-      hbTimer = setInterval(() => {
-        updatePresence(clientRef.current, code, selfName, Date.now()).catch(() => {});
-      }, HEARTBEAT_MS);
-    };
     const stop = () => {
       if (msgTimer) { clearInterval(msgTimer); msgTimer = null; }
       if (roomTimer) { clearInterval(roomTimer); roomTimer = null; }
       if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
     };
 
-    // Pause polling when the tab is hidden to conserve Upstash quota (spec §5.5).
-    // On return: stop existing timers, force a full re-sync from cursor 0
-    // (catches anything that arrived while hidden), THEN resume polling.
-    // Without the forceRefresh step, a hidden tab could miss messages and
-    // resumed polling from the stale cursor would never see them — the
-    // bug Robin hit transitioning between rooms in the same tab.
+    const start = (slow: boolean) => {
+      if (msgTimer) return; // already running
+      pullRoom();
+      pullMessages();
+      const msgMs = slow ? MESSAGE_POLL_HIDDEN_MS : MESSAGE_POLL_MS;
+      const roomMs = slow ? ROOM_POLL_HIDDEN_MS : ROOM_POLL_MS;
+      msgTimer = setInterval(pullMessages, msgMs);
+      roomTimer = setInterval(pullRoom, roomMs);
+      hbTimer = setInterval(() => {
+        updatePresence(clientRef.current, code, selfName, Date.now()).catch(() => {});
+      }, HEARTBEAT_MS);
+    };
+
+    // When the tab is hidden (common: founder works in Cursor while the room
+    // stays open in another window), **fully stopping** polling meant new
+    // agent messages never arrived until a manual refresh — confusing next to
+    // IDE-side tooling that keeps streaming. We **slow down** instead of
+    // stopping to stay within reasonable Upstash budget (spec §5.5).
     const onVis = () => {
+      stop();
       if (document.hidden) {
-        stop();
+        start(true);
       } else {
-        stop();
-        forceRefresh().finally(start);
+        forceRefresh().finally(() => start(false));
       }
     };
     document.addEventListener('visibilitychange', onVis);
 
-    if (!document.hidden) start();
+    start(document.hidden);
 
     return () => {
       document.removeEventListener('visibilitychange', onVis);
