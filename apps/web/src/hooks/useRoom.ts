@@ -28,19 +28,30 @@ export function useRoom(code: string, selfName: string) {
   const cursor = useRef(0);
   const clientRef = useRef(createClient(ENV.upstash));
 
-  // No `inFlight` guard intentionally. An earlier version added one to
-  // dedupe overlapping setInterval fires; in practice if Redis hung
-  // silently for >3s the in-flight flag never cleared (await never
-  // resolved + finally never ran), and *every subsequent poll bailed
-  // forever* — symptom: foreground tab, polling looks alive in DevTools
-  // but new agent messages never surface until the user hits ⟳ Sync
-  // (which uses forceRefresh, a different code path). Robin walked us
-  // straight into that. Letting polls overlap is cheap; the dedup-by-id
-  // and the self-heal below make over-counting harmless.
+  // In-flight guard with TIMEOUT escape hatch. Two failure modes we hit:
+  //
+  // 1. WITHOUT a guard, two setInterval fires can overlap. Robin's console
+  //    showed `fire {cursor: 71}` followed 700ms later by `fire {cursor: 71}`
+  //    again, both reading the same cursor and both running `cursor +=
+  //    fresh.length` blindly → cursor over-advanced past list length →
+  //    every subsequent poll returned [] forever (symptom: foreground tab,
+  //    polling alive, but new messages don't surface until ⟳ Sync).
+  //
+  // 2. WITH a naive boolean guard, if Redis hangs silently the `await` never
+  //    resolves, finally never runs, every subsequent poll bails forever.
+  //    Same end-user symptom from a different angle.
+  //
+  // Fix: timestamp guard. A poll bails ONLY if a prior poll started < 10s
+  // ago. Anything older is presumed dead and replaced.
+  const inFlightRef = useRef<number | null>(null);
   const pullMessages = useCallback(async () => {
+    const tNow = Date.now();
+    if (inFlightRef.current !== null && tNow - inFlightRef.current < 10_000) {
+      return;
+    }
+    inFlightRef.current = tNow;
     // TEMPORARY instrumentation — remove once Robin confirms the foreground
     // sync bug ("agent message doesn't appear unless I hit Sync") is fixed.
-    // We cannot reproduce it locally; need real network/state traces.
     const traceTag = `[useRoom:${code.slice(0, 3)}]`;
     const startedAt = Date.now();
     console.debug(traceTag, 'pullMessages.fire', { cursor: cursor.current, t: startedAt });
@@ -88,6 +99,8 @@ export function useRoom(code: string, selfName: string) {
     } catch (e) {
       console.debug(traceTag, 'pullMessages.error', e);
       setState(s => ({ ...s, error: String(e) }));
+    } finally {
+      inFlightRef.current = null;
     }
   }, [code]);
 
