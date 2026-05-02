@@ -83,7 +83,20 @@ export function useRoom(code: string, selfName: string) {
         }
         return;
       }
-      cursor.current += fresh.length;
+      // CRITICAL: anchor cursor to the server's absolute counter, never
+      // blind-increment by fresh.length. The blind path lets cursor drift
+      // ahead under concurrent fires / window-focus refreshes etc., and
+      // once cursor sits past a real message's index that message is
+      // permanently invisible to the polling path (only forceRefresh from
+      // cursor=0 recovers it). This is the bug Robin's traces caught:
+      // his PING was at list index 78 but cursor was already 79 by the
+      // time anyone polled, so listMessages(..., 79) skipped right over.
+      //
+      // Setting cursor.current = total enforces "we've now seen exactly
+      // what the server has" regardless of how the local arithmetic went.
+      // Two concurrent polls will both write the same value → no drift.
+      const total = await getMessageTotalCount(clientRef.current, code);
+      cursor.current = total ?? (cursor.current + fresh.length);
       setState(s => {
         const seen = new Set(s.messages.map(m => m.id));
         const deduped = fresh.filter(m => !seen.has(m.id));
@@ -92,6 +105,7 @@ export function useRoom(code: string, selfName: string) {
           existingCount: s.messages.length,
           dedupedCount: deduped.length,
           newCursor: cursor.current,
+          serverTotal: total,
         });
         if (deduped.length === 0) return s;
         return { ...s, messages: [...s.messages, ...deduped] };
