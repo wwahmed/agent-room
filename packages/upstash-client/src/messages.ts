@@ -16,6 +16,14 @@ function msgsKey(code: string): string { return `room-msgs:${code}`; }
 // pipeline as RPUSH/LTRIM so it can never drift relative to the list.
 function msgCountKey(code: string): string { return `room-msg-count:${code}`; }
 
+/** Next poll cursor after a full `listMessages(..., 0)` when the room has a counter key; `null` = legacy room. */
+export async function getMessageTotalCount(client: UpstashClient, code: string): Promise<number | null> {
+  const countRaw = await client.command<unknown>(['GET', msgCountKey(code)]);
+  if (countRaw === null || countRaw === undefined) return null;
+  const totalCount = typeof countRaw === 'number' ? countRaw : parseInt(String(countRaw), 10);
+  return Number.isFinite(totalCount) ? totalCount : null;
+}
+
 // Append a message. Server-side gate: the (name, client) in the message
 // must correspond to a participant whose `canSpeak` is not false. New
 // joiners default to canSpeak=true (Slack/Zoom-style: speak first, host

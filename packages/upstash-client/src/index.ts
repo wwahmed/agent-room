@@ -3,3 +3,4 @@ export * from './errors.js';
 export * from './rooms.js';
 export * from './messages.js';
 export * from './reports.js';
+export * from './waitlist.js';

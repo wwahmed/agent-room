@@ -7,6 +7,7 @@ import {
   listMessages,
   appendMessage,
   updatePresence,
+  getMessageTotalCount,
 } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 
@@ -62,11 +63,13 @@ export function useRoom(code: string, selfName: string) {
   const forceRefresh = useCallback(async () => {
     cursor.current = 0;
     try {
-      const [r, fresh] = await Promise.all([
+      const [r, fresh, total] = await Promise.all([
         getRoom(clientRef.current, code),
         listMessages(clientRef.current, code, 0),
+        getMessageTotalCount(clientRef.current, code),
       ]);
-      cursor.current = fresh.length;
+      // Match server-side logical cursor (counter) so polling stays correct after LTRIM; legacy rooms fall back.
+      cursor.current = total ?? fresh.length;
       setState({ room: r, messages: fresh, error: null });
     } catch (e) {
       setState(s => ({ ...s, error: String(e) }));
