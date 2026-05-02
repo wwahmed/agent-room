@@ -38,8 +38,15 @@ export function useRoom(code: string, selfName: string) {
   // straight into that. Letting polls overlap is cheap; the dedup-by-id
   // and the self-heal below make over-counting harmless.
   const pullMessages = useCallback(async () => {
+    // TEMPORARY instrumentation — remove once Robin confirms the foreground
+    // sync bug ("agent message doesn't appear unless I hit Sync") is fixed.
+    // We cannot reproduce it locally; need real network/state traces.
+    const traceTag = `[useRoom:${code.slice(0, 3)}]`;
+    const startedAt = Date.now();
+    console.debug(traceTag, 'pullMessages.fire', { cursor: cursor.current, t: startedAt });
     try {
       const fresh = await listMessages(clientRef.current, code, cursor.current);
+      console.debug(traceTag, 'pullMessages.fetched', { fresh: fresh.length, ms: Date.now() - startedAt });
       if (fresh.length === 0) {
         // Self-heal: if our local cursor has somehow over-advanced past
         // the server's absolute counter (network race / earlier bug /
@@ -63,10 +70,17 @@ export function useRoom(code: string, selfName: string) {
       setState(s => {
         const seen = new Set(s.messages.map(m => m.id));
         const deduped = fresh.filter(m => !seen.has(m.id));
+        console.debug(traceTag, 'pullMessages.dedup', {
+          freshIds: fresh.map(m => m.id),
+          existingCount: s.messages.length,
+          dedupedCount: deduped.length,
+          newCursor: cursor.current,
+        });
         if (deduped.length === 0) return s;
         return { ...s, messages: [...s.messages, ...deduped] };
       });
     } catch (e) {
+      console.debug(traceTag, 'pullMessages.error', e);
       setState(s => ({ ...s, error: String(e) }));
     }
   }, [code]);
