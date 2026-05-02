@@ -46,7 +46,13 @@ export function useRoom(code: string, selfName: string) {
     console.debug(traceTag, 'pullMessages.fire', { cursor: cursor.current, t: startedAt });
     try {
       const fresh = await listMessages(clientRef.current, code, cursor.current);
-      console.debug(traceTag, 'pullMessages.fetched', { fresh: fresh.length, ms: Date.now() - startedAt });
+      console.debug(traceTag, 'pullMessages.fetched', {
+        fresh: fresh.length,
+        ms: Date.now() - startedAt,
+        senders: fresh.map(m => `${m.name}(${m.client})`),
+        ids: fresh.map(m => m.id),
+        cursorBefore: cursor.current,
+      });
       if (fresh.length === 0) {
         // Self-heal: if our local cursor has somehow over-advanced past
         // the server's absolute counter (network race / earlier bug /
