@@ -6,6 +6,7 @@ import { isValidCode, CODE_LEN, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
 import { CodeInput } from '../components/CodeInput.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
+import { AgentJoinQuickstart } from '../components/AgentJoinQuickstart.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 
 function stripDashes(s: string) { return s.replace(/-/g, ''); }
@@ -106,6 +107,8 @@ export function Join() {
               <div className="text-[9px] text-ink-soft">Hosted by {room.createdBy} · {room.participants.length} here</div>
             </div>
           </div>
+
+          <AgentJoinQuickstart roomCode={room.code} />
 
           <label className="block mb-3">
             <span className="text-[11px] font-semibold text-ink-muted block mb-1">Your name</span>
