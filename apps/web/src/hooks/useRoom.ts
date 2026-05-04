@@ -223,11 +223,33 @@ export function useRoom(code: string, selfName: string) {
   }, [code, selfName, pullRoom, pullMessages, forceRefresh]);
 
   const sendMessage = useCallback(async (msg: Message) => {
-    // Propagate errors so the Room screen can show a toast
+    // Optimistic render: add to local state IMMEDIATELY so the sender
+    // sees their own message in the feed without waiting for the
+    // round-trip to Upstash + the follow-up pullMessages. Without this,
+    // hitting Enter shows a ~800-1500ms delay before the message
+    // appears, which feels like the app froze. Slack / Discord /
+    // iMessage all do this.
+    //
+    // Dedup safety: pullMessages will fetch this same msg back from
+    // Redis (same id we just RPUSHed) and skip it via the Set-membership
+    // dedup. So no duplicate render.
+    setState(s => {
+      if (s.messages.some(m => m.id === msg.id)) return s;
+      return { ...s, messages: [...s.messages, msg] };
+    });
+
     try {
       await appendMessage(clientRef.current, code, msg);
       await pullMessages();
     } catch (e) {
+      // Roll back the optimistic add — server didn't accept the message.
+      // The composer's catch in Room.tsx restores the draft text so the
+      // user can retry. This keeps state honest if the network failed
+      // or appendMessage rejected (e.g. host muted us).
+      setState(s => ({
+        ...s,
+        messages: s.messages.filter(m => m.id !== msg.id),
+      }));
       throw e;
     }
   }, [code, pullMessages]);
