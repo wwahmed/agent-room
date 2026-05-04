@@ -20,6 +20,7 @@ import {
 import { generateCode, AVATAR_PALETTE, roleBriefFor, normalizeEscapedWhitespace } from '@agent-room/shared';
 import type { Message, Participant } from '@agent-room/shared';
 import { setRoom, removeRoom, updateCursor, markSent, readState } from './state.js';
+import { detectHarness, persistenceSetupHint } from './harness.js';
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -137,6 +138,14 @@ function resolvedListenTimeoutMs(raw: unknown): number {
 
 export function registerTools(server: Server, env: UpstashEnv) {
   const client = createClient(env);
+  // Snapshot the host harness once at boot. This drives the persistence-setup
+  // nudge in room_join / room_create — agents on harnesses that don't
+  // auto-loop tool calls (Cursor without 1.7+ stop hook, Claude Desktop,
+  // Gemini CLI, etc.) get an extra line telling them to run
+  // `npx agent-room-mcp init`. Snapshotted because env vars don't change
+  // mid-process and detection runs in O(branches).
+  const harness = detectHarness();
+  const persistenceNudge = persistenceSetupHint(harness);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -355,8 +364,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
           joinUrl: `https://www.agent-room.com/j/${code}`,
           roleBrief: roleBriefFor(a.role ?? ''),
           initialListenMs: listenMs,
+          clientKind: harness.kind,
           hint:
-            `Room created; first listen window ran in this same call (${listenMs}ms). ${first.hint} ${sendHint}`,
+            `Room created; first listen window ran in this same call (${listenMs}ms). ${first.hint} ${sendHint}${persistenceNudge}`,
         });
       }
 
@@ -366,7 +376,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
         cursor: msgs.length,
         joinUrl: `https://www.agent-room.com/j/${code}`,
         roleBrief: roleBriefFor(a.role ?? ''),
-        hint: `Room created. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.`,
+        clientKind: harness.kind,
+        hint: `Room created. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.${persistenceNudge}`,
       });
     }
 
@@ -447,7 +458,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
           recentMessages,
           roleBrief: roleBriefFor(a.role ?? ''),
           initialListenMs: listenMs,
-          hint: `${joinLine} First listen window ran in this same call (${listenMs}ms). ${first.hint} ${sendLoopHint}`,
+          clientKind: harness.kind,
+          hint: `${joinLine} First listen window ran in this same call (${listenMs}ms). ${first.hint} ${sendLoopHint}${persistenceNudge}`,
         });
       }
 
@@ -467,9 +479,10 @@ export function registerTools(server: Server, env: UpstashEnv) {
         cursor: msgs.length,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
+        clientKind: harness.kind,
         hint: muted
-          ? `Joined as "${finalName}" — but the host (${updated.createdBy}) has muted you in this room. room_send will return error="muted" until you're unmuted. Call room_listen to read the conversation while you wait. PRESENCE CONTRACT: next call MUST be room_listen with code="${a.code}" since=${msgs.length}.`
-          : `Joined as "${finalName}". ${recentMessages.length} recent messages above for context. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${a.code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.`,
+          ? `Joined as "${finalName}" — but the host (${updated.createdBy}) has muted you in this room. room_send will return error="muted" until you're unmuted. Call room_listen to read the conversation while you wait. PRESENCE CONTRACT: next call MUST be room_listen with code="${a.code}" since=${msgs.length}.${persistenceNudge}`
+          : `Joined as "${finalName}". ${recentMessages.length} recent messages above for context. PRESENCE CONTRACT: your next tool call MUST be room_listen with code="${a.code}" and since=${msgs.length}. After every room_send, queue another room_listen. Stay in the loop until the room ends, the host removes you, or you announce you're leaving. Do NOT end your turn without a pending room_listen.${persistenceNudge}`,
       });
     }
 
