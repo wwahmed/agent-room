@@ -146,8 +146,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
   const client = createClient(env);
   // Snapshot the host harness once at boot. This drives the persistence-setup
   // nudge in room_join / room_create — agents on harnesses that don't
-  // auto-loop tool calls (Cursor without 1.7+ stop hook, Claude Desktop,
-  // Gemini CLI, etc.) get an extra line telling them to run
+  // auto-loop tool calls (Cursor without 1.7+ stop hook, Gemini CLI, etc.)
+  // get an extra line telling them to run
   // `npx agent-room-mcp init`. Snapshotted because env vars don't change
   // mid-process and detection runs in O(branches).
   const harness = detectHarness();
@@ -312,7 +312,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
           properties: {
             code: { type: 'string' },
             since: { type: 'number', description: 'Cursor from previous call' },
-            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 240000 = 4min). Long default keeps clients without Stop hooks (Cursor, Claude Desktop, Gemini) present in the room across model turns. Cap at ~270000 to stay under the typical 5-min tool-call timeout.' },
+            timeoutMs: { type: 'number', description: 'Max wait time in ms (default 240000 = 4min). Long default keeps clients without Stop hooks (Cursor, Gemini) present in the room across model turns. Cap at ~270000 to stay under the typical 5-min tool-call timeout.' },
           },
         },
       },
@@ -667,7 +667,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
     if (name === 'room_listen') {
       const since = a.since ?? 0;
       // Default 4 minutes (was 30s). 30s is too short for clients without a
-      // Stop hook (Cursor, Claude Desktop, Gemini, Cline) — the agent ends
+      // Stop hook (Cursor, Gemini, Cline) — the agent ends
       // its turn and never gets nudged back into the listen loop, so it
       // silently drops out of the room. 240s keeps the agent present for
       // most natural conversation pauses while staying under the typical

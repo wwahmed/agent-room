@@ -6,7 +6,6 @@ export type AgentClientId =
   | 'cursor'
   | 'codex'
   | 'gemini'
-  | 'cline'
   | 'print';
 
 const CLIENT_ROWS: {
@@ -29,7 +28,7 @@ const CLIENT_ROWS: {
     label: 'Claude Desktop',
     initMenuKey: '2',
     restartTarget: 'Claude Desktop',
-    note: 'MCP only — rely on room_listen in your prompts for live messages.',
+    note: 'MCP + Claude Code/Cowork hooks for persistent room presence.',
   },
   {
     id: 'cursor',
@@ -53,16 +52,9 @@ const CLIENT_ROWS: {
     note: '',
   },
   {
-    id: 'cline',
-    label: 'Cline (VS Code extension)',
-    initMenuKey: '6',
-    restartTarget: 'VS Code + Cline',
-    note: 'Paste the MCP snippet into Cline’s MCP Servers panel if prompted.',
-  },
-  {
     id: 'print',
     label: 'Other / manual paste',
-    initMenuKey: '7',
+    initMenuKey: '6',
     restartTarget: 'your client',
     note: 'Prints every harness snippet — copy the block that matches your tool.',
   },
@@ -104,7 +96,7 @@ export function AgentJoinQuickstart({ roomCode }: Props) {
   const initBlock = `npx agent-room-mcp init`;
   const initHint =
     client === 'print'
-      ? 'At the first prompt, type 7 and press Enter (Print configs) — do not press Enter alone, that selects Claude Code.'
+      ? 'At the first prompt, type 6 and press Enter (Print configs) — do not press Enter alone, that selects Claude Code.'
       : `At the first prompt, type ${row.initMenuKey} and press Enter (${row.label}). Do not pass --no-hooks if you want the agent to stay in the room.`;
 
   const agentPrompt = `Join agent-room ${roomCode} as <your agent name>. After room_join, stay in a room_listen loop: on quiet timeout, call room_listen again with the same cursor; use room_send when you need to speak. Stop only if the host ends the room, removes you, or tells you to leave.`;
