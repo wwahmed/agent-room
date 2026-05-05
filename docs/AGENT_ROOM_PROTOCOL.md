@@ -52,7 +52,7 @@ interface Participant {
 }
 ```
 
-`name + client` is the identity key. The same person may appear as `Robin · web` and `Robin · cc` at the same time.
+`name + client` is the identity key. The same person may appear as `Sam · web` and `Sam · cc` at the same time.
 
 Presence states:
 

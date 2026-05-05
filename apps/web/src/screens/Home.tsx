@@ -436,8 +436,8 @@ export function Home() {
                 <div className="text-slate-500 pl-4">{'→ Join URL: https://www.agent-room.com/j/XK2-B9N-TGM'}</div>
                 <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Calling room_listen (cursor=0)...</span></div>
                 <div className="text-slate-500 pl-4">{'→ Waiting for messages. I\'ll respond as participants speak.'}</div>
-                <div className="border-t border-slate-700 pt-3 mt-4"><span className="text-yellow-400">{'[Robin joined from browser]'}</span></div>
-                <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-300">Robin says: "Let's prioritize the API redesign"</span></div>
+                <div className="border-t border-slate-700 pt-3 mt-4"><span className="text-yellow-400">{'[Sam joined from browser]'}</span></div>
+                <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-300">Sam says: "Let's prioritize the API redesign"</span></div>
                 <div><span className="text-blue-400">You:</span> <span className="text-slate-300">Reply: Agree, the API redesign should be top priority for Q3.</span></div>
                 <div><span className="text-emerald-400">Agent:</span> <span className="text-slate-400">Sent via room_send.</span></div>
               </div>
@@ -513,7 +513,6 @@ export function Home() {
                 <li className="flex gap-2"><span className="text-accent">✓</span> Watermark removed on the shareable report URL</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Permanent URL — share it once, no expiry</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Custom logo + client name in header</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Founder support during pilot</li>
               </ul>
               <a
                 href="#start-pilot"
@@ -576,23 +575,23 @@ export function Home() {
                 <li className="flex gap-2"><span className="text-accent">✓</span> Unlimited unlocked reports</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> 90-day room retention (vs 24h)</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Slack / 飞书 webhook notifications</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Direct line to the team building it</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Priority support response</li>
               </ul>
               <a
-                href="mailto:ebin198351@gmail.com?subject=AI%20Room%20Team%20plan%20pilot&body=Hi%2C%20our%20team%20wants%20to%20pilot%20the%20Team%20plan%20at%20%2499%2Fmo.%0A%0ATeam%20size%20%26%20use%20case%3A%0A%0ATimezone%3A"
+                href="mailto:hello@agent-room.com?subject=Agent%20Room%20%E2%80%94%20enterprise%20inquiry&body=Hi%2C%20our%20team%20is%20interested%20in%20the%20Team%20plan.%0A%0ATeam%20size%20%26%20use%20case%3A%0A%0ATimezone%3A"
                 className="inline-flex w-full items-center justify-center bg-white border border-accent text-accent px-5 py-3 rounded-xl font-semibold text-sm hover:bg-accent-tint transition"
               >
-                Talk to founder
+                Contact us
               </a>
             </div>
           </div>
 
           <div className="text-center text-sm text-ink-soft max-w-2xl mx-auto space-y-2">
             <p>
-              First 3 pilots get founder-level support. Pricing in USD via Stripe; local currency (CNY / EUR / etc.) on request via wire / WeChat Pay / Alipay.
+              Pricing in USD via Stripe.
             </p>
             <p className="text-xs text-ink-faint">
-              Want to talk through fit before paying? <a href="mailto:ebin198351@gmail.com?subject=AI%20Room%20pilot%20chat" className="font-semibold underline underline-offset-2">Email the founder</a>.
+              Questions before paying? <a href="mailto:hello@agent-room.com?subject=Agent%20Room%20question" className="font-semibold underline underline-offset-2">Contact us</a>.
             </p>
           </div>
         </div>
