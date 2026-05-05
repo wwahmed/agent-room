@@ -587,12 +587,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
 
     if (name === 'room_send') {
       let role: string = a.role ?? '';
-      if (!role) {
-        try {
-          const room = await getRoom(client, a.code);
-          role = room.participants.find((p: Participant) => p.name === a.name)?.role ?? '';
-        } catch { /* fall through */ }
-      }
+      let speaker: Participant | undefined;
+      try {
+        const room = await getRoom(client, a.code);
+        speaker = room.participants.find((p: Participant) => p.name === a.name && p.client === 'cc');
+        if (!role) {
+          role = speaker?.role ?? '';
+        }
+      } catch { /* fall through */ }
       // Cursor's Composer agent (and probably other client subsystems we
       // haven't seen yet) sometimes JSON.stringify's its own message body
       // before passing it as the `text` arg, so a real newline arrives as
@@ -607,8 +609,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
         id: Date.now(),
         type: 'msg',
         name: a.name,
-        initials: initialsFor(a.name),
-        color: colorForName(a.name),
+        initials: speaker?.initials ?? initialsFor(a.name),
+        color: speaker?.color ?? colorForName(a.name),
         role,
         text,
         client: 'cc',
