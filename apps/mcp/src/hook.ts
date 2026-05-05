@@ -55,7 +55,23 @@ interface HookInput {
 }
 
 function isCursorStopInput(input: HookInput): boolean {
-  return input.hook_event_name === undefined && typeof input.status === 'string';
+  return (
+    typeof input.status === 'string' &&
+    (input.hook_event_name === undefined || input.hook_event_name.toLowerCase() === 'stop')
+  );
+}
+
+export function classifyHookInput(input: HookInput): { event: string; cursorMode: boolean } | null {
+  const cursorMode = isCursorStopInput(input);
+  if (cursorMode) return { event: 'Stop', cursorMode };
+
+  if (input.hook_event_name) {
+    const normalized =
+      input.hook_event_name.toLowerCase() === 'stop' ? 'Stop' : input.hook_event_name;
+    return { event: normalized, cursorMode };
+  }
+
+  return null;
 }
 
 interface PendingRoom {
@@ -156,22 +172,21 @@ async function readStdin(): Promise<HookInput> {
 
 export async function runHook(env: UpstashEnv): Promise<void> {
   const input = await readStdin();
-  const cursorMode = isCursorStopInput(input);
   // Normalize the event name across clients. Cursor only fires the stop
-  // hook (no UserPromptSubmit / SessionStart equivalent today), so we
-  // collapse its `status` into our internal "Stop" event for the rest of
-  // the pipeline. Claude Code / Codex still send their own event name.
+  // hook (no UserPromptSubmit / SessionStart equivalent today). Older
+  // Cursor hook docs/examples showed `{ status, loop_count }` without a
+  // `hook_event_name`, while current Cursor payloads may include
+  // `{ hook_event_name: "stop", status, loop_count }`. Collapse both into
+  // our internal "Stop" event so Cursor still gets `followup_message`.
+  // Claude Code / Codex still send their own event names.
   // An empty stdin payload (e.g. manual test invocation) falls through to
   // a no-op — we used to default to 'Stop' which could trigger phantom
   // long-polls; now we only act when we actually got an event.
-  let event: string;
-  if (cursorMode) {
-    event = 'Stop';
-  } else if (input.hook_event_name) {
-    event = input.hook_event_name;
-  } else {
+  const classified = classifyHookInput(input);
+  if (!classified) {
     process.exit(0);
   }
+  const { event, cursorMode } = classified;
 
   // User typed something — fresh turn cycle. Reset the block streak so the
   // next Stop hook can block fresh up to MAX_BLOCKS_PER_CYCLE times.
