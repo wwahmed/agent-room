@@ -12,6 +12,61 @@ const MCP_ENTRY = {
 const HOOK_COMMAND = 'npx -y agent-room-mcp hook';
 const HOOK_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart'] as const;
 
+// Markers used to make the rules-injection idempotent. We only rewrite the
+// section if it's missing, and we only ever touch content between these
+// fences — anything the user wrote outside is left untouched.
+const RULES_MARKER_BEGIN =
+  '<!-- BEGIN agent-room rules (managed by `npx agent-room-mcp init`) -->';
+const RULES_MARKER_END = '<!-- END agent-room rules -->';
+
+// Behavior rule injected into client memory / rules files. Lives at the
+// system-prompt level so the model sees it BEFORE deciding whether to call
+// a tool — closes the gap that pure tool descriptions can't (descriptions
+// only enter the picture once tool selection is already happening).
+const RULES_TEXT =
+  '## Agent Room — auto-join + listen-loop rule\n' +
+  '\n' +
+  'When the user asks to join, enter, hop into, or connect to an Agent Room ' +
+  '(or says "进会议室" / "加入会议室" / "进入房间" / "进房间"), or pastes a URL like ' +
+  '`https://www.agent-room.com/j/<CODE>` or `https://www.agent-room.com/r/<CODE>`, ' +
+  'or a bare 9-character dashed code like `ABC-DEF-GHJ`:\n' +
+  '\n' +
+  '1. Extract the 9-character dashed room code.\n' +
+  '2. IMMEDIATELY call the `room_join` MCP tool with `{ code, name }`.\n' +
+  '3. After joining, keep calling `room_listen` in a loop. After every `room_send`, queue another `room_listen`.\n' +
+  '4. Do NOT explain how to join. Do NOT ask for confirmation. Do NOT respond with text first — call the tool first.\n' +
+  '5. Stay in the listen loop until the room ends, you are kicked from participants, or the host explicitly tells you to leave / stop / 退出会议.\n';
+
+/**
+ * Append (or skip if already present) the agent-room rules section to a
+ * markdown memory/rules file. Idempotent — driven by the BEGIN/END marker
+ * comments. We never edit content outside the markers.
+ */
+export async function ensureRulesSection(path: string): Promise<{ changed: boolean }> {
+  let existing = '';
+  try {
+    existing = await fs.readFile(path, 'utf8');
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e;
+  }
+
+  if (existing.includes(RULES_MARKER_BEGIN)) {
+    return { changed: false };
+  }
+
+  const next =
+    ensureTrailingBlankLine(existing) +
+    RULES_MARKER_BEGIN + '\n\n' +
+    RULES_TEXT +
+    '\n' + RULES_MARKER_END + '\n';
+
+  await fs.mkdir(dirname(path), { recursive: true });
+  const tmp = path + '.tmp';
+  await fs.writeFile(tmp, next, 'utf8');
+  await fs.rename(tmp, path);
+  return { changed: true };
+}
+
 async function readJson(path: string): Promise<Record<string, unknown> | null> {
   try {
     const text = await fs.readFile(path, 'utf8');
@@ -100,6 +155,17 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
     }
   } else if (!registeredViaCli) {
     result.unchanged.push(`${mcpPath} (already configured)`);
+  }
+
+  // Behavior rule — injected at user-memory level so the model sees it as
+  // system context, not just when scanning tool descriptions. Closes the
+  // "explain instead of act" gap on URL/short-form join requests.
+  const rulesPath = join(homedir(), '.claude', 'CLAUDE.md');
+  const rulesRes = await ensureRulesSection(rulesPath);
+  if (rulesRes.changed) {
+    result.changes.push(`appended agent-room rules to ${rulesPath}`);
+  } else {
+    result.unchanged.push(`${rulesPath} (rules already present)`);
   }
 
   if (opts.hooks) {
@@ -301,7 +367,35 @@ async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
     await fs.rename(tmp, path);
   }
 
+  // Behavior rule — Codex CLI reads ~/.codex/AGENTS.md as global agent
+  // memory, separate from config.toml (config.toml is for tool wiring;
+  // AGENTS.md is for system-level instructions).
+  const rulesPath = join(codexHome, 'AGENTS.md');
+  const rulesRes = await ensureRulesSection(rulesPath);
+  if (rulesRes.changed) {
+    result.changes.push(`appended agent-room rules to ${rulesPath}`);
+  } else {
+    result.unchanged.push(`${rulesPath} (rules already present)`);
+  }
+
   return result;
+}
+
+/**
+ * For clients without a writable global-rules file (Cursor's User Rules
+ * lives in app settings UI, Claude Desktop has no rules mechanism, etc.),
+ * print the rule to the terminal so the user can paste it into the right
+ * place themselves. Keeps install transparent — no surprise files.
+ */
+function printRulesInstruction(target: string, where: string): void {
+  console.log(`\n  Manual rules step for ${target}:`);
+  console.log(`    Paste the following into ${where}:`);
+  console.log('    ' + '-'.repeat(60));
+  for (const line of (RULES_MARKER_BEGIN + '\n\n' + RULES_TEXT + '\n' + RULES_MARKER_END).split('\n')) {
+    console.log('    ' + line);
+  }
+  console.log('    ' + '-'.repeat(60));
+  console.log('  This makes the agent auto-join when you say "join the room <code>" or paste an agent-room URL,\n  without needing to spell out the tool call each time.\n');
 }
 
 function printConfigs() {
@@ -423,6 +517,10 @@ export async function runInit(argv: string[]): Promise<void> {
       console.log('  (skipped hooks; pass without --no-hooks for autonomous chat — Cursor 1.7+ required)');
     }
     nextSteps('Cursor');
+    // Cursor's user-level rules live in the Settings UI (Settings → Rules
+    // → User Rules), not a flat file we can write to safely. Print the
+    // snippet for manual paste so the install stays transparent.
+    printRulesInstruction('Cursor', 'Cursor → Settings → Rules → User Rules');
     return;
   }
 
@@ -431,6 +529,7 @@ export async function runInit(argv: string[]): Promise<void> {
     reportResult('Gemini CLI', result);
     nextSteps('Gemini CLI');
     console.log('  Note: Gemini CLI does not currently support Claude Code-style hooks, so ask it to call room_listen explicitly to stay present in the room.');
+    printRulesInstruction('Gemini CLI', '~/.gemini/GEMINI.md (or whichever file Gemini CLI reads as global instructions on your version)');
     return;
   }
 
@@ -439,6 +538,7 @@ export async function runInit(argv: string[]): Promise<void> {
     reportResult('Cline (VS Code)', result);
     nextSteps('Cline');
     console.log('  Note: targeted stable VS Code. If you use VS Code Insiders / VSCodium / Cursor-with-Cline, run `npx agent-room-mcp init print` and paste the snippet into Cline\'s MCP Servers panel instead.');
+    printRulesInstruction('Cline', "Cline's Custom Instructions field (in the VS Code extension settings)");
     return;
   }
 
@@ -447,6 +547,7 @@ export async function runInit(argv: string[]): Promise<void> {
     reportResult('Claude Desktop', result);
     nextSteps('Claude Desktop');
     console.log('  Note: Claude Desktop does not run hooks, so ask it to call room_listen to see live room messages.');
+    printRulesInstruction('Claude Desktop', 'Claude Desktop → Settings → Profile → System Prompt (or paste at the start of every conversation)');
     return;
   }
 
