@@ -5,7 +5,18 @@ import {
   type UpstashEnv,
 } from '@agent-room/upstash-client';
 import type { Message } from '@agent-room/shared';
-import { readState, updateCursor, bumpBlockStreak, resetBlockStreak, removeRoom } from './state.js';
+import {
+  readState,
+  readHarnessStateOrMerged,
+  updateCursor,
+  updateCursorEverywhere,
+  bumpBlockStreak,
+  bumpBlockStreakEverywhere,
+  resetBlockStreak,
+  resetBlockStreakEverywhere,
+  removeRoom,
+  removeRoomEverywhere,
+} from './state.js';
 
 // Stop-hook long-poll: how long the hook holds the turn open looking for new
 // room messages before letting the agent stop. Increased from the original
@@ -82,8 +93,14 @@ interface PendingRoom {
   messages: Message[];
 }
 
-async function fetchPending(env: UpstashEnv): Promise<PendingRoom[]> {
-  const state = await readState();
+type StateScope = 'scoped' | 'cursor';
+
+async function readHookState(scope: StateScope) {
+  return scope === 'cursor' ? readHarnessStateOrMerged() : readState();
+}
+
+async function fetchPending(env: UpstashEnv, scope: StateScope): Promise<PendingRoom[]> {
+  const state = await readHookState(scope);
   const codes = Object.keys(state.rooms);
   if (codes.length === 0) return [];
 
@@ -144,9 +161,13 @@ function formatMessages(rooms: PendingRoom[]): string {
   return lines.join('\n');
 }
 
-async function commitCursors(rooms: PendingRoom[]): Promise<void> {
+async function commitCursors(rooms: PendingRoom[], scope: StateScope): Promise<void> {
   for (const r of rooms) {
-    await updateCursor(r.code, r.newCursor);
+    if (scope === 'cursor') {
+      await updateCursorEverywhere(r.code, r.newCursor);
+    } else {
+      await updateCursor(r.code, r.newCursor);
+    }
   }
 }
 
@@ -187,11 +208,20 @@ export async function runHook(env: UpstashEnv): Promise<void> {
     process.exit(0);
   }
   const { event, cursorMode } = classified;
+  // Cursor starts the MCP server and Stop hook under different npm wrapper
+  // processes, so their PPID-scoped state files do not match. Cursor stop
+  // hooks read a stable harness state file first and fall back to merged
+  // state for old pre-fix installs. Claude/Codex keep scoped state to
+  // preserve parallel-session isolation.
+  const stateScope: StateScope = cursorMode ? 'cursor' : 'scoped';
 
   // User typed something — fresh turn cycle. Reset the block streak so the
   // next Stop hook can block fresh up to MAX_BLOCKS_PER_CYCLE times.
   if (event === 'UserPromptSubmit') {
-    try { await resetBlockStreak(); } catch { /* non-essential */ }
+    try {
+      if (stateScope === 'cursor') await resetBlockStreakEverywhere();
+      else await resetBlockStreak();
+    } catch { /* non-essential */ }
   }
 
   // Cap the autonomous block-continue chain. We DO allow continuing past
@@ -204,25 +234,28 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   // makes it unlimited from Cursor's side, so this cap is what actually
   // bounds the chain.)
   if (event === 'Stop' && (input.stop_hook_active === true || cursorMode)) {
-    const state = await readState();
+    const state = await readHookState(stateScope);
     if ((state.blockStreak ?? 0) >= MAX_BLOCKS_PER_CYCLE) {
       // Reached the cap — let the agent actually stop. Future user input
       // resets the counter via the UserPromptSubmit branch above (CC) or
       // the next user message in Cursor (loop_count resets to 0).
-      try { await resetBlockStreak(); } catch { /* non-essential */ }
+      try {
+        if (stateScope === 'cursor') await resetBlockStreakEverywhere();
+        else await resetBlockStreak();
+      } catch { /* non-essential */ }
       process.exit(0);
     }
   }
 
   let pending: PendingRoom[];
   try {
-    pending = await fetchPending(env);
+    pending = await fetchPending(env, stateScope);
   } catch {
     process.exit(0);
   }
 
   let withMessages = pending.filter((r) => r.messages.length > 0);
-  await commitCursors(pending); // advance cursors even when only own-messages were skipped
+  await commitCursors(pending, stateScope); // advance cursors even when only own-messages were skipped
 
   // Long-poll fallback (Fix A): on Stop, if there's any active room at all,
   // hold the turn open and watch for incoming messages. This used to fire
@@ -230,17 +263,17 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   // where a passively-listening agent would sleep instantly the moment its
   // turn ended — and any later web user reply would be missed.
   if (withMessages.length === 0 && event === 'Stop') {
-    const state = await readState();
+    const state = await readHookState(stateScope);
     const hasActiveRoom = Object.keys(state.rooms).length > 0;
     if (hasActiveRoom) {
       const deadline = Date.now() + POLL_MAX_MS;
       while (Date.now() < deadline) {
         await sleep(POLL_INTERVAL_MS);
         let p: PendingRoom[];
-        try { p = await fetchPending(env); }
+        try { p = await fetchPending(env, stateScope); }
         catch { break; }
         const got = p.filter((r) => r.messages.length > 0);
-        await commitCursors(p);
+        await commitCursors(p, stateScope);
         if (got.length > 0) { withMessages = got; break; }
       }
     }
@@ -250,7 +283,10 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   // streak (productive activity isn't penalized — the cap exists to bound
   // pure idle loops, not real conversations).
   if (withMessages.length > 0 && event === 'Stop') {
-    try { await resetBlockStreak(); } catch { /* non-essential */ }
+    try {
+      if (stateScope === 'cursor') await resetBlockStreakEverywhere();
+      else await resetBlockStreak();
+    } catch { /* non-essential */ }
     const text = formatMessages(withMessages);
     if (cursorMode) {
       // Cursor expects `{ followup_message }` and submits it as the next
@@ -272,7 +308,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
   if (withMessages.length === 0 && event === 'Stop') {
     let activeRooms: Array<{ code: string; topic: string; selfName: string; cursor: number }> = [];
     try {
-      const state = await readState();
+      const state = await readHookState(stateScope);
       const upstashClient = createClient(env);
       // Best-effort cleanup: drop rooms from local state that are gone
       // server-side (TTL expired) or marked ended, or where this agent is
@@ -284,19 +320,28 @@ export async function runHook(env: UpstashEnv): Promise<void> {
           const room = await getRoom(upstashClient, code);
           const stillIn = room.participants.some(p => p.name === r.name && p.client === 'cc');
           if (room.status !== 'active' || !stillIn) {
-            try { await removeRoom(code); } catch { /* non-essential */ }
+            try {
+              if (stateScope === 'cursor') await removeRoomEverywhere(code);
+              else await removeRoom(code);
+            } catch { /* non-essential */ }
             continue;
           }
           activeRooms.push({ code, topic: room.topic, selfName: r.name, cursor: r.cursor });
         } catch {
           // Room not found / TTL expired — drop it from state too.
-          try { await removeRoom(code); } catch { /* non-essential */ }
+          try {
+            if (stateScope === 'cursor') await removeRoomEverywhere(code);
+            else await removeRoom(code);
+          } catch { /* non-essential */ }
         }
       }
     } catch { /* fall through to plain exit */ }
 
     if (activeRooms.length > 0) {
-      try { await bumpBlockStreak(); } catch { /* non-essential */ }
+      try {
+        if (stateScope === 'cursor') await bumpBlockStreakEverywhere();
+        else await bumpBlockStreak();
+      } catch { /* non-essential */ }
       const lines: string[] = [];
       lines.push('[agent-room] No new messages during the long-poll, but you are still in an active room.');
       lines.push('');
