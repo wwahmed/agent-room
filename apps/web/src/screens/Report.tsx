@@ -187,9 +187,7 @@ export function Report() {
 
 // Free-tier watermark + upgrade nudge. Placed at the very bottom of the
 // report so it shows up when a client scrolls through the delivery,
-// matching the "Made with Notion" / "Made with Linear" pattern. Pricing
-// is intentionally specific ("$19 to remove + keep") so the value swap
-// is concrete: users know exactly what they get for what they pay.
+// matching the "Made with Notion" / "Made with Linear" pattern.
 function FreeTierFooter({ report }: { report: RoomReport }) {
   // The room has a 24h TTL on the server (Redis EX), but exported reports
   // currently share that TTL. Until we ship persisted reports, surface
@@ -197,14 +195,7 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
   const expiresAt = report.exportedAt + 24 * 60 * 60 * 1000;
   const hoursLeft = Math.max(0, Math.round((expiresAt - Date.now()) / (60 * 60 * 1000)));
 
-  // Stripe Payment Link with the room code attached as
-  // `client_reference_id` so when the customer pays, Robin sees the
-  // room code right next to the payment in the Stripe dashboard.
-  // Falls back to a mailto: when the env var isn't configured (early
-  // dev / first-time deploy / Stripe still in KYC).
-  const stripeLink = ENV.stripePaymentLink
-    ? `${ENV.stripePaymentLink}?client_reference_id=${encodeURIComponent(report.code)}`
-    : `mailto:hello@agent-room.com?subject=${encodeURIComponent('Unlock Agent Room report ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock report ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:`)}`;
+  const pilotLink = `mailto:hello@agent-room.com?subject=${encodeURIComponent('Agent Room report unlock ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock or pilot hosted reporting for ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:\nHow often I expect to use Agent Room:`)}`;
 
   return (
     <section className="bg-gradient-to-br from-accent-tint via-white to-amber-50 border border-accent-tint-border rounded-xl p-6 text-center">
@@ -213,14 +204,14 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
         Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Agent Room</a>
       </p>
       <p className="text-sm text-ink-soft max-w-md mx-auto mb-5 leading-relaxed">
-        Unlock <strong>$19 per report</strong> to remove this watermark, keep the URL forever, and add your own logo + client name in the header. Or go <strong>$99/mo unlimited</strong> for ongoing delivery work.
+        Hosted share URLs stay short-lived and watermarked during beta. Join Pro early access to keep delivery URLs, remove the watermark, and add your own logo when hosted reporting opens.
       </p>
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <a
-          href={stripeLink}
+          href={pilotLink}
           className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
         >
-          Unlock this report — $19
+          Request hosted reporting
         </a>
         <a
           href="https://www.agent-room.com/#pricing"
@@ -393,7 +384,7 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: 
   // original report URL without putting promo copy on the user's data.
   // The watermark deliberately ONLY lives on the HTML report page,
   // which is what the customer's customer actually sees. Mirrors the
-  // free-vs-paid line: "use it, free; give it to your client, $19."
+  // free-vs-paid line for hosted delivery URLs.
   // (The `unlocked` parameter is preserved for future use if we ever
   // add paid-only fields like custom branding.)
   void unlocked;

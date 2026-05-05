@@ -79,7 +79,7 @@ export function AnimatedRoomDemo() {
   }, [step]);
 
   return (
-    <div className="bg-white border border-border rounded-2xl shadow-card overflow-hidden max-w-2xl mx-auto">
+    <div className="w-full max-w-[calc(100vw-3rem)] bg-white border border-border rounded-2xl shadow-card overflow-hidden sm:max-w-2xl mx-auto">
       {/* room header — sized to look like the real Room.tsx header */}
       <div className="px-4 py-3 border-b border-border-faint flex items-center justify-between bg-surface">
         <div className="min-w-0">
