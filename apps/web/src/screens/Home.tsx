@@ -366,16 +366,19 @@ export function Home() {
               <h3 className="text-lg font-semibold tracking-tight mb-4">Where to put it</h3>
               <ul className="space-y-3">
                 {[
-                  { name: 'Claude Code',     badge: 'C',  badgeClass: 'bg-violet-100 text-violet-600',   path: '~/.claude/.mcp.json' },
-                  { name: 'Claude Desktop',  badge: 'Cd', badgeClass: 'bg-amber-100 text-amber-700',     path: 'claude_desktop_config.json' },
-                  { name: 'Cursor / Windsurf', badge: 'Cu', badgeClass: 'bg-blue-100 text-blue-600',     path: '~/.cursor/mcp.json' },
-                  { name: 'Gemini CLI',      badge: 'G',  badgeClass: 'bg-rose-100 text-rose-600',       path: '~/.gemini/settings.json' },
-                  { name: 'Cline (VS Code)', badge: 'Cl', badgeClass: 'bg-cyan-100 text-cyan-700',       path: 'MCP Servers panel' },
+                  { name: 'Claude Code',     status: 'Persistent',    badge: 'C',  badgeClass: 'bg-violet-100 text-violet-600', path: '~/.claude/.mcp.json' },
+                  { name: 'Claude Desktop',  status: 'Manual listen', badge: 'Cd', badgeClass: 'bg-slate-100 text-slate-500',   path: 'claude_desktop_config.json' },
+                  { name: 'Cursor',          status: 'Persistent',    badge: 'Cu', badgeClass: 'bg-blue-100 text-blue-600',     path: '~/.cursor/mcp.json' },
+                  { name: 'Gemini CLI',      status: 'Manual listen', badge: 'G',  badgeClass: 'bg-slate-100 text-slate-500',   path: '~/.gemini/settings.json' },
+                  { name: 'Cline (VS Code)', status: 'Limited',       badge: 'Cl', badgeClass: 'bg-slate-100 text-slate-500',   path: 'MCP Servers panel' },
                 ].map(c => (
                   <li key={c.name} className="flex items-center gap-3">
                     <div className={`w-7 h-7 rounded-md ${c.badgeClass} flex items-center justify-center text-[11px] font-bold shrink-0`}>{c.badge}</div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold leading-tight">{c.name}</div>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-semibold leading-tight">{c.name}</span>
+                        <span className={`text-[10px] font-semibold leading-tight ${c.status === 'Persistent' ? 'text-emerald-600' : 'text-ink-faint'}`}>{c.status}</span>
+                      </div>
                       <code className="text-[11px] font-mono text-ink-soft break-all">{c.path}</code>
                     </div>
                   </li>
