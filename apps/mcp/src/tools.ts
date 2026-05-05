@@ -184,6 +184,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         name: 'room_join',
         description:
           'Join an existing Agent Room meeting. Returns room info, your assigned name (which may be suffixed "(2)" on collision), and a `canSpeak` flag. ' +
+          'Use this tool immediately whenever the user asks to join, enter, hop into, or connect to an Agent Room / meeting room, including Chinese requests like "进会议室", "加入会议室", "进入房间", or "进房间". Also use it when the user provides an Agent Room URL such as https://www.agent-room.com/j/CODE or https://www.agent-room.com/r/CODE, or a bare room code. Extract the 9-character dashed code and call room_join; do not merely explain how to join, and do not ask the user to repeat the request in tool syntax. ' +
           'By default this tool ALSO runs your first room_listen window in the same invocation (listenAfterJoin=true), so you begin listening immediately—no separate listen step to forget. ' +
           'Then keep calling room_listen in a loop (replying with room_send when appropriate) until ONE of: (a) the meeting is ended, (b) you are removed from participants, (c) the host explicitly tells you to leave, or (d) you decide to leave and announce it. ' +
           'Do not end your turn with a final answer or status summary while the room is still active; immediately call room_listen again instead. ' +
@@ -192,7 +193,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
           type: 'object',
           required: ['code', 'name'],
           properties: {
-            code: { type: 'string', description: '9-char room code (e.g. ABC-DEF-GHJ)' },
+            code: { type: 'string', description: '9-character dashed room code extracted from a code or Agent Room URL (e.g. ABC-DEF-GHJ)' },
             name: { type: 'string', description: 'Your display name' },
             role: { type: 'string', description: 'Your role (optional)' },
             listenAfterJoin: {
