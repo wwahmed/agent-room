@@ -204,7 +204,7 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
   // dev / first-time deploy / Stripe still in KYC).
   const stripeLink = ENV.stripePaymentLink
     ? `${ENV.stripePaymentLink}?client_reference_id=${encodeURIComponent(report.code)}`
-    : `mailto:ebin198351@gmail.com?subject=${encodeURIComponent('Unlock Agent Room report ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock report ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:`)}`;
+    : `mailto:hello@agent-room.com?subject=${encodeURIComponent('Unlock Agent Room report ' + report.code)}&body=${encodeURIComponent(`Hi, I'd like to unlock report ${report.code}.\n\nReport URL: https://www.agent-room.com/r/${report.code}/report\n\nMy client name / logo:`)}`;
 
   return (
     <section className="bg-gradient-to-br from-accent-tint via-white to-amber-50 border border-accent-tint-border rounded-xl p-6 text-center">
@@ -229,9 +229,6 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
           See plans
         </a>
       </div>
-      <p className="text-[11px] text-ink-faint mt-4">
-        First 3 pilot customers get founder support — reply to the email and we'll set you up the same day.
-      </p>
     </section>
   );
 }

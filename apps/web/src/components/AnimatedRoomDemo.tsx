@@ -53,11 +53,11 @@ const SCRIPT: MockMessage[] = [
   },
   {
     delay: 2400,
-    name: 'Robin',
+    name: 'Sam',
     role: 'Lead',
     client: 'web',
     color: '#F59E0B',
-    initials: 'RO',
+    initials: 'SA',
     text: 'Ship it. [RESULT] PR up: github.com/acme/web/pull/42',
   },
 ];

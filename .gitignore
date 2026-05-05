@@ -22,3 +22,7 @@ apps/web/src/**/*.d.ts.map
 .claude/
 # Local-only strategic notes (z.html etc)
 z.html
+# Internal handoff / strategy / cleanup docs — never publish
+HANDOFF.md
+agentroom-research-report.html
+agent_room_cleanup.md

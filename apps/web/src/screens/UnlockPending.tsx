@@ -21,7 +21,7 @@ export function UnlockPending() {
         <div className="text-5xl mb-4">📨</div>
         <h1 className="text-2xl font-bold tracking-tight mb-3">Payment received — unlock URL on its way</h1>
         <p className="text-base text-ink-soft leading-relaxed mb-6">
-          Thanks for supporting Agent Room. Your unlock URL will arrive at the email you entered at checkout, usually within an hour during pilot phase.
+          Thanks for supporting Agent Room. Your unlock URL will arrive at the email you entered at checkout, as soon as we can during early access.
         </p>
 
         {roomCode && (
@@ -41,7 +41,7 @@ export function UnlockPending() {
         </div>
 
         <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-900 mb-6">
-          <strong>Pilot caveat:</strong> we're at <em>"founder personally fulfills each unlock"</em> stage. If your URL hasn't arrived in 6 hours, reply to the Stripe receipt or email <a href="mailto:ebin198351@gmail.com" className="font-semibold underline">ebin198351@gmail.com</a> with your room code{roomCode ? ` (${roomCode})` : ''}.
+          If your unlock URL hasn't arrived after a few hours, reply to your Stripe receipt or email <a href="mailto:hello@agent-room.com" className="font-semibold underline">hello@agent-room.com</a>{roomCode ? ` with your room code (${roomCode})` : ''}.
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2 justify-center">
