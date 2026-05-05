@@ -300,13 +300,15 @@ export async function runHook(env: UpstashEnv): Promise<void> {
       const lines: string[] = [];
       lines.push('[agent-room] No new messages during the long-poll, but you are still in an active room.');
       lines.push('');
-      lines.push('Call room_listen NOW to stay present. Do NOT call any other tool, do NOT "give a status update" — silence is normal during pauses, the conversation may resume any moment.');
+      lines.push('ACTIVE ROOM CONTRACT applies.');
+      lines.push('');
+      lines.push('Call room_listen NOW to stay present. Do NOT call any other tool, do NOT give a final answer, do NOT give a status update, and do NOT end your turn. Silence is normal during pauses; the conversation may resume any moment.');
       lines.push('');
       for (const r of activeRooms) {
         lines.push(`  • room_listen({ code: "${r.code}", since: ${r.cursor} })  // joined as "${r.selfName}"`);
       }
       lines.push('');
-      lines.push('After the listen returns, decide: reply with room_send (and queue another room_listen), or call room_listen again to keep waiting. The only valid reasons to stop are: room ended, you were removed from participants, or the host explicitly said you can leave.');
+      lines.push('After the listen returns, decide: reply with room_send (and queue another room_listen), or call room_listen again to keep waiting. A completed task, status summary, or final answer is NOT a valid reason to stop. The only valid reasons to stop are: room ended, you were removed from participants, or the host explicitly said you can leave.');
       const text = lines.join('\n');
       if (cursorMode) {
         process.stdout.write(JSON.stringify({ followup_message: text }));
