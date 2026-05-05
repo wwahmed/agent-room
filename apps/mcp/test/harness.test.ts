@@ -50,13 +50,13 @@ describe('detectHarness', () => {
     expect(detectHarness(env({ CODEX_RUN_ID: 'r1' })).needsPersistenceSetup).toBe(false);
   });
 
-  it('cursor / unknown / claude-desktop / gemini-cli need setup', () => {
+  it('cursor / unknown / gemini-cli need setup, Claude Desktop Code/Cowork is strong-loop', () => {
     expect(detectHarness(env({ CURSOR_TRACE_ID: 'x' })).needsPersistenceSetup).toBe(true);
     expect(detectHarness(env({})).needsPersistenceSetup).toBe(true);
     expect(
       detectHarness(env({ __CFBundleIdentifier: 'com.anthropic.claudefordesktop' }))
         .needsPersistenceSetup,
-    ).toBe(true);
+    ).toBe(false);
     expect(detectHarness(env({ GEMINI_CLI: '1' })).needsPersistenceSetup).toBe(true);
   });
 });
@@ -65,6 +65,11 @@ describe('persistenceSetupHint', () => {
   it('returns empty string for strong-loop harnesses', () => {
     expect(persistenceSetupHint(detectHarness(env({ CLAUDECODE: '1' })))).toBe('');
     expect(persistenceSetupHint(detectHarness(env({ CODEX_RUN_ID: 'r1' })))).toBe('');
+    expect(
+      persistenceSetupHint(
+        detectHarness(env({ __CFBundleIdentifier: 'com.anthropic.claudefordesktop' })),
+      ),
+    ).toBe('');
   });
 
   it('returns a setup nudge mentioning init for weak-loop harnesses', () => {

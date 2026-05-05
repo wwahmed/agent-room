@@ -1,7 +1,7 @@
 // Detect which agent harness is running this MCP process. Used to
 // conditionally append a persistence-setup nudge to room_join /
 // room_create hints — harnesses that don't auto-loop tool calls
-// (Cursor without 1.7+ stop hooks, Claude Desktop, Gemini CLI, etc.)
+// (Cursor without 1.7+ stop hooks, Gemini CLI, etc.)
 // silently drop out of rooms unless the user has run
 // `npx agent-room-mcp init`.
 
@@ -51,7 +51,7 @@ export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo
     return { kind: 'gemini-cli', needsPersistenceSetup: true, label: 'Gemini CLI' };
   }
   if (env.CLAUDE_DESKTOP_VERSION || env.__CFBundleIdentifier === 'com.anthropic.claudefordesktop') {
-    return { kind: 'claude-desktop', needsPersistenceSetup: true, label: 'Claude Desktop' };
+    return { kind: 'claude-desktop', needsPersistenceSetup: false, label: 'Claude Desktop Code/Cowork' };
   }
   if (env.CLINE_VERSION) {
     return { kind: 'cline', needsPersistenceSetup: true, label: 'Cline' };

@@ -200,7 +200,7 @@ function claudeDesktopConfigPath(): string {
   return join(homedir(), '.config', 'Claude', 'claude_desktop_config.json');
 }
 
-async function installClaudeDesktop(): Promise<InstallResult> {
+async function installClaudeDesktop(opts: { hooks: boolean }): Promise<InstallResult> {
   const result: InstallResult = { changes: [], unchanged: [] };
   const path = claudeDesktopConfigPath();
   const config = (await readJson(path)) ?? {};
@@ -215,6 +215,13 @@ async function installClaudeDesktop(): Promise<InstallResult> {
   } else {
     result.unchanged.push(`${path} (already configured)`);
   }
+
+  // New Claude Desktop builds embed Claude Code / Cowork. The Code surface
+  // uses Claude Code's settings files for hooks, so install the same
+  // persistent-listening hook there as well.
+  const codeResult = await installClaudeCode({ hooks: opts.hooks });
+  result.changes.push(...codeResult.changes);
+  result.unchanged.push(...codeResult.unchanged);
 
   return result;
 }
@@ -415,7 +422,8 @@ function printConfigs() {
   console.log('\n--- Claude Desktop ---');
   console.log('claude_desktop_config.json:');
   console.log(mcp);
-  console.log('\nNote: Claude Desktop supports MCP tools, but not Claude Code hooks. Use room_listen for live room messages.');
+  console.log('\n~/.claude/settings.json (for Claude Desktop Code/Cowork autonomous chat):');
+  console.log(hooks);
 
   console.log('\n--- Cursor (1.7+) ---');
   console.log('~/.cursor/mcp.json:');
@@ -487,12 +495,11 @@ export async function runInit(argv: string[]): Promise<void> {
     console.log('\nAgent Room — install MCP server\n');
     console.log('Where to install?');
     console.log('  1. Claude Code   (default — adds MCP server + autonomous-chat hooks)');
-    console.log('  2. Claude Desktop (MCP server only — use room_listen for live chat)');
+    console.log('  2. Claude Desktop (adds MCP server + Claude Code/Cowork hooks)');
     console.log('  3. Cursor          (Cursor 1.7+: adds MCP server + stop hook)');
     console.log('  4. Codex CLI     (adds MCP server + hooks)');
     console.log('  5. Gemini CLI');
-    console.log('  6. Cline (VS Code extension)');
-    console.log('  7. Print configs (paste them yourself)');
+    console.log('  6. Print configs (paste them yourself)');
     const ans = (await rl.question('\n[1]: ')).trim();
     rl.close();
     target =
@@ -500,8 +507,7 @@ export async function runInit(argv: string[]): Promise<void> {
       ans === '3' ? 'cursor' :
       ans === '4' ? 'codex' :
       ans === '5' ? 'gemini' :
-      ans === '6' ? 'cline' :
-      ans === '7' ? 'print' :
+      ans === '6' ? 'print' :
       'claude-code';
   }
 
@@ -543,11 +549,14 @@ export async function runInit(argv: string[]): Promise<void> {
   }
 
   if (target === 'claude-desktop' || target === 'claude-desktop-app' || target === 'desktop') {
-    const result = await installClaudeDesktop();
+    const result = await installClaudeDesktop({ hooks: !noHooks });
     reportResult('Claude Desktop', result);
+    if (noHooks) {
+      console.log('  (skipped hooks; pass without --no-hooks for Claude Desktop Code/Cowork autonomous chat)');
+    }
     nextSteps('Claude Desktop');
-    console.log('  Note: Claude Desktop does not run hooks, so ask it to call room_listen to see live room messages.');
-    printRulesInstruction('Claude Desktop', 'Claude Desktop → Settings → Profile → System Prompt (or paste at the start of every conversation)');
+    console.log('  Note: persistent listening applies to Claude Desktop Code/Cowork. Plain chat MCP may still need manual room_listen prompts.');
+    printRulesInstruction('Claude Desktop', 'Claude Desktop Code/Cowork custom instructions or user memory');
     return;
   }
 
@@ -571,6 +580,6 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, gemini, cline, print`);
+  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, gemini, print`);
   process.exit(1);
 }
