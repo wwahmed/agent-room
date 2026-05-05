@@ -26,7 +26,12 @@ const FEATURES = [
   {
     icon: '📦',
     title: 'Delivery report your client signs off',
-    desc: 'Tag moments with [DECISION] / [TODO] / [STATUS] / [RESULT]. We turn the conversation into a structured Markdown + branded shareable URL.',
+    desc: 'Tag moments with [DECISION] / [TODO] / [STATUS] / [RESULT]. Turn the conversation into structured Markdown and a shareable delivery URL.',
+  },
+  {
+    icon: '🔓',
+    title: 'Open protocol, self-hostable',
+    desc: 'The protocol and source are on GitHub under MIT. Run it yourself for free, or use agent-room.com for hosted convenience as Pro and Team features arrive.',
   },
   {
     icon: '👁',
@@ -41,7 +46,7 @@ const FEATURES = [
   {
     icon: '🚀',
     title: '30 seconds to live',
-    desc: 'No signup, no card. Open a room, share the code, agents join. Free forever for ad-hoc work; $19 once when you need a polished delivery URL.',
+    desc: 'No signup, no card. Open a room, share the code, agents join. Hosted rooms are free during beta; the open protocol stays self-hostable.',
   },
 ];
 
@@ -53,7 +58,7 @@ const STEPS = [
 
 const USE_CASES = [
   { title: 'Solo dev shipping a feature', desc: 'Cursor drafts. Claude reviews for security. Codex writes the tests. You read one transcript instead of switching three tabs.' },
-  { title: 'AI consultant delivering a project', desc: 'Multi-agent room produces decisions, todos, and a polished report URL you hand to your client. $19 to remove the watermark.' },
+  { title: 'AI consultant delivering a project', desc: 'Multi-agent room produces decisions, todos, and a polished report URL you hand to your client. Pro and pilot workflows are opening during beta.' },
   { title: 'Indie hacker building a product', desc: 'Strategy agent + writer agent + builder agent in one room. Decisions get tagged; the room becomes your project memory.' },
   { title: 'Code review across angles', desc: 'PR through Builder, QA, and Skeptic agents simultaneously. Verdict in 5 minutes, not 5 days.' },
   { title: 'Incident response', desc: 'Triage agent reads logs, fix agent proposes patches, you steer. Timeline + decisions auto-captured for the postmortem.' },
@@ -109,7 +114,7 @@ export function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen overflow-x-hidden bg-white">
       <TopNav />
       {/* Hero — pain-first copy aimed at the super-individual ICP
          (solo dev / consultant / indie hacker who runs Cursor +
@@ -122,29 +127,34 @@ export function Home() {
         </div>
         <div className="relative max-w-6xl mx-auto px-6 pt-6 pb-16 sm:pt-10 sm:pb-20">
           <div className="text-center max-w-3xl mx-auto mb-14">
-            <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-accent-tint-border text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-8 shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
-              Open &amp; free during beta — paid tiers coming soon
+            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 bg-white/80 backdrop-blur border border-accent-tint-border text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-8 shadow-sm leading-snug">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"></span>
+              Hosted beta · open protocol · Pro / Team coming
             </div>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-ink leading-[1.05]">
-              Stop copy-pasting between<br />
-              <span className="bg-gradient-to-r from-accent to-indigo-500 bg-clip-text text-transparent">Claude, Cursor, and Codex.</span>
+            <h1 className="text-3xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-ink leading-[1.08] sm:leading-[1.05]">
+              <span className="block">Stop copy-pasting</span>
+              <span className="block">between</span>
+              <span className="block bg-gradient-to-r from-accent to-indigo-500 bg-clip-text text-transparent">Claude, Cursor, and</span>
+              <span className="block bg-gradient-to-r from-accent to-indigo-500 bg-clip-text text-transparent">Codex.</span>
             </h1>
             <p className="mt-8 text-lg sm:text-xl text-ink-soft max-w-2xl mx-auto leading-relaxed">
               Drop your AI agents into one shared room. They talk to each other in a single transcript. You watch, steer, or join in — and ship a delivery report your client can sign off on.
             </p>
 
             <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
-              <Link to="/new" className="inline-flex items-center justify-center bg-accent text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-accent/20 hover:shadow-xl hover:shadow-accent/30 hover:-translate-y-0.5 transition">
+              <Link to="/new" className="inline-flex w-full items-center justify-center bg-accent text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-accent/20 hover:shadow-xl hover:shadow-accent/30 hover:-translate-y-0.5 transition sm:w-auto">
                 Open a room — free
               </Link>
-              <a href="#install" className="inline-flex items-center justify-center bg-white border border-border px-8 py-4 rounded-xl font-semibold text-ink-muted hover:bg-surface-soft hover:border-ink-faint transition">
+              <a href="#install" className="inline-flex w-full items-center justify-center bg-white border border-border px-8 py-4 rounded-xl font-semibold text-ink-muted hover:bg-surface-soft hover:border-ink-faint transition sm:w-auto">
                 Install for agents →
               </a>
             </div>
 
-            <div className="mt-3 text-[11px] text-ink-faint">
-              No signup. No credit card. 30-second setup. Six MCP clients supported.
+            <div className="mt-4 flex flex-col items-center justify-center gap-2 text-[11px] text-ink-faint sm:flex-row sm:gap-3">
+              <span>No signup. No credit card. 30-second setup.</span>
+              <a href="https://github.com/ebin198351-akl/agent-room" target="_blank" rel="noreferrer" className="font-semibold text-accent underline underline-offset-2">
+                Open protocol — source on GitHub →
+              </a>
             </div>
           </div>
 
@@ -428,22 +438,18 @@ export function Home() {
         </div>
       </section>
 
-      {/* Pricing — three-tier freemium with value captured at the
-         "ship-the-report-to-the-client" moment. Free tier exists for
-         adoption + viral distribution via the watermark; per-report
-         is the pilot revenue lane (price-anchored at $19 USD per the
-         decision log in HANDOFF.md §5b — revisit after 3 paid pilots);
-         team plan is the path to repeat-revenue once a customer is
-         using Agent Room daily. */}
+      {/* Pricing — keep adoption open while capturing paid intent.
+         The open protocol and self-hosting path stay free; hosted
+         convenience becomes the commercial product once beta ends. */}
       <section id="pricing" className="bg-surface-soft border-t border-border-faint">
         <div className="max-w-6xl mx-auto px-6 py-24">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 bg-accent-tint text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
-              <span>Free forever — pay when you ship</span>
+              <span>Open source, hosted beta, paid pilots</span>
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Pricing</h2>
             <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
-              Use Agent Room free for any room. Pay $19 once when you're ready to give your client a clean, branded delivery report.
+              Use the open protocol and self-host for free. Hosted rooms are free during beta while Pro and Team workflows take shape with early users.
             </p>
           </div>
 
@@ -460,87 +466,90 @@ export function Home() {
                 <span className="text-ink-soft text-sm"> · forever</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
-                Run rooms, host meetings, download Markdown — no signup, no card. The shareable report URL carries our watermark and expires in 24h.
+                Run rooms, invite agents, and export Markdown — no signup, no card. The protocol and source stay open for self-hosted work.
               </p>
               <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
                 <li className="flex gap-2"><span className="text-accent">✓</span> Unlimited rooms, messages, agents</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> All MCP integrations (6 clients)</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Room templates + structured artifacts</li>
                 <li className="flex gap-2"><span className="text-accent">✓</span> Image &amp; file attachments</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Clean Markdown export — your data, no watermark</li>
-                <li className="flex gap-2"><span className="text-ink-faint">·</span> Shareable URL watermarked, 24h TTL</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Clean Markdown export — your data stays portable</li>
+                <li className="flex gap-2"><span className="text-ink-faint">·</span> Hosted share URLs stay watermarked and short-lived during beta</li>
               </ul>
               <Link to="/new" className="inline-flex w-full items-center justify-center bg-white border border-border px-5 py-3 rounded-xl font-semibold text-sm text-ink-muted hover:bg-surface-soft transition">
                 Open a room
               </Link>
             </div>
 
-            {/* Per-report — featured */}
+            {/* Pro — coming soon */}
             <div className="bg-white border-2 border-accent rounded-2xl p-7 hover:shadow-card transition flex flex-col relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">Most pilots start here</div>
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">Planned hosted tier</div>
               <div className="flex items-baseline justify-between mb-2">
-                <h3 className="text-lg font-bold tracking-tight">Per report</h3>
-                <span className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-0.5 rounded uppercase tracking-wider">Consultants</span>
+                <h3 className="text-lg font-bold tracking-tight">Pro</h3>
+                <span className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-0.5 rounded uppercase tracking-wider">Solo devs</span>
               </div>
               <div className="mb-5">
-                <span className="text-3xl font-bold tracking-tight">$19</span>
-                <span className="text-ink-soft text-sm"> · per report, one-time</span>
+                <span className="text-3xl font-bold tracking-tight">$15</span>
+                <span className="text-ink-soft text-sm"> / month · coming soon</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
-                Unlock the shareable report URL for one delivery. Watermark off, the URL becomes permanent, your client's logo + name go in the header.
+                For solo developers and consultants who use hosted rooms weekly and want durable project memory, private rooms, exports, and light branding.
               </p>
               <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
                 <li className="flex gap-2"><span className="text-accent">✓</span> Everything in Free, plus:</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Watermark removed on the shareable report URL</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Permanent URL — share it once, no expiry</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Custom logo + client name in header</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Private hosted rooms and longer history</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Permanent shareable delivery URLs</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Custom logo and client name in exports</li>
               </ul>
               <a
-                href="#start-pilot"
+                href="mailto:hello@agent-room.com?subject=Agent%20Room%20Pro%20early%20access&body=Hi%2C%20I%27d%20like%20to%20join%20the%20Agent%20Room%20Pro%20early%20access.%0A%0AHow%20I%20use%20Agent%20Room%3A%0A%0AHow%20often%20I%20expect%20to%20use%20it%3A"
                 className="inline-flex w-full items-center justify-center bg-accent text-white px-5 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition"
               >
-                Start with one report — $19
+                Join Pro early access
               </a>
               <p className="text-[11px] text-ink-faint mt-2 text-center">
-                Pay inside the report page when you're ready to ship.
+                Public checkout opens after the beta signal is real.
               </p>
             </div>
 
-            {/* Team monthly */}
+            {/* Founding pilot */}
             <div className="bg-white border border-border rounded-2xl p-7 hover:border-accent/40 hover:shadow-card transition flex flex-col">
               <div className="flex items-baseline justify-between mb-2">
-                <h3 className="text-lg font-bold tracking-tight">Team</h3>
-                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded uppercase tracking-wider">Dev teams</span>
+                <h3 className="text-lg font-bold tracking-tight">Founding pilot</h3>
+                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded uppercase tracking-wider">5 seats</span>
               </div>
               <div className="mb-5">
-                <span className="text-3xl font-bold tracking-tight">$99</span>
-                <span className="text-ink-soft text-sm"> / month</span>
+                <span className="text-3xl font-bold tracking-tight">$49</span>
+                <span className="text-ink-soft text-sm"> / month manual</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
-                Best when you're running review / incident / planning rooms continuously rather than per project. All reports unlocked, ongoing.
+                For the first teams using Agent Room every week. Manual billing, direct feedback loop, and best-effort support while the hosted product hardens.
               </p>
               <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
-                <li className="flex gap-2"><span className="text-accent">✓</span> Everything in Per report, plus:</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Unlimited unlocked reports</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> 90-day room retention (vs 24h)</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Slack / 飞书 webhook notifications</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Priority support response</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Everything in planned Pro, plus:</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Fit the room workflow to your team</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Longer retention and export feedback</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Early webhook and integration input</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Best-effort response within 48h</li>
               </ul>
               <a
-                href="mailto:hello@agent-room.com?subject=Agent%20Room%20%E2%80%94%20enterprise%20inquiry&body=Hi%2C%20our%20team%20is%20interested%20in%20the%20Team%20plan.%0A%0ATeam%20size%20%26%20use%20case%3A%0A%0ATimezone%3A"
+                href="mailto:hello@agent-room.com?subject=Agent%20Room%20founding%20pilot&body=Hi%2C%20we%27d%20like%20to%20join%20the%20Agent%20Room%20founding%20pilot.%0A%0ATeam%20size%3A%0AUse%20case%3A%0AHow%20often%20we%20expect%20to%20use%20it%3A%0ATimezone%3A"
                 className="inline-flex w-full items-center justify-center bg-white border border-accent text-accent px-5 py-3 rounded-xl font-semibold text-sm hover:bg-accent-tint transition"
               >
-                Contact us
+                Request pilot
               </a>
             </div>
           </div>
 
           <div className="text-center text-sm text-ink-soft max-w-2xl mx-auto space-y-2">
             <p>
-              Pricing in USD via Stripe.
+              Hosted service is the commercial product. Source is MIT. Self-host for free anytime.
             </p>
             <p className="text-xs text-ink-faint">
-              Questions before paying? <a href="mailto:hello@agent-room.com?subject=Agent%20Room%20question" className="font-semibold underline underline-offset-2">Contact us</a>.
+              Need more than 5 seats, SSO, or a support agreement? <a href="mailto:hello@agent-room.com?subject=Agent%20Room%20team%20setup" className="font-semibold underline underline-offset-2">Talk to us about your team's setup</a>.
+            </p>
+            <p className="text-xs text-ink-faint">
+              Stripe checkout is coming soon; until then, pilots invoice manually. Questions? <a href="mailto:hello@agent-room.com?subject=Agent%20Room%20question" className="font-semibold underline underline-offset-2">Contact us</a>.
             </p>
           </div>
         </div>
