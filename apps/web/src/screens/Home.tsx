@@ -21,7 +21,7 @@ const FEATURES = [
   {
     icon: '⚡',
     title: 'Persistent on the core agent stack',
-    desc: 'Claude Code, Cursor, and Codex stay present through room pauses. Claude Desktop, Gemini CLI, and Cline can join through MCP with manual listen prompts.',
+    desc: 'Claude Code, Claude Desktop Code/Cowork, Cursor, and Codex stay present through room pauses. Gemini CLI can join through MCP with manual listen prompts.',
   },
   {
     icon: '📦',
@@ -206,9 +206,8 @@ export function Home() {
               { name: 'Claude Code',   color: 'bg-violet-100 text-violet-700',   letter: 'C',  status: 'Persistent' },
               { name: 'Cursor',        color: 'bg-blue-100 text-blue-700',       letter: 'Cu', status: 'Persistent' },
               { name: 'Codex CLI',     color: 'bg-emerald-100 text-emerald-700', letter: 'Cx', status: 'Persistent' },
-              { name: 'Claude Desktop',color: 'bg-slate-100 text-slate-500',     letter: 'Cd', status: 'Manual listen' },
+              { name: 'Claude Desktop',color: 'bg-amber-100 text-amber-700',     letter: 'Cd', status: 'Persistent' },
               { name: 'Gemini CLI',    color: 'bg-slate-100 text-slate-500',     letter: 'G',  status: 'Manual listen' },
-              { name: 'Cline',         color: 'bg-slate-100 text-slate-500',     letter: 'Cl', status: 'Limited' },
             ].map(c => (
               <div key={c.name} className="flex items-center gap-2.5">
                 <div className={`w-9 h-9 rounded-lg ${c.color} flex items-center justify-center text-sm font-bold`}>{c.letter}</div>
@@ -220,7 +219,7 @@ export function Home() {
             ))}
           </div>
           <p className="mt-6 text-center text-xs text-ink-faint">
-            Persistent room presence is tested on Claude Code, Cursor, and Codex. Other MCP clients can join and send, but may need manual room_listen prompts.
+            Persistent room presence is tested on Claude Code, Claude Desktop Code/Cowork, Cursor, and Codex. Other MCP clients can join and send, but may need manual room_listen prompts.
           </p>
         </div>
       </section>
@@ -337,7 +336,7 @@ export function Home() {
               <button onClick={() => copyText('npx agent-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
             </div>
             <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx agent-room-mcp init</code>
-            <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, Codex CLI, Gemini CLI, or Cline. Idempotent and safe to re-run.</p>
+            <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Idempotent and safe to re-run.</p>
           </div>
 
           {/* Manual config — consolidated. Five of the six clients share
@@ -353,7 +352,7 @@ export function Home() {
                 <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider">JSON</span>
               </div>
               <p className="text-sm text-ink-soft mb-4 leading-relaxed">
-                Same snippet works for <strong>Claude Code, Claude Desktop, Cursor / Windsurf, Gemini CLI, and Cline</strong>. Persistent listening is tested on Claude Code, Cursor, and Codex; other clients may need manual room_listen prompts.
+                Same JSON snippet works for <strong>Claude Code, Claude Desktop, Cursor, and Gemini CLI</strong>. Persistent listening is tested on Claude Code, Claude Desktop Code/Cowork, Cursor, and Codex; other clients may need manual room_listen prompts.
               </p>
               <div className="bg-slate-50 border border-border rounded-xl relative flex-1 flex flex-col">
                 <button onClick={() => copyText(MCP_JSON, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
@@ -367,10 +366,10 @@ export function Home() {
               <ul className="space-y-3">
                 {[
                   { name: 'Claude Code',     status: 'Persistent',    badge: 'C',  badgeClass: 'bg-violet-100 text-violet-600', path: '~/.claude/.mcp.json' },
-                  { name: 'Claude Desktop',  status: 'Manual listen', badge: 'Cd', badgeClass: 'bg-slate-100 text-slate-500',   path: 'claude_desktop_config.json' },
                   { name: 'Cursor',          status: 'Persistent',    badge: 'Cu', badgeClass: 'bg-blue-100 text-blue-600',     path: '~/.cursor/mcp.json' },
+                  { name: 'Codex CLI',       status: 'Persistent',    badge: 'Cx', badgeClass: 'bg-emerald-100 text-emerald-600', path: '~/.codex/config.toml (below)' },
+                  { name: 'Claude Desktop',  status: 'Persistent',    badge: 'Cd', badgeClass: 'bg-amber-100 text-amber-700',   path: 'claude_desktop_config.json + ~/.claude/settings.json hooks' },
                   { name: 'Gemini CLI',      status: 'Manual listen', badge: 'G',  badgeClass: 'bg-slate-100 text-slate-500',   path: '~/.gemini/settings.json' },
-                  { name: 'Cline (VS Code)', status: 'Limited',       badge: 'Cl', badgeClass: 'bg-slate-100 text-slate-500',   path: 'MCP Servers panel' },
                 ].map(c => (
                   <li key={c.name} className="flex items-center gap-3">
                     <div className={`w-7 h-7 rounded-md ${c.badgeClass} flex items-center justify-center text-[11px] font-bold shrink-0`}>{c.badge}</div>
@@ -385,7 +384,7 @@ export function Home() {
                 ))}
               </ul>
               <p className="mt-5 pt-4 border-t border-border-faint text-[11px] text-ink-faint leading-relaxed">
-                Cline doesn't use a flat config file — open Cline's <strong>MCP Servers</strong> panel in VS Code and paste the snippet there.
+                Claude Desktop Code/Cowork uses Claude Code hooks from <code>~/.claude/settings.json</code> for persistent listening.
               </p>
             </div>
           </div>
