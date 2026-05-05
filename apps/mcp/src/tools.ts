@@ -153,6 +153,57 @@ export function registerTools(server: Server, env: UpstashEnv) {
   const harness = detectHarness();
   const persistenceNudge = persistenceSetupHint(harness);
 
+  function startRoomWatcher(code: string, selfName: string, startCursor: number): void {
+    if (watchers.has(code)) {
+      watchers.get(code)!.stop();
+    }
+
+    let cursor = startCursor;
+    let running = true;
+
+    const poll = async () => {
+      while (running) {
+        try {
+          if (selfName) {
+            await setListenUntil(client, code, selfName, Date.now() + 5000);
+          }
+          const msgs = await listMessages(client, code, cursor);
+          if (msgs.length > 0) {
+            cursor += msgs.length;
+            const others = msgs.filter((m: Message) => !(m.client === 'cc' && m.name === selfName));
+            if (others.length > 0) {
+              const summary = others.map((m: Message) => `${m.name}: ${m.text}`).join('\n');
+              try {
+                await server.sendLoggingMessage({
+                  level: 'info',
+                  logger: `room:${code}`,
+                  data: JSON.stringify({
+                    type: 'new_messages',
+                    code,
+                    cursor,
+                    messages: others.map((m: Message) => ({
+                      name: m.name,
+                      text: m.text,
+                      time: m.time,
+                      client: m.client,
+                    })),
+                    summary,
+                  }),
+                });
+              } catch { /* client may not support logging */ }
+            }
+          }
+        } catch { /* network/presence errors are transient; retry */ }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    };
+
+    poll(); // fire and forget
+    watchers.set(code, { stop: () => { running = false; } });
+  }
+
+  const shouldAutoWatch = harness.kind === 'cursor';
+
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
@@ -361,6 +412,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
       if (listenAfterJoin) {
         const first = await runRoomListenPoll(client, code, msgs.length, listenMs, a.name);
         await updateCursor(code, first.cursor);
+        if (!first.terminated && shouldAutoWatch) {
+          startRoomWatcher(code, a.name, first.cursor);
+        }
         return ok({
           code,
           topic: created.topic,
@@ -370,18 +424,23 @@ export function registerTools(server: Server, env: UpstashEnv) {
           joinUrl: `https://www.agent-room.com/j/${code}`,
           roleBrief: roleBriefFor(a.role ?? ''),
           initialListenMs: listenMs,
+          autoWatchStarted: !first.terminated && shouldAutoWatch,
           clientKind: harness.kind,
           hint:
             `Room created; first listen window ran in this same call (${listenMs}ms). ${first.hint}${persistenceNudge}`,
         });
       }
 
+      if (shouldAutoWatch) {
+        startRoomWatcher(code, a.name, msgs.length);
+      }
       return ok({
         code,
         topic: created.topic,
         cursor: msgs.length,
         joinUrl: `https://www.agent-room.com/j/${code}`,
         roleBrief: roleBriefFor(a.role ?? ''),
+        autoWatchStarted: shouldAutoWatch,
         clientKind: harness.kind,
         hint: `Room created. ${nextListenContract(code, msgs.length)}${persistenceNudge}`,
       });
@@ -402,11 +461,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
       // Otherwise, joining as the host's display name will be rejected by
       // verifyHostKey — clean error, no silent impersonation.
       const targetRoom = await getRoom(client, a.code);
+      let storedStateRoom: Awaited<ReturnType<typeof readState>>['rooms'][string] | undefined;
+      try {
+        const state = await readState();
+        storedStateRoom = state.rooms[a.code];
+      } catch { /* local state is optional; treat as fresh join */ }
       if (a.name === targetRoom.createdBy) {
         try {
-          const state = await readState();
-          const stored = state.rooms[a.code];
-          await verifyHostKey(client, a.code, stored?.hostKey);
+          await verifyHostKey(client, a.code, storedStateRoom?.hostKey);
         } catch (e) {
           if (e instanceof HostNameTakenError) {
             return ok({
@@ -417,11 +479,38 @@ export function registerTools(server: Server, env: UpstashEnv) {
           throw e;
         }
       }
+      const priorIdentity = storedStateRoom
+        ? { name: storedStateRoom.name, client: 'cc' as const }
+        : undefined;
+      const reconnecting = Boolean(
+        priorIdentity &&
+        targetRoom.participants.some((p: Participant) =>
+          p.name === priorIdentity.name && p.client === priorIdentity.client
+        )
+      );
       const updated = await joinRoom(client, a.code, participant, {
-        priorIdentity: { name: a.name, client: 'cc' },
+        ...(priorIdentity ? { priorIdentity } : {}),
       });
       // Use the post-suffix name so future writes match the row we just made.
       const finalName = updated.participant.name;
+      const myEntry = updated.participants.find((p: Participant) => p.name === finalName && p.client === 'cc');
+      const muted = myEntry?.canSpeak === false;
+      if (!reconnecting && !muted) {
+        const greeting: Message = {
+          id: Date.now(),
+          type: 'msg',
+          name: finalName,
+          initials: updated.participant.initials,
+          color: updated.participant.color,
+          role: updated.participant.role,
+          text: `Hi all — ${finalName} here. I'm in the room and listening.`,
+          client: 'cc',
+          time: Date.now(),
+        };
+        try {
+          await appendMessage(client, a.code, greeting);
+        } catch { /* greeting is nice-to-have; join/listen must still proceed */ }
+      }
       const msgs = await listMessages(client, a.code, 0);
       await setRoom(a.code, { name: finalName, cursor: msgs.length, joinedAt: Date.now() });
       const recentMessages = msgs.slice(-20).map((m: Message) => ({
@@ -431,8 +520,6 @@ export function registerTools(server: Server, env: UpstashEnv) {
         text: m.text,
         time: m.time,
       }));
-      const myEntry = updated.participants.find((p: Participant) => p.name === finalName && p.client === 'cc');
-      const muted = myEntry?.canSpeak === false;
 
       const listenAfterJoin = a.listenAfterJoin !== false;
       const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs);
@@ -440,6 +527,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
       if (listenAfterJoin) {
         const first = await runRoomListenPoll(client, a.code, msgs.length, listenMs, finalName);
         await updateCursor(a.code, first.cursor);
+        if (!first.terminated && shouldAutoWatch) {
+          startRoomWatcher(a.code, finalName, first.cursor);
+        }
         const joinLine = muted
           ? `Joined as "${finalName}" — but the host (${updated.createdBy}) has muted you in this room. room_send will return error="muted" until you are unmuted. Call room_listen to read the conversation while you wait.`
           : `Joined as "${finalName}". ${recentMessages.length} recent messages above for context.`;
@@ -462,11 +552,15 @@ export function registerTools(server: Server, env: UpstashEnv) {
           recentMessages,
           roleBrief: roleBriefFor(a.role ?? ''),
           initialListenMs: listenMs,
+          autoWatchStarted: !first.terminated && shouldAutoWatch,
           clientKind: harness.kind,
           hint: `${joinLine} First listen window ran in this same call (${listenMs}ms). ${first.hint}${persistenceNudge}`,
         });
       }
 
+      if (shouldAutoWatch) {
+        startRoomWatcher(a.code, finalName, msgs.length);
+      }
       return ok({
         code: a.code,
         topic: updated.topic,
@@ -483,6 +577,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         cursor: msgs.length,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
+        autoWatchStarted: shouldAutoWatch,
         clientKind: harness.kind,
         hint: muted
           ? `Joined as "${finalName}" — but the host (${updated.createdBy}) has muted you in this room. room_send will return error="muted" until you're unmuted. Call room_listen to read the conversation while you wait. ${nextListenContract(a.code, msgs.length)}${persistenceNudge}`
@@ -596,53 +691,8 @@ export function registerTools(server: Server, env: UpstashEnv) {
     if (name === 'room_watch') {
       const code = a.code;
       const selfName = a.name || '';
-
-      // Stop existing watcher for this room
-      if (watchers.has(code)) {
-        watchers.get(code)!.stop();
-      }
-
-      let cursor = a.since ?? 0;
-      let running = true;
-
-      const poll = async () => {
-        while (running) {
-          try {
-            const msgs = await listMessages(client, code, cursor);
-            if (msgs.length > 0) {
-              cursor += msgs.length;
-              // Filter out own messages
-              const others = msgs.filter((m: Message) => !(m.client === 'cc' && m.name === selfName));
-              if (others.length > 0) {
-                const summary = others.map((m: Message) => `${m.name}: ${m.text}`).join('\n');
-                try {
-                  await server.sendLoggingMessage({
-                    level: 'info',
-                    logger: `room:${code}`,
-                    data: JSON.stringify({
-                      type: 'new_messages',
-                      code,
-                      cursor,
-                      messages: others.map((m: Message) => ({
-                        name: m.name,
-                        text: m.text,
-                        time: m.time,
-                        client: m.client,
-                      })),
-                      summary,
-                    }),
-                  });
-                } catch { /* client may not support logging */ }
-              }
-            }
-          } catch { /* network error, retry */ }
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-      };
-
-      poll(); // fire and forget
-
-      watchers.set(code, { stop: () => { running = false; } });
+      const cursor = a.since ?? 0;
+      startRoomWatcher(code, selfName, cursor);
 
       return ok({
         watching: true,

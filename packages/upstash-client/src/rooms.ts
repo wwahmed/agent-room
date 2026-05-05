@@ -1,5 +1,5 @@
 import type { Room, Participant } from '@agent-room/shared';
-import { ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { AVATAR_PALETTE, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import type { UpstashClient } from './client.js';
 import { RoomNotFoundError, ConcurrencyError } from './errors.js';
 
@@ -108,13 +108,12 @@ export class HostNameTakenError extends Error {
 //    HostNameTakenError. This is what stops "anyone with the code can
 //    impersonate the host".
 //
-// 2. Non-host name collision: if some OTHER (name, client) tuple already
-//    exists in the room and the caller hasn't shown they own the original
-//    seat (no shared client identity yet — see Tier B), we auto-suffix
-//    "(2)" / "(3)" so two real humans named "Robin" don't displace each
-//    other and so no one can squat over an existing participant.
+// 2. Non-host name collision: if any other participant already uses the same
+//    visible room name and the caller hasn't shown they own the original seat
+//    (no shared client identity yet — see Tier B), we auto-suffix "(2)" /
+//    "(3)" so two real humans or agents named "Robin" stay distinguishable.
 //
-// `requesterClaim` is the caller's previous (name, client) tuple if any —
+// `priorIdentity` is the caller's previous (name, client) tuple if any —
 // the web client passes its sessionStorage entry so a refresh on /r/CODE
 // still updates the same row instead of getting a "(2)" suffix.
 export interface JoinRoomOptions {
@@ -132,6 +131,45 @@ export interface JoinRoomOptions {
 // work; new callers can read `result.participant.name` to learn what name
 // was actually assigned.
 export type JoinRoomResult = Room & { participant: Participant };
+
+function isPriorIdentity(
+  p: Participant,
+  priorIdentity: JoinRoomOptions['priorIdentity'],
+): boolean {
+  return Boolean(priorIdentity && p.name === priorIdentity.name && p.client === priorIdentity.client);
+}
+
+function uniqueNameForRoom(
+  desiredName: string,
+  current: Room,
+  priorIdentity: JoinRoomOptions['priorIdentity'],
+): string {
+  const taken = new Set(
+    current.participants
+      .filter(p => !isPriorIdentity(p, priorIdentity))
+      .map(p => p.name),
+  );
+  if (!taken.has(desiredName) || desiredName === current.createdBy) return desiredName;
+
+  let n = 2;
+  let candidate = `${desiredName} (${n})`;
+  while (taken.has(candidate)) candidate = `${desiredName} (${++n})`;
+  return candidate;
+}
+
+function uniqueColorForRoom(
+  desiredColor: string,
+  current: Room,
+  priorIdentity: JoinRoomOptions['priorIdentity'],
+): string {
+  const used = new Set(
+    current.participants
+      .filter(p => !isPriorIdentity(p, priorIdentity))
+      .map(p => p.color),
+  );
+  if (!used.has(desiredColor)) return desiredColor;
+  return AVATAR_PALETTE.find(color => !used.has(color)) ?? desiredColor;
+}
 
 export async function joinRoom(
   client: UpstashClient,
@@ -152,26 +190,17 @@ export async function joinRoom(
       // if the key is wrong. Reaching this branch means the caller has
       // already proven they own the host slot.
     } else {
-      // Non-host name collision: walk siblings and append "(N)" until unique
-      // for this client kind. priorIdentity bypasses the suffix when the
-      // caller is updating their own previous row.
-      const isMyOwnRow = options.priorIdentity
-        && options.priorIdentity.name === participant.name
-        && options.priorIdentity.client === participant.client;
-      if (!isMyOwnRow) {
-        const taken = new Set(
-          current.participants
-            .filter(p => p.client === participant.client)
-            .map(p => p.name),
-        );
-        if (taken.has(next.name) && next.name !== current.createdBy) {
-          let n = 2;
-          let candidate = `${participant.name} (${n})`;
-          while (taken.has(candidate)) candidate = `${participant.name} (${++n})`;
-          next = { ...next, name: candidate };
-        }
-      }
+      // Non-host name collision: names are room-visible labels, so keep
+      // them unique across client kinds too (web Robin vs agent Robin).
+      // priorIdentity bypasses the suffix when the caller is updating their
+      // own previous row.
+      next = { ...next, name: uniqueNameForRoom(participant.name, current, options.priorIdentity) };
     }
+
+    next = {
+      ...next,
+      color: uniqueColorForRoom(next.color, current, options.priorIdentity),
+    };
 
     // Default canSpeak: TRUE for everyone (host, agents, walk-ins). The
     // earlier "host approves new joiners" gate added too much friction —

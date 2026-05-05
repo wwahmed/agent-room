@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Room } from '@agent-room/shared';
+import { AVATAR_PALETTE, type Room } from '@agent-room/shared';
 import { createClient, createRoom, getRoom, RoomNotFoundError, casRoom, ConcurrencyError, joinRoom } from '../src/index.js';
 
 const ENV = { url: 'https://example.upstash.io', token: 't' };
@@ -142,7 +142,7 @@ describe('joinRoom', () => {
     expect(updated.version).toBe(2);
   });
 
-  it('auto-suffixes a colliding name on the same client kind', async () => {
+  it('auto-suffixes a colliding name across client kinds', async () => {
     const before: Room = {
       code: 'A', topic: 't', createdAt: 0, createdBy: 'host', status: 'active', version: 1,
       participants: [
@@ -156,12 +156,57 @@ describe('joinRoom', () => {
 
     const client = createClient(ENV);
     const updated = await joinRoom(client, 'A', {
-      name: 'Robin', role: '', color: '#000', initials: 'RO', client: 'web',
+      name: 'Robin', role: '', color: '#111', initials: 'RO', client: 'cc',
       joinedAt: 100, lastSeenAt: 100,
     });
 
     expect(updated.participant.name).toBe('Robin (2)');
     expect(updated.participants).toHaveLength(2);
+  });
+
+  it('keeps a reconnecting prior identity from getting suffixed', async () => {
+    const before: Room = {
+      code: 'A', topic: 't', createdAt: 0, createdBy: 'host', status: 'active', version: 1,
+      participants: [
+        { name: 'Codex', role: '', color: '#000', initials: 'CO', client: 'cc', joinedAt: 0, lastSeenAt: 0, canSpeak: true },
+      ],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(before) }))
+      .mockResolvedValueOnce(mockResp({ result: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    const updated = await joinRoom(client, 'A', {
+      name: 'Codex', role: '', color: '#000', initials: 'CO', client: 'cc',
+      joinedAt: 100, lastSeenAt: 100,
+    }, {
+      priorIdentity: { name: 'Codex', client: 'cc' },
+    });
+
+    expect(updated.participant.name).toBe('Codex');
+    expect(updated.participants).toHaveLength(1);
+  });
+
+  it('chooses an unused avatar color when the requested color is already taken', async () => {
+    const before: Room = {
+      code: 'A', topic: 't', createdAt: 0, createdBy: 'host', status: 'active', version: 1,
+      participants: [
+        { name: 'Claude', role: '', color: AVATAR_PALETTE[0]!, initials: 'CL', client: 'cc', joinedAt: 0, lastSeenAt: 0, canSpeak: true },
+      ],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(before) }))
+      .mockResolvedValueOnce(mockResp({ result: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    const updated = await joinRoom(client, 'A', {
+      name: 'Codex', role: '', color: AVATAR_PALETTE[0]!, initials: 'CO', client: 'cc',
+      joinedAt: 100, lastSeenAt: 100,
+    });
+
+    expect(updated.participant.color).toBe(AVATAR_PALETTE[1]);
   });
 
   it('lands cc (agent) joiners with canSpeak=true (mute model)', async () => {
