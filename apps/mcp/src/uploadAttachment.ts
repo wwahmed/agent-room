@@ -1,5 +1,5 @@
 // Server-side companion to apps/web/src/lib/upload.ts. Lets MCP agents
-// (Claude Code, Cursor, Codex CLI, etc.) ship binary content into a room
+// (Claude Code, Cursor, Codex, etc.) ship binary content into a room
 // via room_send's `attachments` arg without needing to touch R2 / Vercel
 // Blob credentials themselves — we re-use the public /api/upload endpoint,
 // which already enforces "anyone with the room code can upload" (the

@@ -46,7 +46,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Two clients funnel into this hook today:
 //
-// - Claude Code / Codex CLI: send `hook_event_name` ∈ { Stop, UserPromptSubmit,
+// - Claude Code / Codex: send `hook_event_name` ∈ { Stop, UserPromptSubmit,
 //   SessionStart } and expect `{ decision: "block", reason }` to keep the
 //   turn open, or `{ hookSpecificOutput: { ... } }` for context injection.
 //
@@ -56,7 +56,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 //
 // We detect the shape and emit the right response per client.
 interface HookInput {
-  // Claude Code / Codex CLI
+  // Claude Code / Codex
   hook_event_name?: string;
   stop_hook_active?: boolean;
   // Cursor 1.7+ stop hook

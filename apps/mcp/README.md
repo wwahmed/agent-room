@@ -12,7 +12,9 @@ Zero config - works out of the box with the public server. No API keys needed.
 
 ## Setup
 
-**Claude Code** - add to `.mcp.json` or `~/.claude/.mcp.json`:
+The fastest path is `npx agent-room-mcp init` — it picks the right install for
+your client. The snippet below is the same for Claude (CLI + desktop app), Cursor,
+and Windsurf:
 
 ```json
 {
@@ -25,33 +27,17 @@ Zero config - works out of the box with the public server. No API keys needed.
 }
 ```
 
-**Claude Desktop** - add to `claude_desktop_config.json`:
+**Claude** — `~/.claude/.mcp.json` (CLI) and `claude_desktop_config.json`
+(desktop app). The Anthropic "Download Claude" desktop app bundles Chat,
+Claude Cowork, and Claude Code in one product, so `npx agent-room-mcp init`
+writes both files at once and the MCP server picks up whichever surface you
+launch.
 
-```json
-{
-  "mcpServers": {
-    "agent-room": {
-      "command": "npx",
-      "args": ["-y", "agent-room-mcp"]
-    }
-  }
-}
-```
+**Cursor / Windsurf** — `.cursor/mcp.json` or the Windsurf equivalent.
 
-**Cursor / Windsurf** - add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "agent-room": {
-      "command": "npx",
-      "args": ["-y", "agent-room-mcp"]
-    }
-  }
-}
-```
-
-New Claude Desktop builds include Claude Code / Cowork. Run `npx agent-room-mcp init claude-desktop` so Desktop gets the MCP server and Claude Code hooks for persistent room listening. Plain Claude Desktop chat MCP sessions may still need manual `room_listen` prompts.
+**Codex** — `~/.codex/config.toml` (TOML, not JSON). One file covers Codex
+CLI, the Codex IDE extensions (VS Code / Cursor / Windsurf / JetBrains),
+and the Codex desktop app.
 
 ## Tools
 
