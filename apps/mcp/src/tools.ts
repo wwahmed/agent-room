@@ -18,9 +18,17 @@ import {
   type UpstashEnv,
 } from '@agent-room/upstash-client';
 import { generateCode, AVATAR_PALETTE, roleBriefFor, normalizeEscapedWhitespace } from '@agent-room/shared';
-import type { Message, Participant } from '@agent-room/shared';
+import type { Message, Participant, MessageAttachment } from '@agent-room/shared';
 import { setRoom, removeRoom, updateCursor, markSent, readState } from './state.js';
 import { detectHarness, persistenceSetupHint } from './harness.js';
+import {
+  uploadAgentAttachments,
+  AttachmentUploadError,
+  ALLOWED_ATTACHMENT_MIMES,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_BYTES,
+  type AgentAttachmentInput,
+} from './uploadAttachment.js';
 
 function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -262,8 +270,10 @@ export function registerTools(server: Server, env: UpstashEnv) {
       {
         name: 'room_send',
         description:
-          'Send a message to the room. Returns sent=true on success, or sent=false with error="muted" if the host has muted you. ' +
-          'After every successful room_send, your next action must be room_listen using the returned cursor. Do not end your turn with a final answer or status summary; your turn ending without a listener means later replies will be missed.',
+          'Send a message to the room, optionally with file attachments (PDF / image / Excel / CSV / HTML / plain text / markdown / JSON / docx / zip). ' +
+          'Returns sent=true on success, or sent=false with error="muted" if the host has muted you. ' +
+          'After every successful room_send, your next action must be room_listen using the returned cursor. Do not end your turn with a final answer or status summary; your turn ending without a listener means later replies will be missed. ' +
+          `ATTACHMENTS: pass up to ${MAX_ATTACHMENTS_PER_MESSAGE} files via the 'attachments' arg as { name, mime, content_base64 }; the server uploads them and the resulting bubble shows download links. Each file is capped at ${MAX_ATTACHMENT_BYTES} bytes (10 MB). Allowed MIME types: ${[...ALLOWED_ATTACHMENT_MIMES].join(', ')}.`,
         inputSchema: {
           type: 'object',
           required: ['code', 'name', 'text'],
@@ -272,6 +282,20 @@ export function registerTools(server: Server, env: UpstashEnv) {
             name: { type: 'string', description: 'Your display name' },
             text: { type: 'string', description: 'Message text' },
             role: { type: 'string', description: 'Your role (optional)' },
+            attachments: {
+              type: 'array',
+              description: `Optional array of files to attach (max ${MAX_ATTACHMENTS_PER_MESSAGE}, ${MAX_ATTACHMENT_BYTES} bytes each). Each item is uploaded server-side and rendered as a download link in the chat bubble.`,
+              maxItems: MAX_ATTACHMENTS_PER_MESSAGE,
+              items: {
+                type: 'object',
+                required: ['name', 'mime', 'content_base64'],
+                properties: {
+                  name: { type: 'string', description: 'File name with extension, e.g. "report.pdf"' },
+                  mime: { type: 'string', description: `MIME type. One of: ${[...ALLOWED_ATTACHMENT_MIMES].join(', ')}.` },
+                  content_base64: { type: 'string', description: 'Base64-encoded file body (no data: prefix needed; we strip one if present).' },
+                },
+              },
+            },
           },
         },
       },
@@ -605,6 +629,34 @@ export function registerTools(server: Server, env: UpstashEnv) {
       // suspicious escape, so legitimate `\n` literals (e.g. someone
       // explaining a regex inside a multi-paragraph message) survive.
       const text = normalizeEscapedWhitespace(a.text);
+
+      // Optional attachments: upload each to /api/upload (R2-backed) and
+      // collect MessageAttachment records to embed in the message. Done
+      // BEFORE appendMessage so a failed upload aborts cleanly without
+      // leaving an attachment-less stub in the transcript. We surface
+      // upload errors as sent=false rather than throwing — agents can
+      // then retry with smaller files / different MIMEs without an
+      // exception cascading up the MCP transport.
+      let attachments: MessageAttachment[] = [];
+      if (Array.isArray(a.attachments) && a.attachments.length > 0) {
+        try {
+          attachments = await uploadAgentAttachments(
+            a.attachments as AgentAttachmentInput[],
+            a.code,
+          );
+        } catch (e) {
+          if (e instanceof AttachmentUploadError) {
+            return ok({
+              sent: false,
+              error: 'attachment_upload_failed',
+              code: e.code,
+              hint: `${e.message} Fix the failing attachment and retry room_send. Then call room_listen.`,
+            });
+          }
+          throw e;
+        }
+      }
+
       const msg: Message = {
         id: Date.now(),
         type: 'msg',
@@ -615,6 +667,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         text,
         client: 'cc',
         time: Date.now(),
+        ...(attachments.length > 0 ? { attachments } : {}),
       };
       try {
         await appendMessage(client, a.code, msg);

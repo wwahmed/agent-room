@@ -52,26 +52,72 @@ function AttachmentList({ attachments }: { attachments: MessageAttachment[] }) {
 
 function ImageAttachment({ attachment }: { attachment: MessageAttachment }) {
   return (
-    <a href={attachment.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-black/10 bg-black/5">
-      <img src={attachment.url} alt={attachment.name} className="max-h-64 w-full object-contain" />
-      <div className="truncate px-2 py-1 text-[10px] font-medium opacity-70">
-        {attachment.name} · {formatBytes(attachment.size)}
+    <div className="overflow-hidden rounded-lg border border-black/10 bg-black/5">
+      <a href={attachment.url} target="_blank" rel="noreferrer" className="block">
+        <img src={attachment.url} alt={attachment.name} className="max-h-64 w-full object-contain" />
+      </a>
+      <div className="flex items-center justify-between gap-2 border-t border-black/10 px-2 py-1.5 text-[10px]">
+        <div className="min-w-0">
+          <div className="truncate font-semibold">{attachment.name}</div>
+          <div className="opacity-60">{formatBytes(attachment.size)} · {fileTypeLabel(attachment)}</div>
+        </div>
+        <AttachmentActions attachment={attachment} />
       </div>
-    </a>
+    </div>
   );
 }
 
 function FileAttachment({ attachment }: { attachment: MessageAttachment }) {
   return (
-    <a
-      href={attachment.url}
-      download={attachment.name}
-      className="flex items-center justify-between gap-3 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-[11px] hover:bg-black/10"
-    >
-      <span className="min-w-0 truncate font-semibold">{attachment.name}</span>
-      <span className="shrink-0 opacity-60">{formatBytes(attachment.size)}</span>
-    </a>
+    <div className="flex items-center gap-3 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-[11px]">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/70 font-bold text-[10px] text-ink-muted">
+        {fileTypeLabel(attachment)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-semibold">{attachment.name}</div>
+        <div className="opacity-60">{formatBytes(attachment.size)} · {attachment.mime}</div>
+      </div>
+      <AttachmentActions attachment={attachment} />
+    </div>
   );
+}
+
+function AttachmentActions({ attachment }: { attachment: MessageAttachment }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noreferrer"
+        className="rounded-md border border-black/10 bg-white/70 px-2 py-1 font-semibold hover:bg-white"
+      >
+        Open
+      </a>
+      <a
+        href={attachment.url}
+        download={attachment.name}
+        className="rounded-md bg-ink px-2 py-1 font-semibold text-white hover:bg-ink-soft"
+      >
+        Download
+      </a>
+    </div>
+  );
+}
+
+function fileTypeLabel(attachment: MessageAttachment): string {
+  const name = attachment.name.toLowerCase();
+  const mime = attachment.mime.toLowerCase();
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'PDF';
+  if (mime === 'text/html' || name.endsWith('.html') || name.endsWith('.htm')) return 'HTML';
+  if (mime === 'text/csv' || name.endsWith('.csv')) return 'CSV';
+  if (mime.includes('spreadsheetml') || mime === 'application/vnd.ms-excel' || name.endsWith('.xlsx') || name.endsWith('.xls')) return 'XLS';
+  if (mime.includes('wordprocessingml') || name.endsWith('.docx')) return 'DOC';
+  if (mime.startsWith('image/')) return 'IMG';
+  if (mime === 'application/zip' || name.endsWith('.zip')) return 'ZIP';
+  if (mime === 'application/json' || name.endsWith('.json')) return 'JSON';
+  if (mime === 'text/markdown' || name.endsWith('.md')) return 'MD';
+  if (mime.startsWith('text/') || name.endsWith('.txt')) return 'TXT';
+  return 'FILE';
 }
 
 function formatBytes(size: number): string {

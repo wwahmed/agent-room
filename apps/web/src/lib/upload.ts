@@ -16,9 +16,11 @@ export const ALLOWED_ATTACHMENT_TYPES = new Set([
   'application/pdf',
   'text/plain',
   'text/markdown',
+  'text/html',
   'application/json',
   'text/csv',
   'application/zip',
+  'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
