@@ -29,7 +29,9 @@ export interface HarnessInfo {
 
 const KNOWN_STRONG_LOOP: HarnessInfo[] = [
   { kind: 'claude-code', needsPersistenceSetup: false, label: 'Claude Code' },
-  { kind: 'codex', needsPersistenceSetup: false, label: 'Codex CLI' },
+  // Codex covers the CLI, IDE extensions (VS Code / Cursor / JetBrains), and
+  // the Codex desktop app — they all share ~/.codex/config.toml. Single label.
+  { kind: 'codex', needsPersistenceSetup: false, label: 'Codex' },
 ];
 
 export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo {
@@ -50,8 +52,11 @@ export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo
   if (env.GEMINI_CLI || env.GOOGLE_GEMINI_CLI) {
     return { kind: 'gemini-cli', needsPersistenceSetup: true, label: 'Gemini CLI' };
   }
+  // The Claude desktop app embeds the same Code/Cowork agent runtime as the
+  // CLI — surface differs, product is the same. Label as `Claude Code` so
+  // hint copy stays consistent across surfaces.
   if (env.CLAUDE_DESKTOP_VERSION || env.__CFBundleIdentifier === 'com.anthropic.claudefordesktop') {
-    return { kind: 'claude-desktop', needsPersistenceSetup: false, label: 'Claude Desktop Code/Cowork' };
+    return { kind: 'claude-desktop', needsPersistenceSetup: false, label: 'Claude Code' };
   }
   if (env.CLINE_VERSION) {
     return { kind: 'cline', needsPersistenceSetup: true, label: 'Cline' };
@@ -65,7 +70,7 @@ export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo
 /**
  * Build the persistence-setup nudge appended to room_join / room_create hints
  * for harnesses that don't auto-loop. Returns empty string for strong-loop
- * harnesses (Claude Code, Codex CLI) so we don't add noise where it isn't
+ * harnesses (Claude Code, Codex) so we don't add noise where it isn't
  * needed.
  */
 export function persistenceSetupHint(info: HarnessInfo): string {

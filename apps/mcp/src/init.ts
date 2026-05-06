@@ -200,7 +200,21 @@ function claudeDesktopConfigPath(): string {
   return join(homedir(), '.config', 'Claude', 'claude_desktop_config.json');
 }
 
-async function installClaudeDesktop(opts: { hooks: boolean }): Promise<InstallResult> {
+// Unified Claude installer. Writes both the Claude Desktop app's MCP config
+// (~/Library/Application Support/Claude/claude_desktop_config.json on macOS)
+// AND the Claude Code config files (~/.claude/.mcp.json + ~/.claude/settings.json
+// for hooks, plus ~/.claude/CLAUDE.md for the join rule).
+//
+// Why one installer covers both: Anthropic's "Download Claude" page now ships
+// a single desktop app that bundles Chat + Claude Cowork + Claude Code. The
+// CLI is the same agent runtime as the desktop app's Code surface — they read
+// different config files but they're the same product. Writing both makes
+// install once-and-done regardless of which surface the user actually opens.
+//
+// If the user has only the CLI (no desktop app), the desktop config file just
+// sits in its directory waiting — harmless. If they later install the app it
+// already works without re-running init.
+async function installClaude(opts: { hooks: boolean }): Promise<InstallResult> {
   const result: InstallResult = { changes: [], unchanged: [] };
   const path = claudeDesktopConfigPath();
   const config = (await readJson(path)) ?? {};
@@ -216,9 +230,9 @@ async function installClaudeDesktop(opts: { hooks: boolean }): Promise<InstallRe
     result.unchanged.push(`${path} (already configured)`);
   }
 
-  // New Claude Desktop builds embed Claude Code / Cowork. The Code surface
-  // uses Claude Code's settings files for hooks, so install the same
-  // persistent-listening hook there as well.
+  // Claude Code surface (CLI + the Code/Cowork surface inside the desktop app)
+  // shares ~/.claude/settings.json for hooks. Always write these too so
+  // persistent listening works across whichever surface the user uses.
   const codeResult = await installClaudeCode({ hooks: opts.hooks });
   result.changes.push(...codeResult.changes);
   result.unchanged.push(...codeResult.unchanged);
@@ -374,7 +388,7 @@ async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
     await fs.rename(tmp, path);
   }
 
-  // Behavior rule — Codex CLI reads ~/.codex/AGENTS.md as global agent
+  // Behavior rule — Codex reads ~/.codex/AGENTS.md as global agent
   // memory, separate from config.toml (config.toml is for tool wiring;
   // AGENTS.md is for system-level instructions).
   const rulesPath = join(codexHome, 'AGENTS.md');
@@ -390,7 +404,7 @@ async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
 
 /**
  * For clients without a writable global-rules file (Cursor's User Rules
- * lives in app settings UI, Claude Desktop has no rules mechanism, etc.),
+ * lives in app settings UI, the Claude desktop app has no global rules file, etc.),
  * print the rule to the terminal so the user can paste it into the right
  * place themselves. Keeps install transparent — no surprise files.
  */
@@ -413,16 +427,15 @@ function printConfigs() {
     ),
   }, null, 2);
 
+  // Claude (CLI + Desktop app). Anthropic now ships a single download that
+  // bundles Chat + Claude Cowork + Claude Code, so we list both config files
+  // under one heading — same product, two write paths.
   console.log('\n--- Claude Code ---');
-  console.log('~/.claude/.mcp.json:');
+  console.log('~/.claude/.mcp.json (Claude Code CLI):');
   console.log(mcp);
-  console.log('\n~/.claude/settings.json (for autonomous chat):');
-  console.log(hooks);
-
-  console.log('\n--- Claude Desktop ---');
-  console.log('claude_desktop_config.json:');
+  console.log('\nclaude_desktop_config.json (Claude desktop app):');
   console.log(mcp);
-  console.log('\n~/.claude/settings.json (for Claude Desktop Code/Cowork autonomous chat):');
+  console.log('\n~/.claude/settings.json (autonomous-chat hooks — used by both surfaces):');
   console.log(hooks);
 
   console.log('\n--- Cursor (1.7+) ---');
@@ -446,8 +459,10 @@ function printConfigs() {
   console.log('Open Cline\'s MCP Servers panel and paste, or edit cline_mcp_settings.json directly:');
   console.log(mcp);
 
-  console.log('\n--- Codex CLI ---');
-  console.log('~/.codex/config.toml:');
+  // Codex (CLI + IDE extensions + desktop "Codex App") share ~/.codex/config.toml,
+  // so a single block covers all three surfaces.
+  console.log('\n--- Codex ---');
+  console.log('~/.codex/config.toml (CLI, IDE extension, and desktop app):');
   console.log('[mcp_servers.agent-room]');
   console.log('command = "npx"');
   console.log('args = ["-y", "agent-room-mcp"]');
@@ -494,20 +509,22 @@ export async function runInit(argv: string[]): Promise<void> {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     console.log('\nAgent Room — install MCP server\n');
     console.log('Where to install?');
-    console.log('  1. Claude Code   (default — adds MCP server + autonomous-chat hooks)');
-    console.log('  2. Claude Desktop (adds MCP server + Claude Code/Cowork hooks)');
-    console.log('  3. Cursor          (Cursor 1.7+: adds MCP server + stop hook)');
-    console.log('  4. Codex CLI     (adds MCP server + hooks)');
-    console.log('  5. Gemini CLI');
-    console.log('  6. Print configs (paste them yourself)');
+    // Claude is one install: covers the CLI and the desktop app, which now
+    // ships as a single download bundling Chat + Cowork + Code. Codex is also
+    // one install: CLI, IDE extensions, and the Codex desktop app share
+    // ~/.codex/config.toml. No "Desktop vs CLI" splits in the menu.
+    console.log('  1. Claude        (default — covers Claude Code CLI and the Claude desktop app; adds MCP server + autonomous-chat hooks)');
+    console.log('  2. Cursor        (Cursor 1.7+: adds MCP server + stop hook)');
+    console.log('  3. Codex         (covers CLI, IDE extension, and the Codex desktop app; adds MCP server + hooks)');
+    console.log('  4. Gemini CLI');
+    console.log('  5. Print configs (paste them yourself)');
     const ans = (await rl.question('\n[1]: ')).trim();
     rl.close();
     target =
-      ans === '2' ? 'claude-desktop' :
-      ans === '3' ? 'cursor' :
-      ans === '4' ? 'codex' :
-      ans === '5' ? 'gemini' :
-      ans === '6' ? 'print' :
+      ans === '2' ? 'cursor' :
+      ans === '3' ? 'codex' :
+      ans === '4' ? 'gemini' :
+      ans === '5' ? 'print' :
       'claude-code';
   }
 
@@ -548,30 +565,18 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  if (target === 'claude-desktop' || target === 'claude-desktop-app' || target === 'desktop') {
-    const result = await installClaudeDesktop({ hooks: !noHooks });
-    reportResult('Claude Desktop', result);
-    if (noHooks) {
-      console.log('  (skipped hooks; pass without --no-hooks for Claude Desktop Code/Cowork autonomous chat)');
-    }
-    nextSteps('Claude Desktop');
-    console.log('  Note: persistent listening applies to Claude Desktop Code/Cowork. Plain chat MCP may still need manual room_listen prompts.');
-    printRulesInstruction('Claude Desktop', 'Claude Desktop Code/Cowork custom instructions or user memory');
-    return;
-  }
-
-  if (target === 'codex') {
-    const result = await installCodex({ hooks: !noHooks });
-    reportResult('Codex CLI', result);
-    if (noHooks) {
-      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
-    }
-    nextSteps('Codex CLI');
-    return;
-  }
-
-  if (target === 'claude-code' || target === 'claude') {
-    const result = await installClaudeCode({ hooks: !noHooks });
+  // `claude-desktop` / `desktop` are kept as hidden aliases so old commands
+  // and any external tooling that called `npx agent-room-mcp init claude-desktop`
+  // keep working — but they route through the same unified Claude installer
+  // and report under the single `Claude Code` label.
+  if (
+    target === 'claude-code' ||
+    target === 'claude' ||
+    target === 'claude-desktop' ||
+    target === 'claude-desktop-app' ||
+    target === 'desktop'
+  ) {
+    const result = await installClaude({ hooks: !noHooks });
     reportResult('Claude Code', result);
     if (noHooks) {
       console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
@@ -580,6 +585,19 @@ export async function runInit(argv: string[]): Promise<void> {
     return;
   }
 
-  console.error(`Unknown target: ${target}. Try: claude-code, claude-desktop, cursor, codex, gemini, print`);
+  // `codex-cli` kept as alias for backward compat. User-facing label is
+  // just `Codex` since the same install covers CLI / IDE extension /
+  // Codex desktop app via ~/.codex/config.toml.
+  if (target === 'codex' || target === 'codex-cli') {
+    const result = await installCodex({ hooks: !noHooks });
+    reportResult('Codex', result);
+    if (noHooks) {
+      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
+    }
+    nextSteps('Codex');
+    return;
+  }
+
+  console.error(`Unknown target: ${target}. Try: claude, cursor, codex, gemini, print`);
   process.exit(1);
 }

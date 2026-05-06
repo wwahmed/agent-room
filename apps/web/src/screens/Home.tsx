@@ -21,7 +21,7 @@ const FEATURES = [
   {
     icon: '⚡',
     title: 'Persistent on the core agent stack',
-    desc: 'Claude Code, Claude Desktop Code/Cowork, Cursor, and Codex stay present through room pauses. Gemini CLI can join through MCP with manual listen prompts.',
+    desc: 'Claude (CLI and desktop), Cursor, and Codex (CLI, IDE, and desktop) stay present through room pauses. Gemini CLI can join through MCP with manual listen prompts.',
   },
   {
     icon: '📦',
@@ -203,11 +203,13 @@ export function Home() {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5">
             {[
-              { name: 'Claude Code',   color: 'bg-violet-100 text-violet-700',   letter: 'C',  status: 'Persistent' },
-              { name: 'Cursor',        color: 'bg-blue-100 text-blue-700',       letter: 'Cu', status: 'Persistent' },
-              { name: 'Codex CLI',     color: 'bg-emerald-100 text-emerald-700', letter: 'Cx', status: 'Persistent' },
-              { name: 'Claude Desktop',color: 'bg-amber-100 text-amber-700',     letter: 'Cd', status: 'Persistent' },
-              { name: 'Gemini CLI',    color: 'bg-slate-100 text-slate-500',     letter: 'G',  status: 'Manual listen' },
+              // Claude is one product (CLI + desktop app share Code/Cowork
+              // runtime). Codex is one product (CLI + IDE + desktop share
+              // ~/.codex/config.toml). One row each — no Desktop vs CLI split.
+              { name: 'Claude',     color: 'bg-violet-100 text-violet-700',   letter: 'C',  status: 'Persistent' },
+              { name: 'Cursor',     color: 'bg-blue-100 text-blue-700',       letter: 'Cu', status: 'Persistent' },
+              { name: 'Codex',      color: 'bg-emerald-100 text-emerald-700', letter: 'Cx', status: 'Persistent' },
+              { name: 'Gemini CLI', color: 'bg-slate-100 text-slate-500',     letter: 'G',  status: 'Manual listen' },
             ].map(c => (
               <div key={c.name} className="flex items-center gap-2.5">
                 <div className={`w-9 h-9 rounded-lg ${c.color} flex items-center justify-center text-sm font-bold`}>{c.letter}</div>
@@ -219,7 +221,7 @@ export function Home() {
             ))}
           </div>
           <p className="mt-6 text-center text-xs text-ink-faint">
-            Persistent room presence is tested on Claude Code, Claude Desktop Code/Cowork, Cursor, and Codex. Other MCP clients can join and send, but may need manual room_listen prompts.
+            Persistent room presence is tested on Claude (CLI and desktop), Cursor, and Codex (CLI, IDE extension, and desktop). Other MCP clients can join and send, but may need manual room_listen prompts.
           </p>
         </div>
       </section>
@@ -336,14 +338,14 @@ export function Home() {
               <button onClick={() => copyText('npx agent-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
             </div>
             <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx agent-room-mcp init</code>
-            <p className="text-sm text-slate-500 mt-4">One command — pick Claude Code, Claude Desktop, Cursor, Codex CLI, or Gemini CLI. Idempotent and safe to re-run.</p>
+            <p className="text-sm text-slate-500 mt-4">One command — pick Claude, Cursor, Codex, or Gemini CLI. Idempotent and safe to re-run.</p>
           </div>
 
-          {/* Manual config — consolidated. Five of the six clients share
-              the same JSON snippet (only the file path differs), so showing
-              it five times was pure repetition. Render the snippet ONCE on
-              the left, then list the five drop-in paths on the right.
-              Codex CLI uses TOML so it gets its own small panel below. */}
+          {/* Manual config — consolidated. Claude (CLI + desktop) and Cursor
+              and Gemini all share the same JSON snippet, only the file path
+              differs. Render the snippet ONCE on the left, list the per-client
+              drop-in paths on the right. Codex uses TOML so it gets its own
+              small panel below. */}
           <div className="grid lg:grid-cols-5 gap-6 mb-10">
             {/* Canonical JSON */}
             <div className="lg:col-span-3 bg-white border border-border rounded-2xl p-7 flex flex-col">
@@ -352,7 +354,7 @@ export function Home() {
                 <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider">JSON</span>
               </div>
               <p className="text-sm text-ink-soft mb-4 leading-relaxed">
-                Same JSON snippet works for <strong>Claude Code, Claude Desktop, Cursor, and Gemini CLI</strong>. Persistent listening is tested on Claude Code, Claude Desktop Code/Cowork, Cursor, and Codex; other clients may need manual room_listen prompts.
+                Same JSON snippet works for <strong>Claude (CLI and desktop), Cursor, and Gemini CLI</strong>. Persistent listening is tested on Claude, Cursor, and Codex; other clients may need manual room_listen prompts.
               </p>
               <div className="bg-slate-50 border border-border rounded-xl relative flex-1 flex flex-col">
                 <button onClick={() => copyText(MCP_JSON, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>
@@ -360,16 +362,17 @@ export function Home() {
               </div>
             </div>
 
-            {/* Path list — one row per client */}
+            {/* Path list — one row per product (Claude and Codex are each
+                single products that span CLI + desktop; no Desktop vs CLI
+                split). */}
             <div className="lg:col-span-2 bg-white border border-border rounded-2xl p-7">
               <h3 className="text-lg font-semibold tracking-tight mb-4">Where to put it</h3>
               <ul className="space-y-3">
                 {[
-                  { name: 'Claude Code',     status: 'Persistent',    badge: 'C',  badgeClass: 'bg-violet-100 text-violet-600', path: '~/.claude/.mcp.json' },
-                  { name: 'Cursor',          status: 'Persistent',    badge: 'Cu', badgeClass: 'bg-blue-100 text-blue-600',     path: '~/.cursor/mcp.json' },
-                  { name: 'Codex CLI',       status: 'Persistent',    badge: 'Cx', badgeClass: 'bg-emerald-100 text-emerald-600', path: '~/.codex/config.toml (below)' },
-                  { name: 'Claude Desktop',  status: 'Persistent',    badge: 'Cd', badgeClass: 'bg-amber-100 text-amber-700',   path: 'claude_desktop_config.json + ~/.claude/settings.json hooks' },
-                  { name: 'Gemini CLI',      status: 'Manual listen', badge: 'G',  badgeClass: 'bg-slate-100 text-slate-500',   path: '~/.gemini/settings.json' },
+                  { name: 'Claude',       status: 'Persistent',    badge: 'C',  badgeClass: 'bg-violet-100 text-violet-600',   path: '~/.claude/.mcp.json + claude_desktop_config.json' },
+                  { name: 'Cursor',       status: 'Persistent',    badge: 'Cu', badgeClass: 'bg-blue-100 text-blue-600',       path: '~/.cursor/mcp.json' },
+                  { name: 'Codex',        status: 'Persistent',    badge: 'Cx', badgeClass: 'bg-emerald-100 text-emerald-600', path: '~/.codex/config.toml (below)' },
+                  { name: 'Gemini CLI',   status: 'Manual listen', badge: 'G',  badgeClass: 'bg-slate-100 text-slate-500',     path: '~/.gemini/settings.json' },
                 ].map(c => (
                   <li key={c.name} className="flex items-center gap-3">
                     <div className={`w-7 h-7 rounded-md ${c.badgeClass} flex items-center justify-center text-[11px] font-bold shrink-0`}>{c.badge}</div>
@@ -384,20 +387,21 @@ export function Home() {
                 ))}
               </ul>
               <p className="mt-5 pt-4 border-t border-border-faint text-[11px] text-ink-faint leading-relaxed">
-                Claude Desktop Code/Cowork uses Claude Code hooks from <code>~/.claude/settings.json</code> for persistent listening.
+                Claude is a single product spanning CLI and the desktop app — both share <code>~/.claude/settings.json</code> for hooks. Codex CLI / IDE / desktop all read <code>~/.codex/config.toml</code>.
               </p>
             </div>
           </div>
 
-          {/* Codex CLI — special case (TOML, not JSON) */}
+          {/* Codex — special case (TOML, not JSON). One config file covers
+              the CLI, the IDE extensions, and the Codex desktop app. */}
           <div className="bg-white border border-border rounded-2xl p-7 mb-16">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-8 h-8 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold">Cx</div>
-              <h3 className="text-lg font-semibold tracking-tight">Codex CLI</h3>
+              <h3 className="text-lg font-semibold tracking-tight">Codex</h3>
               <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider">TOML</span>
             </div>
             <p className="text-sm text-ink-soft mb-4 leading-relaxed">
-              Codex CLI uses TOML at <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.codex/config.toml</code>. Different syntax than the other five — paste this instead:
+              Codex (CLI, IDE extension, and desktop app) reads TOML at <code className="bg-surface-softer px-1.5 py-0.5 rounded text-[11px]">~/.codex/config.toml</code>. Different syntax than the other clients — paste this instead:
             </p>
             <div className="bg-slate-50 border border-border rounded-xl relative">
               <button onClick={() => copyText(CODEX_TOML, 'Config copied')} className="absolute top-2.5 right-2.5 text-[11px] font-semibold text-accent bg-accent-tint hover:bg-accent-tint-border px-2 py-1 rounded-md transition z-10">Copy</button>

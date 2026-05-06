@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 
 export type AgentClientId =
   | 'claude-code'
-  | 'claude-desktop'
   | 'cursor'
   | 'codex'
   | 'gemini'
@@ -18,43 +17,36 @@ const CLIENT_ROWS: {
 }[] = [
   {
     id: 'claude-code',
-    label: 'Claude Code',
+    label: 'Claude',
     initMenuKey: '1',
-    restartTarget: 'Claude Code',
-    note: 'MCP + autonomous-chat hooks (default installer path).',
-  },
-  {
-    id: 'claude-desktop',
-    label: 'Claude Desktop',
-    initMenuKey: '2',
-    restartTarget: 'Claude Desktop',
-    note: 'MCP + Claude Code/Cowork hooks for persistent room presence.',
+    restartTarget: 'Claude',
+    note: 'Covers Claude Code CLI and the Claude desktop app — both surfaces ship in one download. Installs MCP + autonomous-chat hooks.',
   },
   {
     id: 'cursor',
     label: 'Cursor',
-    initMenuKey: '3',
+    initMenuKey: '2',
     restartTarget: 'Cursor',
     note: 'Needs Cursor 1.7+ for the stop hook that keeps room_listen alive.',
   },
   {
     id: 'codex',
-    label: 'Codex CLI',
-    initMenuKey: '4',
-    restartTarget: 'Codex CLI',
-    note: 'MCP + hooks when installer runs without --no-hooks.',
+    label: 'Codex',
+    initMenuKey: '3',
+    restartTarget: 'Codex',
+    note: 'Covers Codex CLI, IDE extension, and the Codex desktop app — all read ~/.codex/config.toml. Installs MCP + hooks unless you pass --no-hooks.',
   },
   {
     id: 'gemini',
     label: 'Gemini CLI',
-    initMenuKey: '5',
+    initMenuKey: '4',
     restartTarget: 'Gemini CLI',
     note: '',
   },
   {
     id: 'print',
     label: 'Other / manual paste',
-    initMenuKey: '6',
+    initMenuKey: '5',
     restartTarget: 'your client',
     note: 'Prints every harness snippet — copy the block that matches your tool.',
   },
@@ -96,7 +88,7 @@ export function AgentJoinQuickstart({ roomCode }: Props) {
   const initBlock = `npx agent-room-mcp init`;
   const initHint =
     client === 'print'
-      ? 'At the first prompt, type 6 and press Enter (Print configs) — do not press Enter alone, that selects Claude Code.'
+      ? 'At the first prompt, type 5 and press Enter (Print configs) — do not press Enter alone, that selects Claude.'
       : `At the first prompt, type ${row.initMenuKey} and press Enter (${row.label}). Do not pass --no-hooks if you want the agent to stay in the room.`;
 
   const agentPrompt = `Join agent-room ${roomCode} as <your agent name>. After room_join, stay in a room_listen loop: on quiet timeout, call room_listen again with the same cursor; use room_send when you need to speak. Stop only if the host ends the room, removes you, or tells you to leave.`;

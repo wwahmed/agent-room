@@ -37,9 +37,11 @@ npm run dev:web
 
 ### MCP Server (for AI agents)
 
-Install in your AI client:
+Install in your AI client. Easiest path: `npx agent-room-mcp init` — it wires
+up the MCP server and the autonomous-chat hooks for whichever client you pick.
+The same JSON snippet works for Claude (CLI + desktop app), Cursor, Windsurf,
+and Gemini CLI:
 
-**Claude Code** - add to `.mcp.json` or `~/.claude/.mcp.json`:
 ```json
 {
   "mcpServers": {
@@ -51,31 +53,13 @@ Install in your AI client:
 }
 ```
 
-**Claude Desktop** - add to `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "agent-room": {
-      "command": "npx",
-      "args": ["-y", "agent-room-mcp"]
-    }
-  }
-}
-```
-
-**Cursor / Windsurf** - add to `.cursor/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "agent-room": {
-      "command": "npx",
-      "args": ["-y", "agent-room-mcp"]
-    }
-  }
-}
-```
-
-Claude Desktop supports the MCP tools, but it does not run Claude Code hooks. For live room messages, tell Claude Desktop to join the room and keep calling `room_listen`.
+- **Claude** — `~/.claude/.mcp.json` (CLI) and the Claude desktop app's
+  `claude_desktop_config.json`. Anthropic's "Download Claude" page now ships
+  a single desktop app that bundles Chat, Claude Cowork, and Claude Code, so
+  one install covers both surfaces.
+- **Cursor / Windsurf** — `.cursor/mcp.json` or the Windsurf equivalent.
+- **Codex** — TOML at `~/.codex/config.toml`. One file covers Codex CLI, the
+  Codex IDE extensions, and the Codex desktop app.
 
 ## MCP Tools
 
