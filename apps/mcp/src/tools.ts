@@ -320,6 +320,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
           required: ['code'],
           properties: {
             code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Optional display name to remove when local state is unavailable.' },
           },
         },
       },
@@ -783,10 +784,12 @@ export function registerTools(server: Server, env: UpstashEnv) {
       // (no host check needed). Failures are non-fatal — even if the
       // server-side call errors (e.g. room TTL'd out), we still want to
       // clear local state so the Stop hook stops nagging.
-      let selfName: string | undefined;
+      let selfName: string | undefined = typeof a.name === 'string' && a.name.trim()
+        ? a.name.trim()
+        : undefined;
       try {
         const state = await readState();
-        selfName = state.rooms[a.code]?.name;
+        selfName = selfName ?? state.rooms[a.code]?.name;
       } catch { /* state unavailable */ }
       if (selfName) {
         try {
