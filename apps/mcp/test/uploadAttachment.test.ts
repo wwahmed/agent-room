@@ -55,6 +55,18 @@ describe('uploadAgentAttachment', () => {
     ).rejects.toMatchObject({ code: 'empty_content' });
   });
 
+  it('rejects malformed base64 before any network call', async () => {
+    const fetchMock = vi.fn();
+    await expect(
+      uploadAgentAttachment(
+        { name: 'x.pdf', mime: 'application/pdf', content_base64: 'not actually base64!' },
+        ROOM,
+        { fetch: fetchMock as unknown as typeof fetch },
+      ),
+    ).rejects.toMatchObject({ code: 'bad_base64' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects content that decodes to over the size limit with file_too_large', async () => {
     // Create base64 that decodes to > MAX_ATTACHMENT_BYTES.
     const oneByteOver = Buffer.alloc(MAX_ATTACHMENT_BYTES + 1, 0).toString('base64');
