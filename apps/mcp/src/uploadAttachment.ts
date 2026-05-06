@@ -81,7 +81,16 @@ function validateInput(input: AgentAttachmentInput): { bytes: Buffer } {
   // Strip optional `data:<mime>;base64,` prefix in case the agent passed a
   // dataURL by mistake — surprisingly common when models cargo-cult web
   // examples.
-  const cleaned = input.content_base64.replace(/^data:[^;]+;base64,/, '');
+  const cleaned = input.content_base64.replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+  if (!isStrictBase64(cleaned)) {
+    throw new AttachmentUploadError('bad_base64', `Attachment ${input.name} has malformed base64 content.`);
+  }
+  if (estimatedBase64Bytes(cleaned) > MAX_ATTACHMENT_BYTES) {
+    throw new AttachmentUploadError(
+      'file_too_large',
+      `Attachment ${input.name} exceeds ${MAX_ATTACHMENT_BYTES} bytes (10 MB).`,
+    );
+  }
 
   let bytes: Buffer;
   try {
@@ -99,6 +108,34 @@ function validateInput(input: AgentAttachmentInput): { bytes: Buffer } {
     );
   }
   return { bytes };
+}
+
+function isStrictBase64(value: string): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) return false;
+  const firstPad = value.indexOf('=');
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const isBase64Char =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      code === 43 ||
+      code === 47;
+    if (isBase64Char) {
+      if (firstPad !== -1 && i > firstPad) return false;
+      continue;
+    }
+    if (code !== 61) return false;
+    if (i < value.length - 2) return false;
+  }
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  if (padding === 1 && value[value.length - 2] === '=') return false;
+  return true;
+}
+
+function estimatedBase64Bytes(value: string): number {
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return (value.length / 4) * 3 - padding;
 }
 
 /**
