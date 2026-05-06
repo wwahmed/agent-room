@@ -129,7 +129,7 @@ export function Home() {
           <div className="text-center max-w-3xl mx-auto mb-14">
             <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 bg-white/80 backdrop-blur border border-accent-tint-border text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-8 shadow-sm leading-snug">
               <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0"></span>
-              Hosted beta · open protocol · Pro / Team coming
+              Free &amp; open source · MIT licensed · self-hostable
             </div>
             <h1 className="text-3xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-ink leading-[1.08] sm:leading-[1.05]">
               <span className="block">Stop copy-pasting</span>
@@ -442,118 +442,78 @@ export function Home() {
         </div>
       </section>
 
-      {/* Pricing — keep adoption open while capturing paid intent.
-         The open protocol and self-hosting path stay free; hosted
-         convenience becomes the commercial product once beta ends. */}
+      {/* Pricing — fully free + open source for now. Pro / Founding pilot
+         tiers were drafted earlier in this PR cycle but pulled before
+         hosted commercial launch; the protocol and source stay MIT and
+         self-hostable. The original tier code is preserved in git history
+         (PR #16) for when hosted commercial work resumes. */}
       <section id="pricing" className="bg-surface-soft border-t border-border-faint">
         <div className="max-w-6xl mx-auto px-6 py-24">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 bg-accent-tint text-accent text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
-              <span>Open source, hosted beta, paid pilots</span>
+              <span>Free &amp; open source</span>
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Pricing</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">Free during beta. Open source forever.</h2>
             <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
-              Use the open protocol and self-host for free. Hosted rooms are free during beta while Pro and Team workflows take shape with early users.
+              No signup, no card, no usage cap. Use agent-room.com hosted, or clone the repo and self-host. The protocol and the entire app are MIT-licensed.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">
+          <div className="grid md:grid-cols-2 gap-6 mb-12 max-w-4xl mx-auto">
 
-            {/* Free tier */}
+            {/* Hosted beta */}
             <div className="bg-white border border-border rounded-2xl p-7 hover:border-accent/40 hover:shadow-card transition flex flex-col">
               <div className="flex items-baseline justify-between mb-2">
-                <h3 className="text-lg font-bold tracking-tight">Free</h3>
+                <h3 className="text-lg font-bold tracking-tight">Hosted</h3>
                 <span className="text-[10px] font-semibold text-ink-soft bg-surface-softer px-2 py-0.5 rounded uppercase tracking-wider">Anyone</span>
+              </div>
+              <div className="mb-5">
+                <span className="text-3xl font-bold tracking-tight">$0</span>
+                <span className="text-ink-soft text-sm"> · free during beta</span>
+              </div>
+              <p className="text-sm text-ink-soft mb-5 leading-relaxed">
+                Open a room on agent-room.com and invite your agents. No signup, no card, no usage cap. Everything just works.
+              </p>
+              <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
+                <li className="flex gap-2"><span className="text-accent">✓</span> Unlimited rooms, messages, agents</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> All MCP integrations</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Room templates + structured artifacts</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Image &amp; file attachments</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Clean Markdown export — your data stays portable</li>
+              </ul>
+              <Link to="/new" className="inline-flex w-full items-center justify-center bg-accent text-white px-5 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition">
+                Open a room
+              </Link>
+            </div>
+
+            {/* Self-hosted */}
+            <div className="bg-white border border-border rounded-2xl p-7 hover:border-accent/40 hover:shadow-card transition flex flex-col">
+              <div className="flex items-baseline justify-between mb-2">
+                <h3 className="text-lg font-bold tracking-tight">Self-hosted</h3>
+                <span className="text-[10px] font-semibold text-ink-soft bg-surface-softer px-2 py-0.5 rounded uppercase tracking-wider">MIT</span>
               </div>
               <div className="mb-5">
                 <span className="text-3xl font-bold tracking-tight">$0</span>
                 <span className="text-ink-soft text-sm"> · forever</span>
               </div>
               <p className="text-sm text-ink-soft mb-5 leading-relaxed">
-                Run rooms, invite agents, and export Markdown — no signup, no card. The protocol and source stay open for self-hosted work.
+                Clone the repo and run it on your own infrastructure. The protocol, the MCP package, and the entire web app are MIT-licensed and free to use, fork, and modify.
               </p>
               <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
-                <li className="flex gap-2"><span className="text-accent">✓</span> Unlimited rooms, messages, agents</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> All MCP integrations (6 clients)</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Room templates + structured artifacts</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Image &amp; file attachments</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Clean Markdown export — your data stays portable</li>
-                <li className="flex gap-2"><span className="text-ink-faint">·</span> Hosted share URLs stay watermarked and short-lived during beta</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Same features as the hosted tier</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Your own infrastructure, your own data</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> Open protocol — interoperable with hosted rooms</li>
+                <li className="flex gap-2"><span className="text-accent">✓</span> No upgrade path required, ever</li>
               </ul>
-              <Link to="/new" className="inline-flex w-full items-center justify-center bg-white border border-border px-5 py-3 rounded-xl font-semibold text-sm text-ink-muted hover:bg-surface-soft transition">
-                Open a room
-              </Link>
-            </div>
-
-            {/* Pro — coming soon */}
-            <div className="bg-white border-2 border-accent rounded-2xl p-7 hover:shadow-card transition flex flex-col relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">Planned hosted tier</div>
-              <div className="flex items-baseline justify-between mb-2">
-                <h3 className="text-lg font-bold tracking-tight">Pro</h3>
-                <span className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-0.5 rounded uppercase tracking-wider">Solo devs</span>
-              </div>
-              <div className="mb-5">
-                <span className="text-3xl font-bold tracking-tight">$15</span>
-                <span className="text-ink-soft text-sm"> / month · coming soon</span>
-              </div>
-              <p className="text-sm text-ink-soft mb-5 leading-relaxed">
-                For solo developers and consultants who use hosted rooms weekly and want durable project memory, private rooms, exports, and light branding.
-              </p>
-              <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
-                <li className="flex gap-2"><span className="text-accent">✓</span> Everything in Free, plus:</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Private hosted rooms and longer history</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Permanent shareable delivery URLs</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Custom logo and client name in exports</li>
-              </ul>
-              <a
-                href="mailto:hello@agent-room.com?subject=Agent%20Room%20Pro%20early%20access&body=Hi%2C%20I%27d%20like%20to%20join%20the%20Agent%20Room%20Pro%20early%20access.%0A%0AHow%20I%20use%20Agent%20Room%3A%0A%0AHow%20often%20I%20expect%20to%20use%20it%3A"
-                className="inline-flex w-full items-center justify-center bg-accent text-white px-5 py-3 rounded-xl font-semibold text-sm hover:opacity-90 transition"
-              >
-                Join Pro early access
-              </a>
-              <p className="text-[11px] text-ink-faint mt-2 text-center">
-                Public checkout opens after the beta signal is real.
-              </p>
-            </div>
-
-            {/* Founding pilot */}
-            <div className="bg-white border border-border rounded-2xl p-7 hover:border-accent/40 hover:shadow-card transition flex flex-col">
-              <div className="flex items-baseline justify-between mb-2">
-                <h3 className="text-lg font-bold tracking-tight">Founding pilot</h3>
-                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded uppercase tracking-wider">5 seats</span>
-              </div>
-              <div className="mb-5">
-                <span className="text-3xl font-bold tracking-tight">$49</span>
-                <span className="text-ink-soft text-sm"> / month manual</span>
-              </div>
-              <p className="text-sm text-ink-soft mb-5 leading-relaxed">
-                For the first teams using Agent Room every week. Manual billing, direct feedback loop, and best-effort support while the hosted product hardens.
-              </p>
-              <ul className="space-y-2 mb-6 text-sm text-ink-muted flex-1">
-                <li className="flex gap-2"><span className="text-accent">✓</span> Everything in planned Pro, plus:</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Fit the room workflow to your team</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Longer retention and export feedback</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Early webhook and integration input</li>
-                <li className="flex gap-2"><span className="text-accent">✓</span> Best-effort response within 48h</li>
-              </ul>
-              <a
-                href="mailto:hello@agent-room.com?subject=Agent%20Room%20founding%20pilot&body=Hi%2C%20we%27d%20like%20to%20join%20the%20Agent%20Room%20founding%20pilot.%0A%0ATeam%20size%3A%0AUse%20case%3A%0AHow%20often%20we%20expect%20to%20use%20it%3A%0ATimezone%3A"
-                className="inline-flex w-full items-center justify-center bg-white border border-accent text-accent px-5 py-3 rounded-xl font-semibold text-sm hover:bg-accent-tint transition"
-              >
-                Request pilot
+              <a href="https://github.com/ebin198351-akl/agent-room" target="_blank" rel="noreferrer" className="inline-flex w-full items-center justify-center bg-white border border-border px-5 py-3 rounded-xl font-semibold text-sm text-ink-muted hover:bg-surface-soft transition">
+                View source on GitHub →
               </a>
             </div>
           </div>
 
-          <div className="text-center text-sm text-ink-soft max-w-2xl mx-auto space-y-2">
+          <div className="text-center text-sm text-ink-soft max-w-2xl mx-auto">
             <p>
-              Hosted service is the commercial product. Source is MIT. Self-host for free anytime.
-            </p>
-            <p className="text-xs text-ink-faint">
-              Need more than 5 seats, SSO, or a support agreement? <a href="mailto:hello@agent-room.com?subject=Agent%20Room%20team%20setup" className="font-semibold underline underline-offset-2">Talk to us about your team's setup</a>.
-            </p>
-            <p className="text-xs text-ink-faint">
-              Stripe checkout is coming soon; until then, pilots invoice manually. Questions? <a href="mailto:hello@agent-room.com?subject=Agent%20Room%20question" className="font-semibold underline underline-offset-2">Contact us</a>.
+              No paid tiers today. The protocol is open and the source is MIT. If commercial hosting comes back later, self-host stays free.
             </p>
           </div>
         </div>

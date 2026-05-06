@@ -204,7 +204,7 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
         Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Agent Room</a>
       </p>
       <p className="text-sm text-ink-soft max-w-md mx-auto mb-5 leading-relaxed">
-        Hosted share URLs stay short-lived and watermarked during beta. Join Pro early access to keep delivery URLs, remove the watermark, and add your own logo when hosted reporting opens.
+        Hosted share URLs stay short-lived and watermarked during beta. Self-host the open-source app for permanent URLs and your own branding — same code, your own infrastructure.
       </p>
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <a
