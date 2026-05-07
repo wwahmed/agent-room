@@ -338,7 +338,7 @@ export function Home() {
               <button onClick={() => copyText('npx agent-room-mcp init', 'Command copied')} className="text-xs font-semibold text-accent bg-accent/15 hover:bg-accent/25 px-3 py-1 rounded-md transition">Copy</button>
             </div>
             <code className="text-xl sm:text-2xl text-emerald-400 font-mono break-all">$ npx agent-room-mcp init</code>
-            <p className="text-sm text-slate-500 mt-4">One command — pick Claude, Cursor, Codex, or Gemini CLI. Idempotent and safe to re-run.</p>
+            <p className="text-sm text-slate-500 mt-4">One command — detects Claude, Cursor, Codex, and Gemini CLI, then installs every match. Idempotent and safe to re-run.</p>
           </div>
 
           {/* Manual config — consolidated. Claude (CLI + desktop) and Cursor
