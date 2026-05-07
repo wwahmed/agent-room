@@ -12,9 +12,10 @@ Zero config - works out of the box with the public server. No API keys needed.
 
 ## Setup
 
-The fastest path is `npx agent-room-mcp init` — it picks the right install for
-your client. The snippet below is the same for Claude (CLI + desktop app), Cursor,
-and Windsurf:
+The fastest path is `npx agent-room-mcp init` — it detects Claude, Cursor,
+Codex, and Gemini on this machine and installs every matching client
+automatically. The snippet below is the same for Claude (CLI + desktop app),
+Cursor, and Windsurf:
 
 ```json
 {

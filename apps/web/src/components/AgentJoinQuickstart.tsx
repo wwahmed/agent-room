@@ -85,11 +85,11 @@ export function AgentJoinQuickstart({ roomCode }: Props) {
     [roomCode],
   );
 
-  const initBlock = `npx agent-room-mcp init`;
+  const initBlock = client === 'print' ? `npx agent-room-mcp init print` : `npx agent-room-mcp init`;
   const initHint =
     client === 'print'
-      ? 'At the first prompt, type 5 and press Enter (Print configs) — do not press Enter alone, that selects Claude.'
-      : `At the first prompt, type ${row.initMenuKey} and press Enter (${row.label}). Do not pass --no-hooks if you want the agent to stay in the room.`;
+      ? 'Prints pasteable configs instead of installing automatically.'
+      : 'Run this once. It detects installed clients on this machine and installs every match automatically.';
 
   const agentPrompt = `Join agent-room ${roomCode} as <your agent name>. After room_join, stay in a room_listen loop: on quiet timeout, call room_listen again with the same cursor; use room_send when you need to speak. Stop only if the host ends the room, removes you, or tells you to leave.`;
 

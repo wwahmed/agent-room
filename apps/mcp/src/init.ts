@@ -100,6 +100,8 @@ interface InstallResult {
   unchanged: string[];
 }
 
+export type InstallTarget = 'claude' | 'cursor' | 'codex' | 'gemini';
+
 function which(cmd: string): Promise<string | null> {
   return new Promise((resolve) => {
     const p = spawn('which', [cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -108,6 +110,15 @@ function which(cmd: string): Promise<string | null> {
     p.on('close', (code) => resolve(code === 0 && out.trim() ? out.trim() : null));
     p.on('error', () => resolve(null));
   });
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function tryClaudeMcpAdd(): Promise<boolean> {
@@ -190,14 +201,86 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
   return result;
 }
 
+function claudeDesktopConfigPathFor(home: string, platform: NodeJS.Platform, appdata?: string): string {
+  if (platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  }
+  if (platform === 'win32') {
+    return join(appdata ?? join(home, 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+  }
+  return join(home, '.config', 'Claude', 'claude_desktop_config.json');
+}
+
 function claudeDesktopConfigPath(): string {
-  if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  return claudeDesktopConfigPathFor(homedir(), process.platform, process.env.APPDATA);
+}
+
+interface DetectInstallTargetsOptions {
+  env?: NodeJS.ProcessEnv;
+  home?: string;
+  platform?: NodeJS.Platform;
+  whichCmd?: (cmd: string) => Promise<string | null>;
+  pathExistsFn?: (path: string) => Promise<boolean>;
+}
+
+export async function detectInstallTargets(opts: DetectInstallTargetsOptions = {}): Promise<InstallTarget[]> {
+  const env = opts.env ?? process.env;
+  const home = opts.home ?? homedir();
+  const platform = opts.platform ?? process.platform;
+  const whichCmd = opts.whichCmd ?? which;
+  const exists = opts.pathExistsFn ?? pathExists;
+  const found: InstallTarget[] = [];
+
+  const claudeConfigDir = dirname(claudeDesktopConfigPathFor(home, platform, env.APPDATA));
+  const claudeApp =
+    platform === 'darwin' ? join('/Applications', 'Claude.app') :
+    platform === 'win32' ? join(env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'Claude') :
+    join(home, '.config', 'Claude');
+  if (
+    env.CLAUDECODE === '1' ||
+    Boolean(env.CLAUDE_CODE_ENTRYPOINT) ||
+    (await whichCmd('claude')) ||
+    (await exists(join(home, '.claude'))) ||
+    (await exists(claudeConfigDir)) ||
+    (await exists(claudeApp))
+  ) {
+    found.push('claude');
   }
-  if (process.platform === 'win32') {
-    return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+
+  const codexHome = env.CODEX_HOME ?? join(home, '.codex');
+  if (
+    Boolean(env.CODEX_RUN_ID) ||
+    Boolean(env.CODEX_HOME) ||
+    (await whichCmd('codex')) ||
+    (await exists(codexHome))
+  ) {
+    found.push('codex');
   }
-  return join(homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+
+  const cursorApp =
+    platform === 'darwin' ? join('/Applications', 'Cursor.app') :
+    platform === 'win32' ? join(env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'Programs', 'Cursor') :
+    join(home, '.config', 'Cursor');
+  if (
+    Boolean(env.CURSOR_TRACE_ID) ||
+    Boolean(env.CURSOR_AGENT) ||
+    env.TERM_PROGRAM === 'Cursor' ||
+    (await exists(join(home, '.cursor'))) ||
+    (await exists(cursorApp))
+  ) {
+    found.push('cursor');
+  }
+
+  if (
+    Boolean(env.GEMINI_CLI) ||
+    Boolean(env.GOOGLE_GEMINI_CLI) ||
+    (await whichCmd('gemini')) ||
+    (await exists(join(home, '.gemini')))
+  ) {
+    found.push('gemini');
+  }
+
+  return found;
 }
 
 // Unified Claude installer. Writes both the Claude Desktop app's MCP config
@@ -494,6 +577,65 @@ function nextSteps(target: string) {
   console.log('');
 }
 
+function targetLabel(target: InstallTarget): string {
+  return (
+    target === 'claude' ? 'Claude' :
+    target === 'cursor' ? 'Cursor' :
+    target === 'codex' ? 'Codex' :
+    'Gemini CLI'
+  );
+}
+
+async function installTarget(target: InstallTarget, opts: { hooks: boolean }): Promise<void> {
+  if (target === 'claude') {
+    const result = await installClaude({ hooks: opts.hooks });
+    reportResult('Claude', result);
+    if (!opts.hooks) {
+      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
+    }
+    return;
+  }
+
+  if (target === 'cursor') {
+    const result = await installCursor({ hooks: opts.hooks });
+    reportResult('Cursor', result);
+    if (!opts.hooks) {
+      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat — Cursor 1.7+ required)');
+    }
+    printRulesInstruction('Cursor', 'Cursor → Settings → Rules → User Rules');
+    return;
+  }
+
+  if (target === 'codex') {
+    const result = await installCodex({ hooks: opts.hooks });
+    reportResult('Codex', result);
+    if (!opts.hooks) {
+      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
+    }
+    return;
+  }
+
+  const result = await installGemini();
+  reportResult('Gemini CLI', result);
+  console.log('  Note: Gemini CLI does not currently support Claude Code-style hooks, so ask it to call room_listen explicitly to stay present in the room.');
+  printRulesInstruction('Gemini CLI', '~/.gemini/GEMINI.md (or whichever file Gemini CLI reads as global instructions on your version)');
+}
+
+async function installDetectedTargets(targets: InstallTarget[], opts: { hooks: boolean }): Promise<void> {
+  console.log('\nAgent Room — install MCP server\n');
+  console.log('Detected clients:');
+  for (const target of targets) {
+    console.log(`  ✓ ${targetLabel(target)}`);
+  }
+  console.log('\nInstalling for all detected clients...');
+
+  for (const target of targets) {
+    await installTarget(target, opts);
+  }
+
+  nextSteps(targets.map(targetLabel).join(' / '));
+}
+
 export async function runInit(argv: string[]): Promise<void> {
   const positional = argv.filter((a) => !a.startsWith('--'));
   const noHooks = argv.includes('--no-hooks');
@@ -506,9 +648,15 @@ export async function runInit(argv: string[]): Promise<void> {
 
   let target = positional[0];
   if (!target) {
+    const detectedTargets = await detectInstallTargets();
+    if (detectedTargets.length > 0) {
+      await installDetectedTargets(detectedTargets, { hooks: !noHooks });
+      return;
+    }
+
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     console.log('\nAgent Room — install MCP server\n');
-    console.log('Where to install?');
+    console.log('No installed client was detected automatically. Where to install?');
     // Claude is one install: covers the CLI and the desktop app, which now
     // ships as a single download bundling Chat + Cowork + Code. Codex is also
     // one install: CLI, IDE extensions, and the Codex desktop app share
@@ -534,25 +682,14 @@ export async function runInit(argv: string[]): Promise<void> {
   }
 
   if (target === 'cursor') {
-    const result = await installCursor({ hooks: !noHooks });
-    reportResult('Cursor', result);
-    if (noHooks) {
-      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat — Cursor 1.7+ required)');
-    }
+    await installTarget('cursor', { hooks: !noHooks });
     nextSteps('Cursor');
-    // Cursor's user-level rules live in the Settings UI (Settings → Rules
-    // → User Rules), not a flat file we can write to safely. Print the
-    // snippet for manual paste so the install stays transparent.
-    printRulesInstruction('Cursor', 'Cursor → Settings → Rules → User Rules');
     return;
   }
 
   if (target === 'gemini' || target === 'gemini-cli') {
-    const result = await installGemini();
-    reportResult('Gemini CLI', result);
+    await installTarget('gemini', { hooks: !noHooks });
     nextSteps('Gemini CLI');
-    console.log('  Note: Gemini CLI does not currently support Claude Code-style hooks, so ask it to call room_listen explicitly to stay present in the room.');
-    printRulesInstruction('Gemini CLI', '~/.gemini/GEMINI.md (or whichever file Gemini CLI reads as global instructions on your version)');
     return;
   }
 
@@ -576,12 +713,8 @@ export async function runInit(argv: string[]): Promise<void> {
     target === 'claude-desktop-app' ||
     target === 'desktop'
   ) {
-    const result = await installClaude({ hooks: !noHooks });
-    reportResult('Claude Code', result);
-    if (noHooks) {
-      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
-    }
-    nextSteps('Claude Code');
+    await installTarget('claude', { hooks: !noHooks });
+    nextSteps('Claude');
     return;
   }
 
@@ -589,11 +722,7 @@ export async function runInit(argv: string[]): Promise<void> {
   // just `Codex` since the same install covers CLI / IDE extension /
   // Codex desktop app via ~/.codex/config.toml.
   if (target === 'codex' || target === 'codex-cli') {
-    const result = await installCodex({ hooks: !noHooks });
-    reportResult('Codex', result);
-    if (noHooks) {
-      console.log('  (skipped hooks; pass without --no-hooks for autonomous chat)');
-    }
+    await installTarget('codex', { hooks: !noHooks });
     nextSteps('Codex');
     return;
   }

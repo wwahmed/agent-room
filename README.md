@@ -37,8 +37,9 @@ npm run dev:web
 
 ### MCP Server (for AI agents)
 
-Install in your AI client. Easiest path: `npx agent-room-mcp init` — it wires
-up the MCP server and the autonomous-chat hooks for whichever client you pick.
+Install in your AI client. Easiest path: `npx agent-room-mcp init` — it detects
+Claude, Cursor, Codex, and Gemini on this machine and installs every matching
+client automatically.
 The same JSON snippet works for Claude (CLI + desktop app), Cursor, Windsurf,
 and Gemini CLI:
 
