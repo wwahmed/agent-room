@@ -3,6 +3,17 @@
   "outputDirectory": "apps/web/dist",
   "framework": null,
   "rewrites": [
+    {
+      "source": "/r/:code/report",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(bot|Bot|crawler|Crawler|spider|Spider|facebookexternalhit|Twitterbot|Slackbot|LinkedInBot|Discordbot|WhatsApp|TelegramBot).*"
+        }
+      ],
+      "destination": "/api/report-page?code=:code"
+    },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

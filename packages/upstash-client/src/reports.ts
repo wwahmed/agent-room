@@ -3,6 +3,8 @@ import type { UpstashClient } from './client.js';
 
 function reportKey(code: string): string { return `room-report:${code}`; }
 
+export const REPORT_RETENTION = 'permanent' as const;
+
 export function buildRoomReport(room: Room, messages: Message[]): RoomReport {
   const userMessages = messages.filter(m => m.type === 'msg' && m.text.trim());
   const artifacts = extractArtifacts(userMessages);
@@ -42,6 +44,8 @@ export async function createRoomReport(
   messages: Message[]
 ): Promise<RoomReport> {
   const report = buildRoomReport(room, messages);
+  // Reports are shareable meeting assets, so they intentionally outlive
+  // the 24h room TTL. Redis SET without EX/PX clears any prior TTL.
   await client.command(['SET', reportKey(room.code), JSON.stringify(report)]);
   return report;
 }
