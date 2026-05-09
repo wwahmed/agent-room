@@ -269,6 +269,13 @@ export function Room() {
     try {
       const client = createClient(ENV.upstash);
       await createRoomReport(client, room, messages);
+      // A1: copy the permanent share link to clipboard alongside navigating.
+      // The report key is stored without TTL (see packages/upstash-client/src/reports.ts),
+      // so the link survives past the 24h room TTL — that's exactly the "Save"
+      // half of "Save & Share". Copy first so the toast lives across the
+      // route change (ToastHost is mounted at router level).
+      const reportUrl = `${window.location.origin}/r/${code}/report`;
+      await copyText(reportUrl, 'Saved — share link copied to clipboard');
       navigate(`/r/${code}/report`);
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
@@ -604,9 +611,26 @@ export function Room() {
             </div>
 
             {ended ? (
-              <div className="border-t border-border-faint p-4 bg-surface-softer text-center">
-                <p className="text-xs text-ink-soft mb-2">This meeting has ended.</p>
-                <div className="flex gap-3 justify-center">
+              // A1: ended-room CTA pivots from "Reactivate-only" to a primary
+              // "Save & Share" call-to-action. Once the meeting wraps, the most
+              // valuable next step is to freeze it into a permanent shareable
+              // report (creates the asset + copies the link to clipboard);
+              // Reactivate stays available as a secondary option, Back-to-home
+              // tertiary. This makes share-link generation a one-click move
+              // and feeds the viral loop: every shared link is also a demo of
+              // the product.
+              <div className="border-t border-border-faint p-4 bg-surface-softer">
+                <p className="text-xs text-ink-soft mb-3 text-center">
+                  This meeting has ended. Save it as a permanent report you can share with your team or client.
+                </p>
+                <div className="flex flex-wrap gap-3 justify-center items-center">
+                  <button
+                    onClick={handleExportReport}
+                    disabled={reportBusy || messages.length === 0}
+                    className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {reportBusy ? 'Saving…' : 'Save & Share'}
+                  </button>
                   <button
                     onClick={async () => {
                       try {
@@ -626,11 +650,11 @@ export function Room() {
                         await refreshRoom();
                       } catch {}
                     }}
-                    className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg"
+                    className="text-xs font-semibold text-ink-muted bg-surface border border-border px-4 py-1.5 rounded-lg hover:border-accent/40 hover:text-accent transition"
                   >
                     Reactivate
                   </button>
-                  <button onClick={() => navigate('/')} className="text-xs font-semibold text-ink-muted">Back to home</button>
+                  <button onClick={() => navigate('/')} className="text-xs font-semibold text-ink-faint hover:text-ink-muted">Back to home</button>
                 </div>
               </div>
             ) : !myCanSpeak ? (
