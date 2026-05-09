@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { createClient, createRoom } from '@agent-room/upstash-client';
 import { generateCode, ROLE_PRESETS } from '@agent-room/shared';
 import { ENV } from '../env.js';
@@ -9,8 +9,16 @@ import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 const TEMPLATE_KEY = 'room:pending-template:';
 
 export function CreateMeeting() {
+  // A4: optional `?topic=...&from=<code>` query params let the report
+  // page deep-link a reader straight into a new-room flow with the topic
+  // pre-seeded. `from` is preserved purely for downstream attribution /
+  // debugging — no UI behavior reads it today, but it lives in the URL
+  // so the upcoming room ever needs to know "which shared report
+  // converted you", we don't have to refactor the wire format.
+  const [searchParams] = useSearchParams();
+  const initialTopic = searchParams.get('topic') ?? '';
   const [templateId, setTemplateId] = useState<string>('blank');
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState(initialTopic);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [busy, setBusy] = useState(false);

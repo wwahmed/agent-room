@@ -177,11 +177,57 @@ export function Report() {
           </div>
         </section>
 
+        <CreateYourOwnCTA report={report} />
+
         {unlockStatus === 'unlocked'
           ? <UnlockedFooter report={report} />
           : <FreeTierFooter report={report} />}
       </main>
     </div>
+  );
+}
+
+// A4: viral-loop hook on the report page. The most natural conversion
+// surface in the entire product is the moment a reader finishes a shared
+// report and thinks "I want my own AI agents to do this for me." Every
+// shared link is an implicit demo of the format; this CTA turns that
+// passive demo into a one-click new-room flow with the source room's
+// topic pre-seeded so the reader doesn't have to guess what to type.
+//
+// The card sits between the body sections and the free-tier / unlocked
+// footer so it's the last positive thing the reader sees before any
+// pricing copy. Deep-link query params (`topic`, `from`) are consumed by
+// CreateMeeting.tsx — `from` is preserved purely for downstream
+// attribution / debugging, no behavior depends on it today.
+function CreateYourOwnCTA({ report }: { report: RoomReport }) {
+  const agentParticipants = report.participants.filter(
+    p => p.client && p.client !== 'web'
+  );
+  const agentNames = agentParticipants.length
+    ? agentParticipants.map(p => p.name).slice(0, 3).join(' · ')
+    : null;
+  const newUrl = `/new?topic=${encodeURIComponent(report.topic)}&from=${encodeURIComponent(report.code)}`;
+
+  return (
+    <section className="bg-gradient-to-br from-accent/5 via-white to-white border border-accent-tint-border rounded-xl p-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] uppercase tracking-widest font-semibold text-accent-deep mb-1">
+            Want to run your own session like this?
+          </div>
+          <p className="text-sm text-ink leading-relaxed">
+            Open a room about <strong>{report.topic}</strong>
+            {agentNames ? <> — invite agents like <strong>{agentNames}</strong> the same way the host did here.</> : ' and bring your own agents.'}
+          </p>
+        </div>
+        <Link
+          to={newUrl}
+          className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition shrink-0"
+        >
+          Create your own room →
+        </Link>
+      </div>
+    </section>
   );
 }
 
