@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { artifactLabel, extractArtifacts, normalizeEscapedWhitespace, type ArtifactKind, type RoomArtifact, type RoomReport } from '@agent-room/shared';
+import { artifactLabel, extractArtifacts, normalizeEscapedWhitespace, type ArtifactKind, type Message, type RoomArtifact, type RoomReport } from '@agent-room/shared';
 import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 
@@ -154,9 +154,20 @@ export function Report() {
         </section>
 
         <ReportSection title="Highlights" items={report.highlights} />
-        <ReportSection title="Decisions" items={report.decisions} />
-        <ReportSection title="Action Items" items={report.actionItems} />
-        <ArtifactSection artifacts={artifacts} />
+
+        {/* A5: replaces the old "Decisions / Action Items / Structured
+            Artifacts" trio with a single 决议链 + 证据 + action items 三栏视图.
+            Tagged artifacts (`[DECISION]` / `[TODO]` / `[STATUS]` / `[RESULT]`)
+            render as cards with their backing evidence (the source message
+            excerpt) and a one-click jump back into the transcript. Rooms
+            that didn't tag anything still get a clean board that surfaces
+            the regex-matched decisions / action items as plain bullets. */}
+        <DecisionBoard
+          artifacts={artifacts}
+          fallbackDecisions={report.decisions}
+          fallbackActionItems={report.actionItems}
+          transcript={report.transcript}
+        />
 
         <section className="bg-white border border-border rounded-xl p-5">
           <div className="flex items-center justify-between gap-4 mb-4">
@@ -165,7 +176,9 @@ export function Report() {
           </div>
           <div className="space-y-3">
             {report.transcript.map(m => (
-              <article key={m.id} className="border-l-2 border-border pl-3">
+              // Stable anchor IDs so the Decision Board's "Jump to transcript →"
+              // links land on the exact message that produced each artifact.
+              <article id={`msg-${m.id}`} key={m.id} className="border-l-2 border-border pl-3 scroll-mt-24">
                 <div className="text-[11px] text-ink-soft mb-1">
                   <span className="font-semibold text-ink">{m.name}</span>
                   {m.role && <span> · {m.role}</span>}
@@ -238,36 +251,201 @@ function UnlockedFooter({ report }: { report: RoomReport }) {
   );
 }
 
-function ArtifactSection({ artifacts }: { artifacts: RoomArtifact[] }) {
-  const groups: ArtifactKind[] = ['decision', 'todo', 'status', 'result'];
+// A5: the consolidated "outcome board" that replaces the prior
+// Decisions / Action Items / Structured Artifacts trio. The shape is:
+//
+//   ┌────────────────────────────────────────────────────────────┐
+//   │  Decisions       │  Action Items     │  Status & Results   │
+//   │  (cards w/       │  (cards w/        │  (cards w/          │
+//   │   evidence +     │   evidence +      │   evidence +        │
+//   │   jump link)     │   jump link)      │   jump link)        │
+//   └────────────────────────────────────────────────────────────┘
+//
+// "Evidence" is a clipped excerpt of the source message — it lets the
+// reader see the artifact in its conversational context without
+// scrolling away. The jump link lands on the actual transcript article
+// (via `#msg-<id>` anchors added on the transcript section), so the
+// reader can read the surrounding turn-by-turn if they want more.
+//
+// When a room has no tagged artifacts of a given kind, the column falls
+// back to the regex-matched decisions / actionItems strings so older /
+// untagged rooms still get something useful. Status & Results without
+// artifacts is just hidden — there's no fallback list for those kinds.
+function DecisionBoard({
+  artifacts,
+  fallbackDecisions,
+  fallbackActionItems,
+  transcript,
+}: {
+  artifacts: RoomArtifact[];
+  fallbackDecisions: string[];
+  fallbackActionItems: string[];
+  transcript: Message[];
+}) {
+  const messageById = new Map(transcript.map(m => [m.id, m]));
+
+  const decisions = artifacts.filter(a => a.kind === 'decision');
+  const todos = artifacts.filter(a => a.kind === 'todo');
+  const statusResults = artifacts.filter(a => a.kind === 'status' || a.kind === 'result');
+
+  const cols: BoardColumn[] = [
+    {
+      kind: 'decision',
+      title: 'Decisions',
+      cards: decisions,
+      fallbackText: decisions.length ? [] : fallbackDecisions,
+      fallbackHint: 'Tag with [DECISION] in a message to surface a decision here.',
+    },
+    {
+      kind: 'todo',
+      title: 'Action Items',
+      cards: todos,
+      fallbackText: todos.length ? [] : fallbackActionItems,
+      fallbackHint: 'Tag with [TODO] in a message to surface an action item here.',
+    },
+    {
+      kind: 'status',
+      title: 'Status & Results',
+      cards: statusResults,
+      fallbackText: [],
+      fallbackHint: 'Tag with [STATUS] or [RESULT] to surface progress / outcomes here.',
+    },
+  ];
+
+  const visible = cols.filter(c => c.cards.length || c.fallbackText.length);
+
   return (
     <section className="bg-white border border-border rounded-xl p-5">
-      <h2 className="text-lg font-semibold mb-3">Structured Artifacts</h2>
-      {artifacts.length ? (
-        <div className="grid md:grid-cols-2 gap-3">
-          {groups.map(kind => {
-            const items = artifacts.filter(a => a.kind === kind);
-            if (!items.length) return null;
+      <div className="flex items-baseline justify-between gap-4 mb-4">
+        <h2 className="text-lg font-semibold">Outcome Board</h2>
+        <span className="text-[11px] text-ink-faint">
+          Decisions, action items, and status — backed by evidence from the transcript.
+        </span>
+      </div>
+      {visible.length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          No decisions, action items, status, or results were captured for this room. Tag messages with{' '}
+          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[DECISION]</code>,{' '}
+          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[TODO]</code>,{' '}
+          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[STATUS]</code>, or{' '}
+          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[RESULT]</code> to populate this board.
+        </p>
+      ) : (
+        <div className="grid md:grid-cols-3 gap-4">
+          {cols.map(col => {
+            const isEmpty = col.cards.length === 0 && col.fallbackText.length === 0;
             return (
-              <div key={kind} className="border border-border-faint bg-surface-softer rounded-lg p-3">
-                <h3 className={`text-xs font-semibold uppercase mb-2 ${artifactTone(kind)}`}>{artifactLabel(kind)}</h3>
-                <ul className="space-y-2">
-                  {items.map(item => (
-                    <li key={item.id} className="text-sm leading-relaxed">
-                      <span>{item.text}</span>
-                      <span className="block text-[11px] text-ink-soft mt-0.5">{item.author} · {new Date(item.time).toLocaleString()}</span>
-                    </li>
-                  ))}
-                </ul>
+              <div key={col.kind} className="flex flex-col">
+                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${artifactTone(col.kind)}`}>
+                  {col.title}
+                  <span className="ml-2 text-ink-faint normal-case font-medium">
+                    {col.cards.length || col.fallbackText.length || 0}
+                  </span>
+                </h3>
+                {isEmpty ? (
+                  <p className="text-[11px] text-ink-faint leading-relaxed">{col.fallbackHint}</p>
+                ) : col.cards.length > 0 ? (
+                  <ul className="space-y-2">
+                    {col.cards.map(card => (
+                      <ArtifactCard
+                        key={card.id}
+                        artifact={card}
+                        sourceMessage={messageById.get(card.sourceMessageId) ?? null}
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  // Untagged room: render the regex-matched fallback strings
+                  // as plain bullets. We don't have message-level provenance
+                  // for these so no evidence / jump link.
+                  <ul className="space-y-2">
+                    {col.fallbackText.map((line, i) => (
+                      <li
+                        key={i}
+                        className="text-sm leading-relaxed border border-border-faint bg-surface-softer rounded-lg px-3 py-2"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             );
           })}
         </div>
-      ) : (
-        <p className="text-sm text-ink-soft">No structured markers were found in this room.</p>
       )}
     </section>
   );
+}
+
+interface BoardColumn {
+  kind: ArtifactKind;
+  title: string;
+  cards: RoomArtifact[];
+  /** Plain-string fallback (regex-matched decisions / actionItems) used
+   *  when there are no tagged cards of this kind. */
+  fallbackText: string[];
+  /** Empty-state copy shown when both `cards` and `fallbackText` are empty. */
+  fallbackHint: string;
+}
+
+function ArtifactCard({
+  artifact,
+  sourceMessage,
+}: {
+  artifact: RoomArtifact;
+  sourceMessage: Message | null;
+}) {
+  const evidence = sourceMessage ? buildEvidence(sourceMessage.text, artifact.text) : null;
+  const anchor = `#msg-${artifact.sourceMessageId}`;
+
+  return (
+    <li className="border border-border-faint bg-surface-softer rounded-lg p-3 flex flex-col gap-2">
+      <div className="text-sm leading-relaxed text-ink">{artifact.text}</div>
+      <div className="text-[11px] text-ink-soft">
+        <span className="font-semibold">{artifact.author}</span>
+        <span> · {new Date(artifact.time).toLocaleString()}</span>
+      </div>
+      {evidence && (
+        <blockquote className="text-[12px] leading-relaxed text-ink-soft border-l-2 border-border pl-2 italic">
+          “{evidence}”
+        </blockquote>
+      )}
+      {sourceMessage && (
+        <a
+          href={anchor}
+          className="text-[11px] font-semibold text-accent hover:underline self-start"
+        >
+          Jump to transcript →
+        </a>
+      )}
+    </li>
+  );
+}
+
+// Pull a short excerpt around the artifact text inside the source
+// message so the card has visible "evidence." We anchor on the
+// artifact text itself when possible (so the snippet contains it),
+// then fall back to the message head. Caps at ~180 chars to keep cards
+// scannable; the full message is one click away via the jump link.
+function buildEvidence(messageText: string, artifactText: string): string | null {
+  const normalized = messageText.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  const idx = normalized.indexOf(artifactText);
+  const max = 180;
+  if (idx >= 0) {
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(normalized.length, idx + artifactText.length + 80);
+    const chunk = normalized.slice(start, end);
+    const prefix = start > 0 ? '…' : '';
+    const suffix = end < normalized.length ? '…' : '';
+    return clipWithEllipsis(`${prefix}${chunk}${suffix}`, max + 2);
+  }
+  return clipWithEllipsis(normalized, max);
+}
+
+function clipWithEllipsis(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
 function ReportSection({ title, items }: { title: string; items: string[] }) {
