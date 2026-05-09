@@ -1,9 +1,55 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient, getRoomReport } from '@agent-room/upstash-client';
-import type { RoomReport } from '@agent-room/shared';
+
+// Hotfix: see api/report-page.ts for the full rationale. Same workspace-
+// import problem (`@agent-room/upstash-client` ships TypeScript source
+// via `"main": "./src/index.ts"`, which Node can't load at runtime), so
+// the import was crashing the function before the handler ran. This
+// inlines a minimal Upstash REST GET + the report-shape subset we
+// actually consult.
 
 const FALLBACK_TITLE = 'Agent Room Report';
 const FALLBACK_DESCRIPTION = 'A shareable meeting asset from a multi-agent collaboration room.';
+
+interface MiniParticipant {
+  name: string;
+  client?: string;
+}
+
+interface MiniReport {
+  topic?: string;
+  summary?: string;
+  exportedAt?: number;
+  messageCount?: number;
+  participants?: MiniParticipant[];
+}
+
+async function getRoomReportRaw(
+  url: string,
+  token: string,
+  code: string
+): Promise<MiniReport | null> {
+  let resp: Response;
+  try {
+    resp = await fetch(`${url.replace(/\/$/, '')}/get/room-report:${encodeURIComponent(code)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return null;
+  }
+  if (!resp.ok) return null;
+  let body: { result?: string | null };
+  try {
+    body = (await resp.json()) as { result?: string | null };
+  } catch {
+    return null;
+  }
+  if (!body.result) return null;
+  try {
+    return JSON.parse(body.result) as MiniReport;
+  } catch {
+    return null;
+  }
+}
 
 function readUpstashEnv(): { url: string; token: string } | { missing: string[] } {
   const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.VITE_UPSTASH_REDIS_REST_URL;
@@ -34,7 +80,7 @@ function clip(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}...` : value;
 }
 
-function reportSummary(report: RoomReport | null): { title: string; description: string; details: string[] } {
+function reportSummary(report: MiniReport | null): { title: string; description: string; details: string[] } {
   if (!report) {
     return {
       title: FALLBACK_TITLE,
@@ -43,13 +89,14 @@ function reportSummary(report: RoomReport | null): { title: string; description:
     };
   }
 
-  const agents = report.participants
+  const participants = report.participants ?? [];
+  const agents = participants
     .filter(p => p.client !== 'web')
     .map(p => p.name)
     .slice(0, 3);
   const details = [
-    `${report.messageCount} messages`,
-    `${report.participants.length} participants`,
+    `${report.messageCount ?? 0} messages`,
+    `${participants.length} participants`,
     agents.length ? `Agents: ${agents.join(', ')}` : 'Meeting asset',
   ];
   return {
@@ -59,7 +106,7 @@ function reportSummary(report: RoomReport | null): { title: string; description:
   };
 }
 
-function svgCard(report: RoomReport | null): string {
+function svgCard(report: MiniReport | null): string {
   const summary = reportSummary(report);
   const title = escapeXml(clip(summary.title, 72));
   const description = escapeXml(clip(summary.description, 150));
@@ -101,9 +148,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const env = readUpstashEnv();
-  let report: RoomReport | null = null;
+  let report: MiniReport | null = null;
   if (!('missing' in env)) {
-    report = await getRoomReport(createClient(env), code).catch(() => null);
+    report = await getRoomReportRaw(env.url, env.token, code).catch(() => null);
   }
 
   res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
