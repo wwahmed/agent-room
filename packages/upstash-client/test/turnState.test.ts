@@ -287,7 +287,7 @@ describe('timeoutForRole', () => {
     const r = room();
     expect(timeoutForRole(r, 'lead')).toBe(90_000);
     expect(timeoutForRole(r, 'supplement')).toBe(45_000);
-    expect(timeoutForRole(r, 'moderator')).toBe(120_000);
+    expect(timeoutForRole(r, 'moderator')).toBe(300_000);
     expect(timeoutForRole(r, 'assignee')).toBe(90_000);
   });
 
@@ -296,7 +296,7 @@ describe('timeoutForRole', () => {
     expect(timeoutForRole(r, 'lead')).toBe(5_000);
     expect(timeoutForRole(r, 'supplement')).toBe(1_000);
     // Unconfigured roles still fall back.
-    expect(timeoutForRole(r, 'moderator')).toBe(120_000);
+    expect(timeoutForRole(r, 'moderator')).toBe(300_000);
   });
 
   it('returns Infinity for non-deadline roles (open, human, host_directed)', () => {
@@ -344,7 +344,7 @@ describe('newModeratorTurn', () => {
     expect(state.currentName).toBe('Lead');
     expect(state.currentRole).toBe('moderator');
     expect(state.queue).toEqual([]);
-    expect(state.deadline).toBe(1000 + 120_000); // default moderator timeout
+    expect(state.deadline).toBe(1000 + 300_000); // default moderator timeout
   });
 });
 
@@ -358,7 +358,7 @@ describe('moderatorReply', () => {
     const after = moderatorReply(start, r, 5000);
     expect(after.currentName).toBe('Lead');
     expect(after.currentRole).toBe('moderator');
-    expect(after.deadline).toBe(5000 + 120_000);
+    expect(after.deadline).toBe(5000 + 300_000);
     expect(after.spoken).toEqual([
       { name: 'Lead', client: 'cc', role: 'moderator', status: 'replied', at: 5000 },
     ]);

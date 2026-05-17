@@ -68,7 +68,7 @@ export type SystemEventType =
 export const DEFAULT_TURN_TIMEOUTS_MS = {
   lead: 90_000,
   supplement: 45_000,
-  moderator: 120_000,
+  moderator: 300_000,
   assignee: 90_000,
 } as const;
 
