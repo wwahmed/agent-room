@@ -198,6 +198,40 @@ async function emitTimeoutSysMessage(
   } catch { /* best-effort — the turn already advanced even if sys msg fails */ }
 }
 
+// Server-emitted sys message for a lead-grace preemption. Posted by
+// appendMessage's caller when a queue-head supplement preempts the Lead
+// in sequential mode after the grace window elapses — the Lead's slot
+// was dropped with status='skipped_by_grace' inside the CAS mutator,
+// and this surfaces that to participants.
+async function emitGraceSkipSysMessage(
+  client: ReturnType<typeof createClient>,
+  code: string,
+  leadSkipped: TurnSpokenEntry,
+  mode: ReplyMode,
+): Promise<void> {
+  const now = Date.now();
+  const sysMsg: Message = {
+    id: now,
+    type: 'sys',
+    name: 'system',
+    initials: '⚡',
+    color: '#F59E0B',
+    role: '',
+    text: `@${leadSkipped.name} did not speak within the lead-grace window — supplement took the floor.`,
+    client: 'cc',
+    time: now,
+    metadata: {
+      eventType: 'skipped_by_grace',
+      modeAtSend: mode,
+      roleAtSend: leadSkipped.role,
+      targetAgentName: leadSkipped.name,
+      targetAgentClient: leadSkipped.client,
+      skippedBy: 'system',
+    },
+  };
+  try { await appendSystemMessage(client, code, sysMsg); } catch { /* best-effort */ }
+}
+
 // Server-emitted sys message for a mode auto-fallback. Posted when the
 // Moderator times out, the Moderator leaves the room, or the Sequential
 // Lead leaves the room. The room's replyMode has already been flipped to
@@ -972,6 +1006,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         ...(attachments.length > 0 ? { attachments } : {}),
       };
       let appendResult: Awaited<ReturnType<typeof appendMessage>>;
+      const modeBeforeSend = (await getRoom(client, a.code)).replyMode ?? 'open';
       try {
         appendResult = await appendMessage(client, a.code, msg);
       } catch (e) {
@@ -996,6 +1031,12 @@ export function registerTools(server: Server, env: UpstashEnv) {
           });
         }
         throw e;
+      }
+      // Grace preemption: a queue-head supplement just took the floor from
+      // the Lead. Emit a sys message so the host (and other agents
+      // tail-scanning the chat) can see why the Lead was dropped.
+      if (appendResult.leadSkipped) {
+        await emitGraceSkipSysMessage(client, a.code, appendResult.leadSkipped, modeBeforeSend);
       }
       const msgs = await listMessages(client, a.code, 0);
       // Advance cursor past our own message so the Stop hook does not re-inject it.

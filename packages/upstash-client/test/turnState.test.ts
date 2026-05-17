@@ -4,17 +4,22 @@ import {
   addHostDirected,
   advanceOnTimeout,
   advanceTurn,
+  applyGraceSupplementReply,
   buildSupplementQueue,
+  canAgentSpeakNow,
   consumeHostDirected,
   consumeHostDirectedDetailed,
   isCurrentSpeaker,
+  isGraceSupplementSpeaker,
   isHumanSender,
+  leadGraceMs,
   moderatorReply,
   myRoleInTurn,
   newModeratorTurn,
   newSequentialTurn,
   pickLeadForSequential,
   shouldStartNewTurn,
+  skipQueueHead,
   timeoutForRole,
   type TurnState,
 } from '../src/turnState.js';
@@ -115,11 +120,19 @@ describe('newSequentialTurn', () => {
     expect(state.currentName).toBe('Lead');
     expect(state.currentRole).toBe('lead');
     expect(state.deadline).toBe(1000 + 90_000); // default lead timeout
+    expect(state.leadGraceUntil).toBe(1000 + 20_000); // default lead grace
     expect(state.queue).toEqual([
       { name: 'A', client: 'cc', role: 'supplement' },
       { name: 'B', client: 'cc', role: 'supplement' },
     ]);
     expect(state.spoken).toEqual([]);
+  });
+
+  it('omits leadGraceUntil when no supplements are waiting (pointless grace)', () => {
+    const r = room({ participants: [part('host', 'web', 0), part('Lead', 'cc', 10)] });
+    const state = newSequentialTurn(r, 100, 1000)!;
+    expect(state.queue).toEqual([]);
+    expect(state.leadGraceUntil).toBeUndefined();
   });
 });
 
@@ -135,6 +148,8 @@ describe('advanceTurn', () => {
     expect(after.currentRole).toBe('supplement');
     expect(after.deadline).toBe(2000 + 45_000); // default supplement timeout
     expect(after.queue).toEqual([{ name: 'B', client: 'cc', role: 'supplement' }]);
+    // Grace window cleared once we leave the lead slot.
+    expect(after.leadGraceUntil).toBeUndefined();
   });
 
   it('clears current/deadline when the queue empties', () => {
@@ -272,7 +287,7 @@ describe('timeoutForRole', () => {
     const r = room();
     expect(timeoutForRole(r, 'lead')).toBe(90_000);
     expect(timeoutForRole(r, 'supplement')).toBe(45_000);
-    expect(timeoutForRole(r, 'moderator')).toBe(45_000);
+    expect(timeoutForRole(r, 'moderator')).toBe(120_000);
     expect(timeoutForRole(r, 'assignee')).toBe(90_000);
   });
 
@@ -281,7 +296,7 @@ describe('timeoutForRole', () => {
     expect(timeoutForRole(r, 'lead')).toBe(5_000);
     expect(timeoutForRole(r, 'supplement')).toBe(1_000);
     // Unconfigured roles still fall back.
-    expect(timeoutForRole(r, 'moderator')).toBe(45_000);
+    expect(timeoutForRole(r, 'moderator')).toBe(120_000);
   });
 
   it('returns Infinity for non-deadline roles (open, human, host_directed)', () => {
@@ -329,7 +344,7 @@ describe('newModeratorTurn', () => {
     expect(state.currentName).toBe('Lead');
     expect(state.currentRole).toBe('moderator');
     expect(state.queue).toEqual([]);
-    expect(state.deadline).toBe(1000 + 45_000); // default moderator timeout
+    expect(state.deadline).toBe(1000 + 120_000); // default moderator timeout
   });
 });
 
@@ -343,7 +358,7 @@ describe('moderatorReply', () => {
     const after = moderatorReply(start, r, 5000);
     expect(after.currentName).toBe('Lead');
     expect(after.currentRole).toBe('moderator');
-    expect(after.deadline).toBe(5000 + 45_000);
+    expect(after.deadline).toBe(5000 + 120_000);
     expect(after.spoken).toEqual([
       { name: 'Lead', client: 'cc', role: 'moderator', status: 'replied', at: 5000 },
     ]);
@@ -394,11 +409,12 @@ describe('myRoleInTurn', () => {
     expect(myRoleInTurn(state, 'Lead', 'cc')).toBe('lead');
   });
 
-  it('returns "queued" for upcoming supplements', () => {
+  it('returns "queued" for upcoming supplements before lead-grace elapses', () => {
     const r = room();
-    const state = newSequentialTurn(r, 1, 1)!;
-    expect(myRoleInTurn(state, 'A', 'cc')).toBe('queued');
-    expect(myRoleInTurn(state, 'B', 'cc')).toBe('queued');
+    const state = newSequentialTurn(r, 1, 1000)!;
+    // 5s into the turn — well within the 20s lead grace window.
+    expect(myRoleInTurn(state, 'A', 'cc', 6000)).toBe('queued');
+    expect(myRoleInTurn(state, 'B', 'cc', 6000)).toBe('queued');
   });
 
   it('returns "spoken" once the participant has replied or been skipped', () => {
@@ -415,5 +431,100 @@ describe('myRoleInTurn', () => {
       hostDirected: [{ name: 'A', client: 'cc', addedAt: 0 }],
     };
     expect(myRoleInTurn(state, 'A', 'cc')).toBe('host_directed');
+  });
+});
+
+describe('lead grace', () => {
+  it('leadGraceMs honors modeConfig override and falls back to default', () => {
+    expect(leadGraceMs(room())).toBe(20_000);
+    expect(leadGraceMs(room({ modeConfig: { leadGraceMs: 5_000 } }))).toBe(5_000);
+  });
+
+  it('canAgentSpeakNow: Lead always, queue head only after grace, others never', () => {
+    const r = room();
+    const state = newSequentialTurn(r, 1, 1000)!;
+    // Inside grace: only Lead can speak.
+    expect(canAgentSpeakNow(state, 'Lead', 'cc', 5000)).toBe(true);
+    expect(canAgentSpeakNow(state, 'A', 'cc', 5000)).toBe(false);
+    expect(canAgentSpeakNow(state, 'B', 'cc', 5000)).toBe(false);
+    // Past grace: queue head A unlocks; B (not at head) stays gated.
+    expect(canAgentSpeakNow(state, 'Lead', 'cc', 25_000)).toBe(true);
+    expect(canAgentSpeakNow(state, 'A', 'cc', 25_000)).toBe(true);
+    expect(canAgentSpeakNow(state, 'B', 'cc', 25_000)).toBe(false);
+  });
+
+  it('isGraceSupplementSpeaker distinguishes grace-path from current-speaker path', () => {
+    const r = room();
+    const state = newSequentialTurn(r, 1, 1000)!;
+    expect(isGraceSupplementSpeaker(state, 'Lead', 'cc', 25_000)).toBe(false); // is current
+    expect(isGraceSupplementSpeaker(state, 'A', 'cc', 25_000)).toBe(true);     // grace path
+    expect(isGraceSupplementSpeaker(state, 'A', 'cc', 5_000)).toBe(false);     // still in grace
+  });
+
+  it('myRoleInTurn surfaces the queue-head supplement as "supplement" after grace', () => {
+    const r = room();
+    const state = newSequentialTurn(r, 1, 1000)!;
+    expect(myRoleInTurn(state, 'A', 'cc', 5_000)).toBe('queued');
+    expect(myRoleInTurn(state, 'A', 'cc', 25_000)).toBe('supplement');
+    // Non-head supplement stays queued — only the head is grace-eligible.
+    expect(myRoleInTurn(state, 'B', 'cc', 25_000)).toBe('queued');
+  });
+
+  it('applyGraceSupplementReply marks Lead skipped_by_grace and advances the queue', () => {
+    const r = room();
+    const state = newSequentialTurn(r, 1, 1000)!;
+    const { state: after, leadSkipped } = applyGraceSupplementReply(
+      state, 'A', 'cc', r, 25_000,
+    );
+    expect(leadSkipped).toEqual({
+      name: 'Lead', client: 'cc', role: 'lead', status: 'skipped_by_grace', at: 25_000,
+    });
+    expect(after.spoken).toEqual([
+      { name: 'Lead', client: 'cc', role: 'lead', status: 'skipped_by_grace', at: 25_000 },
+      { name: 'A', client: 'cc', role: 'supplement', status: 'replied', at: 25_000 },
+    ]);
+    expect(after.currentName).toBe('B');
+    expect(after.queue).toEqual([]);
+    expect(after.leadGraceUntil).toBeUndefined();
+  });
+
+  it('applyGraceSupplementReply clears current/deadline when queue empties out', () => {
+    const r = room({ participants: [part('host', 'web', 0), part('Lead', 'cc', 10), part('A', 'cc', 20)] });
+    const state = newSequentialTurn(r, 1, 1000)!;
+    const { state: after } = applyGraceSupplementReply(state, 'A', 'cc', r, 25_000);
+    expect(after.currentName).toBeUndefined();
+    expect(after.queue).toEqual([]);
+    expect(after.leadGraceUntil).toBeUndefined();
+  });
+
+  it('Lead reply during grace uses normal advanceTurn (no skip)', () => {
+    const r = room();
+    const state = newSequentialTurn(r, 1, 1000)!;
+    const after = advanceTurn(state, 'replied', r, 5_000);
+    expect(after.spoken[0]?.status).toBe('replied');
+    expect(after.currentName).toBe('A');
+    expect(after.leadGraceUntil).toBeUndefined();
+  });
+
+  it('skipQueueHead drops the head supplement without preempting the Lead', () => {
+    const r = room();
+    const state = newSequentialTurn(r, 1, 1000)!;
+    const after = skipQueueHead(state, 'no_addition', 25_000);
+    // Lead still current; A removed from queue with no_addition status.
+    expect(after.currentName).toBe('Lead');
+    expect(after.currentRole).toBe('lead');
+    expect(after.leadGraceUntil).toBe(state.leadGraceUntil);
+    expect(after.queue).toEqual([{ name: 'B', client: 'cc', role: 'supplement' }]);
+    expect(after.spoken).toEqual([
+      { name: 'A', client: 'cc', role: 'supplement', status: 'no_addition', at: 25_000 },
+    ]);
+  });
+
+  it('skipQueueHead is a no-op when the queue is empty', () => {
+    const r = room({ participants: [part('host', 'web', 0), part('Lead', 'cc', 10)] });
+    const state = newSequentialTurn(r, 1, 1000)!;
+    expect(state.queue).toEqual([]);
+    const after = skipQueueHead(state, 'no_addition', 25_000);
+    expect(after).toEqual(state);
   });
 });

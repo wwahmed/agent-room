@@ -4,7 +4,7 @@ import type {
   ReplyMode,
   ReplyModeConfig,
 } from '@agent-room/shared';
-import { AVATAR_PALETTE, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { AVATAR_PALETTE, DEFAULT_TURN_TIMEOUTS_MS, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import type { UpstashClient } from './client.js';
 import { RoomNotFoundError, ConcurrencyError } from './errors.js';
 
@@ -367,6 +367,19 @@ export async function setReplyMode(
     if (mode === 'moderator') {
       if (!config?.moderatorAgentName || !config?.moderatorAgentClient) {
         throw new InvalidModeConfigError('moderator', 'moderatorAgentName + moderatorAgentClient');
+      }
+    }
+    if (config?.leadGraceMs !== undefined) {
+      const leadDeadline = config.timeoutMs?.lead ?? DEFAULT_TURN_TIMEOUTS_MS.lead;
+      if (
+        !Number.isFinite(config.leadGraceMs)
+        || config.leadGraceMs < 0
+        || config.leadGraceMs > leadDeadline
+      ) {
+        throw new InvalidModeConfigError(
+          mode,
+          `leadGraceMs (must be a finite number in [0, ${leadDeadline}])`,
+        );
       }
     }
     // Persist normalized config. For 'open' we still keep whatever the

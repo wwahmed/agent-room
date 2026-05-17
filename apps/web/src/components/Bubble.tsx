@@ -55,6 +55,7 @@ function systemEventLabel(message: Message): string {
   }
   if (eventType === 'timed_out' && target) return `${target} timed out and was skipped`;
   if (eventType === 'skipped_by_host' && target) return `${target} was skipped by host`;
+  if (eventType === 'skipped_by_grace' && target) return `${target} was preempted by supplement (lead grace elapsed)`;
   if (eventType === 'host_invoked' && target) return `${target} was asked by host`;
   if (eventType === 'moderator_dispatched' && target) return `${target} was assigned by moderator`;
   if (eventType === 'lead_left' && target) return `${target} left. Switched to Open mode`;

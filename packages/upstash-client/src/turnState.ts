@@ -1,5 +1,5 @@
 import type { ClientKind, Participant, ReplyMode, RoleInTurn, Room } from '@agent-room/shared';
-import { DEFAULT_TURN_TIMEOUTS_MS, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { DEFAULT_LEAD_GRACE_MS, DEFAULT_TURN_TIMEOUTS_MS, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import type { UpstashClient } from './client.js';
 import { ConcurrencyError } from './errors.js';
 import { casRoom } from './rooms.js';
@@ -23,7 +23,12 @@ export interface TurnQueueEntry {
   role: RoleInTurn;
 }
 
-export type TurnSpokenStatus = 'replied' | 'skipped' | 'timed_out' | 'no_addition';
+export type TurnSpokenStatus =
+  | 'replied'
+  | 'skipped'
+  | 'timed_out'
+  | 'no_addition'
+  | 'skipped_by_grace';
 
 export interface TurnSpokenEntry {
   name: string;
@@ -60,6 +65,14 @@ export interface TurnState {
   // Epoch-ms by which currentName must produce a message. If Date.now()
   // exceeds this on the next read, advanceOnTimeout() skips and moves on.
   deadline?: number;
+
+  // Sequential mode only: epoch-ms until which the Lead has the floor
+  // exclusively. After this instant the queue-head supplement may also
+  // speak — whichever lands first wins the turn. Unset for moderator
+  // mode and for turns where the current speaker isn't (and never was)
+  // the Lead. Cleared by advanceTurn / applyGraceSupplementReply when
+  // we leave the lead slot, so a stale value can't accidentally re-fire.
+  leadGraceUntil?: number;
 
   // FIFO queue of upcoming speakers.
   queue: TurnQueueEntry[];
@@ -146,6 +159,12 @@ export async function casTurnState(
     return next;
   }
   throw lastError instanceof ConcurrencyError ? lastError : new ConcurrencyError();
+}
+
+// Resolve the lead-grace window in ms for this room. Honors the
+// per-room override if present, otherwise DEFAULT_LEAD_GRACE_MS.
+export function leadGraceMs(room: Room): number {
+  return room.modeConfig?.leadGraceMs ?? DEFAULT_LEAD_GRACE_MS;
 }
 
 // Resolve the per-role timeout in ms for this room's modeConfig, falling
@@ -257,6 +276,10 @@ export function newSequentialTurn(
     currentClient: lead.client,
     currentRole: leadRole,
     deadline: now + timeoutForRole(room, leadRole),
+    // Lead-grace: queue-head supplement is unlocked after this instant
+    // (only set if there's actually a supplement waiting — pointless
+    // grace window if the Lead is the only agent).
+    ...(queue.length > 0 ? { leadGraceUntil: now + leadGraceMs(room) } : {}),
     queue,
     spoken: [],
   };
@@ -298,6 +321,7 @@ export function advanceTurn(
       currentClient: undefined,
       currentRole: undefined,
       deadline: undefined,
+      leadGraceUntil: undefined,
       queue: [],
       spoken: [...state.spoken, finished],
     };
@@ -308,6 +332,10 @@ export function advanceTurn(
     currentClient: next.client,
     currentRole: next.role,
     deadline: now + timeoutForRole(room, next.role),
+    // Grace only applies while a Lead is current. Once we hand off
+    // (or skip past) the Lead, drop the field so dump-readers don't
+    // see a stale value.
+    leadGraceUntil: undefined,
     queue: nextQueue,
     spoken: [...state.spoken, finished],
   };
@@ -371,8 +399,8 @@ export function advanceOnTimeout(
   return { state: cur, skipped };
 }
 
-// Is (name, client) the current turn-holder? Used by findAllowedSpeaker
-// in sequential/moderator modes to validate `room_send` calls.
+// Is (name, client) the current turn-holder? Kept for tests and back-compat;
+// production code should use canAgentSpeakNow which also honors lead grace.
 export function isCurrentSpeaker(
   state: TurnState | null,
   name: string,
@@ -380,6 +408,143 @@ export function isCurrentSpeaker(
 ): boolean {
   if (!state || !state.currentName || !state.currentClient) return false;
   return state.currentName === name && state.currentClient === client;
+}
+
+// Internal: is this agent the queue-head supplement AND has lead-grace
+// elapsed? Encapsulates the "supplement may preempt Lead" rule used by
+// both canAgentSpeakNow and myRoleInTurn (and exported so messages.ts can
+// branch on it after a successful speaker check).
+function isGraceEligibleQueueHead(
+  state: TurnState,
+  name: string,
+  client: ClientKind,
+  now: number,
+): boolean {
+  if (state.mode !== 'sequential') return false;
+  if (state.currentRole !== 'lead') return false;
+  if (state.leadGraceUntil === undefined || now < state.leadGraceUntil) return false;
+  const head = state.queue[0];
+  if (!head) return false;
+  return head.name === name && head.client === client;
+}
+
+// May (name, client) send a normal_turn message right now? True when they
+// are the current speaker OR when sequential lead grace has elapsed and
+// they are the queue-head supplement (head-of-line break). The Lead can
+// still speak in parallel until their own deadline — first reply wins
+// via CAS; the loser gets logged as skipped_by_grace.
+export function canAgentSpeakNow(
+  state: TurnState | null,
+  name: string,
+  client: ClientKind,
+  now: number = Date.now(),
+): boolean {
+  if (!state || !state.currentName || !state.currentClient) return false;
+  if (state.currentName === name && state.currentClient === client) return true;
+  return isGraceEligibleQueueHead(state, name, client, now);
+}
+
+// True iff this agent passes canAgentSpeakNow specifically via the
+// grace-eligible-queue-head path (i.e. they are NOT the current speaker).
+// Used by messages.ts to pick the right roleAtSend + advance strategy.
+export function isGraceSupplementSpeaker(
+  state: TurnState | null,
+  name: string,
+  client: ClientKind,
+  now: number = Date.now(),
+): boolean {
+  if (!state) return false;
+  if (state.currentName === name && state.currentClient === client) return false;
+  return isGraceEligibleQueueHead(state, name, client, now);
+}
+
+// Sequential lead-grace path: the queue-head supplement just replied while
+// the Lead was still current. Mark the Lead as skipped_by_grace, log the
+// supplement, drop the supplement from the queue, advance to the next
+// speaker (or end of turn). Returns the new state + the lead's spoken
+// entry so the caller can emit a sys message about the grace skip.
+export function applyGraceSupplementReply(
+  state: TurnState,
+  supplementName: string,
+  supplementClient: ClientKind,
+  room: Room,
+  now: number = Date.now(),
+  supplementStatus: TurnSpokenStatus = 'replied',
+): { state: TurnState; leadSkipped: TurnSpokenEntry } {
+  const leadSkipped: TurnSpokenEntry = {
+    name: state.currentName!,
+    client: state.currentClient!,
+    role: 'lead',
+    status: 'skipped_by_grace',
+    at: now,
+  };
+  const supplementEntry: TurnSpokenEntry = {
+    name: supplementName,
+    client: supplementClient,
+    role: 'supplement',
+    status: supplementStatus,
+    at: now,
+  };
+  // Drop the queue-head supplement (the one that just spoke), THEN
+  // advance to the next speaker. Note: we deliberately drop the Lead
+  // from `current` without re-queueing — `skipped_by_grace` is terminal.
+  const remaining = state.queue.slice(1);
+  const next = remaining.shift();
+  const spoken = [...state.spoken, leadSkipped, supplementEntry];
+  if (!next) {
+    return {
+      state: {
+        ...state,
+        currentName: undefined,
+        currentClient: undefined,
+        currentRole: undefined,
+        deadline: undefined,
+        leadGraceUntil: undefined,
+        queue: [],
+        spoken,
+      },
+      leadSkipped,
+    };
+  }
+  return {
+    state: {
+      ...state,
+      currentName: next.name,
+      currentClient: next.client,
+      currentRole: next.role,
+      deadline: now + timeoutForRole(room, next.role),
+      leadGraceUntil: undefined,
+      queue: remaining,
+      spoken,
+    },
+    leadSkipped,
+  };
+}
+
+// Sequential lead-grace path: the queue-head supplement sent the
+// __no_addition__ token while still in grace. We honor the supplement's
+// opt-out (drop them from the queue, log no_addition) but do NOT preempt
+// the Lead — they keep the floor until their own deadline. Opting out
+// is a soft signal, not a claim on the mic.
+export function skipQueueHead(
+  state: TurnState,
+  status: TurnSpokenStatus = 'no_addition',
+  now: number = Date.now(),
+): TurnState {
+  const head = state.queue[0];
+  if (!head) return state;
+  const entry: TurnSpokenEntry = {
+    name: head.name,
+    client: head.client,
+    role: head.role,
+    status,
+    at: now,
+  };
+  return {
+    ...state,
+    queue: state.queue.slice(1),
+    spoken: [...state.spoken, entry],
+  };
 }
 
 // Pop a host-directed one-shot allowlist entry if present. Returns true if
@@ -665,6 +830,7 @@ export function myRoleInTurn(
   state: TurnState | null,
   name: string,
   client: ClientKind,
+  now: number = Date.now(),
 ): MyRoleInTurn {
   if (!state) return 'observer';
   if (state.hostDirected?.some(e => e.name === name && e.client === client)) {
@@ -672,6 +838,11 @@ export function myRoleInTurn(
   }
   if (state.currentName === name && state.currentClient === client) {
     return (state.currentRole ?? 'observer') as MyRoleInTurn;
+  }
+  // Grace-eligible queue-head supplement: surface as 'supplement' so the
+  // agent knows they can speak now (not just 'queued').
+  if (isGraceEligibleQueueHead(state, name, client, now)) {
+    return 'supplement';
   }
   if (state.queue.some(q => q.name === name && q.client === client)) {
     return 'queued';

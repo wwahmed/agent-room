@@ -54,6 +54,7 @@ export type SystemEventType =
   | 'moderator_changed'
   | 'timed_out'
   | 'skipped_by_host'
+  | 'skipped_by_grace'
   | 'lead_left'
   | 'moderator_left'
   | 'moderator_fallback'
@@ -62,13 +63,21 @@ export type SystemEventType =
 
 // Default per-role timeout values (in ms). Used when a room hasn't been
 // configured with custom overrides. Tuned higher than the chat default
-// because real LLM calls (with tool use) can take 30-60s.
+// because real LLM calls (with tool use) can take 30-60s. Moderator gets
+// the longest window because they read + decide + dispatch in one turn.
 export const DEFAULT_TURN_TIMEOUTS_MS = {
   lead: 90_000,
   supplement: 45_000,
-  moderator: 45_000,
+  moderator: 120_000,
   assignee: 90_000,
 } as const;
+
+// Sequential mode: how long after a turn starts the Lead has the floor
+// exclusively. Once this elapses the queue-head supplement may also speak;
+// whichever lands first wins the turn and the loser is logged as
+// status='skipped_by_grace'. Stops sequential head-of-line blocking when
+// the Lead is slow or offline.
+export const DEFAULT_LEAD_GRACE_MS = 20_000;
 
 // Per-room reply-mode configuration. All fields optional so a room can be
 // created without naming a Lead/Moderator until the host actually picks a
@@ -91,6 +100,13 @@ export interface ReplyModeConfig {
   // DEFAULT_TURN_TIMEOUTS_MS. Stored at room level (not turn state) so
   // settings survive server restarts.
   timeoutMs?: Partial<typeof DEFAULT_TURN_TIMEOUTS_MS>;
+
+  // Sequential mode: lead-grace window in ms. After this elapses the
+  // queue-head supplement may speak even though the Lead is still current
+  // — see canAgentSpeakNow / applyGraceSupplementReply. Defaults to
+  // DEFAULT_LEAD_GRACE_MS. Must satisfy 0 <= leadGraceMs <= lead deadline
+  // (a grace window longer than the Lead's own deadline is nonsensical).
+  leadGraceMs?: number;
 }
 
 export interface Room {

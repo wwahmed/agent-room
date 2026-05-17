@@ -2,17 +2,21 @@ import type { Message, MessageMetadata, RoleInTurn, InvocationType } from '@agen
 import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import type { UpstashClient } from './client.js';
 import { findSpeaker, MutedError, NotYourTurnError, getRoom } from './rooms.js';
+import type { TurnSpokenEntry } from './turnState.js';
 import {
   advanceOnTimeout,
   advanceTurn,
+  applyGraceSupplementReply,
+  canAgentSpeakNow,
   casTurnState,
   consumeHostDirectedDetailed,
-  isCurrentSpeaker,
+  isGraceSupplementSpeaker,
   isHumanSender,
   moderatorReply,
   newModeratorTurn,
   newSequentialTurn,
   shouldStartNewTurn,
+  skipQueueHead,
 } from './turnState.js';
 
 function msgsKey(code: string): string { return `room-msgs:${code}`; }
@@ -56,6 +60,12 @@ export interface AppendResult {
   // case, the metadata that WOULD have been attached). Useful for
   // surfacing roleAtSend/turnId in the tool response.
   metadata: MessageMetadata;
+  // Sequential lead-grace path: when a queue-head supplement preempts the
+  // Lead, the Lead is logged as skipped_by_grace inside the CAS mutator.
+  // We surface that entry here so the MCP layer can post a sys message
+  // explaining the skip (mirrors how advanceOnTimeout's skipped[] flows
+  // to emitTimeoutSysMessage).
+  leadSkipped?: TurnSpokenEntry;
 }
 
 // Append a message. Server-side gates, in order:
@@ -113,6 +123,7 @@ export async function appendMessage(
     invocationType: InvocationType;
     turnId?: number;
     skipMessage: boolean;
+    leadSkipped?: TurnSpokenEntry;
   } = {
     roleAtSend: 'open',
     invocationType: 'normal_turn',
@@ -120,6 +131,9 @@ export async function appendMessage(
   };
 
   await casTurnState(client, code, (prev) => {
+    // Reset per-attempt decision state so a CAS retry doesn't carry over
+    // leadSkipped from a stale earlier attempt.
+    decision.leadSkipped = undefined;
     // Lazy cleanup: skip any expired speakers before evaluating this
     // sender. Skipped sys messages are emitted by the listen poll, not
     // here — appendMessage is on the hot path and must not RPUSH a sys
@@ -128,6 +142,7 @@ export async function appendMessage(
     // events.
     const after = advanceOnTimeout(prev, room);
     let cur = after.state;
+    const now = Date.now();
 
     if (isHumanSender(room, message.name, message.client)) {
       // Humans (web client or the host) are never turn-gated. If a new
@@ -152,30 +167,45 @@ export async function appendMessage(
       return cur;
     }
 
-    // cc agent (not the host) — must be the current speaker, or in the
-    // host-directed allowlist.
-    if (cur && isCurrentSpeaker(cur, message.name, message.client)) {
-      const role = cur.currentRole!;
+    // cc agent (not the host) — must be the current speaker, or the
+    // grace-eligible queue-head supplement, or in the host-directed
+    // allowlist.
+    if (cur && canAgentSpeakNow(cur, message.name, message.client, now)) {
+      const isGrace = isGraceSupplementSpeaker(cur, message.name, message.client, now);
+      const role: RoleInTurn = isGrace ? 'supplement' : cur.currentRole!;
       const turnId = cur.turnId;
       decision.roleAtSend = role;
       decision.invocationType = 'normal_turn';
       decision.turnId = turnId;
       // Supplement-skip token: advance with status='no_addition', do NOT
-      // append a chat message. Only meaningful for supplement-role
-      // speakers; treat as a normal reply for the Lead (a Lead saying
-      // `__no_addition__` would be confusing — we honor the token but
-      // still advance with that explicit status so reports show it).
+      // append a chat message. During lead grace we treat this as the
+      // supplement bowing out (drop from queue, lead keeps the floor),
+      // NOT as a preemption — opting out is a soft signal, not a claim
+      // on the mic.
       if (isSupplementSkipToken) {
         decision.skipMessage = true;
-        return advanceTurn(cur, 'no_addition', room);
+        if (isGrace) {
+          return skipQueueHead(cur, 'no_addition', now);
+        }
+        return advanceTurn(cur, 'no_addition', room, now);
       }
       // Moderator mode: Moderator-as-current keeps current after reply
       // (no queue pop). They route via room_direct_invoke; their
       // deadline resets each time they actually post a message.
       if (cur.mode === 'moderator' && role === 'moderator') {
-        return moderatorReply(cur, room);
+        return moderatorReply(cur, room, now);
       }
-      return advanceTurn(cur, 'replied', room);
+      // Grace path: queue-head supplement preempts Lead. Log the Lead
+      // as skipped_by_grace and surface that entry so the caller can
+      // post a sys message.
+      if (isGrace) {
+        const result = applyGraceSupplementReply(
+          cur, message.name, message.client, room, now,
+        );
+        decision.leadSkipped = result.leadSkipped;
+        return result.state;
+      }
+      return advanceTurn(cur, 'replied', room, now);
     }
     if (cur) {
       const directed = consumeHostDirectedDetailed(cur, message.name, message.client);
@@ -202,7 +232,12 @@ export async function appendMessage(
       invocationType: decision.invocationType,
       ...(decision.turnId !== undefined ? { turnId: decision.turnId } : {}),
     };
-    return { appended: false, reason: 'no_addition', metadata };
+    return {
+      appended: false,
+      reason: 'no_addition',
+      metadata,
+      ...(decision.leadSkipped ? { leadSkipped: decision.leadSkipped } : {}),
+    };
   }
 
   const metadata: MessageMetadata = {
@@ -214,7 +249,11 @@ export async function appendMessage(
   };
   const enriched: Message = { ...message, metadata };
   await rpushMessage(client, code, enriched);
-  return { appended: true, metadata };
+  return {
+    appended: true,
+    metadata,
+    ...(decision.leadSkipped ? { leadSkipped: decision.leadSkipped } : {}),
+  };
 }
 
 // Internal helper: write a message to the Redis list, refreshing TTL and
