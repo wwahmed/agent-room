@@ -1,72 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { artifactLabel, extractArtifacts, normalizeEscapedWhitespace, type ArtifactKind, type Message, type RoomArtifact, type RoomReport } from '@agent-room/shared';
 import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 
-// localStorage key for a per-room unlocked state. Once a customer hits
-// /r/CODE/report?unlock=TOKEN and the server validates, we drop the
-// token here so future visits to /r/CODE/report (no query param) still
-// render watermark-free. Cleared if the token ever stops verifying
-// (e.g. UNLOCK_SECRET rotated).
-function unlockKey(code: string): string {
-  return `room:${code}:unlocked`;
-}
-
-function readStoredUnlock(code: string): string | null {
-  try { return localStorage.getItem(unlockKey(code)); } catch { return null; }
-}
-
 export function Report() {
   const { code = '' } = useParams();
-  const [searchParams] = useSearchParams();
   const [report, setReport] = useState<RoomReport | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  // Unlock state has three values: null (not yet checked), 'unlocked'
-  // (verified), 'locked' (no token / invalid). Renders the watermark
-  // unless 'unlocked'.
-  const [unlockStatus, setUnlockStatus] = useState<'pending' | 'unlocked' | 'locked'>('pending');
-
-  useEffect(() => {
-    // 1. If localStorage already has a token from a previous visit,
-    //    re-verify it server-side (in case secret rotated). Until the
-    //    re-verify completes, optimistically render unlocked so the
-    //    page doesn't flash watermark on every visit.
-    // 2. If URL has ?unlock=TOKEN, verify and persist on success.
-    // 3. Otherwise, lock.
-    const urlToken = searchParams.get('unlock');
-    const stored = readStoredUnlock(code);
-    const token = urlToken ?? stored ?? '';
-
-    if (!token || !code) {
-      setUnlockStatus('locked');
-      return;
-    }
-
-    // Optimistic: if we have a stored token already, render unlocked
-    // immediately while we re-verify in the background.
-    if (stored) setUnlockStatus('unlocked');
-
-    fetch(`/api/unlock-verify?code=${encodeURIComponent(code)}&token=${encodeURIComponent(token)}`)
-      .then(r => r.json().then(body => ({ ok: r.ok, body })))
-      .then(({ ok, body }) => {
-        if (ok && body.valid) {
-          try { localStorage.setItem(unlockKey(code), token); } catch { /* private mode */ }
-          setUnlockStatus('unlocked');
-        } else {
-          // Token invalid — wipe stored to force re-paying or re-asking.
-          try { localStorage.removeItem(unlockKey(code)); } catch { /* private mode */ }
-          setUnlockStatus('locked');
-        }
-      })
-      .catch(() => {
-        // Network failure: don't punish the user — fall back to whatever
-        // the optimistic decision was.
-        if (!stored) setUnlockStatus('locked');
-      });
-  }, [code, searchParams]);
 
   useEffect(() => {
     const client = createClient(ENV.upstash);
@@ -131,7 +74,7 @@ export function Report() {
               {refreshing ? 'Refreshing…' : 'Refresh from latest'}
             </button>
             <button
-              onClick={() => downloadMarkdown(report, artifacts, unlockStatus === 'unlocked')}
+              onClick={() => downloadMarkdown(report, artifacts)}
               className="rounded-lg border border-white/25 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
             >
               Download Markdown
@@ -192,9 +135,7 @@ export function Report() {
 
         <CreateYourOwnCTA report={report} />
 
-        {unlockStatus === 'unlocked'
-          ? <UnlockedFooter report={report} />
-          : <FreeTierFooter report={report} />}
+        <ReportFooter report={report} />
       </main>
     </div>
   );
@@ -244,10 +185,9 @@ function CreateYourOwnCTA({ report }: { report: RoomReport }) {
   );
 }
 
-// Free-tier watermark + upgrade nudge. Placed at the very bottom of the
-// report so it shows up when a client scrolls through the delivery,
-// matching the "Made with Notion" / "Made with Linear" pattern.
-function FreeTierFooter({ report }: { report: RoomReport }) {
+// "Made with Agent Room" credit + next-step nudge at the bottom of the
+// report — the open-source equivalent of the "Made with Notion" footer.
+function ReportFooter({ report }: { report: RoomReport }) {
   // The room has a 24h TTL on the server (Redis EX), but exported reports
   // currently share that TTL. Until we ship persisted reports, surface
   // the practical ceiling so the user knows when this URL stops working.
@@ -279,20 +219,6 @@ function FreeTierFooter({ report }: { report: RoomReport }) {
           Protocol docs
         </a>
       </div>
-    </section>
-  );
-}
-
-// Replacement footer rendered when the unlock token verifies. Quiet
-// confirmation so the page doesn't feel "stamped" — the absence of the
-// watermark is the real signal.
-function UnlockedFooter({ report }: { report: RoomReport }) {
-  return (
-    <section className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-center">
-      <div className="text-[11px] uppercase tracking-widest font-semibold text-emerald-700 mb-1">✓ Unlocked report</div>
-      <p className="text-sm text-emerald-900">
-        This report has been unlocked. Share <code className="font-mono bg-white border border-emerald-200 rounded px-2 py-0.5 text-[12px]">https://www.agent-room.com/r/{report.code}/report</code> with your client — no watermark, no expiry.
-      </p>
     </section>
   );
 }

@@ -6,7 +6,6 @@ import { Lobby } from './screens/Lobby.js';
 import { Room } from './screens/Room.js';
 import { Report } from './screens/Report.js';
 import { Join } from './screens/Join.js';
-import { UnlockPending } from './screens/UnlockPending.js';
 import { ToastHost } from './components/Toast.js';
 import { Analytics } from './components/Analytics.js';
 
@@ -38,7 +37,6 @@ export const router = createBrowserRouter([
   { path: '/r/:code/lobby', element: <Layout><LobbyByParam /></Layout> },
   { path: '/r/:code', element: <Layout><RoomByParam /></Layout> },
   { path: '/r/:code/report', element: <Layout><ReportByParam /></Layout> },
-  { path: '/r/unlock-pending', element: <Layout><UnlockPending /></Layout> },
   { path: '/j/:code', element: <Layout><Join /></Layout> },
   { path: '/j', element: <Layout><Join /></Layout> },
 ]);
