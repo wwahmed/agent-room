@@ -54,14 +54,20 @@ import {
 } from './uploadAttachment.js';
 
 function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/);
+  // Defensive: weak-loop harnesses (Cursor, etc.) occasionally omit or null
+  // out the `name` arg even though the schema marks it required. A raw
+  // `name.trim()` then throws "Cannot read properties of undefined (reading
+  // 'trim')", which surfaced as the room_status trim crash. Coerce first.
+  const parts = (typeof name === 'string' ? name : '').trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-  return (parts[0] ?? '??').slice(0, 2).toUpperCase().padEnd(2, '?');
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase().padEnd(2, '?');
+  return '??';
 }
 
 function colorForName(name: string): string {
+  const safe = typeof name === 'string' ? name : '';
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  for (let i = 0; i < safe.length; i++) h = (h * 31 + safe.charCodeAt(i)) | 0;
   return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length]!;
 }
 
@@ -991,20 +997,32 @@ export function registerTools(server: Server) {
     }
 
     if (name === 'room_status') {
+      // Required-field guard: some weak-loop harnesses drop `name`/`text`
+      // despite the schema. Fail cleanly instead of crashing downstream
+      // (initialsFor) or posting a blank "??" status.
+      const statusName = typeof a.name === 'string' ? a.name.trim() : '';
+      const statusText = typeof a.text === 'string' ? a.text.trim() : '';
+      if (!statusName || !statusText) {
+        return ok({
+          sent: false,
+          error: 'bad_request',
+          hint: 'room_status requires both "name" (your display name) and "text" (a short status). Provide both and retry, then call room_listen.',
+        });
+      }
       let role: string = a.role ?? '';
       let speaker: Participant | undefined;
       try {
         const room = await getRoom(client, a.code);
-        speaker = room.participants.find((p: Participant) => p.name === a.name && p.client === 'cc');
+        speaker = room.participants.find((p: Participant) => p.name === statusName && p.client === 'cc');
         if (!role) role = speaker?.role ?? '';
       } catch { /* fall through — initials/color fall back below */ }
-      const text = normalizeEscapedWhitespace(a.text);
+      const text = normalizeEscapedWhitespace(statusText);
       const msg: Message = {
         id: Date.now(),
         type: 'msg',
-        name: a.name,
-        initials: speaker?.initials ?? initialsFor(a.name),
-        color: speaker?.color ?? colorForName(a.name),
+        name: statusName,
+        initials: speaker?.initials ?? initialsFor(statusName),
+        color: speaker?.color ?? colorForName(statusName),
         role,
         text,
         client: 'cc',
