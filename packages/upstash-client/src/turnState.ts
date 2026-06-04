@@ -819,6 +819,7 @@ export async function directInvoke(
 export type MyRoleInTurn =
   | 'lead'
   | 'supplement'
+  | 'wrap'          // sequential mode — holding the closing wrap-up turn
   | 'moderator'
   | 'assignee'
   | 'queued'        // in the queue, but not yet current

@@ -1,16 +1,11 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { myRoleInTurn } from '@agent-room/upstash-client';
 import {
-  createClient,
+  createRoomApiClient,
   createRoom,
   getRoom,
   joinRoom,
-  verifyHostKey,
-  HostNameTakenError,
-  MutedError,
-  NotYourTurnError,
-  NotHostError,
-  InvalidModeConfigError,
   setReplyMode,
   endRoom,
   reactivateRoom,
@@ -21,15 +16,18 @@ import {
   setListenUntil,
   removeParticipant,
   getTurnState,
-  sweepTimeouts,
-  myRoleInTurn,
+  sweepRoom,
   directInvoke,
   hostSkipCurrent,
-  type TurnSpokenEntry,
-  type FallbackReason,
-  type UpstashEnv,
-} from '@agent-room/upstash-client';
-import { generateCode, AVATAR_PALETTE, roleBriefFor, normalizeEscapedWhitespace } from '@agent-room/shared';
+  HostNameTakenError,
+  MutedError,
+  NotYourTurnError,
+  NotHostError,
+  InvalidModeConfigError,
+  ModeNotSupportedError,
+  type RoomApiClient,
+} from './roomApi.js';
+import { AVATAR_PALETTE, roleBriefFor, normalizeEscapedWhitespace } from '@agent-room/shared';
 import type {
   Message,
   Participant,
@@ -43,8 +41,7 @@ import { setRoom, removeRoom, updateCursor, markSent, readState, readRoomStateFo
 import {
   detectHarness,
   defaultListenAfterJoin,
-  geminiMcpTimeoutHint,
-  GEMINI_CLI_MAX_LISTEN_MS,
+  mcpTimeoutHint,
   persistenceSetupHint,
 } from './harness.js';
 import {
@@ -107,13 +104,20 @@ interface ReplyModeSnapshot {
   };
   turnId?: number;
   myRoleInTurn?: ReturnType<typeof myRoleInTurn>;
-  // True iff the named caller is currently allowed to call room_send
-  // (current speaker, or on the host-directed allowlist, or human).
+  // True iff the named caller is currently allowed to call room_send for a
+  // full turn (current speaker, or on the host-directed allowlist, or human).
   canISpeakNow?: boolean;
+  // Moderator mode only: true iff the named caller is a non-moderator cc
+  // agent that may post a short *status update* right now even though it
+  // is not the current speaker. A status update ("received / on it /
+  // done") is always accepted, never takes the floor — but substantive
+  // analysis still needs a moderator invoke (canISpeakNow). Absent (not
+  // set) outside moderator mode or when the caller can already speak.
+  canSendStatusNow?: boolean;
 }
 
 async function readReplyModeSnapshot(
-  client: ReturnType<typeof createClient>,
+  client: RoomApiClient,
   room: Room,
   selfName?: string,
   selfClient: ClientKind = 'cc',
@@ -150,133 +154,26 @@ async function readReplyModeSnapshot(
   if (selfName) {
     const role = myRoleInTurn(state, selfName, selfClient);
     snapshot.myRoleInTurn = role;
-    // Humans can always speak. Among cc, only the current speaker and
-    // anyone on the host-directed allowlist may send.
+    // Humans can always speak. Among cc, only the current speaker (lead /
+    // supplement / the lead's closing 'wrap' turn / moderator / assignee)
+    // and anyone on the host-directed allowlist may send.
     if (selfClient === 'web' || selfName === room.createdBy) {
       snapshot.canISpeakNow = true;
     } else {
       snapshot.canISpeakNow =
-        role === 'lead' || role === 'supplement' || role === 'moderator' ||
-        role === 'assignee' || role === 'host_directed';
+        role === 'lead' || role === 'supplement' || role === 'wrap' ||
+        role === 'moderator' || role === 'assignee' || role === 'host_directed';
+    }
+    // Moderator mode: a non-moderator cc agent that can't take a full turn
+    // can still post a short status update. Surface that as its own flag so
+    // the agent knows it may ping "received / on it / done" without waiting
+    // — without conflating it with canISpeakNow (which would wrongly imply
+    // it can post substantive analysis).
+    if (replyMode === 'moderator' && selfClient === 'cc' && !snapshot.canISpeakNow) {
+      snapshot.canSendStatusNow = true;
     }
   }
   return snapshot;
-}
-
-// Server-emitted sys message for a turn-timeout skip. Posted by the lazy
-// timeout sweep when an agent's deadline expires without a reply. The
-// `@AgentName` prefix is intentional — agents that scan messages for
-// mentions will notice they were skipped.
-async function emitTimeoutSysMessage(
-  client: ReturnType<typeof createClient>,
-  code: string,
-  skip: TurnSpokenEntry,
-  mode: ReplyMode,
-): Promise<void> {
-  const now = Date.now();
-  const sysMsg: Message = {
-    id: now,
-    type: 'sys',
-    name: 'system',
-    initials: '⏱️',
-    color: '#EF4444',
-    role: '',
-    text: `@${skip.name} did not reply in time — skipping their ${skip.role} slot.`,
-    client: 'cc',
-    time: now,
-    metadata: {
-      eventType: 'timed_out',
-      modeAtSend: mode,
-      roleAtSend: skip.role,
-      targetAgentName: skip.name,
-      targetAgentClient: skip.client,
-      skippedBy: 'system',
-    },
-  };
-  try {
-    await appendSystemMessage(client, code, sysMsg);
-  } catch { /* best-effort — the turn already advanced even if sys msg fails */ }
-}
-
-// Server-emitted sys message for a lead-grace preemption. Posted by
-// appendMessage's caller when a queue-head supplement preempts the Lead
-// in sequential mode after the grace window elapses — the Lead's slot
-// was dropped with status='skipped_by_grace' inside the CAS mutator,
-// and this surfaces that to participants.
-async function emitGraceSkipSysMessage(
-  client: ReturnType<typeof createClient>,
-  code: string,
-  leadSkipped: TurnSpokenEntry,
-  mode: ReplyMode,
-): Promise<void> {
-  const now = Date.now();
-  const sysMsg: Message = {
-    id: now,
-    type: 'sys',
-    name: 'system',
-    initials: '⚡',
-    color: '#F59E0B',
-    role: '',
-    text: `@${leadSkipped.name} did not speak within the lead-grace window — supplement took the floor.`,
-    client: 'cc',
-    time: now,
-    metadata: {
-      eventType: 'skipped_by_grace',
-      modeAtSend: mode,
-      roleAtSend: leadSkipped.role,
-      targetAgentName: leadSkipped.name,
-      targetAgentClient: leadSkipped.client,
-      skippedBy: 'system',
-    },
-  };
-  try { await appendSystemMessage(client, code, sysMsg); } catch { /* best-effort */ }
-}
-
-// Server-emitted sys message for a mode auto-fallback. Posted when the
-// Moderator times out, the Moderator leaves the room, or the Sequential
-// Lead leaves the room. The room's replyMode has already been flipped to
-// 'open' by sweepTimeouts; this message tells participants why.
-async function emitFallbackSysMessage(
-  client: ReturnType<typeof createClient>,
-  code: string,
-  fallback: { reason: FallbackReason; agentName: string; agentClient: ClientKind },
-  priorMode: ReplyMode,
-): Promise<void> {
-  const now = Date.now();
-  let text: string;
-  let eventType: 'moderator_fallback' | 'lead_left' | 'moderator_left';
-  switch (fallback.reason) {
-    case 'moderator_timeout':
-      text = `Moderator @${fallback.agentName} did not respond in time — falling back to open mode.`;
-      eventType = 'moderator_fallback';
-      break;
-    case 'moderator_left':
-      text = `Moderator @${fallback.agentName} left the room — falling back to open mode.`;
-      eventType = 'moderator_left';
-      break;
-    case 'lead_left':
-      text = `Lead @${fallback.agentName} left the room — falling back to open mode.`;
-      eventType = 'lead_left';
-      break;
-  }
-  const sysMsg: Message = {
-    id: now,
-    type: 'sys',
-    name: 'system',
-    initials: '🔓',
-    color: '#10B981',
-    role: '',
-    text,
-    client: 'cc',
-    time: now,
-    metadata: {
-      eventType,
-      modeAtSend: priorMode,
-      targetAgentName: fallback.agentName,
-      targetAgentClient: fallback.agentClient,
-    },
-  };
-  try { await appendSystemMessage(client, code, sysMsg); } catch { /* best-effort */ }
 }
 
 type RoomListenPollResult = {
@@ -288,7 +185,7 @@ type RoomListenPollResult = {
 
 /** Long-poll for new messages; shared by room_listen and post-join/create first listen. */
 async function runRoomListenPoll(
-  client: ReturnType<typeof createClient>,
+  client: RoomApiClient,
   code: string,
   since: number,
   timeoutMs: number,
@@ -323,7 +220,11 @@ async function runRoomListenPoll(
     }
     if (pollCount > 0 && pollCount % 10 === 0) {
       try {
-        const room = await getRoom(client, code);
+        // sweepRoom runs the turn-timeout sweep server-side (emitting any
+        // timeout / fallback sys messages itself) and returns the room, so
+        // this one call covers both the status/kicked probe and the sweep
+        // the listen loop used to run on this same 20s cadence.
+        const room = await sweepRoom(client, code);
         if (room.status === 'ended') {
           try { await removeRoom(code); } catch { /* non-essential */ }
           return {
@@ -341,27 +242,6 @@ async function runRoomListenPoll(
             terminated: 'kicked',
             hint: `TERMINATION SIGNAL: you were removed from the participants list (likely by the host "${room.createdBy}"). Stop calling room_listen — you are no longer in this meeting. Inform the user.`,
           };
-        }
-        // Reply-mode timeout sweep. Only meaningful when the room is in a
-        // turn-taking mode AND a turn is in flight; otherwise sweepTimeouts
-        // is a single Redis read that returns no-skips. We run this on the
-        // same 20s cadence as the room-status probe to keep added Redis
-        // load minimal. If a speaker timed out, we emit one sys message
-        // per skip and the next iteration's listMessages will pick them
-        // up and return them to the caller. If the sweep also triggered a
-        // mode auto-fallback (moderator timed out / Lead left / Moderator
-        // left), we emit a distinct sys event so participants know
-        // replyMode reverted to 'open'.
-        if (room.replyMode && room.replyMode !== 'open') {
-          try {
-            const sweep = await sweepTimeouts(client, room.code, room);
-            for (const skip of sweep.skipped) {
-              await emitTimeoutSysMessage(client, room.code, skip, room.replyMode);
-            }
-            if (sweep.fallback) {
-              await emitFallbackSysMessage(client, room.code, sweep.fallback, room.replyMode);
-            }
-          } catch { /* sweep is best-effort; never break the listen loop */ }
         }
       } catch { /* transient — keep listening */ }
     }
@@ -381,21 +261,33 @@ async function runRoomListenPoll(
   };
 }
 
-function resolvedListenTimeoutMs(raw: unknown, harnessKind: ReturnType<typeof detectHarness>['kind']): number {
-  const cap =
-    harnessKind === 'gemini-cli'
-      ? Math.min(MAX_LISTEN_MS, GEMINI_CLI_MAX_LISTEN_MS)
-      : MAX_LISTEN_MS;
+function resolvedListenTimeoutMs(raw: unknown, maxListenMs: number): number {
+  // Cap to the harness's safe MCP-call duration so weak-loop clients (Cursor,
+  // Gemini, Cline, …) never block past their tool-call timeout. MAX_LISTEN_MS
+  // is the absolute ceiling; strong harnesses pass maxListenMs ≥ it.
+  const cap = Math.min(MAX_LISTEN_MS, maxListenMs);
   if (typeof raw === 'number' && Number.isFinite(raw)) {
     return Math.min(Math.max(1000, raw), cap);
   }
-  return harnessKind === 'gemini-cli'
-    ? Math.min(DEFAULT_LISTEN_MS, GEMINI_CLI_MAX_LISTEN_MS)
-    : DEFAULT_LISTEN_MS;
+  return Math.min(DEFAULT_LISTEN_MS, cap);
 }
 
-export function registerTools(server: Server, env: UpstashEnv) {
-  const client = createClient(env);
+// Host-action endpoints on /api/room verify the caller's hostKey. The MCP
+// stashes the hostKey in PPID-scoped state when it CREATES a room; only that
+// session can perform host actions (end / reactivate / set mode / skip /
+// host direct-invoke). A session that merely joined someone else's room has
+// no hostKey and the server will reject the host action with NotHostError.
+async function readHostKey(code: string): Promise<string | undefined> {
+  try {
+    const state = await readState();
+    return state.rooms[code]?.hostKey;
+  } catch {
+    return undefined;
+  }
+}
+
+export function registerTools(server: Server) {
+  const client = createRoomApiClient();
   // Snapshot the host harness once at boot. This drives the persistence-setup
   // nudge in room_join / room_create — agents on harnesses that don't
   // auto-loop tool calls (Cursor without 1.7+ stop hook, Gemini CLI, etc.)
@@ -403,7 +295,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
   // `npx agent-room-mcp init`. Snapshotted because env vars don't change
   // mid-process and detection runs in O(branches).
   const harness = detectHarness();
-  const persistenceNudge = persistenceSetupHint(harness) + geminiMcpTimeoutHint(harness);
+  const persistenceNudge = persistenceSetupHint(harness) + mcpTimeoutHint(harness);
 
   function startRoomWatcher(code: string, selfName: string, startCursor: number): void {
     if (watchers.has(code)) {
@@ -544,6 +436,27 @@ export function registerTools(server: Server, env: UpstashEnv) {
         },
       },
       {
+        name: 'room_status',
+        description:
+          'Post a SHORT status update ("received" / "on it" / "still running the build" / "done") WITHOUT taking or ending a turn. ' +
+          'Use this to report progress — it never advances the sequential turn order and never consumes the moderator\'s floor. ' +
+          'In sequential mode, when you are the current speaker, a room_status ping ALSO renews your turn deadline — a long-running ' +
+          'task (code edits, tests, triage) should send room_status periodically so it is not skipped for being slow; the response ' +
+          'returns extendsTurn:true when the deadline was renewed. In moderator mode, a non-moderator agent uses room_status to ' +
+          'acknowledge the moderator without taking the floor. When you have your actual result or answer, use room_send instead — ' +
+          'that is the message that ends your turn.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'text'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name' },
+            text: { type: 'string', description: 'Short status text, e.g. "On it — running the build."' },
+            role: { type: 'string', description: 'Your role (optional)' },
+          },
+        },
+      },
+      {
         name: 'room_list_messages',
         description: 'Get all messages from a room, optionally starting from a cursor.',
         inputSchema: {
@@ -610,11 +523,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
       },
       {
         name: 'room_end',
-        description: 'End a meeting. The room becomes read-only but can be reactivated within 24h.',
+        description: 'End a meeting. The room becomes read-only but can be reactivated within 24h. Host-only — only the session that created the room can end it.',
         inputSchema: {
           type: 'object',
           required: ['code'],
-          properties: { code: { type: 'string' } },
+          properties: {
+            code: { type: 'string' },
+            name: { type: 'string', description: 'Optional caller display name. Defaults to this session\'s stored name.' },
+          },
         },
       },
       {
@@ -631,11 +547,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
       },
       {
         name: 'room_reactivate',
-        description: 'Reactivate an ended meeting.',
+        description: 'Reactivate an ended meeting. Host-only — only the session that created the room can reactivate it.',
         inputSchema: {
           type: 'object',
           required: ['code'],
-          properties: { code: { type: 'string' } },
+          properties: {
+            code: { type: 'string' },
+            name: { type: 'string', description: 'Optional caller display name. Defaults to this session\'s stored name.' },
+          },
         },
       },
       {
@@ -653,9 +572,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
         description:
           'Host-only. Set this room\'s agent reply mode. Modes:\n' +
           ' - "open" (default): every approved participant may speak any time. Current legacy behavior.\n' +
-          ' - "sequential": a Lead agent answers first; the rest of the cc-client agents supplement in join order. Only the current turn-holder may call room_send; human participants and the host are always allowed.\n' +
-          ' - "moderator": a Moderator agent routes work to specific agents. Non-moderator agents stay silent unless assigned (or unless the host direct-invokes them).\n' +
-          'Switching modes mid-conversation is allowed; any in-flight turn is reset.\n' +
+          ' - "sequential": a Lead agent answers first; the rest of the cc-client agents supplement in join order, then the Lead gets a closing "wrap" turn to conclude. Only the current turn-holder may call room_send; human participants and the host are always allowed.\n' +
+          ' - "moderator": a Moderator agent routes work to specific agents. A non-moderator agent may still post a short status update ("received / on it / done") at any time — that is always allowed and never takes the floor. Substantive analysis or work requires a moderator assignment (or a host direct-invoke). Watch the canSendStatusNow / canISpeakNow flags in room_listen.\n' +
+          'AI Interview rooms (topic includes "interview") reject mode changes — they run a fixed 1-on-1 flow. Switching modes mid-conversation is allowed; any in-flight turn is reset.\n' +
           'Required modeConfig fields by mode:\n' +
           ' - open: none required\n' +
           ' - sequential: optional leadAgentName + leadAgentClient (omit to fall back to "first cc-client agent in join order")\n' +
@@ -703,7 +622,12 @@ export function registerTools(server: Server, env: UpstashEnv) {
           ' - host: always allowed. Recipient\'s message is tagged roleAtSend="host_directed".\n' +
           ' - moderator: allowed ONLY when the room is in "moderator" mode AND the caller IS the configured Moderator. Recipient\'s message is tagged roleAtSend="assignee" so reports distinguish moderator-routed work from host overrides.\n' +
           'No-ops if no turn is in flight (the next human message will start one); call again after the first turn-starting message.\n' +
-          'Idempotent — re-invoking the same target before they reply does NOT stack (still one slot).',
+          'Idempotent — re-invoking the same target before they reply does NOT stack (still one slot).\n' +
+          '\n' +
+          'Running the room as the Moderator — you own the floor:\n' +
+          ' - Focus on coordinating: assign work to the right agents, sequence who speaks, and check/review what they produce. Drive the discussion toward a decision.\n' +
+          ' - Keep order with your words, not force. If an agent over-talks or keeps chiming in out of turn, post a room_send that names them and asks them to hold off until you call on them — a reminder, never a mute.\n' +
+          ' - Delegate time-consuming work via room_direct_invoke rather than doing it yourself. Quick things (a short check, a summary, a routing decision) are fine. Only take on a substantial task yourself when the host has explicitly assigned that task to you.',
         inputSchema: {
           type: 'object',
           required: ['code', 'name', 'targetName'],
@@ -736,8 +660,9 @@ export function registerTools(server: Server, env: UpstashEnv) {
     const a = (args ?? {}) as Record<string, any>;
 
     if (name === 'room_create') {
-      const code = generateCode();
-      const created = await createRoom(client, { code, topic: a.topic, createdBy: a.name });
+      // The room code is generated server-side by /api/room.
+      const created = await createRoom(client, { topic: a.topic, createdBy: a.name });
+      const code = created.code;
       const participant: Participant = {
         name: a.name,
         role: a.role ?? '',
@@ -748,6 +673,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         lastSeenAt: Date.now(),
       };
       await joinRoom(client, code, participant, {
+        hostKey: created.hostKey,
         priorIdentity: { name: a.name, client: 'cc' },
       });
       const msgs = await listMessages(client, code, 0);
@@ -757,7 +683,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
       await setRoom(code, { name: a.name, cursor: msgs.length, joinedAt: Date.now(), hostKey: created.hostKey });
 
       const listenAfterJoin = defaultListenAfterJoin(harness, a.listenAfterJoin);
-      const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs, harness.kind);
+      const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs, harness.maxListenMs);
       if (listenAfterJoin) {
         const first = await runRoomListenPoll(client, code, msgs.length, listenMs, a.name);
         await updateCursor(code, first.cursor);
@@ -807,26 +733,14 @@ export function registerTools(server: Server, env: UpstashEnv) {
       };
       // If this MCP session previously created the room, we have a hostKey
       // stashed and can re-claim the host name on rejoin (refresh / restart).
-      // Otherwise, joining as the host's display name will be rejected by
-      // verifyHostKey — clean error, no silent impersonation.
+      // Otherwise, joining as the host's display name is rejected server-side
+      // by the join endpoint's verifyHostKey — clean error, no silent
+      // impersonation.
       const targetRoom = await getRoom(client, a.code);
       let storedStateRoom: Awaited<ReturnType<typeof readState>>['rooms'][string] | undefined;
       try {
         storedStateRoom = await readRoomStateForJoin(a.code, a.name);
       } catch { /* local state is optional; treat as fresh join */ }
-      if (a.name === targetRoom.createdBy) {
-        try {
-          await verifyHostKey(client, a.code, storedStateRoom?.hostKey);
-        } catch (e) {
-          if (e instanceof HostNameTakenError) {
-            return ok({
-              error: 'host_name_taken',
-              hint: `The name "${a.name}" is reserved for the host of this room. Pick a different display name (or use the original session that created the room).`,
-            });
-          }
-          throw e;
-        }
-      }
       const priorIdentity = storedStateRoom
         ? { name: storedStateRoom.name, client: 'cc' as const }
         : undefined;
@@ -836,9 +750,21 @@ export function registerTools(server: Server, env: UpstashEnv) {
           p.name === priorIdentity.name && p.client === priorIdentity.client
         )
       );
-      const updated = await joinRoom(client, a.code, participant, {
-        ...(priorIdentity ? { priorIdentity } : {}),
-      });
+      let updated: Awaited<ReturnType<typeof joinRoom>>;
+      try {
+        updated = await joinRoom(client, a.code, participant, {
+          hostKey: storedStateRoom?.hostKey,
+          ...(priorIdentity ? { priorIdentity } : {}),
+        });
+      } catch (e) {
+        if (e instanceof HostNameTakenError) {
+          return ok({
+            error: 'host_name_taken',
+            hint: `The name "${a.name}" is reserved for the host of this room. Pick a different display name (or use the original session that created the room).`,
+          });
+        }
+        throw e;
+      }
       // Use the post-suffix name so future writes match the row we just made.
       const finalName = updated.participant.name;
       const myEntry = updated.participants.find((p: Participant) => p.name === finalName && p.client === 'cc');
@@ -870,7 +796,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
       }));
 
       const listenAfterJoin = defaultListenAfterJoin(harness, a.listenAfterJoin);
-      const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs, harness.kind);
+      const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs, harness.maxListenMs);
 
       // One-shot reply-mode snapshot for the join response. Uses the
       // post-join Room (which already has the new participant's row, so
@@ -1006,9 +932,12 @@ export function registerTools(server: Server, env: UpstashEnv) {
         ...(attachments.length > 0 ? { attachments } : {}),
       };
       let appendResult: Awaited<ReturnType<typeof appendMessage>>;
-      const modeBeforeSend = (await getRoom(client, a.code)).replyMode ?? 'open';
+      // Sending as the host requires the hostKey; the server ignores it for
+      // any other sender name. The grace-preemption sys message (when a
+      // supplement takes the Lead's floor) is emitted server-side by the
+      // send endpoint, so the MCP no longer posts it here.
       try {
-        appendResult = await appendMessage(client, a.code, msg);
+        appendResult = await appendMessage(client, a.code, msg, await readHostKey(a.code));
       } catch (e) {
         if (e instanceof MutedError) {
           // The host has muted this participant. Tell the user explicitly
@@ -1031,12 +960,6 @@ export function registerTools(server: Server, env: UpstashEnv) {
           });
         }
         throw e;
-      }
-      // Grace preemption: a queue-head supplement just took the floor from
-      // the Lead. Emit a sys message so the host (and other agents
-      // tail-scanning the chat) can see why the Lead was dropped.
-      if (appendResult.leadSkipped) {
-        await emitGraceSkipSysMessage(client, a.code, appendResult.leadSkipped, modeBeforeSend);
       }
       const msgs = await listMessages(client, a.code, 0);
       // Advance cursor past our own message so the Stop hook does not re-inject it.
@@ -1067,6 +990,68 @@ export function registerTools(server: Server, env: UpstashEnv) {
       });
     }
 
+    if (name === 'room_status') {
+      let role: string = a.role ?? '';
+      let speaker: Participant | undefined;
+      try {
+        const room = await getRoom(client, a.code);
+        speaker = room.participants.find((p: Participant) => p.name === a.name && p.client === 'cc');
+        if (!role) role = speaker?.role ?? '';
+      } catch { /* fall through — initials/color fall back below */ }
+      const text = normalizeEscapedWhitespace(a.text);
+      const msg: Message = {
+        id: Date.now(),
+        type: 'msg',
+        name: a.name,
+        initials: speaker?.initials ?? initialsFor(a.name),
+        color: speaker?.color ?? colorForName(a.name),
+        role,
+        text,
+        client: 'cc',
+        time: Date.now(),
+      };
+      let appendResult: Awaited<ReturnType<typeof appendMessage>>;
+      try {
+        // kind='status': posts a status-tagged message; never advances the
+        // turn. The current sequential speaker also gets their deadline
+        // renewed (server returns metadata.extendsTurn).
+        appendResult = await appendMessage(client, a.code, msg, await readHostKey(a.code), 'status');
+      } catch (e) {
+        if (e instanceof MutedError) {
+          return ok({
+            sent: false,
+            error: 'muted',
+            hint: `${e.message} The host must unmute you (🔊 in the People panel) before you can post. Call room_listen and wait.`,
+          });
+        }
+        if (e instanceof NotYourTurnError) {
+          // Sequential mode only lets the *current* speaker heartbeat. A
+          // queued / observing agent has nothing to renew.
+          return ok({
+            sent: false,
+            error: 'not_your_turn',
+            hint: `${e.message} room_status renews the turn only for the current sequential speaker. If you are queued or observing, just call room_listen and wait for your turn.`,
+          });
+        }
+        throw e;
+      }
+      const msgs = await listMessages(client, a.code, 0);
+      await updateCursor(a.code, msgs.length);
+      await markSent(a.code, Date.now());
+      const extended = appendResult.metadata?.extendsTurn === true;
+      return ok({
+        sent: true,
+        appended: true,
+        cursor: msgs.length,
+        extendsTurn: extended,
+        ...(appendResult.metadata?.roleAtSend ? { roleAtSend: appendResult.metadata.roleAtSend } : {}),
+        ...(appendResult.metadata?.turnId !== undefined ? { turnId: appendResult.metadata.turnId } : {}),
+        hint: extended
+          ? `Status posted — your turn deadline was renewed. Keep working; send another room_status before it lapses if you need more time, or room_send your result when done. ${nextListenContract(a.code, msgs.length)}`
+          : `Status posted (no turn change). ${nextListenContract(a.code, msgs.length)}`,
+      });
+    }
+
     if (name === 'room_list_messages') {
       const since = typeof a.since === 'number' ? a.since : 0;
       const msgs = await listMessages(client, a.code, since);
@@ -1076,9 +1061,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
     }
 
     if (name === 'room_export') {
-      const room = await getRoom(client, a.code);
-      const msgs = await listMessages(client, a.code, 0);
-      const report = await createRoomReport(client, room, msgs);
+      const report = await createRoomReport(client, a.code);
       return ok({
         exported: true,
         code: a.code,
@@ -1105,7 +1088,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
           selfName = state.rooms[a.code]?.name;
         } catch { /* state unavailable */ }
       }
-      const timeoutMs = resolvedListenTimeoutMs(a.timeoutMs, harness.kind);
+      const timeoutMs = resolvedListenTimeoutMs(a.timeoutMs, harness.maxListenMs);
       const result = await runRoomListenPoll(client, a.code, since, timeoutMs, selfName);
       // Reply-mode snapshot: one extra getRoom + (non-open only) one
       // getTurnState. Adds ~2 Redis reads per listen *return* (not per
@@ -1153,7 +1136,26 @@ export function registerTools(server: Server, env: UpstashEnv) {
     }
 
     if (name === 'room_end') {
-      await endRoom(client, a.code);
+      // Ending a room is host-only server-side. The requester name defaults
+      // to this session's stored display name; the hostKey is read from the
+      // PPID-scoped state written when this session created the room.
+      let requesterName: string | undefined =
+        typeof a.name === 'string' && a.name.trim() ? a.name.trim() : undefined;
+      if (!requesterName) {
+        try { requesterName = (await readState()).rooms[a.code]?.name; } catch { /* state unavailable */ }
+      }
+      try {
+        await endRoom(client, a.code, requesterName ?? '', await readHostKey(a.code));
+      } catch (e) {
+        if (e instanceof NotHostError) {
+          return ok({
+            ok: false,
+            error: 'not_host',
+            hint: `${e.message} Only the session that created this room can end it.`,
+          });
+        }
+        throw e;
+      }
       await removeRoom(a.code);
       // Stop watcher if active
       const w = watchers.get(a.code);
@@ -1191,7 +1193,23 @@ export function registerTools(server: Server, env: UpstashEnv) {
     }
 
     if (name === 'room_reactivate') {
-      await reactivateRoom(client, a.code);
+      let requesterName: string | undefined =
+        typeof a.name === 'string' && a.name.trim() ? a.name.trim() : undefined;
+      if (!requesterName) {
+        try { requesterName = (await readState()).rooms[a.code]?.name; } catch { /* state unavailable */ }
+      }
+      try {
+        await reactivateRoom(client, a.code, requesterName ?? '', await readHostKey(a.code));
+      } catch (e) {
+        if (e instanceof NotHostError) {
+          return ok({
+            ok: false,
+            error: 'not_host',
+            hint: `${e.message} Only the session that created this room can reactivate it.`,
+          });
+        }
+        throw e;
+      }
       return ok({ reactivated: true, code: a.code });
     }
 
@@ -1210,13 +1228,20 @@ export function registerTools(server: Server, env: UpstashEnv) {
       const config = (a.modeConfig ?? undefined) as ReplyModeConfig | undefined;
       let updated: Awaited<ReturnType<typeof setReplyMode>>;
       try {
-        updated = await setReplyMode(client, a.code, a.name, mode, config);
+        updated = await setReplyMode(client, a.code, a.name, await readHostKey(a.code), mode, config);
       } catch (e) {
         if (e instanceof NotHostError) {
           return ok({
             ok: false,
             error: 'not_host',
             hint: `${e.message} Only the room creator can change reply mode. Ask the host to flip it.`,
+          });
+        }
+        if (e instanceof ModeNotSupportedError) {
+          return ok({
+            ok: false,
+            error: 'mode_not_supported',
+            hint: e.message,
           });
         }
         if (e instanceof InvalidModeConfigError) {
@@ -1244,7 +1269,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
         metadata: { eventType: 'mode_changed', modeAtSend: mode },
       };
       try {
-        await appendSystemMessage(client, a.code, sysMsg);
+        await appendSystemMessage(client, a.code, a.name, await readHostKey(a.code), sysMsg);
       } catch { /* sys message is nice-to-have; mode write already succeeded */ }
       return ok({
         ok: true,
@@ -1286,35 +1311,38 @@ export function registerTools(server: Server, env: UpstashEnv) {
       const added = await directInvoke(
         client,
         a.code,
+        a.name,
+        await readHostKey(a.code),
         { name: targetName, client: targetClient },
         source,
       );
-      // Optional sys event so participants see the dispatch in the
-      // chat. Concise — full assignment language is in the recipient's
-      // eventual reply.
-      const now = Date.now();
-      const sysMsg: Message = {
-        id: now,
-        type: 'sys',
-        name: 'system',
-        initials: '🎯',
-        color: '#3B82F6',
-        role: '',
-        text:
-          source === 'host'
-            ? `Host (${a.name}) directly invoked @${targetName}.`
-            : `Moderator (${a.name}) assigned this to @${targetName}.`,
-        client: 'cc',
-        time: now,
-        metadata: {
-          eventType: source === 'host' ? 'host_invoked' : 'moderator_dispatched',
-          modeAtSend: (room.replyMode ?? 'open') as ReplyMode,
-          targetAgentName: targetName,
-          targetAgentClient: targetClient,
-          invocationType: source === 'host' ? 'host_directed' : 'moderator_assigned',
-        },
-      };
-      try { await appendSystemMessage(client, a.code, sysMsg); } catch { /* best-effort */ }
+      // Sys event so participants see the dispatch in the chat. The host
+      // path posts it here via the host-gated systemMessage endpoint (this
+      // session holds the hostKey). The moderator path has no hostKey, so
+      // the directInvoke endpoint emits the moderator_dispatched sys message
+      // server-side instead.
+      if (source === 'host') {
+        const now = Date.now();
+        const sysMsg: Message = {
+          id: now,
+          type: 'sys',
+          name: 'system',
+          initials: '🎯',
+          color: '#3B82F6',
+          role: '',
+          text: `Host (${a.name}) directly invoked @${targetName}.`,
+          client: 'cc',
+          time: now,
+          metadata: {
+            eventType: 'host_invoked',
+            modeAtSend: (room.replyMode ?? 'open') as ReplyMode,
+            targetAgentName: targetName,
+            targetAgentClient: targetClient,
+            invocationType: 'host_directed',
+          },
+        };
+        try { await appendSystemMessage(client, a.code, a.name, await readHostKey(a.code), sysMsg); } catch { /* best-effort */ }
+      }
       return ok({
         ok: true,
         code: a.code,
@@ -1336,7 +1364,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
           hint: `Only the host (${room.createdBy}) can force-skip a speaker.`,
         });
       }
-      const skipped = await hostSkipCurrent(client, a.code, room);
+      const skipped = await hostSkipCurrent(client, a.code, a.name, await readHostKey(a.code));
       if (!skipped) {
         return ok({
           ok: false,
@@ -1364,7 +1392,7 @@ export function registerTools(server: Server, env: UpstashEnv) {
           skippedBy: 'host',
         },
       };
-      try { await appendSystemMessage(client, a.code, sysMsg); } catch { /* best-effort */ }
+      try { await appendSystemMessage(client, a.code, a.name, await readHostKey(a.code), sysMsg); } catch { /* best-effort */ }
       return ok({
         ok: true,
         code: a.code,

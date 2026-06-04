@@ -33,6 +33,8 @@ export type RoleInTurn =
   | 'open'           // sent under reply-mode 'open' (no turn)
   | 'lead'           // sequential mode — the lead answer
   | 'supplement'     // sequential mode — a follow-up supplement
+  | 'wrap'           // sequential mode — the Lead's closing wrap-up turn,
+                     // issued once after the supplement queue drains
   | 'moderator'      // moderator mode — moderator dispatching/summarizing
   | 'assignee'       // moderator mode — an agent answering a moderator assignment
   | 'host_directed'  // host used direct-invoke to call this agent (any mode)
@@ -158,6 +160,9 @@ export interface MessageMetadata {
   targetAgentClient?: ClientKind;
   // For skipped_by_host / timed_out events: who/what triggered the skip.
   skippedBy?: 'system' | 'host';
+  // Sequential mode: room_status heartbeat that renewed the speaker's deadline
+  // instead of ending the turn (UI/report show "still working" pings).
+  extendsTurn?: boolean;
 }
 
 export interface Message {

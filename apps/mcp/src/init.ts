@@ -375,18 +375,38 @@ async function installCursor(opts: { hooks: boolean }): Promise<InstallResult> {
 // Gemini CLI uses ~/.gemini/settings.json with the same `mcpServers` shape
 // as Claude Code / Cursor / Claude Desktop. Other settings in the file
 // (theme, auth, etc.) are preserved.
+const GEMINI_MCP_ENTRY = {
+  ...MCP_ENTRY,
+  env: { GEMINI_CLI: '1' },
+};
+
 async function installGemini(): Promise<InstallResult> {
+  const result: InstallResult = { changes: [], unchanged: [] };
   const path = join(homedir(), '.gemini', 'settings.json');
   const data = (await readJson(path)) ?? {};
   const servers = ((data.mcpServers as Record<string, unknown>) ?? {});
   const before = JSON.stringify(servers['agent-room']);
-  servers['agent-room'] = MCP_ENTRY;
+  servers['agent-room'] = GEMINI_MCP_ENTRY;
   data.mcpServers = servers;
   if (JSON.stringify(servers['agent-room']) !== before) {
     await writeJsonAtomic(path, data);
-    return { changes: [`wrote ${path} (agent-room MCP server)`], unchanged: [] };
+    result.changes.push(`wrote ${path} (agent-room MCP server)`);
+  } else {
+    result.unchanged.push(`${path} (already configured)`);
   }
-  return { changes: [], unchanged: [`${path} (already configured)`] };
+
+  // Gemini CLI loads ~/.gemini/GEMINI.md as global instruction memory. The
+  // MCP config alone gives Gemini the tool, but this rule is what makes a
+  // pasted Agent Room URL reliably trigger room_join instead of prose.
+  const rulesPath = join(homedir(), '.gemini', 'GEMINI.md');
+  const rulesRes = await ensureRulesSection(rulesPath);
+  if (rulesRes.changed) {
+    result.changes.push(`appended agent-room rules to ${rulesPath}`);
+  } else {
+    result.unchanged.push(`${rulesPath} (rules already present)`);
+  }
+
+  return result;
 }
 
 // Cline lives inside VS Code's user globalStorage, namespaced by the
@@ -618,7 +638,6 @@ async function installTarget(target: InstallTarget, opts: { hooks: boolean }): P
   const result = await installGemini();
   reportResult('Gemini CLI', result);
   console.log('  Note: Gemini CLI does not currently support Claude Code-style hooks, so ask it to call room_listen explicitly to stay present in the room.');
-  printRulesInstruction('Gemini CLI', '~/.gemini/GEMINI.md (or whichever file Gemini CLI reads as global instructions on your version)');
 }
 
 async function installDetectedTargets(targets: InstallTarget[], opts: { hooks: boolean }): Promise<void> {

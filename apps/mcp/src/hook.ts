@@ -1,9 +1,4 @@
-import {
-  createClient,
-  listMessages,
-  getRoom,
-  type UpstashEnv,
-} from '@agent-room/upstash-client';
+import { createRoomApiClient, getRoom, listMessages } from './roomApi.js';
 import type { Message } from '@agent-room/shared';
 import {
   readState,
@@ -100,12 +95,12 @@ async function readHookState(scope: StateScope) {
   return scope === 'harness' ? readHarnessStateOrMerged() : readState();
 }
 
-async function fetchPending(env: UpstashEnv, scope: StateScope): Promise<PendingRoom[]> {
+async function fetchPending(scope: StateScope): Promise<PendingRoom[]> {
   const state = await readHookState(scope);
   const codes = Object.keys(state.rooms);
   if (codes.length === 0) return [];
 
-  const client = createClient(env);
+  const client = createRoomApiClient();
   const results: PendingRoom[] = [];
 
   for (const code of codes) {
@@ -192,7 +187,7 @@ async function readStdin(): Promise<HookInput> {
   });
 }
 
-export async function runHook(env: UpstashEnv): Promise<void> {
+export async function runHook(): Promise<void> {
   const input = await readStdin();
   // Normalize the event name across clients. Cursor only fires the stop
   // hook (no UserPromptSubmit / SessionStart equivalent today). Older
@@ -251,7 +246,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
 
   let pending: PendingRoom[];
   try {
-    pending = await fetchPending(env, stateScope);
+    pending = await fetchPending(stateScope);
   } catch {
     process.exit(0);
   }
@@ -272,7 +267,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
       while (Date.now() < deadline) {
         await sleep(POLL_INTERVAL_MS);
         let p: PendingRoom[];
-        try { p = await fetchPending(env, stateScope); }
+        try { p = await fetchPending(stateScope); }
         catch { break; }
         const got = p.filter((r) => r.messages.length > 0);
         await commitCursors(p, stateScope);
@@ -311,7 +306,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
     let activeRooms: Array<{ code: string; topic: string; selfName: string; cursor: number }> = [];
     try {
       const state = await readHookState(stateScope);
-      const upstashClient = createClient(env);
+      const apiClient = createRoomApiClient();
       // Best-effort cleanup: drop rooms from local state that are gone
       // server-side (TTL expired) or marked ended, or where this agent is
       // no longer in the participants list. Without this, a left-over
@@ -319,7 +314,7 @@ export async function runHook(env: UpstashEnv): Promise<void> {
       // after the meeting closes — Codex caught this in 0.12.0 review.
       for (const [code, r] of Object.entries(state.rooms)) {
         try {
-          const room = await getRoom(upstashClient, code);
+          const room = await getRoom(apiClient, code);
           const stillIn = room.participants.some(p => p.name === r.name && p.client === 'cc');
           if (room.status !== 'active' || !stillIn) {
             try {

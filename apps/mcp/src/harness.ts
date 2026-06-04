@@ -25,13 +25,24 @@ export interface HarnessInfo {
   needsPersistenceSetup: boolean;
   /** Human-readable harness label to splice into hints. */
   label: string;
+  /** Safe duration for a single blocking MCP tool call (e.g. room_listen) on
+   *  this harness. Strong-loop harnesses (Claude Code, Codex) have no short MCP
+   *  timeout and allow long listens; Cursor / Gemini / other IDE clients cap
+   *  MCP calls (~60s), so their listens must stay well under that. */
+  maxListenMs: number;
 }
 
+/** Long listen window for harnesses with no short MCP tool-call timeout. */
+export const STRONG_MAX_LISTEN_MS = 270_000;
+/** Conservative cap for harnesses that time out long MCP tool calls — Cursor,
+ *  Gemini CLI, Cline, Windsurf, and unknown clients. Keep listens under ~60s. */
+export const WEAK_MAX_LISTEN_MS = 45_000;
+
 const KNOWN_STRONG_LOOP: HarnessInfo[] = [
-  { kind: 'claude-code', needsPersistenceSetup: false, label: 'Claude Code' },
+  { kind: 'claude-code', needsPersistenceSetup: false, label: 'Claude Code', maxListenMs: STRONG_MAX_LISTEN_MS },
   // Codex covers the CLI, IDE extensions (VS Code / Cursor / JetBrains), and
   // the Codex desktop app — they all share ~/.codex/config.toml. Single label.
-  { kind: 'codex', needsPersistenceSetup: false, label: 'Codex' },
+  { kind: 'codex', needsPersistenceSetup: false, label: 'Codex', maxListenMs: STRONG_MAX_LISTEN_MS },
 ];
 
 export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo {
@@ -47,24 +58,24 @@ export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo
     return KNOWN_STRONG_LOOP[1]!;
   }
   if (env.CURSOR_TRACE_ID || env.CURSOR_AGENT || env.TERM_PROGRAM === 'Cursor') {
-    return { kind: 'cursor', needsPersistenceSetup: true, label: 'Cursor' };
+    return { kind: 'cursor', needsPersistenceSetup: true, label: 'Cursor', maxListenMs: WEAK_MAX_LISTEN_MS };
   }
   if (env.GEMINI_CLI || env.GOOGLE_GEMINI_CLI) {
-    return { kind: 'gemini-cli', needsPersistenceSetup: true, label: 'Gemini CLI' };
+    return { kind: 'gemini-cli', needsPersistenceSetup: true, label: 'Gemini CLI', maxListenMs: WEAK_MAX_LISTEN_MS };
   }
   // The Claude desktop app embeds the same Code/Cowork agent runtime as the
   // CLI — surface differs, product is the same. Label as `Claude Code` so
   // hint copy stays consistent across surfaces.
   if (env.CLAUDE_DESKTOP_VERSION || env.__CFBundleIdentifier === 'com.anthropic.claudefordesktop') {
-    return { kind: 'claude-desktop', needsPersistenceSetup: false, label: 'Claude Code' };
+    return { kind: 'claude-desktop', needsPersistenceSetup: false, label: 'Claude Code', maxListenMs: STRONG_MAX_LISTEN_MS };
   }
   if (env.CLINE_VERSION) {
-    return { kind: 'cline', needsPersistenceSetup: true, label: 'Cline' };
+    return { kind: 'cline', needsPersistenceSetup: true, label: 'Cline', maxListenMs: WEAK_MAX_LISTEN_MS };
   }
   if (env.WINDSURF_VERSION || env.TERM_PROGRAM === 'Windsurf') {
-    return { kind: 'windsurf', needsPersistenceSetup: true, label: 'Windsurf' };
+    return { kind: 'windsurf', needsPersistenceSetup: true, label: 'Windsurf', maxListenMs: WEAK_MAX_LISTEN_MS };
   }
-  return { kind: 'unknown', needsPersistenceSetup: true, label: 'this client' };
+  return { kind: 'unknown', needsPersistenceSetup: true, label: 'this client', maxListenMs: WEAK_MAX_LISTEN_MS };
 }
 
 /**
@@ -93,23 +104,26 @@ export function persistenceSetupHint(info: HarnessInfo): string {
   );
 }
 
-/** Gemini CLI caps MCP tool calls at ~60s; keep listens under this. */
-export const GEMINI_CLI_MAX_LISTEN_MS = 45_000;
-
 export function defaultListenAfterJoin(harness: HarnessInfo, explicit: unknown): boolean {
   if (explicit === false) return false;
   if (explicit === true) return true;
-  // Bundled first listen on join can exceed Gemini's MCP timeout and stall
-  // the session in "Thinking..." for minutes.
-  if (harness.kind === 'gemini-cli') return false;
+  // Weak-loop harnesses (Cursor, Gemini, Cline, …) time out long MCP tool
+  // calls, so a bundled long first-listen on join can exceed their limit and
+  // stall the session. They each have their own persistence (stop hook /
+  // autoWatch / manual room_listen), so skip the bundled listen and let them
+  // call a capped room_listen themselves.
+  if (harness.needsPersistenceSetup) return false;
   return true;
 }
 
-export function geminiMcpTimeoutHint(info: HarnessInfo): string {
-  if (info.kind !== 'gemini-cli') return '';
+// Hint appended to room_join for harnesses that time out long MCP tool calls
+// (maxListenMs < STRONG). Tells the agent that join skipped the bundled listen
+// and to keep each room_listen window under the cap.
+export function mcpTimeoutHint(info: HarnessInfo): string {
+  if (info.maxListenMs >= STRONG_MAX_LISTEN_MS) return '';
   return (
-    ` GEMINI MCP TIMEOUT: Gemini CLI enforces ~60s per MCP tool call. ` +
-    `On Gemini, room_join skips the bundled first listen; call room_listen ` +
-    `with timeoutMs<=${GEMINI_CLI_MAX_LISTEN_MS} and chain room_listen after each reply.`
+    ` MCP CALL TIMEOUT (${info.label}): this client times out long MCP tool calls, ` +
+    `so room_join skipped the bundled first listen — call room_listen with ` +
+    `timeoutMs≤${info.maxListenMs} and chain another room_listen after each reply.`
   );
 }

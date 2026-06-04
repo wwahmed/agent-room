@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { detectHarness, persistenceSetupHint } from '../src/harness.js';
+import {
+  defaultListenAfterJoin,
+  detectHarness,
+  mcpTimeoutHint,
+  persistenceSetupHint,
+} from '../src/harness.js';
 
 function env(overrides: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   return overrides as NodeJS.ProcessEnv;
@@ -82,5 +87,38 @@ describe('persistenceSetupHint', () => {
     const hint = persistenceSetupHint(detectHarness(env({})));
     expect(hint).toContain('this client');
     expect(hint).toContain('agent-room-mcp init');
+  });
+
+  it('gives Gemini CLI a memory-rule nudge instead of a hook nudge', () => {
+    const hint = persistenceSetupHint(detectHarness(env({ GEMINI_CLI: '1' })));
+    expect(hint).toContain('Gemini CLI');
+    expect(hint).toContain('agent-room-mcp init gemini');
+    expect(hint).toContain('GEMINI.md join rule');
+    expect(hint).toContain('does not currently support stop hooks');
+  });
+});
+
+describe('weak-loop listen defaults', () => {
+  it('skips bundled listen on join for weak-loop harnesses unless explicit', () => {
+    const gemini = detectHarness(env({ GEMINI_CLI: '1' }));
+    const cursor = detectHarness(env({ CURSOR_TRACE_ID: 'x' }));
+    expect(defaultListenAfterJoin(gemini, undefined)).toBe(false);
+    expect(defaultListenAfterJoin(cursor, undefined)).toBe(false);
+    expect(defaultListenAfterJoin(gemini, true)).toBe(true);
+    expect(defaultListenAfterJoin(gemini, false)).toBe(false);
+    // Strong-loop harnesses bundle the listen by default.
+    expect(defaultListenAfterJoin(detectHarness(env({ CLAUDECODE: '1' })), undefined)).toBe(true);
+  });
+
+  it('caps listen window for weak-loop harnesses and stays silent for strong ones', () => {
+    const cursor = detectHarness(env({ CURSOR_TRACE_ID: 'x' }));
+    const gemini = detectHarness(env({ GEMINI_CLI: '1' }));
+    expect(cursor.maxListenMs).toBeLessThan(60_000);
+    expect(gemini.maxListenMs).toBeLessThan(60_000);
+    expect(detectHarness(env({ CLAUDECODE: '1' })).maxListenMs).toBeGreaterThanOrEqual(240_000);
+    // The MCP-timeout hint fires for weak-loop clients, empty for strong.
+    expect(mcpTimeoutHint(cursor)).toContain('MCP CALL TIMEOUT');
+    expect(mcpTimeoutHint(gemini)).toContain(String(gemini.maxListenMs));
+    expect(mcpTimeoutHint(detectHarness(env({ CLAUDECODE: '1' })))).toBe('');
   });
 });

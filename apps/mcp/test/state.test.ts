@@ -131,4 +131,47 @@ describe('state harness files', () => {
       cursor: 7,
     });
   });
+
+  it('finds a same-name prior room state after the PPID state changes', async () => {
+    const dir = await makeStateDir('agent-room-state-rejoin-');
+    vi.stubEnv('AGENT_ROOM_STATE_DIR', dir);
+
+    await fs.writeFile(
+      join(dir, 'state-111.json'),
+      JSON.stringify({
+        version: 1,
+        blockStreak: 0,
+        rooms: {
+          'ABC-DEF-GHJ': {
+            name: 'Claude',
+            cursor: 7,
+            joinedAt: 456,
+          },
+        },
+      }),
+      'utf8'
+    );
+    await fs.writeFile(
+      join(dir, 'state-222.json'),
+      JSON.stringify({
+        version: 1,
+        blockStreak: 0,
+        rooms: {
+          'ABC-DEF-GHJ': {
+            name: 'Codex',
+            cursor: 12,
+            joinedAt: 789,
+          },
+        },
+      }),
+      'utf8'
+    );
+
+    const { readRoomStateForJoin } = await import('../src/state.js');
+    const state = await readRoomStateForJoin('ABC-DEF-GHJ', 'Claude');
+    expect(state).toMatchObject({
+      name: 'Claude',
+      cursor: 7,
+    });
+  });
 });
