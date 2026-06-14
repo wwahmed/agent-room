@@ -670,10 +670,23 @@ export interface SweepResult {
 // see what happened.
 //
 // Concurrency: a CAS-then-write race is possible (two listen polls both
-// see the same expired deadline and both write). Idempotency comes from
-// `spoken.at` being monotonically advanced: a second writer who lost the
-// race will append duplicates only if both fired at the exact same ms,
-// which is rare and self-healing on the next read.
+// see the same expired deadline and both write). The state writes are
+// idempotent, but the caller emits one sys message per returned skip and
+// fallback — so two concurrent sweeps of the same dead-end would post the
+// "falling back to open mode" notice (and the moderator skip) TWICE. The
+// fallback emission is therefore gated on `claimDeadEndNotice`: only the
+// sweep that wins the SET NX claim returns the fallback; the loser
+// suppresses it (state still converges via the winner's write).
+async function claimDeadEndNotice(
+  client: UpstashClient,
+  code: string,
+  identity: string,
+): Promise<boolean> {
+  const key = `sweepDeadEnd:${code}:${identity}`;
+  const won = await client.command<string | null>(['SET', key, '1', 'NX', 'EX', '30']);
+  return won === 'OK';
+}
+
 export async function sweepTimeouts(
   client: UpstashClient,
   code: string,
@@ -726,6 +739,18 @@ export async function sweepTimeouts(
   }
 
   if (fallback) {
+    // Dedupe concurrent sweeps of the same dead-end so the caller emits the
+    // fallback notice once. The key is derived purely from `prev` (the absent
+    // role + the deadline that lapsed), so every racer computes the same key
+    // and exactly one SET NX wins. Loser suppresses skip + fallback (the
+    // winner's room CAS + turn clear below still converge the state).
+    // Best-effort: if the lock client errors, fall through and emit (a rare
+    // duplicate beats a silently-dropped fallback notice).
+    const claimed = await claimDeadEndNotice(
+      client, code,
+      `${fallback.reason}:${fallback.agentName}:${fallback.agentClient}:${prev.deadline ?? 'none'}`,
+    ).catch(() => true);
+    if (!claimed) return { state, skipped: [] };
     // Flip replyMode to 'open' and clear turnState. Best-effort: if the
     // room CAS fails (concurrent setReplyMode), we still clear local
     // state and surface the event — the room write will eventually
