@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { VersionTag } from './VersionTag.js';
 
 // T-05 inspector shell. People / Outputs / Room settings move out of the
 // old permanent side columns and mobile tab bar into ONE surface:
@@ -53,6 +54,10 @@ export function Inspector({ open, onClose, renderTab, initialTab = 'people' }: P
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">{renderTab(tab)}</div>
+      {/* T-44: unobtrusive but discoverable build id, in the room's settings drawer. */}
+      <div className="flex flex-shrink-0 items-center justify-end border-t border-border-faint px-3 py-1.5">
+        <VersionTag />
+      </div>
     </div>
   );
 
