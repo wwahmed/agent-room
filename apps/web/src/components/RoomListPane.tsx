@@ -44,8 +44,8 @@ export function RoomListPane({ activeCode }: { activeCode: string }) {
 
   return (
     <aside className="hidden h-full w-[280px] flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex">
-      <div className="flex h-[52px] flex-shrink-0 items-center border-b border-border-faint px-4">
-        <span className="text-[15px] font-semibold">Rooms</span>
+      <div className="flex h-[60px] flex-shrink-0 items-center border-b border-border-faint px-4">
+        <span className="text-[16px] font-semibold">Rooms</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {rooms.map(r => {
@@ -57,14 +57,14 @@ export function RoomListPane({ activeCode }: { activeCode: string }) {
               className={`block min-h-11 rounded-lg px-3 py-2 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
             >
               <div className="flex items-baseline gap-2">
-                <div className={`min-w-0 flex-1 truncate text-[14px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
+                <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
                 {r.lastActivityAt != null && (
-                  <span className="flex-shrink-0 text-[10px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
+                  <span className="flex-shrink-0 text-[11px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
                     {relativeTime(r.lastActivityAt)}
                   </span>
                 )}
               </div>
-              <div className="truncate text-[11px] text-ink-faint">
+              <div className="truncate text-[12px] text-ink-faint">
                 {r.participants} here
                 {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
                 {r.status === 'ended' ? ' · ended' : ''}

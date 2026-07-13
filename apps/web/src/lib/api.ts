@@ -282,6 +282,12 @@ export async function joinRoom(
     participant,
     priorIdentity: options.priorIdentity,
     hostKey: options.hostKey ?? storedHostKey(code),
+    // T-25 handshake: present the stored per-tab memberKey (if any) so the
+    // server can reclaim THIS row by memberKeyHash on rejoin instead of
+    // suffixing a duplicate. Forward-compatible — the pre-T-25 server ignores
+    // this field; T-25's reclaim branch (a) matches it. Undefined on a fresh
+    // tab, where the server falls back to the authenticated-identity anchor.
+    memberKey: storedMemberKey(code),
     // T-30 (F2): ask the origin to mint a member credential for this row.
     wantMemberKey: true,
   });
