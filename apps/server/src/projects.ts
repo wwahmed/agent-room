@@ -285,8 +285,8 @@ const LOCK_STALE_MS = 30_000;
  * single synchronous writer, so this guards external tooling and any
  * future second process, not the event loop.
  */
-function acquireLedgerLock(abs: string): string {
-  const lockPath = `${abs}.lock`;
+function acquireFileLock(target: string): string {
+  const lockPath = `${target}.lock`;
   const payload = JSON.stringify({ pid: process.pid, at: Date.now() });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -330,7 +330,7 @@ export function syncTaskLedger(
   const now = Date.now();
   const section = renderManagedSection(board, roomCode, now);
 
-  const lockPath = acquireLedgerLock(abs);
+  const lockPath = acquireFileLock(abs);
   let tmp: string | null = null;
   try {
     let before = `# Task ledger — ${cfg.name}\n\nDurable record of WakiChat room task boards for this project. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
@@ -421,17 +421,23 @@ export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt
 // key, and creation picks one of those keys. Registry writes go through
 // the same wx/atomic discipline as the ledger.
 
-const SCAN_ROOTS = (process.env.PROJECT_SCAN_ROOTS || join(process.env.HOME || '/', 'workspaces'))
-  .split(':')
-  .filter(Boolean);
+// EXPLICIT allowlist only (Codex round-3, item 6): no default. Unset =>
+// onboarding surface is disabled entirely.
+const SCAN_ROOTS = (process.env.PROJECT_SCAN_ROOTS || '').split(':').filter(Boolean);
 const SCAN_DEPTH = 2;
 
 export interface ProjectCandidate {
-  key: string;       // "<rootIndex>:<relative/path>" — opaque to clients
-  dirName: string;   // display: repo directory name
-  relPath: string;   // display: path relative to its scan root
+  key: string;       // server-issued random token — carries no path data
+  dirName: string;   // display: repo directory name only
   suggestedId: string;
 }
+
+// Round-3 item 1: candidate keys are single-use random tokens minted at
+// discovery time and resolved through this in-memory map. The browser
+// never sees (or can fabricate) anything path-shaped; create refuses any
+// token discovery did not issue. Tokens expire and die with the process.
+const CANDIDATE_TTL_MS = 10 * 60 * 1000;
+const issuedCandidates = new Map<string, { abs: string; dirName: string; at: number }>();
 
 function slugify(name: string): string {
   const s = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63);
@@ -439,6 +445,7 @@ function slugify(name: string): string {
 }
 
 export function listProjectCandidates(): ProjectCandidate[] {
+  if (SCAN_ROOTS.length === 0) return []; // onboarding disabled without an explicit allowlist
   const registered = new Set<string>();
   try {
     for (const cfg of Object.values(loadRegistry())) {
@@ -446,10 +453,14 @@ export function listProjectCandidates(): ProjectCandidate[] {
     }
   } catch { /* invalid registry: still list candidates so it can be rebuilt */ }
 
+  // Expire stale tokens on every listing.
+  const now = Date.now();
+  for (const [tok, v] of issuedCandidates) if (now - v.at > CANDIDATE_TTL_MS) issuedCandidates.delete(tok);
+
   const out: ProjectCandidate[] = [];
-  SCAN_ROOTS.forEach((scanRoot, rootIdx) => {
+  for (const scanRoot of SCAN_ROOTS) {
     let rootReal: string;
-    try { rootReal = realpathSync(scanRoot); } catch { return; }
+    try { rootReal = realpathSync(scanRoot); } catch { continue; }
     const walk = (dir: string, depth: number) => {
       if (depth > SCAN_DEPTH) return;
       let entries: string[];
@@ -459,8 +470,10 @@ export function listProjectCandidates(): ProjectCandidate[] {
         try { real = realpathSync(dir); } catch { return; }
         if (!real.startsWith(rootReal + sep) && real !== rootReal) return; // symlinked out — skip
         if (registered.has(real)) return;
-        const rel = real === rootReal ? '.' : real.slice(rootReal.length + 1);
-        out.push({ key: `${rootIdx}:${rel}`, dirName: real.split(sep).pop() || rel, relPath: rel, suggestedId: slugify(real.split(sep).pop() || rel) });
+        const dirName = real.split(sep).pop() || 'repo';
+        const token = randomBytes(16).toString('hex');
+        issuedCandidates.set(token, { abs: real, dirName, at: now });
+        out.push({ key: token, dirName, suggestedId: slugify(dirName) });
         return; // don't descend into repos
       }
       for (const e of entries) {
@@ -470,57 +483,65 @@ export function listProjectCandidates(): ProjectCandidate[] {
       }
     };
     walk(rootReal, 0);
-  });
+  }
   return out.sort((a, b) => a.dirName.localeCompare(b.dirName));
 }
 
-/** Create a registry entry from a scanned candidate key. Never accepts raw paths. */
+/**
+ * Create a registry entry from a server-issued candidate token. Raw or
+ * fabricated keys are refused outright — only tokens minted by
+ * listProjectCandidates() in this process resolve to anything.
+ */
 export function createProjectFromCandidate(key: string, requestedId?: string, requestedName?: string): ProjectSummary {
-  const m = /^(\d+):(.+)$/.exec(key || '');
-  if (!m) throw projErr('BadRequestError', 'Invalid candidate key.');
-  const rootIdx = Number(m[1]);
-  const rel = m[2];
-  const scanRoot = SCAN_ROOTS[rootIdx];
-  if (!scanRoot) throw projErr('BadRequestError', 'Invalid candidate key (unknown scan root).');
-  if (rel.includes('..') || rel.startsWith('/') || rel.includes('\0')) throw projErr('BadRequestError', 'Invalid candidate key (unsafe path).');
-  const rootReal = realpathSync(scanRoot);
-  const abs = rel === '.' ? rootReal : resolve(rootReal, rel);
-  const absReal = realpathSync(abs); // throws if gone
-  if (absReal !== rootReal && !absReal.startsWith(rootReal + sep)) throw projErr('BadRequestError', 'Candidate escapes the scan root.');
+  if (SCAN_ROOTS.length === 0) throw projErr('BadRequestError', 'Project onboarding is disabled: PROJECT_SCAN_ROOTS is not configured.');
+  const issued = issuedCandidates.get(key || '');
+  if (!issued || Date.now() - issued.at > CANDIDATE_TTL_MS) {
+    throw projErr('BadRequestError', 'Unknown or expired candidate key; refresh the candidate list.');
+  }
+  // Re-validate at use time: still under an allowed root, still a repo.
+  const absReal = realpathSync(issued.abs); // throws if gone
+  const underAllowedRoot = SCAN_ROOTS.some(r => {
+    try { const rr = realpathSync(r); return absReal === rr || absReal.startsWith(rr + sep); } catch { return false; }
+  });
+  if (!underAllowedRoot) throw projErr('BadRequestError', 'Candidate escaped the scan roots since discovery.');
   if (!existsSync(join(absReal, '.git'))) throw projErr('BadRequestError', 'Candidate is not a git repository.');
 
-  const registry = loadRegistry(); // strict: malformed registry blocks creation
-  for (const cfg of Object.values(registry)) {
-    try { if (realpathSync(cfg.root) === absReal) throw projErr('BadRequestError', 'That repository is already registered.'); } catch (e) { if ((e as Error).name === 'BadRequestError') throw e; }
-  }
-  const dirName = absReal.split(sep).pop() || 'project';
-  let id = requestedId ? requestedId.trim().toLowerCase() : slugify(dirName);
-  if (!ID_RE.test(id)) throw projErr('BadRequestError', `Project id must match ${ID_RE}.`);
-  if (registry[id]) throw projErr('BadRequestError', `Project id "${id}" is already taken.`);
-  const name = (requestedName || dirName).trim().slice(0, 80) || dirName;
-
-  const docs: Record<string, string> = { tasks: 'docs/TASKS.md' };
-  if (existsSync(join(absReal, 'README.md'))) docs.brief = 'README.md';
-  if (existsSync(join(absReal, 'FEATURES.md'))) docs.features = 'FEATURES.md';
-
-  // Atomic registry write with the same wx/rename discipline. Re-read the
-  // RAW file (not the validated view) so unknown fields like _comment are
-  // preserved byte-for-byte in spirit.
-  let rawObj: Record<string, unknown> = {};
-  if (existsSync(REGISTRY_PATH)) {
-    rawObj = JSON.parse(readFileSync(REGISTRY_PATH, 'utf8')) as Record<string, unknown>;
-  }
-  rawObj[id] = { name, root: absReal, docs };
-  const tmp = join(dirname(REGISTRY_PATH), `.projects-${randomBytes(6).toString('hex')}.tmp`);
-  writeFileSync(tmp, JSON.stringify(rawObj, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  // Round-3 item 4: registry writes hold the same advisory lock as the
+  // ledger, and the raw file is re-read INSIDE the lock (CAS), so two
+  // concurrent registrations can't lose each other's entries.
+  const lockPath = acquireFileLock(REGISTRY_PATH);
+  let tmp: string | null = null;
   try {
+    const registry = loadRegistry(); // strict: malformed registry blocks creation
+    for (const cfg of Object.values(registry)) {
+      try { if (realpathSync(cfg.root) === absReal) throw projErr('BadRequestError', 'That repository is already registered.'); } catch (e) { if ((e as Error).name === 'BadRequestError') throw e; }
+    }
+    const dirName = issued.dirName;
+    const id = requestedId ? requestedId.trim().toLowerCase() : slugify(dirName);
+    if (!ID_RE.test(id)) throw projErr('BadRequestError', `Project id must match ${ID_RE}.`);
+    if (registry[id]) throw projErr('BadRequestError', `Project id "${id}" is already taken.`);
+    const name = (requestedName || dirName).trim().slice(0, 80) || dirName;
+
+    const docs: Record<string, string> = { tasks: 'docs/TASKS.md' };
+    if (existsSync(join(absReal, 'README.md'))) docs.brief = 'README.md';
+    if (existsSync(join(absReal, 'FEATURES.md'))) docs.features = 'FEATURES.md';
+
+    let rawObj: Record<string, unknown> = {};
+    if (existsSync(REGISTRY_PATH)) {
+      rawObj = JSON.parse(readFileSync(REGISTRY_PATH, 'utf8')) as Record<string, unknown>;
+    }
+    rawObj[id] = { name, root: absReal, docs };
+    tmp = join(dirname(REGISTRY_PATH), `.projects-${randomBytes(6).toString('hex')}.tmp`);
+    writeFileSync(tmp, JSON.stringify(rawObj, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     renameSync(tmp, REGISTRY_PATH);
-  } catch (e) {
-    try { unlinkSync(tmp); } catch { /* gone */ }
-    throw e;
+    tmp = null;
+    issuedCandidates.delete(key);
+    console.log(`[project] registered "${id}" -> ${absReal}`);
+    return { id, name, docs: Object.keys(docs) };
+  } finally {
+    if (tmp) { try { unlinkSync(tmp); } catch { /* gone */ } }
+    try { unlinkSync(lockPath); } catch { /* gone */ }
   }
-  console.log(`[project] registered "${id}" -> ${absReal}`);
-  return { id, name, docs: Object.keys(docs) };
 }
 
 function projErr(name: string, message: string): Error {

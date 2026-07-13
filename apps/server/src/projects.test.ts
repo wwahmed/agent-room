@@ -201,14 +201,16 @@ describe('safe onboarding', () => {
     expect(created.id).toBe('myrepo');
     expect(created.docs).toContain('tasks');
     expect(created.docs).toContain('brief');
-    // registered repos disappear from candidates; duplicate ids rejected
+    // registered repos disappear from candidates; the used token is
+    // single-use, so replaying it fails as unknown
     expect(listProjectCandidates().map(c => c.dirName)).not.toContain('myrepo');
-    expect(() => createProjectFromCandidate(cand.key)).toThrowError(/already registered/);
+    expect(() => createProjectFromCandidate(cand.key)).toThrowError(/Unknown or expired/);
   });
 
-  it('rejects forged candidate keys', () => {
-    expect(() => createProjectFromCandidate('0:../../etc')).toThrowError(/unsafe|Invalid/);
-    expect(() => createProjectFromCandidate('9:whatever')).toThrowError(/unknown scan root/);
-    expect(() => createProjectFromCandidate('junk')).toThrowError(/Invalid candidate key/);
+  it('rejects any key not issued by discovery (tokens are opaque and server-minted)', () => {
+    expect(() => createProjectFromCandidate('0:../../etc')).toThrowError(/Unknown or expired/);
+    expect(() => createProjectFromCandidate('9:whatever')).toThrowError(/Unknown or expired/);
+    expect(() => createProjectFromCandidate('junk')).toThrowError(/Unknown or expired/);
+    expect(() => createProjectFromCandidate('a'.repeat(32))).toThrowError(/Unknown or expired/);
   });
 });

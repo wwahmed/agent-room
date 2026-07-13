@@ -182,6 +182,30 @@ function statusForError(err: Error): number {
   }
 }
 
+// Admin = an Access-authenticated allowlisted user (ADMIN_EMAILS env
+// narrows it further if set). Local agents are trusted for room data but
+// NOT for the onboarding surface — registering projects is the owner's
+// call, made in a browser.
+function adminGate(caller: Caller): { status: number; body: unknown } | null {
+  if (caller.kind === 'anonymous') return { status: 401, body: { error: 'Unauthorized', message: 'Sign in required.' } };
+  if (caller.kind !== 'user') return { status: 403, body: { error: 'Forbidden', message: 'Project onboarding is owner-only; use the web app.' } };
+  const admins = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  if (admins.length > 0 && !admins.includes(caller.email)) {
+    return { status: 403, body: { error: 'Forbidden', message: 'Project onboarding is owner-only.' } };
+  }
+  return null;
+}
+
+// Registry problems are logged in full server-side; browsers get a
+// generic message so absolute host paths never leak (Codex round-3).
+function sanitizeProjectError(err: Error): { error: string; message: string } {
+  if (err.name === 'ProjectRegistryError') {
+    console.error(`[project] ${err.message}`);
+    return { error: err.name, message: 'Project registry is misconfigured on the server; check the server log.' };
+  }
+  return { error: err.name, message: err.message };
+}
+
 function sysMessage(text: string, metadata: Record<string, unknown>): Message {
   return {
     id: Date.now(),
@@ -771,7 +795,7 @@ const server = createServer(async (req, res) => {
         console.warn(
           `[api/room] ${payload.action} rejected: ${e.name} (${e.message}) code=${payload.code ?? ''} name=${who?.name ?? payload.name ?? payload.requesterName ?? ''} client=${who?.client ?? ''}`,
         );
-        return sendJson(res, statusForError(e), { error: e.name, message: e.message });
+        return sendJson(res, statusForError(e), sanitizeProjectError(e));
       }
     }
 
@@ -848,21 +872,23 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, { projects: listProjects() });
       } catch (e) {
         const err = e as Error;
-        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+        return sendJson(res, statusForError(err), sanitizeProjectError(err));
       }
     }
 
     if (path === '/api/project/candidates' && req.method === 'GET') {
-      // Discovered git repos under PROJECT_SCAN_ROOTS, keyed opaquely —
-      // the safe onboarding path: the browser picks, it never types paths.
+      // Onboarding surface is ADMIN-ONLY: the Access-authenticated owner
+      // (allowlist) — not local agents, not merely-authenticated callers.
       const caller = await resolveCaller(req);
-      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const gate = adminGate(caller);
+      if (gate) return sendJson(res, gate.status, gate.body);
       return sendJson(res, 200, { candidates: listProjectCandidates() });
     }
 
     if (path === '/api/project/create' && req.method === 'POST') {
       const caller = await resolveCaller(req);
-      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const gate = adminGate(caller);
+      if (gate) return sendJson(res, gate.status, gate.body);
       try {
         const body = JSON.parse(await readBody(req)) as { key?: string; id?: string; name?: string };
         const project = createProjectFromCandidate(String(body.key || ''), body.id, body.name);
@@ -870,7 +896,7 @@ const server = createServer(async (req, res) => {
       } catch (e) {
         const err = e as Error;
         if (err.name === 'SyntaxError') return sendJson(res, 400, { error: 'BadRequest', message: 'invalid JSON body' });
-        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+        return sendJson(res, statusForError(err), sanitizeProjectError(err));
       }
     }
 
@@ -885,7 +911,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, readDoc(String(q.get('id') || ''), String(q.get('role') || '')));
       } catch (e) {
         const err = e as Error;
-        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+        return sendJson(res, statusForError(err), sanitizeProjectError(err));
       }
     }
 

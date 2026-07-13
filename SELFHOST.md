@@ -92,16 +92,27 @@ This fork runs the full Agent Room stack on one always-on Mac
   and unlinked on failure. A managed section WITHOUT a hash line
   ("legacy") is fail-closed like a tamper — `force` migrates it.
 - Onboarding a project: pick "Create from a discovered repo" in New
-  room or the Project tab — the server scans `PROJECT_SCAN_ROOTS`
-  (default `~/workspaces`, colon-separated) for git repos and writes
-  the registry entry itself (browser never sends paths); or hand-edit
-  `deploy/projects.json`. Only the `tasks` role is ever written; all
-  other roles are read-only through `/api/project/doc`.
-- Tests: `npm -w apps/server test` covers malformed/invalid registry,
-  traversal/absolute/symlink/symlink-swap denial, tamper + legacy
-  fail-closed + force migration, idempotence, lock discipline (fresh
-  lock refusal, stale takeover), serialization, and onboarding key
-  forgery.
+  room or the Project tab. The server scans `PROJECT_SCAN_ROOTS`
+  (EXPLICIT colon-separated allowlist in `.env`; unset = onboarding
+  disabled) for git repos, mints single-use random candidate TOKENS
+  (10-min TTL, in-memory), and `/api/project/create` accepts only
+  those tokens — nothing path-shaped ever crosses the browser
+  boundary, and fabricated keys are refused. The surface is
+  OWNER-ONLY: Access-authenticated allowlisted users (narrow further
+  with `ADMIN_EMAILS`); local agents get 403. Registry writes hold a
+  `projects.json.lock` with the re-read inside it (CAS), so
+  concurrent registrations can't lose entries. Registry error
+  responses to browsers are generic; full details go to the server
+  log only. Alternatively hand-edit `deploy/projects.json`. Only the
+  `tasks` role is ever written; all other roles are read-only through
+  `/api/project/doc`.
+- Tests: `npm -w apps/server test` (build first: the race suite runs
+  REAL child processes against dist/projects.js). Coverage: malformed/
+  invalid registry, traversal/absolute/symlink denial, tamper + legacy
+  fail-closed + force migration, idempotence, lock discipline, 8-way
+  simultaneous multi-process writers, a live symlink-swapper racing a
+  writer (nothing lands outside the root), concurrent registrations
+  (registry CAS), and forged/replayed candidate tokens.
 
 ## Deploying changes
 

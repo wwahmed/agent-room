@@ -398,9 +398,8 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 export interface ProjectCandidate {
-  key: string;
+  key: string; // server-issued opaque token
   dirName: string;
-  relPath: string;
   suggestedId: string;
 }
 
