@@ -31,3 +31,6 @@ chat.log
 chat-error.log
 tunnel.log
 tunnel-error.log
+
+# T-18: live project registry holds machine-specific absolute paths - keep local
+deploy/projects.json

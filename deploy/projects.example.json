@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to deploy/projects.json (gitignored) and point ids at real local repos. Ids are slugs; roots are absolute paths on the host; doc paths are repo-relative. Only the 'tasks' role is ever written.",
+  "my-project": {
+    "name": "My Project",
+    "root": "/absolute/path/to/repo",
+    "docs": {
+      "tasks": "docs/TASKS.md",
+      "features": "FEATURES.md",
+      "brief": "README.md"
+    }
+  }
+}
