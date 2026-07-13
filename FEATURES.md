@@ -27,6 +27,12 @@ This roadmap records product direction, not delivery promises. A feature becomes
 9. **Extensible without lock-in.** Web, MCP, local agents, remote agents, and future connectors should share stable protocols and degrade safely when capabilities differ.
 10. **Ambitious, not fictional.** Keep a broad product horizon while clearly distinguishing shipped, active, planned, and exploratory work.
 
+### Upstream framework policy
+
+WakiChat extends the MIT-licensed [Agent Room](https://github.com/ebin198351-akl/agent-room) protocol and product base. Preserve sound upstream primitives—room lifecycle, MCP client support, listening/presence, reply modes, task verification, attachments, structured artifacts, reports, templates, and role presets—while rebuilding deployment, auth, storage, and durable project memory around WakiLabs boundaries. Evaluate upstream features deliberately; availability alone is not a reason to ship them.
+
+See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
+
 ## Shipped foundation
 
 | Capability | Status | Board reference |
@@ -35,6 +41,7 @@ This roadmap records product direction, not delivery promises. A feature becomes
 | Mobile room/lobby layout with no horizontal overflow | Shipped | T-02 |
 | Authenticated one-tap room entry and stable identity | Shipped | T-03 |
 | Touch-safe composer behavior and logout | Shipped | T-04 |
+| Dense editorial conversation workspace, full-width composer, and sender identity surfaces | Shipped | T-05 |
 | Automatic deploy detection and one-tap update | Shipped | T-06 |
 | Installable PWA with Android/desktop prompt and iOS guidance | Shipped | T-07 |
 | Compact mobile chrome and accessible targets | Shipped | T-08 |
@@ -45,7 +52,7 @@ This roadmap records product direction, not delivery promises. A feature becomes
 
 ## UI and experience
 
-### Unified conversation workspace — Active
+### Unified conversation workspace — Shipped
 
 - Use one WakiChat shell across the room list and room view.
 - Desktop: compact workspace rail, room list, conversation canvas, and optional inspector.
@@ -89,10 +96,10 @@ Board: **T-05**.
 - Rich task evidence: changed files, excerpts, commands, exit codes, deployment links, and verifier verdicts.
 - Lightweight reactions and acknowledgements that do not create noisy transcript messages.
 
-### Agent orchestration — Planned
+### Agent orchestration — Shipped base / Planned extensions
 
-- Clear agent identity, client, role, model/session capability, presence, and current work.
-- Host-directed invocation, speaker queue, reply modes, moderation, timeouts, mute, kick, and safe recovery from stalled turns.
+- Preserve the inherited open/sequential/moderator reply modes, host-directed invocation, speaker queue, timeouts, status pings, mute, kick, and presence contract.
+- Extend clear agent identity, client, role, model/session capability, presence, and current work.
 - Capability negotiation so unsupported clients fall back to plain text rather than breaking the room.
 - Agent status cards for working, waiting, blocked, reviewing, disconnected, and completed states.
 - Parallel-work lanes with explicit file/repo ownership and collision warnings.
@@ -110,7 +117,7 @@ Board: **T-05**.
 
 ## Project, task, and document workspace
 
-### Project-backed rooms — Next
+### Project-backed rooms — Active
 
 - Require new rooms to attach to a server-approved project id; never accept arbitrary browser filesystem paths.
 - Map each project to a local repository and a small manifest of document roles.
@@ -152,6 +159,9 @@ Board: **T-17**. **T-16 is superseded**; do not build year-scale transcript rete
 - Recoverable upload/transcription queues and clear partial-failure states.
 - Health checks for server, Redis, tunnel, auth keys, and MCP connectivity.
 - Automatic deploy rollback guardrails and end-to-end smoke tests for the flows that failed in production.
+- Replace the inherited read-mutate-write `casRoom` retry loop with an atomic compare-and-set primitive and concurrency tests.
+- Pin and audit the MCP package against a known source/tarball hash; test installer, hook, state, cursor, and resume compatibility across supported clients.
+- Port npm `0.25.4`'s private (`0600`) and lock-serialized local state behavior after establishing source parity, with stale-lock and crash-recovery tests.
 
 ### Security and privacy — Shipped / Planned
 
@@ -189,6 +199,7 @@ Board: **T-10**.
 - Upload progress, retry, cancel, resumability, size/type limits, and explicit retention.
 - Project-aware storage: promote durable artifacts into the repository or approved storage; keep transient files bounded.
 - Agent-readable attachment references with permission-aware download tools and extracted text where safe.
+- Extend the upstream `room_attachment_read` contract for bounded PDF, DOCX, and text extraction instead of creating a parallel reader protocol.
 - Redaction and secret detection before an attachment is exposed to every room participant.
 
 ### Audio and multimodal collaboration — Later / Research
@@ -246,15 +257,16 @@ Board: **T-10**.
 
 ### Now
 
-1. Finish and independently verify the unified dense conversation workspace (**T-05**).
-2. Commit this roadmap and hand it to the project-workspace implementation (**T-19**).
+1. Build and independently verify project-backed rooms and the durable Markdown workspace (**T-18**).
+2. Audit the upstream Agent Room framework and reconcile high-value capabilities into this roadmap (**T-20**).
+
+Completed in this horizon: unified dense conversation workspace (**T-05**) and the first durable roadmap (**T-19**).
 
 ### Next
 
-1. Project-backed rooms and durable Markdown task/document workspace (**T-18**).
-2. Enhanced long-form voice transcription (**T-10**).
-3. Structured question and option cards (**T-13**).
-4. Bounded retained-history lazy loading (**T-17**).
+1. Enhanced long-form voice transcription (**T-10**).
+2. Structured question and option cards (**T-13**).
+3. Bounded retained-history lazy loading (**T-17**).
 
 ### After the core loop is dependable
 
