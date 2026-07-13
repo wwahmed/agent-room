@@ -6,7 +6,7 @@ import { showToast } from './Toast.js';
 // and long-press on touch both open a small popover; "Copy text" copies the
 // message body to the clipboard. Structured so a future "Reply" action slots in
 // beside Copy. Dismisses on outside-click or Escape.
-export function MessageMenu({ message, align = 'right' }: { message: Message; align?: 'left' | 'right' }) {
+export function MessageMenu({ message, align = 'right', onReply }: { message: Message; align?: 'left' | 'right'; onReply?: (m: Message) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -71,6 +71,19 @@ export function MessageMenu({ message, align = 'right' }: { message: Message; al
           role="menu"
           className={`absolute top-7 z-30 min-w-[128px] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg ${align === 'right' ? 'right-0' : 'left-0'}`}
         >
+          {onReply && message.type === 'msg' && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { setOpen(false); onReply(message); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-ink transition hover:bg-surface-softer"
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M7 4 3 8l4 4M3.4 8H10a3.5 3.5 0 0 1 3.5 3.5V13" />
+              </svg>
+              Reply
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

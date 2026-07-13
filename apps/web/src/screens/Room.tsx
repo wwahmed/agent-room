@@ -12,7 +12,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
+import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
@@ -108,6 +108,8 @@ export function Room() {
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
+  // T-53/T-54: the message being quote-replied to (composer chip + send payload).
+  const [replyingTo, setReplyingTo] = useState<MessageReplyRef | null>(null);
   const [now, setNow] = useState(Date.now());
   const feedRef = useRef<HTMLDivElement>(null);
   // T-48 scroll-anchoring: only auto-stick to the bottom when the reader is
@@ -609,6 +611,21 @@ export function Room() {
     });
   }
 
+  // T-54: begin a quote-reply to a message (from the ⋯ menu or a swipe).
+  function startReply(m: Message) {
+    setReplyingTo({ id: m.id, name: m.name, text: (m.text ?? '').slice(0, 240) });
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  // T-54: jump to (and briefly highlight) the quoted original by id.
+  function jumpToMessage(id: number) {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return; // original may be paged out; the denormalized quote still shows
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('reply-flash');
+    window.setTimeout(() => el.classList.remove('reply-flash'), 1200);
+  }
+
   async function send() {
     const body = text.trim();
     if ((!body && attachments.length === 0) || ended) return;
@@ -623,9 +640,12 @@ export function Room() {
       text: body,
       time: Date.now(),
       attachments: attachments.length ? attachments : undefined,
+      // T-54: quote-reply reference; the server sanitizes/truncates name+snippet.
+      replyTo: replyingTo ?? undefined,
     };
     setText('');
     setAttachments([]);
+    setReplyingTo(null);
     try {
       await sendMessage(msg);
     } catch (e) {
@@ -1017,6 +1037,8 @@ export function Room() {
                     grouped={isSameGroup(messages[i - 1], m)}
                     ambiguousNames={ambiguousNames}
                     now={now}
+                    onReply={startReply}
+                    onJumpToQuote={jumpToMessage}
                   />
                 ));
               })()}
@@ -1125,6 +1147,22 @@ export function Room() {
                   <div className="text-[11px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
                     <span>🔇</span>
                     <span>{mutedCount} {mutedCount === 1 ? 'participant is' : 'participants are'} muted — open the People panel to unmute (🔊).</span>
+                  </div>
+                )}
+                {replyingTo && (
+                  <div className="flex items-center gap-2 rounded-lg border-l-2 border-accent bg-surface-softer px-3 py-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-semibold text-accent-deep">Replying to {replyingTo.name}</div>
+                      <div className="truncate text-[12px] text-ink-faint">{replyingTo.text || '…'}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      aria-label="Cancel reply"
+                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-ink-soft transition hover:bg-surface hover:text-ink"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+                    </button>
                   </div>
                 )}
                 {attachments.length > 0 && (

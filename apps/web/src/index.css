@@ -49,3 +49,10 @@ body {
   background: rgb(var(--surface-sunken));
   color: rgb(var(--ink));
 }
+
+/* T-54: brief highlight when jumping to a quoted message. */
+@keyframes reply-flash {
+  0%, 100% { background-color: transparent; }
+  25% { background-color: rgb(var(--accent) / 0.16); }
+}
+.reply-flash { animation: reply-flash 1.2s ease-in-out; border-radius: 1rem; }

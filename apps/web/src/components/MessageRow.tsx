@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { Message } from '@agent-room/shared';
 import { AttachmentList, MessageText, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
@@ -73,6 +74,10 @@ interface Props {
   ambiguousNames?: Set<string>;
   /** Live clock for relative timestamps (T-49); ticks every ~30s from Room. */
   now?: number;
+  /** T-54: start a quote-reply to this message. */
+  onReply?: (m: Message) => void;
+  /** T-54: jump to a quoted original by id. */
+  onJumpToQuote?: (id: number) => void;
 }
 
 // Exact clock for the hover/title tooltip — precise time behind the relative label.
@@ -80,8 +85,49 @@ function exactTime(t: number): string {
   return new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now }: Props) {
+// T-54: the quoted-message block rendered atop a reply. Denormalized (name +
+// snippet travel on the reply) so it shows even after the original pages out;
+// tapping it jumps to the original when still loaded.
+function ReplyQuote({ reply, onJump, onDark }: { reply: NonNullable<Message['replyTo']>; onJump?: (id: number) => void; onDark?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onJump?.(reply.id)}
+      className={`mb-1.5 flex w-full flex-col items-start gap-0.5 rounded-md border-l-2 px-2.5 py-1 text-left transition ${
+        onDark ? 'border-white/60 bg-white/10 hover:bg-white/20' : 'border-accent/60 bg-black/10 hover:bg-black/20'
+      }`}
+    >
+      <span className={`text-[11px] font-semibold ${onDark ? 'text-white/90' : 'text-accent-deep'}`}>{reply.name}</span>
+      <span className={`line-clamp-2 text-[12px] leading-snug [overflow-wrap:anywhere] ${onDark ? 'text-white/70' : 'text-ink-faint'}`}>{reply.text || '…'}</span>
+    </button>
+  );
+}
+
+// T-54: swipe-right (touch) to reply — the WhatsApp gesture. Small horizontal
+// intent threshold, ignores mostly-vertical scrolls.
+function useSwipeReply(onReply: (() => void) | undefined) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  if (!onReply) return {};
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0];
+      start.current = t ? { x: t.clientX, y: t.clientY } : null;
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const s = start.current;
+      start.current = null;
+      const t = e.changedTouches[0];
+      if (!s || !t) return;
+      const dx = t.clientX - s.x;
+      const dy = t.clientY - s.y;
+      if (dx > 55 && Math.abs(dy) < 40) onReply();
+    },
+  };
+}
+
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote }: Props) {
   const body = message.text ?? '';
+  const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
 
   if (message.type === 'sys') {
     return (
@@ -97,9 +143,10 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
     // Own messages: subtle right alignment, compact tinted block, no
     // avatar/name (you know who you are). Timestamp inside, quiet.
     return (
-      <div className={`group flex items-start justify-end gap-1 px-3 sm:px-4 ${grouped ? 'mt-1' : 'mt-4'}`}>
-        <div className="pt-1"><MessageMenu message={message} /></div>
+      <div id={`msg-${message.id}`} {...swipe} className={`group flex items-start justify-end gap-1 px-3 sm:px-4 ${grouped ? 'mt-1' : 'mt-4'}`}>
+        <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div className="min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
+          {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} onDark />}
           {body.trim() && (
             <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
               <MessageText text={body} />
@@ -128,12 +175,13 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
     // Follow-up in a group: a plain full-width bubble under the first, no
     // header; hover reveals the exact time.
     return (
-      <div className="group relative mt-1 px-3 sm:px-4" title={exactTime(message.time)}>
+      <div id={`msg-${message.id}`} {...swipe} className="group relative mt-1 px-3 sm:px-4" title={exactTime(message.time)}>
         <div className={`rounded-2xl border ${bodyClass}`} style={bubble}>
+          {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
-        <div className="absolute right-4 top-1 sm:right-5"><MessageMenu message={message} /></div>
+        <div className="absolute right-4 top-1 sm:right-5"><MessageMenu message={message} onReply={onReply} /></div>
       </div>
     );
   }
@@ -142,7 +190,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
   // a header row INSIDE the top of the bubble (divider under it), so the bubble
   // spans the full reading width instead of surrendering a left avatar gutter.
   return (
-    <div className="group mt-4 px-3 sm:px-4">
+    <div id={`msg-${message.id}`} {...swipe} className="group mt-4 px-3 sm:px-4">
       <div className="overflow-hidden rounded-2xl border" style={bubble}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b px-3.5 pt-2 pb-1.5" style={headerBorder}>
           <SenderAvatar message={message} sizeClass="h-6 w-6" textClass="text-[10px]" />
@@ -150,9 +198,10 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
           {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="truncate text-[11px] text-ink-faint">{message.role}</span>}
           <span className="ml-auto flex-shrink-0 text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
-          <MessageMenu message={message} />
+          <MessageMenu message={message} onReply={onReply} />
         </div>
         <div className={bodyClass}>
+          {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
