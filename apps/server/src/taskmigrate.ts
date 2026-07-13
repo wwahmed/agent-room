@@ -80,3 +80,40 @@ export function applyAliasMigration(tasks: MigratableTask[], m: AliasMigration):
   }
   return migrated;
 }
+
+export interface BindingOverride {
+  taskId: string;
+  field: 'owner' | 'verifier';
+  to: string;
+  toClient: 'web' | 'cc';
+}
+
+/**
+ * Set a single task's owner or verifier explicitly (function-based lineage that
+ * a blanket alias remap can't express, e.g. one task keeps a different owner
+ * than the rest of its old alias). Fails closed if the task is missing or the
+ * change would make owner==verifier. Mutates in place; returns the binding key
+ * it changed (e.g. "T-25.owner").
+ */
+export function applyBindingOverride(tasks: MigratableTask[], o: BindingOverride): string {
+  const to = (o.to || '').trim();
+  if (!o.taskId || !to) throw new AliasMigrationError('BadRequestError', 'override taskId and to are required');
+  const t = tasks.find((x) => x.id === o.taskId);
+  if (!t) throw new AliasMigrationError('BadRequestError', `override target task ${o.taskId} not found`);
+  if (o.field === 'owner') {
+    if (t.verifier && t.verifier === to) {
+      throw new AliasMigrationError('CollisionError', `override would make owner==verifier on ${o.taskId} (@${to})`);
+    }
+    t.owner = to;
+    t.ownerClient = o.toClient;
+  } else if (o.field === 'verifier') {
+    if (t.owner && t.owner === to) {
+      throw new AliasMigrationError('CollisionError', `override would make owner==verifier on ${o.taskId} (@${to})`);
+    }
+    t.verifier = to;
+    t.verifierClient = o.toClient;
+  } else {
+    throw new AliasMigrationError('BadRequestError', `override field must be owner|verifier, got ${o.field}`);
+  }
+  return `${o.taskId}.${o.field}`;
+}

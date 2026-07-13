@@ -38,7 +38,7 @@ import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
-import { applyAliasMigration, AliasMigrationError } from './taskmigrate.js';
+import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -300,6 +300,7 @@ interface ArmSpec {
   code: string;
   target: { name: string; client: 'web' | 'cc' };
   migrations: { from: string; to: string; toClient?: 'web' | 'cc' }[];
+  overrides?: { taskId: string; field: 'owner' | 'verifier'; to: string; toClient?: 'web' | 'cc' }[];
 }
 function readArmSpec(): ArmSpec | null {
   try {
@@ -843,6 +844,22 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         }
         try {
           migrated.push(...applyAliasMigration(board.tasks, { from: mig.from, to: mig.to, toClient }));
+        } catch (e) {
+          const err = e as AliasMigrationError;
+          throw taskError(err.name || 'BadRequestError', err.message);
+        }
+      }
+      // Function-based overrides (e.g. one task keeps a different owner than the
+      // rest of its old alias). Applied after blanket migrations; each target
+      // must be a uniquely keyed participant, and collisions fail closed.
+      for (const ov of arm.overrides || []) {
+        const toClient = ov.toClient || 'cc';
+        const tRows = room.participants.filter((p) => p.name === ov.to && p.client === toClient);
+        if (tRows.length !== 1 || !tRows[0].memberKeyHash) {
+          throw taskError('MemberAuthError', `override target @${ov.to} (${toClient}) is not a uniquely keyed participant`);
+        }
+        try {
+          migrated.push(applyBindingOverride(board.tasks, { taskId: ov.taskId, field: ov.field, to: ov.to, toClient }));
         } catch (e) {
           const err = e as AliasMigrationError;
           throw taskError(err.name || 'BadRequestError', err.message);
