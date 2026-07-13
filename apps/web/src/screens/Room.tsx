@@ -1095,7 +1095,33 @@ export function Room() {
                   </button>
                   <span className="hidden sm:inline text-ink-faint">Prefills your message. You choose the agent and send.</span>
                 </div>
-                <div className="flex items-end gap-1">
+                {/* Host feedback (04:09): tool buttons must NEVER steal width
+                    from the writing surface. Textarea spans the full composer
+                    width at every height; controls live on their own compact
+                    row below. */}
+                <textarea
+                  ref={textareaRef}
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  onPaste={e => { void handlePaste(e); }}
+                  onKeyDown={e => {
+                    // Enter is always a newline (host direction, 2026-07-13).
+                    // Cmd/Ctrl+Enter sends on hardware keyboards.
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (⌘/Ctrl+Enter to send)'}
+                  rows={1}
+                  style={{
+                    height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
+                    maxHeight: composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
+                  }}
+                  /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
+                  className="w-full resize-none overflow-y-auto rounded-xl border border-border bg-surface-softer px-3 py-2.5 text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                />
+                <div className="flex items-center gap-1">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1119,28 +1145,6 @@ export function Room() {
                       </svg>
                     )}
                   </button>
-                  <textarea
-                    ref={textareaRef}
-                    value={text}
-                    onChange={e => setText(e.target.value)}
-                    onPaste={e => { void handlePaste(e); }}
-                    onKeyDown={e => {
-                      // Enter is always a newline (host direction, 2026-07-13).
-                      // Cmd/Ctrl+Enter sends on hardware keyboards.
-                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                        e.preventDefault();
-                        send();
-                      }
-                    }}
-                    placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (⌘/Ctrl+Enter to send)'}
-                    rows={1}
-                    style={{
-                      height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
-                      maxHeight: composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
-                    }}
-                    /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
-                    className="min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface-softer px-3 py-2.5 text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
-                  />
                   <VoiceButton
                     onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
                     disabled={ended}
@@ -1157,14 +1161,16 @@ export function Room() {
                         : <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.25 6.75M2.5 13.5l4.25-4.25" />}
                     </svg>
                   </button>
+                  <div className="flex-1" />
                   <button
                     onClick={send}
                     disabled={!text.trim() && attachments.length === 0}
                     title="Send"
                     aria-label="Send message"
-                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-11 min-w-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+                    <span className="text-sm font-bold">Send</span>
+                    <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
                       <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
                     </svg>
                   </button>

@@ -89,11 +89,17 @@ export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
 
   const ambiguous = ambiguousNames?.has(message.name);
 
+  // Host feedback (04:10): every sender gets a stable tinted surface
+  // derived from their identity color, so Waqas/Claude/Codex read apart
+  // at a glance before the name does. Saturation stays low (hex alpha
+  // ~9%) so long technical text keeps full contrast on the dark theme.
+  const tint = { backgroundColor: `${message.color}17`, borderLeft: `2px solid ${message.color}66` };
+
   if (grouped) {
     // Follow-up message in a group: no header, body aligns with the
     // text column above (avatar gutter preserved for hover timestamp).
     return (
-      <div className="group flex gap-2.5 px-3 py-0.5 hover:bg-surface-softer/60 sm:px-4">
+      <div className="group flex gap-2.5 py-0.5 pl-2.5 pr-3 sm:pr-4" style={tint}>
         <div className="w-8 flex-shrink-0 pt-1 text-right text-[9px] leading-none text-ink-faint opacity-0 group-hover:opacity-100">
           {timeLabel(message.time)}
         </div>
@@ -106,7 +112,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
   }
 
   return (
-    <div className="group mt-2.5 flex gap-2.5 px-3 py-0.5 hover:bg-surface-softer/60 sm:px-4">
+    <div className="group mt-2.5 flex gap-2.5 py-1 pl-2.5 pr-3 sm:pr-4" style={tint}>
       <div className="pt-0.5">
         <SenderAvatar message={message} />
       </div>
