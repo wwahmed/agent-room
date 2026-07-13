@@ -606,6 +606,62 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (path === '/api/me' && req.method === 'GET') {
+      // Cloudflare Access injects the authenticated email at the edge; the
+      // origin is only reachable through the Access-gated tunnel or from
+      // localhost (trusted single-user Mac), so the header is authoritative
+      // here. JWT signature verification is a future hardening step.
+      const email = String(req.headers['cf-access-authenticated-user-email'] || '').toLowerCase();
+      if (!email) return sendJson(res, 200, { identity: null });
+      let mapped: { name?: string; role?: string } | undefined;
+      try {
+        const map = JSON.parse(process.env.IDENTITY_MAP || '{}') as Record<string, { name?: string; role?: string }>;
+        mapped = map[email];
+      } catch {
+        // malformed IDENTITY_MAP falls back to email-derived name
+      }
+      return sendJson(res, 200, {
+        identity: {
+          email,
+          name: mapped?.name || email.split('@')[0],
+          role: mapped?.role || '',
+        },
+      });
+    }
+
+    if (path === '/api/rooms' && req.method === 'GET') {
+      const keys: string[] = [];
+      let scanCursor = '0';
+      do {
+        const [next, batch] = (await redis.scan(scanCursor, 'MATCH', 'room:???-???-???', 'COUNT', 200)) as [string, string[]];
+        scanCursor = next;
+        keys.push(...batch);
+      } while (scanCursor !== '0');
+      const rooms: Array<Record<string, unknown>> = [];
+      for (const key of keys) {
+        const raw = await redis.get(key);
+        if (!raw) continue;
+        try {
+          const r = JSON.parse(raw) as {
+            code: string; topic: string; status: string; createdBy: string; createdAt: number;
+            participants?: Array<unknown>;
+          };
+          rooms.push({
+            code: r.code,
+            topic: r.topic,
+            status: r.status,
+            createdBy: r.createdBy,
+            createdAt: r.createdAt,
+            participants: (r.participants || []).length,
+          });
+        } catch {
+          // skip unparseable rooms
+        }
+      }
+      rooms.sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+      return sendJson(res, 200, { rooms });
+    }
+
     if (path === '/healthz') {
       const pong = await redis.ping();
       return sendJson(res, pong === 'PONG' ? 200 : 500, { ok: pong === 'PONG' });

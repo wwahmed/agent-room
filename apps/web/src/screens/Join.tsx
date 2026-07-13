@@ -8,6 +8,7 @@ import { CodeInput } from '../components/CodeInput.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { AgentJoinQuickstart } from '../components/AgentJoinQuickstart.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
+import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 
 function stripDashes(s: string) { return s.replace(/-/g, ''); }
 function withDashes(s: string) { return s.match(/.{1,3}/g)?.join('-') ?? s; }
@@ -21,6 +22,18 @@ export function Join() {
   const [role, setRole] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Prefill from the Access-authenticated identity so the owner never
+  // types name/role even when landing on the Join form directly.
+  useEffect(() => {
+    let cancelled = false;
+    fetchIdentity().then(me => {
+      if (cancelled || !me) return;
+      setName(prev => prev || me.name);
+      setRole(prev => prev || me.role || lastRole());
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (raw.length !== CODE_LEN) { setRoom(null); return; }
@@ -67,6 +80,7 @@ export function Join() {
       // Persist whatever the server actually assigned so future writes use it.
       const finalName = result.participant.name;
       sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify({ name: finalName, role: role.trim() }));
+      rememberRole(role);
       navigate(`/r/${room.code}`);
     } catch (e) {
       if (e instanceof HostNameTakenError) {

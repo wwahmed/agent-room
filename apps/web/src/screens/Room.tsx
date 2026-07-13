@@ -8,11 +8,12 @@ import { Avatar } from '../components/Avatar.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getTurnState, hostSkipCurrent, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, type TurnState } from '@agent-room/upstash-client';
+import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '@agent-room/upstash-client';
 import { ENV } from '../env.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
+import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -42,7 +43,48 @@ export function Room() {
   // silently impersonated the host for any unknown visitor.
   const [self, _setSelf] = useState<SelfIdentity | null>(() => readStoredSelf(code));
   useEffect(() => {
-    if (!self) navigate(`/j/${code}`, { replace: true });
+    if (self) return;
+    // No stored identity for this tab. Before bouncing to the Join form,
+    // try the Access-authenticated identity (/api/me): the single-user
+    // self-host promise is that the authenticated owner never types a
+    // name/role. Anonymous contexts fall through to /j/ as before.
+    let cancelled = false;
+    (async () => {
+      const identity = await fetchIdentity();
+      if (cancelled) return;
+      if (!identity) {
+        navigate(`/j/${code}`, { replace: true });
+        return;
+      }
+      try {
+        const client = createClient(ENV.upstash);
+        const room = await getRoom(client, code);
+        if (identity.name === room.createdBy) {
+          const hostKey = localStorage.getItem(`room:${code}:hostKey`)
+            ?? sessionStorage.getItem(`room:${code}:hostKey`)
+            ?? undefined;
+          await verifyHostKey(client, code, hostKey);
+        }
+        const role = identity.role || lastRole();
+        const joined = await joinRoom(client, code, {
+          name: identity.name,
+          role,
+          color: colorForName(identity.name),
+          initials: initialsFor(identity.name),
+          client: 'web' as const,
+          joinedAt: Date.now(),
+          lastSeenAt: Date.now(),
+        }, { priorIdentity: { name: identity.name, client: 'web' } });
+        if (cancelled) return;
+        const assigned: SelfIdentity = { name: joined.participant.name, role };
+        sessionStorage.setItem(`room:${code}:self`, JSON.stringify(assigned));
+        rememberRole(role);
+        _setSelf(assigned);
+      } catch {
+        if (!cancelled) navigate(`/j/${code}`, { replace: true });
+      }
+    })();
+    return () => { cancelled = true; };
   }, [self, code, navigate]);
   const { room, messages, error, sendMessage, refreshRoom, forceRefresh } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
