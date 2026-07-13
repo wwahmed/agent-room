@@ -29,7 +29,7 @@ import { existsSync } from 'node:fs';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateCode } from '@agent-room/shared';
+import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -273,6 +273,14 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
     case 'send': {
       const message = payload.message as Message;
       const kind = (payload.kind as string) || 'message';
+      if (!message || typeof (message as { name?: unknown }).name !== 'string' || !(message as { name?: string }).name) {
+        // Without a sender name the speaker check can only fail, and the
+        // resulting MutedError text ('"undefined" has been muted') sends
+        // agents down the wrong path. Name the real problem instead.
+        const err = new Error('message.name is required — pass your display name in the room_send call.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
       if (kind === 'status') {
         // Status updates append without touching the turn machinery.
         await getRoom(client, code);
@@ -354,9 +362,171 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       }
       return { skipped };
     }
+    case 'taskBoard': {
+      await getRoom(client, code);
+      return { board: await getTaskBoard(code) };
+    }
+    case 'taskCreate': {
+      await getRoom(client, code);
+      const board = await getTaskBoard(code);
+      const id =
+        typeof payload.id === 'string' && payload.id.trim()
+          ? payload.id.trim()
+          : `T-${String(board.tasks.length + 1).padStart(2, '0')}`;
+      if (board.tasks.some((t) => t.id === id)) {
+        throw taskError('BadRequestError', `Task id ${id} already exists on this board.`);
+      }
+      const task: BoardTask = {
+        id,
+        title: String(payload.title || '').slice(0, 200),
+        state: 'todo',
+        createdBy: String(payload.requesterName || ''),
+        owner: (payload.owner as string) || undefined,
+        ownerClient: (payload.ownerClient as 'web' | 'cc') || undefined,
+        verifier: (payload.verifier as string) || undefined,
+        verifierClient: (payload.verifierClient as 'web' | 'cc') || undefined,
+        dod: (payload.dod as string) || undefined,
+        createdAt: nowMs(),
+      };
+      if (!task.title) throw taskError('BadRequestError', 'title is required');
+      if (task.verifier && task.owner && task.verifier === task.owner) {
+        throw taskError('BadRequestError', 'verifier must be a different agent than the owner');
+      }
+      board.tasks.push(task);
+      await saveTaskBoard(code, board);
+      return { board, task };
+    }
+    case 'taskClaim': {
+      const board = await getTaskBoard(code);
+      const task = requireTask(board, String(payload.id || ''));
+      if (task.state !== 'todo' && task.state !== 'rejected') {
+        throw taskError('BadRequestError', `Task ${task.id} is ${task.state}; only todo/rejected tasks can be claimed.`);
+      }
+      task.owner = String(payload.name || '');
+      task.ownerClient = (payload.client as 'web' | 'cc') || 'cc';
+      task.state = 'in_progress';
+      task.claimedAt = nowMs();
+      await saveTaskBoard(code, board);
+      return { board, task };
+    }
+    case 'taskSubmit': {
+      const board = await getTaskBoard(code);
+      const task = requireTask(board, String(payload.id || ''));
+      const name = String(payload.name || '');
+      if (task.owner && task.owner !== name) {
+        throw taskError('NotYourTurnError', `Only the owner (@${task.owner}) can submit ${task.id}.`);
+      }
+      const ev = (payload.evidence || {}) as Record<string, unknown>;
+      const missing = ['fileListing', 'fileExcerpt', 'runOutput'].filter(
+        (k) => typeof ev[k] !== 'string' || !(ev[k] as string).trim(),
+      );
+      if (missing.length > 0 || !Number.isFinite(Number(ev.exitCode))) {
+        throw taskError(
+          'BadRequestError',
+          `Submission incomplete: evidence requires fileListing, fileExcerpt, runOutput and numeric exitCode (missing: ${[...missing, ...(Number.isFinite(Number(ev.exitCode)) ? [] : ['exitCode'])].join(', ')}).`,
+        );
+      }
+      task.owner = task.owner || name;
+      task.state = 'awaiting_review';
+      task.evidence = {
+        fileListing: String(ev.fileListing),
+        fileExcerpt: String(ev.fileExcerpt),
+        runOutput: String(ev.runOutput),
+        exitCode: Number(ev.exitCode),
+      };
+      task.submittedAt = nowMs();
+      await saveTaskBoard(code, board);
+      return { board, task };
+    }
+    case 'taskVerify': {
+      const board = await getTaskBoard(code);
+      const task = requireTask(board, String(payload.id || ''));
+      const name = String(payload.name || '');
+      const verdict = String(payload.verdict || '');
+      if (task.state !== 'awaiting_review') {
+        throw taskError('BadRequestError', `Task ${task.id} is ${task.state}; only awaiting_review tasks can be verified.`);
+      }
+      if (task.owner && task.owner === name) {
+        throw taskError('NotHostError', `Self-verification rejected: @${name} owns ${task.id}.`);
+      }
+      if (task.verifier && task.verifier !== name) {
+        throw taskError('NotHostError', `Only the designated verifier (@${task.verifier}) can rule on ${task.id}.`);
+      }
+      if (verdict !== 'done' && verdict !== 'rejected') {
+        throw taskError('BadRequestError', 'verdict must be "done" or "rejected"');
+      }
+      task.state = verdict;
+      task.verdict = verdict;
+      task.note = (payload.note as string) || undefined;
+      task.verifiedBy = name;
+      task.verifiedAt = nowMs();
+      await saveTaskBoard(code, board);
+      return { board, task };
+    }
     default:
       throw new Error(`unknown action: ${action || '(none)'}`);
   }
+}
+
+// ---------- task board (npm client >= 0.25 contract; not in the public repo) ----------
+
+interface BoardTask {
+  id: string;
+  title: string;
+  state: 'todo' | 'in_progress' | 'awaiting_review' | 'done' | 'rejected';
+  createdBy: string;
+  owner?: string;
+  ownerClient?: 'web' | 'cc';
+  verifier?: string;
+  verifierClient?: 'web' | 'cc';
+  dod?: string;
+  evidence?: { fileListing: string; fileExcerpt: string; runOutput: string; exitCode: number };
+  verdict?: 'done' | 'rejected';
+  note?: string;
+  verifiedBy?: string;
+  createdAt?: number;
+  claimedAt?: number;
+  submittedAt?: number;
+  verifiedAt?: number;
+}
+
+interface TaskBoard {
+  tasks: BoardTask[];
+}
+
+function nowMs(): number {
+  return Date.now();
+}
+
+function taskError(name: string, message: string): Error {
+  const err = new Error(message);
+  err.name = name;
+  return err;
+}
+
+function requireTask(board: TaskBoard, id: string): BoardTask {
+  const task = board.tasks.find((t) => t.id === id);
+  if (!task) throw taskError('RoomNotFoundError', `Task ${id} not found on this board.`);
+  return task;
+}
+
+function taskBoardKey(code: string): string {
+  return `room-tasks:${code}`;
+}
+
+async function getTaskBoard(code: string): Promise<TaskBoard> {
+  const raw = await redis.get(taskBoardKey(code));
+  if (!raw) return { tasks: [] };
+  try {
+    const parsed = JSON.parse(raw) as TaskBoard;
+    return Array.isArray(parsed.tasks) ? parsed : { tasks: [] };
+  } catch {
+    return { tasks: [] };
+  }
+}
+
+async function saveTaskBoard(code: string, board: TaskBoard): Promise<void> {
+  await redis.set(taskBoardKey(code), JSON.stringify(board), 'EX', ROOM_TTL_SECONDS);
 }
 
 // ---------- static web UI ----------
