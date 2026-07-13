@@ -161,8 +161,12 @@ describe('DictationController', () => {
     h.c.resume();
     expect(h.liveDeadlineMs()).toBe(7000);  // pause-aware: 10000 - 3000 active
     h.cur().emit([{ final: true, text: 'more' }]);
-    h.c.stop();
-    expect(h.finals).toEqual(['kept more']);
+    // FIRE the resumed deadline (not an explicit stop): it must auto-finalize exactly once.
+    h.flushDeadline();
+    expect(h.snap().state).toBe('idle');
+    expect(h.finals).toEqual(['kept more']); // one auto-finalization
+    h.flushDeadline();                        // any stale timer flushed again must NOT re-deliver
+    expect(h.finals).toEqual(['kept more']); // still exactly one
   });
 
   it('tracks active elapsed time, excluding paused time', () => {
