@@ -5,7 +5,7 @@
 // PROJECTS_FILE is fixed to a temp path BEFORE the module import below
 // (module reads it at load time); each test rewrites that file's content.
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -168,7 +168,10 @@ describe('lock discipline', () => {
     const lock = join(REPO, 'docs', 'TASKS.md.lock');
     writeFileSync(lock, JSON.stringify({ pid: 99999, at: Date.now() }));
     expect(() => syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD)).toThrowError(/lock/);
-    writeFileSync(lock, JSON.stringify({ pid: 99999, at: Date.now() - 60_000 })); // stale
+    // Staleness is judged by file mtime (content can be mid-write), so
+    // age the lock the way a crashed writer's lock actually ages.
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(lock, past, past);
     const res = syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD);
     expect(res.changed).toBe(true);
     expect(existsSync(lock)).toBe(false); // released

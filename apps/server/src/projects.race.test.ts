@@ -92,33 +92,48 @@ describe('multi-process contention (real children on dist/projects.js)', () => {
     expect(existsSync(join(REPO, 'docs', 'TASKS.md.lock'))).toBe(false);
   }, 60_000);
 
-  it('writer vs symlink-swapper: nothing ever lands outside the root', async () => {
-    const writer = spawnChild(`
-      let wrote = 0, denied = 0;
-      for (let i = 0; i < 30; i++) {
-        try { m.syncTaskLedger('proj', 'RAC-ERA-CEE', ${BOARD_JS(1)}, true); wrote++; }
-        catch (e) { denied++; }
-      }
-      console.log('wrote:' + wrote + ' denied:' + denied);
-    `);
-    // Swap docs/ <-> symlink-to-OUTSIDE concurrently, from this process.
-    const docs = join(REPO, 'docs');
-    const swapper = (async () => {
-      for (let i = 0; i < 30; i++) {
-        try {
-          rmSync(docs, { recursive: true, force: true });
-          symlinkSync(OUTSIDE, docs);
-          await new Promise(r => setTimeout(r, 3));
-          rmSync(docs, { recursive: true, force: true });
-          mkdirSync(docs, { recursive: true });
-          await new Promise(r => setTimeout(r, 3));
-        } catch { /* raced with the writer's rename — fine */ }
-      }
-    })();
-    const [w] = await Promise.all([writer, swapper]);
-    expect(w.out).toMatch(/wrote:\d+ denied:\d+/);
-    // The invariant that matters: the outside directory stayed empty.
-    expect(readFileSync !== null && existsSync(join(OUTSIDE, 'TASKS.md'))).toBe(false);
+  it('writer vs symlink-swapper: ZERO filesystem events land outside the root', async () => {
+    // Codex round-4 standard: transient artifacts count. An fs.watch on
+    // the outside directory must observe NOTHING for the whole race —
+    // not just an empty directory at the end.
+    const { watch } = await import('node:fs');
+    const outsideEvents: string[] = [];
+    const watcher = watch(OUTSIDE, (event, filename) => {
+      outsideEvents.push(`${event}:${filename ?? '?'}`);
+    });
+    try {
+      const writer = spawnChild(`
+        let wrote = 0, denied = 0;
+        for (let i = 0; i < 40; i++) {
+          try { m.syncTaskLedger('proj', 'RAC-ERA-CEE', ${BOARD_JS(1)}, true); wrote++; }
+          catch (e) { denied++; }
+        }
+        console.log('wrote:' + wrote + ' denied:' + denied);
+      `);
+      // Swap docs/ <-> symlink-to-OUTSIDE concurrently, from this process.
+      const docs = join(REPO, 'docs');
+      const swapper = (async () => {
+        for (let i = 0; i < 40; i++) {
+          try {
+            rmSync(docs, { recursive: true, force: true });
+            symlinkSync(OUTSIDE, docs);
+            await new Promise(r => setTimeout(r, 2));
+            rmSync(docs, { recursive: true, force: true });
+            mkdirSync(docs, { recursive: true });
+            await new Promise(r => setTimeout(r, 2));
+          } catch { /* raced with the writer — fine */ }
+        }
+      })();
+      const [w] = await Promise.all([writer, swapper]);
+      expect(w.out).toMatch(/wrote:\d+ denied:\d+/);
+      // give the watcher a beat to flush any queued events
+      await new Promise(r => setTimeout(r, 200));
+      expect(outsideEvents).toEqual([]);
+      expect(existsSync(join(OUTSIDE, 'TASKS.md'))).toBe(false);
+      expect(existsSync(join(OUTSIDE, 'TASKS.md.lock'))).toBe(false);
+    } finally {
+      watcher.close();
+    }
   }, 60_000);
 
   it('two simultaneous registrations both survive (registry lock/CAS)', async () => {

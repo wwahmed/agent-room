@@ -9,7 +9,8 @@
 //     ledger: a human-readable managed section plus an embedded machine
 //     JSON block, so a future room can resume the exact board after the
 //     Redis copy expires.
-//   - Writes are atomic (tmp + rename in the same directory) and touch
+//   - Writes are fd-anchored (no-follow open, truncate+write+fsync under
+//     an advisory lock — see the no-follow primitives below) and touch
 //     ONLY the marker-fenced managed section; every byte outside the
 //     markers is preserved (dirty-work preservation).
 //   - No automatic git commits: the ledger diff stays visible in normal
@@ -21,7 +22,7 @@
 // The "tasks" role is the ONLY writable role; all other docs are
 // read-only through the API.
 
-import { readFileSync, existsSync, renameSync, writeFileSync, realpathSync, statSync, unlinkSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync, statSync, unlinkSync, readdirSync, openSync, closeSync, readSync, fstatSync, ftruncateSync, writeSync, fsyncSync, constants as fsConstants } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
@@ -278,6 +279,74 @@ export interface SyncResult {
 
 const LOCK_STALE_MS = 30_000;
 
+// ---------- no-follow filesystem primitives (Codex T-18 round 4) ----------
+//
+// The round-4 finding: creating the lock/tmp and renaming through a
+// LEXICAL path lets a parent-symlink swap between operations land
+// artifacts outside the project root — an fs.watch probe caught
+// transient outside events. Node has no openat/renameat, so the fix is
+// Darwin's O_NOFOLLOW_ANY: the kernel refuses to traverse a symlink in
+// ANY path component of the open. Every write below goes through a file
+// descriptor obtained with that flag — once the fd is open, later path
+// swaps are irrelevant because writes address the fd, not the path.
+// There is deliberately NO tmp+rename anymore: rename is inherently
+// lexical and unfixable without renameat. Losing rename atomicity is
+// covered by (a) the advisory lock serializing writers and (b) the
+// embedded section hash turning any torn write into a detected
+// conflict that `force` repairs.
+// On non-Darwin platforms the flag degrades to O_NOFOLLOW (final
+// component only) plus the realpath pre-checks — documented weaker.
+const O_NOFOLLOW_ANY = process.platform === 'darwin' ? 0x20000000 : fsConstants.O_NOFOLLOW;
+
+/**
+ * Open with symlink traversal refused in every path component (Darwin).
+ * The parent is canonicalized FIRST — benign system symlinks like
+ * /var -> /private/var would otherwise trip the flag. After
+ * canonicalization the path contains no links at that instant, so any
+ * symlink the kernel then encounters is a hostile post-check swap.
+ */
+function openNoFollow(path: string, flags: number, mode?: number, mustBeUnder?: string): number {
+  const canonical = join(realpathSync(dirname(path)), path.split(sep).pop()!);
+  // Containment binds HERE, to the canonical path the kernel will
+  // actually use. A swapped parent canonicalizes to its target, so an
+  // escape is caught before any inode is touched — zero outside events.
+  if (mustBeUnder && canonical !== mustBeUnder && !canonical.startsWith(mustBeUnder + sep)) {
+    throw projErr('BadRequestError', 'Refused: target path resolves outside the permitted root.');
+  }
+  try {
+    return openSync(canonical, flags | O_NOFOLLOW_ANY, mode);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP' || code === 'EMLINK' || code === 'ENOTDIR') {
+      throw projErr('BadRequestError', 'Refused: a symlink appeared in the target path.');
+    }
+    throw e;
+  }
+}
+
+function readFdText(fd: number): string {
+  const size = fstatSync(fd).size;
+  const buf = Buffer.alloc(size);
+  let off = 0;
+  while (off < size) {
+    const n = readSync(fd, buf, off, size - off, off);
+    if (n <= 0) break;
+    off += n;
+  }
+  return buf.subarray(0, off).toString('utf8');
+}
+
+/** Truncate + write + fsync through the fd. Path swaps after open cannot redirect this. */
+function writeFdText(fd: number, text: string): void {
+  ftruncateSync(fd, 0);
+  const buf = Buffer.from(text, 'utf8');
+  let off = 0;
+  while (off < buf.length) {
+    off += writeSync(fd, buf, off, buf.length - off, off);
+  }
+  fsyncSync(fd);
+}
+
 /**
  * Advisory per-ledger lock: `<file>.lock` created with wx (fails if it
  * exists). Contents = pid + timestamp; a lock older than LOCK_STALE_MS
@@ -285,21 +354,40 @@ const LOCK_STALE_MS = 30_000;
  * single synchronous writer, so this guards external tooling and any
  * future second process, not the event loop.
  */
-function acquireFileLock(target: string): string {
+function acquireFileLock(target: string, mustBeUnder?: string): string {
   const lockPath = `${target}.lock`;
   const payload = JSON.stringify({ pid: process.pid, at: Date.now() });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      writeFileSync(lockPath, payload, { flag: 'wx', mode: 0o600 });
-      return lockPath;
+      // wx + no-follow-any: cannot land through a swapped parent.
+      const fd = openNoFollow(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600, mustBeUnder);
+      let realLock: string;
+      try {
+        writeFdText(fd, payload);
+        // Capture the REAL path now, while it provably points inside; the
+        // finally-unlink uses this so a later parent swap can't redirect
+        // the deletion at an attacker-chosen file.
+        realLock = realpathSync(lockPath);
+      } catch (e) {
+        closeSync(fd);
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+          // Our fresh lock vanished: another writer misjudged and stole it.
+          throw projErr('LedgerConflictError', 'Lost a lock takeover race; retry shortly.');
+        }
+        throw e;
+      }
+      closeSync(fd);
+      return realLock;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      // Staleness judged by the FILE's mtime, not its content — the
+      // create(wx) and payload write are two steps, so a reader can see
+      // an empty-but-fresh lock and must NOT treat it as crashed.
       let stale = false;
       try {
-        const held = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid?: number; at?: number };
-        stale = !held.at || Date.now() - held.at > LOCK_STALE_MS;
+        stale = Date.now() - statSync(lockPath).mtimeMs > LOCK_STALE_MS;
       } catch {
-        stale = true; // unreadable lock: treat as crashed writer
+        continue; // vanished between EEXIST and stat: holder released; retry create
       }
       if (!stale) {
         throw projErr('LedgerConflictError', 'Another writer holds the ledger lock; retry shortly.');
@@ -330,13 +418,18 @@ export function syncTaskLedger(
   const now = Date.now();
   const section = renderManagedSection(board, roomCode, now);
 
-  const lockPath = acquireFileLock(abs);
-  let tmp: string | null = null;
+  const rootRealForIo = realpathSync(cfg.root);
+  const lockPath = acquireFileLock(abs, rootRealForIo);
+  // Open the ledger ITSELF with no-follow-any before reading: from here
+  // on every byte moves through this fd, so the read → integrity check →
+  // write sequence cannot be redirected by any path/parent swap.
+  let ledgerFd: number | null = null;
   try {
     let before = `# Task ledger — ${cfg.name}\n\nDurable record of WakiChat room task boards for this project. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
     let after = '\n';
-    if (existsSync(abs)) {
-      const current = readFileSync(abs, 'utf8');
+    ledgerFd = openNoFollow(abs, fsConstants.O_CREAT | fsConstants.O_RDWR, 0o644, rootRealForIo);
+    const current = readFdText(ledgerFd);
+    if (current.length > 0) {
       const slice = managedSlice(current);
       if (slice) {
         const integrity = sectionIntegrity(slice.section);
@@ -372,23 +465,22 @@ export function syncTaskLedger(
     }
 
     const next = before + section + after;
-    // TOCTOU guard: re-verify containment of the (possibly re-created or
-    // symlink-swapped) parent directory immediately before writing the tmp
-    // file and renaming. Node's fs API can't hold a directory handle, so a
-    // microscopic window remains; the lock + this recheck close the
-    // practical swap race.
-    const parentReal = realpathSync(dirname(abs));
+    // Belt-and-suspenders containment check (load-bearing on non-Darwin
+    // where O_NOFOLLOW_ANY degrades): the fd we already hold must live
+    // inside the project root.
+    const realNow = realpathSync(abs);
     const rootReal = realpathSync(cfg.root);
-    if (parentReal !== rootReal && !parentReal.startsWith(rootReal + sep)) {
-      throw projErr('BadRequestError', 'Ledger parent directory escaped the project root between check and write.');
+    if (realNow !== rootReal && !realNow.startsWith(rootReal + sep)) {
+      throw projErr('BadRequestError', 'Ledger path escaped the project root between check and write.');
     }
-    tmp = join(parentReal, `.tasks-sync-${randomBytes(6).toString('hex')}.tmp`);
-    writeFileSync(tmp, next, { flag: 'wx', mode: 0o600 });
-    renameSync(tmp, abs); // atomic on the same filesystem
-    tmp = null; // consumed by rename
+    // fd-anchored write: truncate + write + fsync through the descriptor
+    // opened above. No tmp file, no rename, no lexical-path window. A
+    // crash mid-write leaves a torn section, which the embedded hash
+    // classifies as a conflict on the next sync — repaired with force.
+    writeFdText(ledgerFd, next);
     return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };
   } finally {
-    if (tmp) { try { unlinkSync(tmp); } catch { /* already gone */ } }
+    if (ledgerFd !== null) { try { closeSync(ledgerFd); } catch { /* closed */ } }
     try { unlinkSync(lockPath); } catch { /* already gone */ }
   }
 }
@@ -416,10 +508,10 @@ export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt
 // ---------- safe project onboarding (Codex T-18 gate 4) ----------
 //
 // The browser still NEVER supplies a filesystem path. The server scans
-// PROJECT_SCAN_ROOTS (default ~/workspaces, colon-separated) for git
-// repositories, offers them as candidates keyed by an opaque relative
-// key, and creation picks one of those keys. Registry writes go through
-// the same wx/atomic discipline as the ledger.
+// PROJECT_SCAN_ROOTS (explicit allowlist; unset disables onboarding)
+// for git repositories, mints single-use random candidate tokens, and
+// creation accepts only those tokens. Registry writes go through the
+// same lock + no-follow fd discipline as the ledger.
 
 // EXPLICIT allowlist only (Codex round-3, item 6): no default. Unset =>
 // onboarding surface is disabled entirely.
@@ -509,8 +601,8 @@ export function createProjectFromCandidate(key: string, requestedId?: string, re
   // Round-3 item 4: registry writes hold the same advisory lock as the
   // ledger, and the raw file is re-read INSIDE the lock (CAS), so two
   // concurrent registrations can't lose each other's entries.
-  const lockPath = acquireFileLock(REGISTRY_PATH);
-  let tmp: string | null = null;
+  const registryDirReal = realpathSync(dirname(REGISTRY_PATH));
+  const lockPath = acquireFileLock(REGISTRY_PATH, registryDirReal);
   try {
     const registry = loadRegistry(); // strict: malformed registry blocks creation
     for (const cfg of Object.values(registry)) {
@@ -526,20 +618,20 @@ export function createProjectFromCandidate(key: string, requestedId?: string, re
     if (existsSync(join(absReal, 'README.md'))) docs.brief = 'README.md';
     if (existsSync(join(absReal, 'FEATURES.md'))) docs.features = 'FEATURES.md';
 
-    let rawObj: Record<string, unknown> = {};
-    if (existsSync(REGISTRY_PATH)) {
-      rawObj = JSON.parse(readFileSync(REGISTRY_PATH, 'utf8')) as Record<string, unknown>;
+    // fd-anchored registry write, same no-follow discipline as the ledger.
+    const regFd = openNoFollow(REGISTRY_PATH, fsConstants.O_CREAT | fsConstants.O_RDWR, 0o600, registryDirReal);
+    try {
+      const rawText = readFdText(regFd);
+      const rawObj: Record<string, unknown> = rawText.trim() ? JSON.parse(rawText) as Record<string, unknown> : {};
+      rawObj[id] = { name, root: absReal, docs };
+      writeFdText(regFd, JSON.stringify(rawObj, null, 2) + '\n');
+    } finally {
+      closeSync(regFd);
     }
-    rawObj[id] = { name, root: absReal, docs };
-    tmp = join(dirname(REGISTRY_PATH), `.projects-${randomBytes(6).toString('hex')}.tmp`);
-    writeFileSync(tmp, JSON.stringify(rawObj, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
-    renameSync(tmp, REGISTRY_PATH);
-    tmp = null;
     issuedCandidates.delete(key);
     console.log(`[project] registered "${id}" -> ${absReal}`);
     return { id, name, docs: Object.keys(docs) };
   } finally {
-    if (tmp) { try { unlinkSync(tmp); } catch { /* gone */ } }
     try { unlinkSync(lockPath); } catch { /* gone */ }
   }
 }
