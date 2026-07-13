@@ -79,7 +79,12 @@ plumbing decision for the planner/host.** Options:
 
 1. Land T-30 code (done, live) with `ALLOW_LEGACY_NAME_AUTH=on`.
 2. Start the proxy (LaunchAgent below), verify `curl` health.
-3. Repoint ALL THREE agents to their distinct proxy secrets; restart.
+3. Repoint each agent to ITS OWN proxy port + secret; restart. The
+   binding is FIXED (see the table below) and must never be crossed:
+   **Codex → 8211, Claude-Web → 8212, Claude · Foundation → 8213.**
+   Staged migration order (safe because the flag is still on):
+   **Claude-Web (8212) → Foundation (8213) → Codex (8211)**, verifying a
+   send after each before starting the next.
 4. Each agent rejoins D64-2UJ-FNR (auto-join rule) → its keyless row
    becomes keyed. History (messages) and the task board are separate
    Redis keys and are untouched by rejoin.
