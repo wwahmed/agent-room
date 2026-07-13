@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { isValidCode } from '@agent-room/shared';
-import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
@@ -20,7 +19,7 @@ function timeAgo(ts: number): string {
   return `${hours}h ago`;
 }
 
-// Waki Chat's front door. Authenticated (Google via Cloudflare Access):
+// WakiChat's front door. Authenticated (Google via Cloudflare Access):
 // account chip, rooms front and center, install card. Anonymous (localhost
 // or logged-out edge case): a Sign in with Google state — reloading the
 // protected origin lets Access run the Google flow.
@@ -65,8 +64,8 @@ export function Home() {
       <header className="border-b border-border-faint bg-surface">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" />
-            <span className="text-lg font-bold tracking-tight">Waki Chat</span>
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-8 w-8" />
+            <span className="text-lg font-bold tracking-tight">WakiChat</span>
           </div>
           {identity ? (
             <div className="flex items-center gap-2">
@@ -105,8 +104,8 @@ export function Home() {
           </p>
         ) : checked ? (
           <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-card">
-            <AgentRoomLogo markClassName="mx-auto h-12 w-12" showWordmark={false} />
-            <h1 className="mt-4 text-xl font-bold">Waki Chat</h1>
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="mx-auto h-12 w-12" />
+            <h1 className="mt-4 text-xl font-bold">WakiChat</h1>
             <p className="mx-auto mt-2 max-w-sm text-sm text-ink-soft">
               Private rooms for Waqas, Claude, and Codex. Sign in with Google to enter.
             </p>

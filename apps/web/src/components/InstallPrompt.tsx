@@ -6,14 +6,14 @@ import { useEffect, useState } from 'react';
 // offer a real Install button that triggers the native dialog.
 // iOS Safari: there is no programmatic install API, so when we detect
 // iOS outside standalone mode we show the Add to Home Screen steps.
-// Already-installed (display-mode: standalone) hides everything.
+// Browsers without a programmatic prompt still get a durable install entry
+// with the correct manual instructions. Already-installed standalone mode
+// hides the card.
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
-
-const DISMISS_KEY = 'agentroom:installDismissed';
 
 function isStandalone(): boolean {
   return (
@@ -29,55 +29,60 @@ function isIos(): boolean {
 
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showIosGuide, setShowIosGuide] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; }
-  });
+  const [installed, setInstalled] = useState(() => isStandalone());
+  const [showGuide, setShowGuide] = useState(false);
+  const ios = isIos();
 
   useEffect(() => {
-    if (isStandalone()) return;
+    if (installed) return;
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
     };
+    const onInstalled = () => setInstalled(true);
     window.addEventListener('beforeinstallprompt', onPrompt);
-    if (isIos()) setShowIosGuide(true);
-    return () => window.removeEventListener('beforeinstallprompt', onPrompt);
-  }, []);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, [installed]);
 
-  function dismiss() {
-    setDismissed(true);
-    try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* private mode */ }
-  }
+  if (installed) return null;
 
-  if (dismissed || isStandalone() || (!deferred && !showIosGuide)) return null;
+  const guide = ios
+    ? <>In Safari, tap <span className="font-semibold text-ink">Share</span>, then <span className="font-semibold text-ink">Add to Home Screen</span>.</>
+    : <>Open your browser menu and choose <span className="font-semibold text-ink">Install WakiChat</span> or <span className="font-semibold text-ink">Add to Home Screen</span>.</>;
 
   return (
     <div className="mt-4 flex items-start gap-3 rounded-xl border border-border-faint bg-surface-softer p-4">
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-accent-tint text-accent">📱</div>
+      <img
+        src="/brand/wakichat/wakichat-icon-192.png"
+        alt=""
+        className="h-10 w-10 flex-shrink-0"
+      />
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold">Install Waki Chat as an app</div>
-        {deferred ? (
-          <div className="mt-1 text-xs text-ink-soft">Full screen, home-screen icon, no browser chrome.</div>
-        ) : (
+        <div className="text-sm font-semibold">Install WakiChat</div>
+        <div className="mt-1 text-xs text-ink-soft">Full screen, home-screen icon, no browser chrome.</div>
+        {showGuide && !deferred && (
           <div className="mt-1 text-xs leading-relaxed text-ink-soft">
-            In Safari: tap the <span className="font-semibold text-ink">Share</span> button, then{' '}
-            <span className="font-semibold text-ink">Add to Home Screen</span>.
+            {guide}
           </div>
         )}
-        {deferred && (
-          <button
-            onClick={() => {
+        <button
+          onClick={() => {
+            if (deferred) {
               void deferred.prompt();
               void deferred.userChoice.finally(() => setDeferred(null));
-            }}
-            className="mt-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-          >
-            Install
-          </button>
-        )}
+            } else {
+              setShowGuide(value => !value);
+            }
+          }}
+          className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+        >
+          {deferred ? 'Install' : showGuide ? 'Hide instructions' : 'Install'}
+        </button>
       </div>
-      <button onClick={dismiss} aria-label="Dismiss" className="flex-shrink-0 p-1 text-ink-faint transition hover:text-ink">✕</button>
     </div>
   );
 }
