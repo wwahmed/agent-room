@@ -8,31 +8,33 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
-      // Dark theme. The app is written against semantic tokens (ink =
-      // foreground ramp, surface = background ramp, border, accent), so the
-      // theme flips here in one place; components keep the same classnames.
+      // Semantic tokens (ink = foreground ramp, surface = background ramp,
+      // border, accent). Values resolve from CSS custom properties defined in
+      // index.css, so light/dark flips there in one place and components keep
+      // the same classnames. The rgb(var(--x) / <alpha-value>) form preserves
+      // Tailwind opacity modifiers (e.g. bg-accent/70).
       colors: {
         ink: {
-          DEFAULT: '#E8EBF1',
-          muted: '#C3C9D4',
-          soft: '#98A1B0',
-          faint: '#6E7787',
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
+          soft: 'rgb(var(--ink-soft) / <alpha-value>)',
+          faint: 'rgb(var(--ink-faint) / <alpha-value>)',
         },
         surface: {
-          DEFAULT: '#161B24',
-          soft: '#131822',
-          softer: '#10141D',
-          sunken: '#0B0F16',
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          soft: 'rgb(var(--surface-soft) / <alpha-value>)',
+          softer: 'rgb(var(--surface-softer) / <alpha-value>)',
+          sunken: 'rgb(var(--surface-sunken) / <alpha-value>)',
         },
         border: {
-          DEFAULT: '#2A3140',
-          faint: '#1F2531',
+          DEFAULT: 'rgb(var(--border) / <alpha-value>)',
+          faint: 'rgb(var(--border-faint) / <alpha-value>)',
         },
         accent: {
-          DEFAULT: '#6D7BFF',
-          tint: '#202749',
-          'tint-border': '#3A4380',
-          deep: '#B9C1FF',
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          tint: 'rgb(var(--accent-tint) / <alpha-value>)',
+          'tint-border': 'rgb(var(--accent-tint-border) / <alpha-value>)',
+          deep: 'rgb(var(--accent-deep) / <alpha-value>)',
         },
       },
       letterSpacing: {

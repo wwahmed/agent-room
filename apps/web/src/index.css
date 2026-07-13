@@ -2,7 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-html { color-scheme: dark; }
-html, body, #root { height: 100%; }
-body { background: #0B0F16; color: #E8EBF1; }
+/* T-43 theme palette. Tokens are space-separated RGB channels so Tailwind's
+   alpha modifiers keep working via rgb(var(--x) / <alpha-value>) in the config.
+   Dark is the default (:root); light is a [data-theme='light'] override. The
+   pre-paint script in index.html stamps data-theme before first paint. */
+@layer base {
+  :root {
+    color-scheme: dark;
+    --ink: 232 235 241;
+    --ink-muted: 195 201 212;
+    --ink-soft: 152 161 176;
+    --ink-faint: 110 119 135;
+    --surface: 22 27 36;
+    --surface-soft: 19 24 34;
+    --surface-softer: 16 20 29;
+    --surface-sunken: 11 15 22;
+    --border: 42 49 64;
+    --border-faint: 31 37 49;
+    --accent: 109 123 255;
+    --accent-tint: 32 39 73;
+    --accent-tint-border: 58 67 128;
+    --accent-deep: 185 193 255;
+  }
 
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --ink: 26 31 40;
+    --ink-muted: 65 72 85;
+    --ink-soft: 92 100 114;
+    --ink-faint: 122 130 143;
+    --surface: 255 255 255;
+    --surface-soft: 246 247 249;
+    --surface-softer: 237 239 243;
+    --surface-sunken: 235 237 241;
+    --border: 213 218 226;
+    --border-faint: 228 231 237;
+    --accent: 78 90 212;
+    --accent-tint: 233 235 255;
+    --accent-tint-border: 195 200 245;
+    --accent-deep: 58 68 184;
+  }
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: rgb(var(--surface-sunken));
+  color: rgb(var(--ink));
+}

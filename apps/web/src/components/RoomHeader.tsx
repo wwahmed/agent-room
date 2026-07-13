@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Room } from '@agent-room/shared';
+import { ThemeToggle } from './ThemeToggle.js';
 
 // T-05 compact room bar: ONE 52px row in the same WakiChat shell
 // language as Home (host: "chat itself has an ugly header"). Back +
@@ -39,6 +40,7 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
         <div className="truncate text-[15px] font-semibold leading-tight">{room.topic}</div>
         <div className={`truncate text-[11px] leading-tight ${ended ? 'font-semibold text-red-400' : 'text-ink-faint'}`}>{presence}</div>
       </div>
+      <ThemeToggle />
       <button
         onClick={onShare}
         aria-label="Copy invite link"

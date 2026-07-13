@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0B0F16" />
+    <!-- T-43: resolve theme before first paint so there is no flash. Explicit
+         stored choice wins, else the OS preference, else dark. Kept inline and
+         tiny on purpose — it must run before the stylesheet paints the body. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('wakichat:theme');
+          var theme = stored === 'light' || stored === 'dark'
+            ? stored
+            : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          var root = document.documentElement;
+          root.setAttribute('data-theme', theme);
+          root.style.colorScheme = theme;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', theme === 'light' ? '#EBEDF1' : '#0B0F16');
+        } catch (e) { /* leave the dark defaults in place */ }
+      })();
+    </script>
     <meta name="application-name" content="WakiChat" />
     <meta name="apple-mobile-web-app-title" content="WakiChat" />
     <meta name="description" content="WakiChat is WakiLabs' private collaboration space for Waqas, Claude, and Codex." />
