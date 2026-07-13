@@ -185,6 +185,15 @@ export interface MessageMetadata {
   extendsTurn?: boolean;
 }
 
+// T-53: a quoted message carried on the replying message. Denormalized (author
+// + snippet live here, not a pointer) so the quote still renders after the
+// original is paged out by lazy-load; `id` remains the scroll-to target.
+export interface MessageReplyRef {
+  id: number;    // quoted message's id (epoch ms) — the jump target
+  name: string;  // quoted author display name
+  text: string;  // short snippet of the quoted text (server-truncated)
+}
+
 export interface Message {
   id: number;            // epoch ms at creation
   type: MessageKind;
@@ -196,6 +205,7 @@ export interface Message {
   client: ClientKind;
   time: number;
   attachments?: MessageAttachment[];
+  replyTo?: MessageReplyRef;
   metadata?: MessageMetadata;
 }
 

@@ -1,4 +1,4 @@
-import type { Message, MessageMetadata, RoleInTurn, InvocationType } from '@agent-room/shared';
+import type { Message, MessageMetadata, MessageReplyRef, RoleInTurn, InvocationType } from '@agent-room/shared';
 import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import type { UpstashClient } from './client.js';
 import { findSpeaker, MutedError, NotYourTurnError, getRoom } from './rooms.js';
@@ -86,6 +86,25 @@ export interface AppendResult {
 //     them — server-side fields are merged in, server wins on conflict.
 //   - Supplement-skip token (`__no_addition__`) advances the turn WITHOUT
 //     appending a chat message; returns { appended: false, reason: 'no_addition' }.
+// T-53: the server owns the quoted snippet — never trust a client-supplied
+// length. Truncate, collapse whitespace, require a valid target id; anything
+// malformed drops the quote rather than storing junk.
+const REPLY_SNIPPET_MAX = 120;
+const REPLY_NAME_MAX = 80;
+export function normalizeReplyTo(r: unknown): MessageReplyRef | undefined {
+  if (!r || typeof r !== 'object') return undefined;
+  const o = r as Record<string, unknown>;
+  const id = Number(o.id);
+  if (!Number.isFinite(id) || id <= 0) return undefined;
+  const name = typeof o.name === 'string' ? o.name : '';
+  const text = typeof o.text === 'string' ? o.text : '';
+  return {
+    id,
+    name: name.slice(0, REPLY_NAME_MAX),
+    text: text.replace(/\s+/g, ' ').trim().slice(0, REPLY_SNIPPET_MAX),
+  };
+}
+
 export async function appendMessage(
   client: UpstashClient,
   code: string,
@@ -95,6 +114,9 @@ export async function appendMessage(
   if (!findSpeaker(room, message.name, message.client)) {
     throw new MutedError(message.name, room.createdBy);
   }
+  // Sanitize the quote once at the funnel so every store path carries the
+  // server-truncated version (both the open fast-path and the turn-gated path).
+  message = { ...message, replyTo: normalizeReplyTo(message.replyTo) };
   const mode = room.replyMode ?? 'open';
 
   // Fast path: open mode. No turn machinery — preserves the legacy hot
