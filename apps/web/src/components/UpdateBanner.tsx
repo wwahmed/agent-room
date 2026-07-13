@@ -52,8 +52,10 @@ export function UpdateBanner() {
   return (
     <button
       onClick={() => window.location.reload()}
-      className="fixed inset-x-0 bottom-0 z-[100] flex items-center justify-center gap-2 bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg"
-      style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+      // T-42 (Waqas): pinned to the TOP so it never overlaps the composer /
+      // bottom controls; top safe-area inset keeps it clear of the notch.
+      className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-2 bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg"
+      style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
     >
       A new version is ready — tap to update
     </button>
