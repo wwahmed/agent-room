@@ -1,5 +1,6 @@
 import type { Message } from '@agent-room/shared';
 import { AttachmentList, MessageText, systemEventLabel } from './Bubble.js';
+import { messageTime } from '../lib/relativeTime.js';
 
 // T-05 editorial message rows. Sender identity is the primary visual
 // anchor (host feedback: "I am having a very hard time distinguishing
@@ -73,9 +74,16 @@ interface Props {
   self: boolean;
   grouped: boolean;
   ambiguousNames?: Set<string>;
+  /** Live clock for relative timestamps (T-49); ticks every ~30s from Room. */
+  now?: number;
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
+// Exact clock for the hover/title tooltip — precise time behind the relative label.
+function exactTime(t: number): string {
+  return new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+export function MessageRow({ message, self, grouped, ambiguousNames, now }: Props) {
   const body = message.text ?? '';
 
   if (message.type === 'sys') {
@@ -100,7 +108,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
-          <div className="mt-0.5 text-right text-[10px] leading-none text-white/60">{timeLabel(message.time)}</div>
+          <div className="mt-0.5 text-right text-[10px] leading-none text-white/60" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
         </div>
       </div>
     );
@@ -146,7 +154,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
           <span className="text-[15px] font-bold sm:text-[16px]" style={{ color: message.color }}>{message.name}</span>
           {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="truncate text-[11px] text-ink-faint">{message.role}</span>}
-          <span className="text-[10px] text-ink-faint">{timeLabel(message.time)}</span>
+          <span className="text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
         </div>
         <div className={`${bubbleBase} rounded-tl-md`} style={bubble}>
           {body.trim() && <MessageText text={body} />}
