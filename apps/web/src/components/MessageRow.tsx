@@ -1,6 +1,7 @@
 import type { Message } from '@agent-room/shared';
 import { AttachmentList, MessageText, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
+import { MessageMenu } from './MessageMenu.js';
 
 // T-05 editorial message rows. Sender identity is the primary visual
 // anchor (host feedback: "I am having a very hard time distinguishing
@@ -96,7 +97,8 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
     // Own messages: subtle right alignment, compact tinted block, no
     // avatar/name (you know who you are). Timestamp inside, quiet.
     return (
-      <div className={`flex justify-end px-3 sm:px-4 ${grouped ? 'mt-1' : 'mt-4'}`}>
+      <div className={`group flex items-start justify-end gap-1 px-3 sm:px-4 ${grouped ? 'mt-1' : 'mt-4'}`}>
+        <div className="pt-1"><MessageMenu message={message} /></div>
         <div className="min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
           {body.trim() && (
             <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
@@ -126,11 +128,12 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
     // Follow-up in a group: a plain full-width bubble under the first, no
     // header; hover reveals the exact time.
     return (
-      <div className="group mt-1 px-3 sm:px-4" title={exactTime(message.time)}>
+      <div className="group relative mt-1 px-3 sm:px-4" title={exactTime(message.time)}>
         <div className={`rounded-2xl border ${bodyClass}`} style={bubble}>
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
+        <div className="absolute right-4 top-1 sm:right-5"><MessageMenu message={message} /></div>
       </div>
     );
   }
@@ -147,6 +150,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
           {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="truncate text-[11px] text-ink-faint">{message.role}</span>}
           <span className="ml-auto flex-shrink-0 text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
+          <MessageMenu message={message} />
         </div>
         <div className={bodyClass}>
           {body.trim() && <MessageText text={body} />}
