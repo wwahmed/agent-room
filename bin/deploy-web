@@ -1,0 +1,24 @@
+#!/bin/sh
+# Build + deploy the web UI in place. The bundle HARD-REQUIRES the KV token
+# at build time (env.ts must()) - building without it ships a blank site,
+# which happened once on 2026-07-13. Always deploy through this script.
+#
+# Usage: bin/deploy-web
+set -eu
+cd "$(dirname "$0")/.."
+if [ ! -f .env ]; then
+  echo "ERROR: .env missing (needs KV_TOKEN)"; exit 1
+fi
+set -a; . ./.env; set +a
+if [ -z "${KV_TOKEN:-}" ]; then
+  echo "ERROR: KV_TOKEN not set in .env"; exit 1
+fi
+export PATH="$HOME/.local/node/bin:$PATH"
+# KV URL intentionally NOT set: env.ts falls back to window.location.origin
+# so the same bundle works on chat.wakilabs.dev and localhost.
+VITE_UPSTASH_REDIS_REST_TOKEN="$KV_TOKEN" npm -w apps/web run build
+# Smoke: server must be healthy and serving the fresh bundle hash.
+HASH=$(ls apps/web/dist/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js//')
+curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "ERROR: server unhealthy"; exit 1; }
+curl -sf http://127.0.0.1:8210/ | grep -q "$HASH" || { echo "ERROR: served index.html does not reference fresh bundle $HASH"; exit 1; }
+echo "OK: deployed bundle index-$HASH.js and server is serving it."
