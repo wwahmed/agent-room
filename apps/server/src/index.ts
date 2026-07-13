@@ -35,6 +35,17 @@ import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
 import { generateRoomCode, canonicalizeCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import type { MessageAttachment } from '@agent-room/shared';
+import { parseMultipart } from './multipart.js';
+import {
+  saveBlob,
+  readBlob,
+  deleteRoomBlobs,
+  isAllowedMime,
+  attachmentKind,
+  mimeForExt,
+  MAX_ATTACHMENT_BYTES,
+} from './blobstore.js';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
@@ -163,6 +174,27 @@ function readBody(req: IncomingMessage): Promise<string> {
       }
     });
     req.on('end', () => res(data));
+    req.on('error', rej);
+  });
+}
+
+// Binary-safe body reader for the upload path — string concat corrupts bytes,
+// so we accumulate Buffers. Capped a little above the 10 MB attachment limit to
+// leave room for multipart framing.
+function readRawBody(req: IncomingMessage, maxBytes = 12_000_000): Promise<Buffer> {
+  return new Promise((res, rej) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > maxBytes) {
+        rej(new Error('body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => res(Buffer.concat(chunks)));
     req.on('error', rej);
   });
 }
@@ -1074,11 +1106,88 @@ const server = createServer(async (req, res) => {
       }
     }
 
-    if (path === '/api/upload' || path === '/api/delete-room-blobs') {
-      return sendJson(res, 501, {
-        error: 'NotImplemented',
-        message: 'Attachments are disabled on this self-hosted deployment.',
+    // T-51: attachment upload — multipart in, MessageAttachment out, stored on
+    // local disk (self-host has no Vercel Blob). Access-gated.
+    if (path === '/api/upload' && req.method === 'POST') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const ct = String(req.headers['content-type'] || '');
+      if (!/multipart\/form-data/i.test(ct)) return sendJson(res, 400, { error: 'bad_request', message: 'expected multipart/form-data' });
+      let raw: Buffer;
+      try {
+        raw = await readRawBody(req);
+      } catch {
+        return sendJson(res, 413, { error: 'file_too_large', message: 'Upload exceeds the size limit.' });
+      }
+      let parsed;
+      try {
+        parsed = parseMultipart(raw, ct);
+      } catch {
+        return sendJson(res, 400, { error: 'bad_request', message: 'malformed multipart body' });
+      }
+      const code = canonicalizeCode(String(parsed.fields.roomCode || ''));
+      if (!code) return sendJson(res, 400, { error: 'bad_request', message: 'missing or invalid roomCode' });
+      const file = parsed.files.find((f) => f.field === 'file') ?? parsed.files[0];
+      if (!file) return sendJson(res, 400, { error: 'no_file', message: 'no file part in upload' });
+      if (file.data.length === 0) return sendJson(res, 400, { error: 'empty_file', message: 'the file is empty' });
+      if (file.data.length > MAX_ATTACHMENT_BYTES) return sendJson(res, 413, { error: 'file_too_large', message: 'Attachment exceeds the 10 MB limit.' });
+      const mime = (file.contentType.split(';')[0] || '').trim().toLowerCase();
+      if (!isAllowedMime(mime)) return sendJson(res, 415, { error: 'mime_not_allowed', message: `Unsupported file type: ${mime || file.filename}` });
+      const stored = saveBlob(code, file.data, mime);
+      const width = Number(parsed.fields.width);
+      const height = Number(parsed.fields.height);
+      const attachment: MessageAttachment = {
+        id: stored.key,
+        type: attachmentKind(mime),
+        url: stored.url,
+        storageKey: `${code}/${stored.key}`,
+        name: file.filename || stored.key,
+        size: stored.size,
+        mime,
+        uploadedAt: Date.now(),
+        ...(Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : {}),
+      };
+      return sendJson(res, 200, attachment);
+    }
+
+    if (path === '/api/delete-room-blobs' && req.method === 'POST') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      let payload: { roomCode?: string };
+      try {
+        payload = JSON.parse(await readBody(req)) as { roomCode?: string };
+      } catch {
+        return sendJson(res, 400, { error: 'bad_request', message: 'invalid JSON body' });
+      }
+      const code = canonicalizeCode(String(payload.roomCode || ''));
+      if (!code) return sendJson(res, 400, { error: 'bad_request', message: 'invalid roomCode' });
+      return sendJson(res, 200, { deleted: deleteRoomBlobs(code) });
+    }
+
+    // T-51: serve a stored attachment. Access-gated (only signed-in users can
+    // fetch), and hardened against the fact that we accept svg/html: a strict
+    // sandbox CSP + nosniff neutralizes any active content on direct
+    // navigation, while <img> embedding of images still works.
+    if (path.startsWith('/blobs/') && req.method === 'GET') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const parts = path.split('/');
+      const blob = readBlob(decodeURIComponent(parts[2] || ''), decodeURIComponent(parts[3] || ''));
+      if (!blob) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': mimeForExt(blob.ext),
+        'Content-Length': String(blob.data.length),
+        'Cache-Control': 'private, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        'Content-Disposition': 'inline',
       });
+      res.end(blob.data);
+      return;
     }
 
     if (path === '/api/me' && req.method === 'GET') {
