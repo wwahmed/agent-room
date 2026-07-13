@@ -15,31 +15,38 @@ interface Props {
 export function Bubble({ message, self, ambiguousNames }: Props) {
   if (message.type === 'sys') {
     return (
-      <div className="mx-auto max-w-[min(620px,92%)] rounded-full border border-border-faint bg-surface px-3 py-1.5 text-center text-[11px] font-semibold text-ink-soft shadow-sm">
+      <div className="mx-auto max-w-[min(620px,92%)] rounded-full border border-border-faint bg-surface px-3 py-1.5 text-center text-[12px] font-semibold text-ink-soft shadow-sm">
         {systemEventLabel(message)}
       </div>
     );
   }
 
-  const row = self ? 'flex-row-reverse ml-auto' : '';
-  const meta = self ? 'justify-end' : '';
-  const bubble = self
-    ? 'bg-accent-tint border border-accent-tint-border text-accent-deep rounded-bl-[14px] rounded-br-[4px]'
-    : 'bg-surface-sunken text-ink rounded-bl-[4px] rounded-br-[14px]';
+  // WhatsApp-style: own messages right-aligned in a solid accent bubble with no
+  // avatar; everyone else left-aligned with an avatar and a colored name inside
+  // the bubble. The squared-off corner (rounded-*-sm) is the tail.
   const ambiguous = ambiguousNames?.has(message.name);
+  const time = new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const bubble = self
+    ? 'bg-accent text-white rounded-2xl rounded-br-sm'
+    : 'bg-surface text-ink rounded-2xl rounded-bl-sm';
+
   return (
-    <div className={`flex gap-2 max-w-[min(640px,86%)] ${row}`}>
-      <Avatar initials={message.initials} color={message.color} size="md" />
-      <div className="min-w-0">
-        <div className={`text-[9px] text-ink-faint font-medium flex gap-1.5 mb-1 ${meta}`}>
-          <span className="font-semibold text-ink-muted">{message.name}</span>
-          {ambiguous && <span className="text-ink-faint">· {message.client}</span>}
-          {message.role && <span>· {message.role}</span>}
-          <span>· {new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-        </div>
-        <div className={`px-3 py-2 text-[13px] leading-relaxed rounded-t-[14px] break-words ${bubble}`}>
+    <div className={`flex w-full gap-2 ${self ? 'flex-row-reverse' : ''}`}>
+      {!self && <Avatar initials={message.initials} color={message.color} size="md" />}
+      <div className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3 py-2 shadow-sm break-words ${bubble}`}>
+        {!self && (
+          <div className="mb-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[12px] leading-tight">
+            <span className="font-semibold" style={{ color: message.color }}>{message.name}</span>
+            {ambiguous && <span className="text-ink-faint">· {message.client}</span>}
+            {message.role && <span className="text-ink-faint">· {message.role}</span>}
+          </div>
+        )}
+        <div className="text-[15px] leading-relaxed">
           {message.text.trim() && <MessageText text={message.text} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
+        </div>
+        <div className={`mt-1 text-[11px] leading-none text-right ${self ? 'text-white/70' : 'text-ink-faint'}`}>
+          {time}
         </div>
       </div>
     </div>
@@ -286,11 +293,13 @@ function parseBlocks(text: string): TextBlock[] {
 // anywhere on a message line.
 const INLINE_PATTERN = /(\[(?:DECISION|TODO|STATUS|RESULT)\])|(`[^`]+`|\*\*[^*]+\*\*|https?:\/\/[^\s]+)/gi;
 
+// Dark-theme tones: translucent tint + light text, so the chips read on a dark
+// bubble instead of glaring as light blocks.
 const ARTIFACT_TONE: Record<string, string> = {
-  DECISION: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
-  TODO:     'bg-amber-100 text-amber-800 ring-amber-200',
-  STATUS:   'bg-blue-100 text-blue-800 ring-blue-200',
-  RESULT:   'bg-violet-100 text-violet-800 ring-violet-200',
+  DECISION: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30',
+  TODO:     'bg-amber-500/15 text-amber-300 ring-amber-400/30',
+  STATUS:   'bg-blue-500/15 text-blue-300 ring-blue-400/30',
+  RESULT:   'bg-violet-500/15 text-violet-300 ring-violet-400/30',
 };
 
 function renderInline(text: string): ReactNode[] {

@@ -660,8 +660,9 @@ export function Room() {
   }
 
   return (
-    <div className="h-full flex items-center justify-center px-3 py-4">
-      <div className="w-full max-w-7xl h-[88vh] grid grid-rows-[auto_auto_1fr] bg-surface border border-border rounded-xl shadow-card overflow-hidden">
+    <div className="h-full flex items-center justify-center sm:px-3 sm:py-4">
+      {/* dvh (not vh) so mobile browser chrome doesn't push the composer off-screen. */}
+      <div className="w-full max-w-7xl h-[100dvh] sm:h-[88vh] grid grid-rows-[auto_auto_1fr] bg-surface border-0 sm:border border-border sm:rounded-xl shadow-card overflow-hidden">
         <header className="px-4 py-3 border-b border-border-faint flex justify-between items-center bg-surface">
           <div className="min-w-0 flex items-center gap-3">
             <AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" />
@@ -675,7 +676,7 @@ export function Room() {
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex">
               {room.participants.slice(0, 5).map((p, i) => (
-                <div key={p.name} style={{ marginLeft: i === 0 ? 0 : -6 }} className="ring-2 ring-white rounded-full">
+                <div key={p.name} style={{ marginLeft: i === 0 ? 0 : -6 }} className="ring-2 ring-surface rounded-full">
                   <Avatar initials={p.initials} color={p.color} size="sm" />
                 </div>
               ))}
@@ -690,7 +691,7 @@ export function Room() {
           </div>
         </header>
 
-        <div className="lg:hidden grid grid-cols-3 gap-1 border-b border-border-faint bg-surface p-2 text-[11px]">
+        <div className="lg:hidden grid grid-cols-3 gap-1 border-b border-border-faint bg-surface p-2 text-[13px]">
           {[
             ['chat', 'Chat'],
             ['people', 'People'],
@@ -699,15 +700,15 @@ export function Room() {
             <button
               key={key}
               onClick={() => setMobilePanel(key as 'chat' | 'people' | 'outputs')}
-              className={`rounded-lg px-2 py-1.5 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
+              className={`rounded-lg px-2 py-2.5 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
             >
               {label}
             </button>
           ))}
         </div>
 
-        <div className="min-h-0 grid lg:grid-cols-[260px_minmax(0,1fr)_300px] bg-surface-soft">
-          <aside className={`${mobilePanel === 'people' ? 'flex' : 'hidden'} lg:flex min-h-0 flex-col border-r border-border-faint bg-surface`}>
+        <div className="min-h-0 grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)_300px] bg-surface-soft">
+          <aside className={`${mobilePanel === 'people' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col border-r border-border-faint bg-surface`}>
             <div className="p-4 border-b border-border-faint">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Room</div>
               <h2 className="text-sm font-semibold leading-snug">{room.topic}</h2>
@@ -787,7 +788,7 @@ export function Room() {
                               type="button"
                               onClick={() => { void handleSkipCurrent(); }}
                               disabled={modeBusy}
-                              className="h-7 rounded-md border border-amber-200 bg-amber-50 px-2 text-[10px] font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                              className="h-7 rounded-md border border-amber-400/30 bg-amber-500/10 px-2 text-[10px] font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-60"
                             >
                               Skip
                             </button>
@@ -827,14 +828,14 @@ export function Room() {
                   return (
                     <div
                       key={`${p.name}-${p.client}`}
-                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 transition ${rowFade} ${isMuted ? 'border-amber-300 bg-amber-50/60' : 'border-border-faint bg-surface-softer'}`}
+                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 transition ${rowFade} ${isMuted ? 'border-amber-400/40 bg-amber-500/10' : 'border-border-faint bg-surface-softer'}`}
                     >
                       <Avatar initials={p.initials} color={p.color} size="sm" />
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold truncate flex items-center gap-1 flex-wrap">
                           {p.name}
                           {p.name === room.createdBy && <span className="text-[9px] font-semibold text-accent bg-accent-tint px-1 py-px rounded">host</span>}
-                          {isMuted && <span className="text-[9px] font-semibold text-amber-700 bg-amber-100 px-1 py-px rounded">muted</span>}
+                          {isMuted && <span className="text-[9px] font-semibold text-amber-300 bg-amber-500/15 px-1 py-px rounded">muted</span>}
                         </div>
                         <div className="text-[10px] text-ink-soft truncate">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
@@ -873,8 +874,8 @@ export function Room() {
                               title={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
                               aria-label={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
                               className={`flex h-7 w-7 items-center justify-center rounded-md border text-[11px] transition ${isMuted
-                                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                : 'border-border-faint bg-surface text-ink-soft hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700'}`}
+                                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                                : 'border-border-faint bg-surface text-ink-soft hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-300'}`}
                             >
                               {/* Speaker glyph: solid when can speak, slashed when muted. */}
                               {isMuted ? (
@@ -895,7 +896,7 @@ export function Room() {
                               onClick={() => handleKick({ name: p.name, client: p.client })}
                               title={`Remove ${p.name}`}
                               aria-label={`Remove ${p.name}`}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
                             >
                               <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
                                 <path d="m4 4 8 8M12 4l-8 8" />
@@ -914,7 +915,7 @@ export function Room() {
               {!ended && room.createdBy === self.name && (
                 <button
                   onClick={handleEndMeeting}
-                  className="flex-1 text-[11px] font-semibold text-red-600 bg-red-50 px-3 py-2 rounded-lg hover:bg-red-100"
+                  className="flex-1 text-[11px] font-semibold text-red-300 bg-red-500/10 px-3 py-2 rounded-lg hover:bg-red-500/20"
                 >
                   End
                 </button>
@@ -925,7 +926,7 @@ export function Room() {
             </div>
           </aside>
 
-          <section className={`${mobilePanel === 'chat' ? 'flex' : 'hidden'} lg:flex min-h-0 flex-col`}>
+          <section className={`${mobilePanel === 'chat' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col`}>
             <div className="px-5 py-3 border-b border-border-faint bg-surface flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold">Discussion</div>
@@ -963,7 +964,7 @@ export function Room() {
                     <button onClick={dismissIdlePrompt} className="px-4 py-1.5 bg-accent text-white text-xs font-semibold rounded-lg">
                       Keep open
                     </button>
-                    <button onClick={handleEndMeeting} className="px-4 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded-lg border border-red-200">
+                    <button onClick={handleEndMeeting} className="px-4 py-1.5 bg-red-500/10 text-red-300 text-xs font-semibold rounded-lg border border-red-400/30">
                       End now
                     </button>
                   </div>
@@ -1019,7 +1020,7 @@ export function Room() {
                 </div>
               </div>
             ) : !myCanSpeak ? (
-              <div className="border-t border-border-faint p-5 bg-amber-50 text-center">
+              <div className="border-t border-border-faint p-5 bg-amber-500/10 text-center">
                 <div className="text-2xl mb-1">🔇</div>
                 <p className="text-sm font-semibold text-amber-900 mb-1">You've been muted by the host</p>
                 <p className="text-xs text-amber-800/80 max-w-xs mx-auto">
@@ -1040,7 +1041,7 @@ export function Room() {
                   </div>
                 )}
                 {isHost && mutedCount > 0 && (
-                  <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 flex items-center gap-2">
+                  <div className="text-[11px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
                     <span>🔇</span>
                     <span>{mutedCount} {mutedCount === 1 ? 'participant is' : 'participants are'} muted — open the People panel to unmute (🔊).</span>
                   </div>
@@ -1110,7 +1111,8 @@ export function Room() {
                     placeholder="Message the room… (Enter to send, Shift+Enter for newline)"
                     rows={1}
                     style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
-                    className="flex-1 resize-none overflow-y-auto px-3 py-2 bg-surface-softer border border-border rounded-lg text-sm leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                    /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
+                    className="flex-1 resize-none overflow-y-auto px-3 py-2 bg-surface-softer border border-border rounded-lg text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
                   />
                   <button
                     onClick={send}
@@ -1124,7 +1126,7 @@ export function Room() {
             )}
           </section>
 
-          <aside className={`${mobilePanel === 'outputs' ? 'flex' : 'hidden'} lg:flex min-h-0 flex-col border-l border-border-faint bg-surface`}>
+          <aside className={`${mobilePanel === 'outputs' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col border-l border-border-faint bg-surface`}>
             <div className="p-4 border-b border-border-faint">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Outputs</div>
               <div className="grid grid-cols-2 gap-2">
@@ -1224,7 +1226,7 @@ function artifactTone(kind: ArtifactKind): string {
     case 'decision':
       return 'text-emerald-700';
     case 'todo':
-      return 'text-amber-700';
+      return 'text-amber-300';
     case 'status':
       return 'text-blue-700';
     case 'result':

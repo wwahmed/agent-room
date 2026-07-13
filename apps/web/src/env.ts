@@ -4,9 +4,17 @@ function must(name: string): string {
   return val;
 }
 
+function optional(name: string): string | undefined {
+  return (import.meta.env as Record<string, string | undefined>)[name];
+}
+
 export const ENV = {
   upstash: {
-    url: must('VITE_UPSTASH_REDIS_REST_URL'),
+    // Self-host default: the KV proxy lives on the same origin that serves
+    // this bundle (/kv on the apps/server host), so the same build works on
+    // chat.wakilabs.dev, localhost, and any future hostname. An explicit
+    // VITE_UPSTASH_REDIS_REST_URL still wins (hosted Upstash, split origins).
+    url: optional('VITE_UPSTASH_REDIS_REST_URL') || `${window.location.origin}/kv`,
     token: must('VITE_UPSTASH_REDIS_REST_TOKEN'),
   },
 };
