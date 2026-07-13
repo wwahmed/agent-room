@@ -37,6 +37,7 @@ import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
+import { applyAliasMigration, AliasMigrationError } from './taskmigrate.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -723,6 +724,46 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       task.verifiedAt = nowMs();
       await commitBoard(code, board);
       return { board, task };
+    }
+    case 'taskReassignAlias': {
+      // T-36: host-authorized, audited migration of task owner/verifier
+      // bindings from a defunct alias to a current KEYED participant (T-25
+      // rename recovery). Fails closed on: missing/wrong host credential
+      // (requireHost — strict once ALLOW_LEGACY_NAME_AUTH is off), an absent /
+      // ambiguous / non-keyed target, and any owner==verifier collision the
+      // remap would create. Atomic: applyAliasMigration validates the whole
+      // board before mutating, and we commit once. Historical message
+      // attribution (room-msgs) is never touched.
+      await requireHost(code, payload.hostKey as string | undefined);
+      const from = String(payload.from || '').trim();
+      const to = String(payload.to || '').trim();
+      const toClient = (payload.toClient as 'web' | 'cc') || 'cc';
+      const room = await getRoom(client, code);
+      const toRows = room.participants.filter((p) => p.name === to && p.client === toClient);
+      if (toRows.length === 0) {
+        throw taskError('BadRequestError', `reassign target @${to} (${toClient}) is not a participant in this room`);
+      }
+      if (toRows.length > 1) {
+        throw taskError('BadRequestError', `reassign target @${to} (${toClient}) is ambiguous — ${toRows.length} rows share it`);
+      }
+      if (!toRows[0].memberKeyHash) {
+        throw taskError('MemberAuthError', `reassign target @${to} is not keyed; only a credentialed identity can receive task bindings`);
+      }
+      const board = await getTaskBoard(code);
+      let migrated: string[];
+      try {
+        migrated = applyAliasMigration(board.tasks, { from, to, toClient });
+      } catch (e) {
+        const err = e as AliasMigrationError;
+        throw taskError(err.name || 'BadRequestError', err.message);
+      }
+      if (migrated.length === 0) {
+        securityEvent(`alias-migration on ${code}: no task bindings matched @${from} (idempotent no-op; host-authorized)`);
+        return { board, migrated };
+      }
+      await commitBoard(code, board);
+      securityEvent(`alias-migration on ${code}: @${from} -> @${to} (${toClient}); rewrote ${migrated.join(', ')} (host-authorized)`);
+      return { board, migrated };
     }
     default:
       throw new Error(`unknown action: ${action || '(none)'}`);
