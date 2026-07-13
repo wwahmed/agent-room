@@ -4,6 +4,7 @@ import { isValidCode } from '@agent-room/shared';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { TopNav } from '../components/TopNav.js';
 import { fetchIdentity, fetchRooms, type RoomSummary, type WhoAmI } from '../lib/identity.js';
+import { InstallPrompt } from '../components/InstallPrompt.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -113,6 +114,8 @@ export function Home() {
               ))}
             </div>
           )}
+
+          <InstallPrompt />
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <Link
