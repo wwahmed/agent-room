@@ -1,0 +1,22 @@
+# Cloudflare Tunnel config for chat.wakilabs.dev (agent-room self-host).
+# Tunnel created 2026-07-12: cloudflared tunnel create waki-chat
+# DNS: proxied CNAME chat.wakilabs.dev -> 230c15a5-0cb5-4fbd-a7d5-c23ec3777c46.cfargotunnel.com
+# (created via Cloudflare API because cert.pem only authorizes 3dbypixel.com).
+# Access policy: Cloudflare Access app "waki-chat" gates the hostname to
+# wwahmed@gmail.com via Google login. Local agents bypass all of this by
+# talking to http://127.0.0.1:8210 directly.
+
+tunnel: 230c15a5-0cb5-4fbd-a7d5-c23ec3777c46
+credentials-file: /Users/wahmed/.cloudflared/230c15a5-0cb5-4fbd-a7d5-c23ec3777c46.json
+
+metrics: 0.0.0.0:0
+
+ingress:
+  - hostname: chat.wakilabs.dev
+    service: http://localhost:8210
+    originRequest:
+      connectTimeout: 30s
+      http2Origin: false
+      keepAliveConnections: 4
+      keepAliveTimeout: 90s
+  - service: http_status:404

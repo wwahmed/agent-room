@@ -1,0 +1,20 @@
+{
+  "name": "@agent-room/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@agent-room/shared": "*",
+    "@agent-room/upstash-client": "*",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -26,3 +26,8 @@ z.html
 HANDOFF.md
 agentroom-research-report.html
 agent_room_cleanup.md
+.env
+chat.log
+chat-error.log
+tunnel.log
+tunnel-error.log
