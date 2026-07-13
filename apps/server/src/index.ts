@@ -30,6 +30,7 @@ import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
 import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { verifyAccessJwt, allowedEmails } from './access.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -87,6 +88,44 @@ const client: UpstashClient = {
     });
   },
 };
+
+// ---------- caller identity (T-12) ----------
+
+type Caller = { kind: 'local' } | { kind: 'user'; email: string } | { kind: 'anonymous' };
+
+// Edge-traversing requests carry a signed Access JWT which we fully
+// validate (signature/iss/aud/exp) and allowlist-check. Local processes
+// (the agents' MCP servers) hit 127.0.0.1 directly and are trusted.
+// Anything else is anonymous and gets no data access.
+function accessJwtFrom(req: IncomingMessage): string | null {
+  const header = req.headers['cf-access-jwt-assertion'];
+  if (typeof header === 'string' && header) return header;
+  // On Access-bypassed paths the edge does not inject the header, but the
+  // domain-wide CF_Authorization cookie carries the same signed JWT.
+  const cookies = req.headers.cookie || '';
+  const m = /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(cookies);
+  return m ? m[1] : null;
+}
+
+async function resolveCaller(req: IncomingMessage): Promise<Caller> {
+  const jwt = accessJwtFrom(req);
+  if (typeof jwt === 'string' && jwt) {
+    const claims = await verifyAccessJwt(jwt);
+    if (claims && allowedEmails().has(claims.email.toLowerCase())) {
+      return { kind: 'user', email: claims.email.toLowerCase() };
+    }
+    return { kind: 'anonymous' };
+  }
+  // CRITICAL: cloudflared delivers edge traffic from 127.0.0.1 too. Only
+  // treat loopback as trusted-local when the request did NOT traverse the
+  // edge (no cf-ray/cf-connecting-ip, which Cloudflare always injects and
+  // an external caller cannot remove).
+  const viaEdge = Boolean(req.headers['cf-ray'] || req.headers['cf-connecting-ip']);
+  const addr = req.socket.remoteAddress || '';
+  const loopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+  if (loopback && !viaEdge) return { kind: 'local' };
+  return { kind: 'anonymous' };
+}
 
 // ---------- helpers ----------
 
@@ -150,8 +189,13 @@ function sysMessage(text: string, metadata: Record<string, unknown>): Message {
 
 async function handleKv(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'POST only' });
+  // Auth: a validated Access identity (browser through the tunnel) or the
+  // local trust boundary (agents/tooling on this Mac). The bearer token
+  // remains for local scripts but is never shipped in the web bundle.
+  const caller = await resolveCaller(req);
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${KV_TOKEN}`) return sendJson(res, 401, { error: 'unauthorized' });
+  const bearerOk = auth === `Bearer ${KV_TOKEN}`;
+  if (caller.kind === 'anonymous' && !bearerOk) return sendJson(res, 401, { error: 'unauthorized' });
 
   let body: unknown;
   try {
@@ -579,6 +623,8 @@ const server = createServer(async (req, res) => {
     if (path === '/kv/pipeline') return await handleKv(req, res, '/pipeline');
 
     if (path === '/api/room' && req.method === 'POST') {
+      const roomCaller = await resolveCaller(req);
+      if (roomCaller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
       let payload: Record<string, unknown>;
       try {
         payload = JSON.parse(await readBody(req)) as Record<string, unknown>;
@@ -607,12 +653,12 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/api/me' && req.method === 'GET') {
-      // Cloudflare Access injects the authenticated email at the edge; the
-      // origin is only reachable through the Access-gated tunnel or from
-      // localhost (trusted single-user Mac), so the header is authoritative
-      // here. JWT signature verification is a future hardening step.
-      const email = String(req.headers['cf-access-authenticated-user-email'] || '').toLowerCase();
-      if (!email) return sendJson(res, 200, { identity: null });
+      // Identity comes from the fully validated Access JWT (signature,
+      // issuer, audience, expiry, allowlist) — not the spoofable plain
+      // email header. Local/anonymous callers get identity: null.
+      const caller = await resolveCaller(req);
+      if (caller.kind !== 'user') return sendJson(res, 200, { identity: null });
+      const email = caller.email;
       let mapped: { name?: string; role?: string } | undefined;
       try {
         const map = JSON.parse(process.env.IDENTITY_MAP || '{}') as Record<string, { name?: string; role?: string }>;
@@ -630,6 +676,8 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/api/rooms' && req.method === 'GET') {
+      const roomsCaller = await resolveCaller(req);
+      if (roomsCaller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
       const keys: string[] = [];
       let scanCursor = '0';
       do {
@@ -673,6 +721,14 @@ const server = createServer(async (req, res) => {
       } catch {
         return sendJson(res, 200, { bundle: 'unknown' });
       }
+    }
+
+    if (path === '/login') {
+      // The edge protects this path with the Google/Access policy; reaching
+      // the origin means login completed. Bounce to the shell, where the
+      // CF_Authorization cookie now authenticates every data call.
+      res.writeHead(302, { Location: '/' });
+      return res.end();
     }
 
     if (path === '/healthz') {

@@ -87,13 +87,13 @@ export function Home() {
               </a>
             </div>
           ) : checked ? (
-            <button
-              onClick={() => window.location.reload()}
+            <a
+              href="/login"
               className="flex min-h-11 items-center gap-2 rounded-lg bg-surface-softer border border-border px-4 text-sm font-semibold transition hover:border-accent"
             >
               <span className="text-base font-bold text-accent">G</span>
               Sign in with Google
-            </button>
+            </a>
           ) : null}
         </div>
       </header>
@@ -110,12 +110,12 @@ export function Home() {
             <p className="mx-auto mt-2 max-w-sm text-sm text-ink-soft">
               Private rooms for Waqas, Claude, and Codex. Sign in with Google to enter.
             </p>
-            <button
-              onClick={() => window.location.reload()}
+            <a
+              href="/login"
               className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-6 text-sm font-bold text-white transition hover:opacity-90"
             >
               Sign in with Google
-            </button>
+            </a>
           </div>
         ) : null}
 

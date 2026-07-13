@@ -13,6 +13,24 @@ This fork runs the full Agent Room stack on one always-on Mac
 | Web UI | `apps/web` (Vite) | static files served by the server from `apps/web/dist` |
 | Auth | Cloudflare Access (Google IdP, allowlist) | edge-side; local agents bypass via 127.0.0.1 |
 
+## Auth boundary (T-12, 2026-07-13)
+
+- The Cloudflare Access app protects ONLY `chat.wakilabs.dev/login`
+  (the auth-start route). The shell is public; every data surface
+  (`/kv`, `/api/room`, `/api/rooms`, `/api/me`) is enforced at the
+  ORIGIN via full Access JWT validation (signature against the team
+  JWKS, issuer, audience, expiry, email allowlist) from the
+  `Cf-Access-Jwt-Assertion` header or the `CF_Authorization` cookie.
+- Local processes (agents on 127.0.0.1) are trusted ONLY when the
+  request did not traverse the edge (no `cf-ray` header) — cloudflared
+  also connects from loopback, so the header check is load-bearing.
+- The web bundle carries NO data credential (the old baked KV token was
+  rotated); `KV_TOKEN` in `.env` remains for local tooling only.
+- Access config: team domain + app AUD live in `.env`
+  (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`). Rollback: set the Access app
+  path back to empty (protect whole hostname) — origin enforcement
+  stays valid either way.
+
 ## Deploying changes
 
 - **Web UI:** `bin/deploy-web` - never run the vite build by hand. The

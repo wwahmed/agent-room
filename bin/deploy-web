@@ -10,13 +10,10 @@ if [ ! -f .env ]; then
   echo "ERROR: .env missing (needs KV_TOKEN)"; exit 1
 fi
 set -a; . ./.env; set +a
-if [ -z "${KV_TOKEN:-}" ]; then
-  echo "ERROR: KV_TOKEN not set in .env"; exit 1
-fi
 export PATH="$HOME/.local/node/bin:$PATH"
-# KV URL intentionally NOT set: env.ts falls back to window.location.origin
-# so the same bundle works on chat.wakilabs.dev and localhost.
-VITE_UPSTASH_REDIS_REST_TOKEN="$KV_TOKEN" npm -w apps/web run build
+# T-12: no credential is baked into the bundle. The server authenticates
+# /kv via validated Access identity; KV_TOKEN stays server-side only.
+npm -w apps/web run build
 # Smoke: server must be healthy and serving the fresh bundle hash.
 HASH=$(ls apps/web/dist/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js//')
 curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "ERROR: server unhealthy"; exit 1; }

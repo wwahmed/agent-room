@@ -15,6 +15,10 @@ export const ENV = {
     // chat.wakilabs.dev, localhost, and any future hostname. An explicit
     // VITE_UPSTASH_REDIS_REST_URL still wins (hosted Upstash, split origins).
     url: optional('VITE_UPSTASH_REDIS_REST_URL') || `${window.location.origin}/kv`,
-    token: must('VITE_UPSTASH_REDIS_REST_TOKEN'),
+    // T-12: the browser no longer carries a data credential. The server
+    // authenticates /kv via the validated Cloudflare Access identity (or
+    // localhost trust); this placeholder only satisfies the client's
+    // Authorization header shape.
+    token: optional('VITE_UPSTASH_REDIS_REST_TOKEN') || 'access-session',
   },
 };
