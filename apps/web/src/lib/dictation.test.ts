@@ -44,6 +44,8 @@ function harness(opts: { maxMs?: number; failStartAll?: boolean } = {}) {
     // restart timers are short (<=100ms); the deadline is long (maxMs)
     flushRestarts: () => { timers.filter(t => t.ms >= 0 && t.ms <= 100).forEach(t => { const f = t.fn; t.ms = -1; f(); }); },
     flushDeadline: () => { timers.filter(t => t.ms > 100).forEach(t => { const f = t.fn; t.ms = -1; f(); }); },
+    // ms of the last still-live deadline timer (for remaining-time assertions)
+    liveDeadlineMs: () => { const d = timers.filter(t => t.ms > 100); return d.length ? d[d.length - 1]!.ms : null; },
     tick: (ms: number) => { clock += ms; },
     snap: () => snap!,
   };
@@ -144,6 +146,23 @@ describe('DictationController', () => {
     expect(h.snap().state).toBe('idle');   // not 'recording'
     expect(h.snap().error).toMatch(/microphone|start/i);
     expect(h.finals).toHaveLength(0);
+  });
+
+  it('Pause clears the deadline even when its timer handle is 0, and Resume reschedules for the REMAINING active time', () => {
+    const h = harness({ maxMs: 10000 });
+    h.c.start();                    // deadline scheduled — its handle is 0 in this harness
+    expect(h.liveDeadlineMs()).toBe(10000);
+    h.tick(3000);                   // 3s of active recording
+    h.cur().emit([{ final: true, text: 'kept' }]);
+    h.c.pause();                    // must clear the handle-0 deadline (truthiness would miss it)
+    h.flushDeadline();              // if the stale deadline survived, this would fire Stop
+    expect(h.snap().state).toBe('paused'); // still paused — not prematurely finalized
+    expect(h.finals).toHaveLength(0);
+    h.c.resume();
+    expect(h.liveDeadlineMs()).toBe(7000);  // pause-aware: 10000 - 3000 active
+    h.cur().emit([{ final: true, text: 'more' }]);
+    h.c.stop();
+    expect(h.finals).toEqual(['kept more']);
   });
 
   it('tracks active elapsed time, excluding paused time', () => {

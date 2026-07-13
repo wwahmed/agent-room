@@ -178,14 +178,14 @@ export class DictationController {
   }
 
   private scheduleRestart() {
-    if (this.restartTimer) return;
+    if (this.restartTimer != null) return;
     this.restartTimer = this.o.setTimer(() => {
       this.restartTimer = null;
       if (this.state === 'recording' && !this.stopping) this.spawn(false);
     }, this.o.restartBackoffMs);
   }
   private clearRestart() {
-    if (this.restartTimer) { this.o.clearTimer(this.restartTimer); this.restartTimer = null; }
+    if (this.restartTimer != null) { this.o.clearTimer(this.restartTimer); this.restartTimer = null; }
   }
 
   // Pause-aware hard deadline: fires Stop when ACTIVE time reaches maxMs even
@@ -197,7 +197,7 @@ export class DictationController {
     this.deadlineTimer = this.o.setTimer(() => { this.deadlineTimer = null; this.stop(); }, remaining);
   }
   private clearDeadline() {
-    if (this.deadlineTimer) { this.o.clearTimer(this.deadlineTimer); this.deadlineTimer = null; }
+    if (this.deadlineTimer != null) { this.o.clearTimer(this.deadlineTimer); this.deadlineTimer = null; }
   }
 
   // ---- public controls ----
