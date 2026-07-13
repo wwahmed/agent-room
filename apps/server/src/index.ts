@@ -1219,7 +1219,12 @@ const server = createServer(async (req, res) => {
       const keys: string[] = [];
       let scanCursor = '0';
       do {
-        const [next, batch] = (await redis.scan(scanCursor, 'MATCH', 'room:???-???-???', 'COUNT', 200)) as [string, string[]];
+        // T-47: match ALL room keys, not just the 9-char legacy shape — word
+        // codes (door-cat-hall) are variable length and would otherwise be
+        // invisible in the room list. `room:*` matches only room records: the
+        // message/task/count keys use a `room-` (hyphen) prefix, and any
+        // non-room JSON is skipped by the parse below.
+        const [next, batch] = (await redis.scan(scanCursor, 'MATCH', 'room:*', 'COUNT', 200)) as [string, string[]];
         scanCursor = next;
         keys.push(...batch);
       } while (scanCursor !== '0');
@@ -1232,6 +1237,9 @@ const server = createServer(async (req, res) => {
             code: string; topic: string; status: string; createdBy: string; createdAt: number;
             participants?: Array<unknown>;
           };
+          // Guard: only real room records, whose stored code matches their key.
+          // Keeps the widened `room:*` scan from ever surfacing a stray key.
+          if (!r || typeof r.code !== 'string' || `room:${r.code}` !== key) continue;
           // T-35: cheap per-room activity — last message's `time` (tail of the
           // room-msgs list) and the maintained count key. Empty/unreadable
           // rooms fall back to createdAt so a brand-new room still sorts sanely.
