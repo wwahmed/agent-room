@@ -956,6 +956,11 @@ export function Room() {
         />
 
             <div ref={feedRef} className="flex-1 overflow-y-auto py-2 relative">
+              {/* T-21: cap the text column at a comfortable reading measure
+                  on wide monitors; the feed surface stays full-bleed. Self
+                  messages right-align WITHIN the measure instead of
+                  stranding at the far edge of an ultrawide. */}
+              <div className="mx-auto w-full max-w-[860px]">
               {(() => {
                 // Names that appear with more than one client in the room get
                 // disambiguated as "Name · web" / "Name · cc" in each bubble.
@@ -991,6 +996,7 @@ export function Room() {
                   </div>
                 </div>
               )}
+              </div>
             </div>
 
             {ended ? (
@@ -1050,7 +1056,7 @@ export function Room() {
               </div>
             ) : (
               <div
-                className={`relative border-t border-border-faint p-3 bg-surface flex flex-col gap-2 transition ${dragActive ? 'ring-2 ring-inset ring-accent bg-accent-tint/40' : ''}`}
+                className={`relative border-t border-border-faint p-3 bg-surface transition ${dragActive ? 'ring-2 ring-inset ring-accent bg-accent-tint/40' : ''}`}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -1061,6 +1067,8 @@ export function Room() {
                     Release to attach
                   </div>
                 )}
+                {/* T-21: composer aligns to the same reading measure as the feed. */}
+                <div className="mx-auto flex w-full max-w-[860px] flex-col gap-2">
                 {isHost && mutedCount > 0 && (
                   <div className="text-[11px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
                     <span>🔇</span>
@@ -1175,6 +1183,7 @@ export function Room() {
                       <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
                     </svg>
                   </button>
+                </div>
                 </div>
               </div>
             )}

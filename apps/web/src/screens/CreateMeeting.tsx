@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { createClient, createRoom, listProjects, type ProjectSummary } from '../lib/api.js';
+import { createClient, createProject, createRoom, listProjectCandidates, listProjects, type ProjectCandidate, type ProjectSummary } from '../lib/api.js';
 import { ROLE_PRESETS } from '@agent-room/shared';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
@@ -25,6 +25,7 @@ export function CreateMeeting() {
   // T-18: project attachment is required for new web-created rooms when
   // the registry has projects (it always does on the self-host).
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [projectId, setProjectId] = useState('');
   const navigate = useNavigate();
 
@@ -33,6 +34,7 @@ export function CreateMeeting() {
       setProjects(list);
       if (list.length === 1 && list[0]) setProjectId(list[0].id);
     });
+    void listProjectCandidates().then(setCandidates);
   }, []);
 
   const template = templateById(templateId);
@@ -48,19 +50,24 @@ export function CreateMeeting() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!topic.trim() || !name.trim()) return;
-    if (projects.length > 0 && !projectId) {
+    if ((projects.length > 0 || candidates.length > 0) && !projectId) {
       setError('Pick a project — new rooms need a durable home for their task board.');
       return;
     }
     setBusy(true); setError(null);
     try {
       const client = createClient();
+      let resolvedProjectId = projectId;
+      if (projectId.startsWith('new:')) {
+        // Server-issued candidate key -> real registry entry, then use it.
+        resolvedProjectId = (await createProject(projectId.slice(4))).id;
+      }
       // The server allocates the room code (it can check collisions
       // against Redis; the browser can't).
       const created = await createRoom(client, {
         topic: topic.trim(),
         createdBy: name.trim(),
-        projectId: projectId || undefined,
+        projectId: resolvedProjectId || undefined,
       });
       const code = created.code;
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
@@ -147,7 +154,7 @@ export function CreateMeeting() {
           </span>
         )}
       </label>
-      {projects.length > 0 && (
+      {(projects.length > 0 || candidates.length > 0) && (
         <label className="block mb-4">
           <span className="text-xs font-semibold text-ink-muted block mb-1.5">Project</span>
           <select
@@ -158,6 +165,11 @@ export function CreateMeeting() {
           >
             <option value="">Choose a project…</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+            {candidates.length > 0 && (
+              <optgroup label="Create from a discovered repo">
+                {candidates.map(c => <option key={c.key} value={`new:${c.key}`}>{c.dirName} — new project</option>)}
+              </optgroup>
+            )}
           </select>
           <span className="text-[10px] text-ink-faint mt-1 block">
             The room's task board syncs to this project's repo as a durable Markdown ledger.

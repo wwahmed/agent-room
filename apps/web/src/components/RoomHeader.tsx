@@ -22,7 +22,10 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
     : `${room.participants.length} here${listeningCount > 0 ? ` · ${listeningCount} listening` : ''}`;
 
   return (
-    <header className="flex h-[52px] flex-shrink-0 items-center gap-1.5 border-b border-border-faint bg-surface px-1.5 sm:px-3">
+    <header className="flex h-[52px] flex-shrink-0 items-center border-b border-border-faint bg-surface px-1.5 sm:px-3">
+      {/* T-21: header content shares the feed's reading measure so title,
+          text column, and composer read as one canvas on wide monitors. */}
+      <div className="mx-auto flex h-full w-full max-w-[860px] items-center gap-1.5">
       <Link
         to="/"
         aria-label="Back to rooms"
@@ -60,6 +63,7 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
         </svg>
         <span className="text-[12px] font-semibold">{room.participants.length}</span>
       </button>
+      </div>
     </header>
   );
 }

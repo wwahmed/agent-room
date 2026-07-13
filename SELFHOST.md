@@ -82,10 +82,26 @@ This fork runs the full Agent Room stack on one always-on Mac
 - Backup/rollback: the ledger is a normal tracked file — `git diff`
   audits every sync and `git checkout -- docs/TASKS.md` rolls back.
   The server never commits; committing stays deliberate.
-- Onboarding a project: add an entry to `deploy/projects.json` (id slug,
-  absolute repo root, at least a `tasks` doc role), restart the server,
-  then pick it in New room or `attachProject`. Only the `tasks` role is
-  ever written; all other roles are read-only through `/api/project/doc`.
+- Registry is STRICT: a malformed file or any invalid entry makes every
+  project API fail closed with a `ProjectRegistryError` (503) naming
+  the problem; startup logs the validation result. A missing file is a
+  valid empty registry.
+- Writes hold an advisory `<ledger>.lock` (wx-created, pid+timestamp,
+  stale >30s taken over with a warning) around the whole
+  read → integrity → write sequence; the tmp file is wx-created 0600
+  and unlinked on failure. A managed section WITHOUT a hash line
+  ("legacy") is fail-closed like a tamper — `force` migrates it.
+- Onboarding a project: pick "Create from a discovered repo" in New
+  room or the Project tab — the server scans `PROJECT_SCAN_ROOTS`
+  (default `~/workspaces`, colon-separated) for git repos and writes
+  the registry entry itself (browser never sends paths); or hand-edit
+  `deploy/projects.json`. Only the `tasks` role is ever written; all
+  other roles are read-only through `/api/project/doc`.
+- Tests: `npm -w apps/server test` covers malformed/invalid registry,
+  traversal/absolute/symlink/symlink-swap denial, tamper + legacy
+  fail-closed + force migration, idempotence, lock discipline (fresh
+  lock refusal, stale takeover), serialization, and onboarding key
+  forgery.
 
 ## Deploying changes
 

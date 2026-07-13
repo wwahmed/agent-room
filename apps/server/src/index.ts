@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
 import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { verifyAccessJwt, allowedEmails } from './access.js';
-import { getProject, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, type SyncResult } from './projects.js';
+import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -175,6 +175,8 @@ function statusForError(err: Error): number {
       return 400;
     case 'LedgerConflictError':
       return 409;
+    case 'ProjectRegistryError':
+      return 503; // registry misconfigured: project features fail closed
     default:
       return 500;
   }
@@ -842,7 +844,34 @@ const server = createServer(async (req, res) => {
     if (path === '/api/projects' && req.method === 'GET') {
       const caller = await resolveCaller(req);
       if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
-      return sendJson(res, 200, { projects: listProjects() });
+      try {
+        return sendJson(res, 200, { projects: listProjects() });
+      } catch (e) {
+        const err = e as Error;
+        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+      }
+    }
+
+    if (path === '/api/project/candidates' && req.method === 'GET') {
+      // Discovered git repos under PROJECT_SCAN_ROOTS, keyed opaquely —
+      // the safe onboarding path: the browser picks, it never types paths.
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      return sendJson(res, 200, { candidates: listProjectCandidates() });
+    }
+
+    if (path === '/api/project/create' && req.method === 'POST') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      try {
+        const body = JSON.parse(await readBody(req)) as { key?: string; id?: string; name?: string };
+        const project = createProjectFromCandidate(String(body.key || ''), body.id, body.name);
+        return sendJson(res, 200, { project });
+      } catch (e) {
+        const err = e as Error;
+        if (err.name === 'SyntaxError') return sendJson(res, 400, { error: 'BadRequest', message: 'invalid JSON body' });
+        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+      }
     }
 
     if (path === '/api/project/doc' && req.method === 'GET') {
@@ -901,4 +930,5 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`[server] agent-room self-host listening on http://127.0.0.1:${PORT}`);
   console.log(`[server] web dist: ${WEB_DIST}`);
   console.log(`[server] redis: ${REDIS_URL}`);
+  validateRegistryAtStartup();
 });

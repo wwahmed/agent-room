@@ -397,6 +397,34 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return ((await res.json()) as { projects?: ProjectSummary[] }).projects ?? [];
 }
 
+export interface ProjectCandidate {
+  key: string;
+  dirName: string;
+  relPath: string;
+  suggestedId: string;
+}
+
+/** Git repos discovered under the server's scan roots — the safe creation path. */
+export async function listProjectCandidates(): Promise<ProjectCandidate[]> {
+  const res = await fetch('/api/project/candidates', { credentials: 'same-origin' });
+  if (!res.ok) return [];
+  return ((await res.json()) as { candidates?: ProjectCandidate[] }).candidates ?? [];
+}
+
+export async function createProject(key: string, id?: string, name?: string): Promise<ProjectSummary> {
+  const res = await fetch('/api/project/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ key, id, name }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { project?: ProjectSummary; error?: string; message?: string };
+  if (!res.ok || !body.project) {
+    throw new ApiError(String(body.error || 'ApiError'), String(body.message || `Create failed (${res.status})`), res.status);
+  }
+  return body.project;
+}
+
 export async function readProjectDoc(
   id: string,
   role: string,

@@ -3,10 +3,13 @@ import type { Room } from '@agent-room/shared';
 import {
   attachProject,
   createClient,
+  createProject,
   getTaskBoard,
+  listProjectCandidates,
   listProjects,
   readProjectDoc,
   type BoardTask,
+  type ProjectCandidate,
   type ProjectSummary,
 } from '../lib/api.js';
 
@@ -40,6 +43,7 @@ interface Props {
 
 export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [tasks, setTasks] = useState<BoardTask[] | null>(null);
   const [pickId, setPickId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,6 +55,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
 
   useEffect(() => {
     void listProjects().then(setProjects);
+    void listProjectCandidates().then(setCandidates);
   }, []);
 
   useEffect(() => {
@@ -91,7 +96,14 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
     if (!pickId) return;
     setBusy(true); setError(null);
     try {
-      await attachProject(createClient(), room.code, pickId, { requesterName: selfName });
+      let projectId = pickId;
+      if (pickId.startsWith('new:')) {
+        // Safe creation path: the value is a server-issued candidate key,
+        // never a filesystem path from the browser.
+        const created = await createProject(pickId.slice(4));
+        projectId = created.id;
+      }
+      await attachProject(createClient(), room.code, projectId, { requesterName: selfName });
       onAttached();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -117,6 +129,11 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
             >
               <option value="">Choose a project…</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+              {candidates.length > 0 && (
+                <optgroup label="Create from a discovered repo">
+                  {candidates.map(c => <option key={c.key} value={`new:${c.key}`}>{c.dirName} — new project</option>)}
+                </optgroup>
+              )}
             </select>
             <button
               onClick={() => { void doAttach(); }}

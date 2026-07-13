@@ -21,7 +21,7 @@
 // The "tasks" role is the ONLY writable role; all other docs are
 // read-only through the API.
 
-import { readFileSync, existsSync, renameSync, writeFileSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, renameSync, writeFileSync, realpathSync, statSync, unlinkSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
@@ -55,19 +55,57 @@ const STATE_END = 'wakichat:state:end -->';
 const HASH_LINE_RE = /<!-- wakichat:hash:[0-9a-f]{16} -->/;
 const HASH_PLACEHOLDER = '<!-- wakichat:hash:0000000000000000 -->';
 
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * Strict registry loader (Codex T-18 gate 1): a missing file is a valid
+ * empty registry, but a malformed file or ANY invalid entry throws a
+ * ProjectRegistryError naming the problem — no silent skips, so a typo
+ * can't quietly hide a project or route writes somewhere unexpected.
+ */
 export function loadRegistry(): Record<string, ProjectConfig> {
+  if (!existsSync(REGISTRY_PATH)) return {};
+  let raw: string;
   try {
-    const raw = readFileSync(REGISTRY_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, ProjectConfig>;
-    const out: Record<string, ProjectConfig> = {};
-    for (const [id, cfg] of Object.entries(parsed)) {
-      if (!cfg || typeof cfg.root !== 'string' || typeof cfg.name !== 'string') continue;
-      if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(id)) continue; // ids are slugs, never paths
-      out[id] = { name: cfg.name, root: cfg.root, docs: cfg.docs && typeof cfg.docs === 'object' ? cfg.docs : {} };
+    raw = readFileSync(REGISTRY_PATH, 'utf8');
+  } catch (e) {
+    throw projErr('ProjectRegistryError', `Project registry ${REGISTRY_PATH} is unreadable: ${(e as Error).message}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw projErr('ProjectRegistryError', `Project registry ${REGISTRY_PATH} is not valid JSON: ${(e as Error).message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw projErr('ProjectRegistryError', `Project registry ${REGISTRY_PATH} must be a JSON object of id -> config.`);
+  }
+  const out: Record<string, ProjectConfig> = {};
+  for (const [id, cfgU] of Object.entries(parsed as Record<string, unknown>)) {
+    if (id.startsWith('_')) continue; // _comment and friends are allowed
+    const cfg = cfgU as Partial<ProjectConfig>;
+    if (!ID_RE.test(id)) throw projErr('ProjectRegistryError', `Registry entry "${id}": ids must be slugs matching ${ID_RE}.`);
+    if (!cfg || typeof cfg !== 'object') throw projErr('ProjectRegistryError', `Registry entry "${id}" must be an object.`);
+    if (typeof cfg.name !== 'string' || !cfg.name.trim()) throw projErr('ProjectRegistryError', `Registry entry "${id}": "name" must be a non-empty string.`);
+    if (typeof cfg.root !== 'string' || !cfg.root.startsWith('/')) throw projErr('ProjectRegistryError', `Registry entry "${id}": "root" must be an absolute path.`);
+    if (!cfg.docs || typeof cfg.docs !== 'object' || Array.isArray(cfg.docs)) throw projErr('ProjectRegistryError', `Registry entry "${id}": "docs" must be an object of role -> relative path.`);
+    for (const [role, rel] of Object.entries(cfg.docs)) {
+      if (typeof rel !== 'string' || !rel || rel.includes('..') || rel.startsWith('/') || rel.includes('\0')) {
+        throw projErr('ProjectRegistryError', `Registry entry "${id}", doc role "${role}": path must be a safe relative path (got ${JSON.stringify(rel)}).`);
+      }
     }
-    return out;
-  } catch {
-    return {};
+    out[id] = { name: cfg.name, root: cfg.root, docs: { ...cfg.docs } };
+  }
+  return out;
+}
+
+/** Startup validation: log actionable problems without killing the chat core. */
+export function validateRegistryAtStartup(): void {
+  try {
+    const reg = loadRegistry();
+    console.log(`[project] registry OK: ${Object.keys(reg).length} project(s) from ${REGISTRY_PATH}`);
+  } catch (e) {
+    console.error(`[project] REGISTRY INVALID — project features will fail closed until fixed: ${(e as Error).message}`);
   }
 }
 
@@ -202,8 +240,9 @@ export function renderManagedSection(board: LedgerBoardShape, roomCode: string, 
 /**
  * File-derived integrity check: 'clean' when the embedded hash matches
  * the section content, 'tampered' when it doesn't (hand edit inside the
- * markers), 'legacy' when no hash line exists (pre-hash section — treat
- * as clean once, the next write adds the line).
+ * markers), 'legacy' when no hash line exists. Legacy is FAIL-CLOSED at
+ * the sync layer: an ordinary sync refuses to overwrite it; an explicit
+ * force migrates it to the hashed format.
  */
 export function sectionIntegrity(section: string): 'clean' | 'tampered' | 'legacy' {
   const m = HASH_LINE_RE.exec(section);
@@ -237,11 +276,49 @@ export interface SyncResult {
   conflict?: string;
 }
 
+const LOCK_STALE_MS = 30_000;
+
+/**
+ * Advisory per-ledger lock: `<file>.lock` created with wx (fails if it
+ * exists). Contents = pid + timestamp; a lock older than LOCK_STALE_MS
+ * is taken over with a warning (crashed writer). The server itself is a
+ * single synchronous writer, so this guards external tooling and any
+ * future second process, not the event loop.
+ */
+function acquireLedgerLock(abs: string): string {
+  const lockPath = `${abs}.lock`;
+  const payload = JSON.stringify({ pid: process.pid, at: Date.now() });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(lockPath, payload, { flag: 'wx', mode: 0o600 });
+      return lockPath;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      let stale = false;
+      try {
+        const held = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid?: number; at?: number };
+        stale = !held.at || Date.now() - held.at > LOCK_STALE_MS;
+      } catch {
+        stale = true; // unreadable lock: treat as crashed writer
+      }
+      if (!stale) {
+        throw projErr('LedgerConflictError', 'Another writer holds the ledger lock; retry shortly.');
+      }
+      console.warn(`[project] taking over stale ledger lock ${lockPath}`);
+      try { unlinkSync(lockPath); } catch { /* raced with the owner's cleanup */ }
+    }
+  }
+  throw projErr('LedgerConflictError', 'Could not acquire the ledger lock.');
+}
+
 /**
  * Write the board into the project's task ledger. Conflict detection is
- * FILE-derived (sectionIntegrity): a hand edit inside the markers makes
- * the embedded hash mismatch and the write is refused unless `force` —
- * no external state, so it survives Redis loss and room expiry.
+ * FILE-derived (sectionIntegrity): a hand edit inside the markers, or a
+ * pre-hash "legacy" section, refuses the write unless `force` — no
+ * external state, so it survives Redis loss and room expiry. The whole
+ * read → integrity check → write sequence runs synchronously INSIDE an
+ * advisory lock; the tmp file is wx-created 0600 and cleaned up on any
+ * failure.
  */
 export function syncTaskLedger(
   projectId: string,
@@ -253,53 +330,67 @@ export function syncTaskLedger(
   const now = Date.now();
   const section = renderManagedSection(board, roomCode, now);
 
-  let before = `# Task ledger — ${cfg.name}\n\nDurable record of WakiChat room task boards for this project. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
-  let after = '\n';
-  if (existsSync(abs)) {
-    const current = readFileSync(abs, 'utf8');
-    const slice = managedSlice(current);
-    if (slice) {
-      const integrity = sectionIntegrity(slice.section);
-      if (integrity === 'tampered' && !force) {
-        return { rel, bytes: 0, changed: false, hash: sectionHash(slice.section), conflict: 'managed section was modified outside WakiChat since the last sync; review the file and re-sync with force' };
-      }
-      // Idempotence: identical board on a clean section => no write, no
-      // timestamp churn. A forced repair must always rewrite.
-      if (integrity === 'clean' && !force) {
-        const jsonMatch = /```json\n([\s\S]*?)\n```/.exec(slice.section);
-        if (jsonMatch) {
-          try {
-            const prev = JSON.parse(jsonMatch[1]) as { board?: LedgerBoardShape };
-            if (prev.board && JSON.stringify(prev.board) === JSON.stringify(board)) {
-              return { rel, bytes: Buffer.byteLength(current), changed: false, hash: sectionHash(slice.section) };
-            }
-          } catch { /* fall through to a fresh write */ }
+  const lockPath = acquireLedgerLock(abs);
+  let tmp: string | null = null;
+  try {
+    let before = `# Task ledger — ${cfg.name}\n\nDurable record of WakiChat room task boards for this project. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
+    let after = '\n';
+    if (existsSync(abs)) {
+      const current = readFileSync(abs, 'utf8');
+      const slice = managedSlice(current);
+      if (slice) {
+        const integrity = sectionIntegrity(slice.section);
+        if (integrity === 'tampered' && !force) {
+          return { rel, bytes: 0, changed: false, hash: sectionHash(slice.section), conflict: 'managed section was modified outside WakiChat since the last sync; review the file and re-sync with force' };
         }
+        if (integrity === 'legacy' && !force) {
+          // Fail closed: missing integrity metadata is not a license to
+          // overwrite. An explicit force migrates to the hashed format.
+          return { rel, bytes: 0, changed: false, hash: sectionHash(slice.section), conflict: 'managed section has no integrity hash (pre-hash format); review the file and run projectSync with force to migrate it' };
+        }
+        // Idempotence: identical board on a clean section => no write, no
+        // timestamp churn. A forced repair must always rewrite.
+        if (integrity === 'clean' && !force) {
+          const jsonMatch = /```json\n([\s\S]*?)\n```/.exec(slice.section);
+          if (jsonMatch) {
+            try {
+              const prev = JSON.parse(jsonMatch[1]) as { board?: LedgerBoardShape };
+              if (prev.board && JSON.stringify(prev.board) === JSON.stringify(board)) {
+                return { rel, bytes: Buffer.byteLength(current), changed: false, hash: sectionHash(slice.section) };
+              }
+            } catch { /* fall through to a fresh write */ }
+          }
+        }
+        before = slice.before;
+        after = slice.after;
+      } else {
+        // File exists but has no managed section yet: append one, keep
+        // every existing byte.
+        before = current.endsWith('\n') ? current + '\n' : current + '\n\n';
+        after = '\n';
       }
-      before = slice.before;
-      after = slice.after;
-    } else {
-      // File exists but has no managed section yet: append one, keep
-      // every existing byte.
-      before = current.endsWith('\n') ? current + '\n' : current + '\n\n';
-      after = '\n';
     }
-  }
 
-  const next = before + section + after;
-  // TOCTOU guard: re-verify containment of the (possibly re-created or
-  // symlink-swapped) parent directory immediately before writing the tmp
-  // file and renaming. Node's fs API can't hold a directory handle, so a
-  // microscopic window remains; this closes the practical swap race.
-  const parentReal = realpathSync(dirname(abs));
-  const rootReal = realpathSync(cfg.root);
-  if (parentReal !== rootReal && !parentReal.startsWith(rootReal + sep)) {
-    throw projErr('BadRequestError', 'Ledger parent directory escaped the project root between check and write.');
+    const next = before + section + after;
+    // TOCTOU guard: re-verify containment of the (possibly re-created or
+    // symlink-swapped) parent directory immediately before writing the tmp
+    // file and renaming. Node's fs API can't hold a directory handle, so a
+    // microscopic window remains; the lock + this recheck close the
+    // practical swap race.
+    const parentReal = realpathSync(dirname(abs));
+    const rootReal = realpathSync(cfg.root);
+    if (parentReal !== rootReal && !parentReal.startsWith(rootReal + sep)) {
+      throw projErr('BadRequestError', 'Ledger parent directory escaped the project root between check and write.');
+    }
+    tmp = join(parentReal, `.tasks-sync-${randomBytes(6).toString('hex')}.tmp`);
+    writeFileSync(tmp, next, { flag: 'wx', mode: 0o600 });
+    renameSync(tmp, abs); // atomic on the same filesystem
+    tmp = null; // consumed by rename
+    return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };
+  } finally {
+    if (tmp) { try { unlinkSync(tmp); } catch { /* already gone */ } }
+    try { unlinkSync(lockPath); } catch { /* already gone */ }
   }
-  const tmp = join(parentReal, `.tasks-sync-${randomBytes(4).toString('hex')}.tmp`);
-  writeFileSync(tmp, next, 'utf8');
-  renameSync(tmp, abs); // atomic on the same filesystem
-  return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };
 }
 
 /** Read the embedded machine state back out of the ledger (board resume). */
@@ -320,6 +411,116 @@ export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt
   } catch {
     return null;
   }
+}
+
+// ---------- safe project onboarding (Codex T-18 gate 4) ----------
+//
+// The browser still NEVER supplies a filesystem path. The server scans
+// PROJECT_SCAN_ROOTS (default ~/workspaces, colon-separated) for git
+// repositories, offers them as candidates keyed by an opaque relative
+// key, and creation picks one of those keys. Registry writes go through
+// the same wx/atomic discipline as the ledger.
+
+const SCAN_ROOTS = (process.env.PROJECT_SCAN_ROOTS || join(process.env.HOME || '/', 'workspaces'))
+  .split(':')
+  .filter(Boolean);
+const SCAN_DEPTH = 2;
+
+export interface ProjectCandidate {
+  key: string;       // "<rootIndex>:<relative/path>" — opaque to clients
+  dirName: string;   // display: repo directory name
+  relPath: string;   // display: path relative to its scan root
+  suggestedId: string;
+}
+
+function slugify(name: string): string {
+  const s = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63);
+  return ID_RE.test(s) ? s : `repo-${s}`.slice(0, 63);
+}
+
+export function listProjectCandidates(): ProjectCandidate[] {
+  const registered = new Set<string>();
+  try {
+    for (const cfg of Object.values(loadRegistry())) {
+      try { registered.add(realpathSync(cfg.root)); } catch { /* root missing */ }
+    }
+  } catch { /* invalid registry: still list candidates so it can be rebuilt */ }
+
+  const out: ProjectCandidate[] = [];
+  SCAN_ROOTS.forEach((scanRoot, rootIdx) => {
+    let rootReal: string;
+    try { rootReal = realpathSync(scanRoot); } catch { return; }
+    const walk = (dir: string, depth: number) => {
+      if (depth > SCAN_DEPTH) return;
+      let entries: string[];
+      try { entries = readdirSync(dir); } catch { return; }
+      if (entries.includes('.git')) {
+        let real: string;
+        try { real = realpathSync(dir); } catch { return; }
+        if (!real.startsWith(rootReal + sep) && real !== rootReal) return; // symlinked out — skip
+        if (registered.has(real)) return;
+        const rel = real === rootReal ? '.' : real.slice(rootReal.length + 1);
+        out.push({ key: `${rootIdx}:${rel}`, dirName: real.split(sep).pop() || rel, relPath: rel, suggestedId: slugify(real.split(sep).pop() || rel) });
+        return; // don't descend into repos
+      }
+      for (const e of entries) {
+        if (e.startsWith('.') || e === 'node_modules') continue;
+        const p = join(dir, e);
+        try { if (statSync(p).isDirectory()) walk(p, depth + 1); } catch { /* unreadable */ }
+      }
+    };
+    walk(rootReal, 0);
+  });
+  return out.sort((a, b) => a.dirName.localeCompare(b.dirName));
+}
+
+/** Create a registry entry from a scanned candidate key. Never accepts raw paths. */
+export function createProjectFromCandidate(key: string, requestedId?: string, requestedName?: string): ProjectSummary {
+  const m = /^(\d+):(.+)$/.exec(key || '');
+  if (!m) throw projErr('BadRequestError', 'Invalid candidate key.');
+  const rootIdx = Number(m[1]);
+  const rel = m[2];
+  const scanRoot = SCAN_ROOTS[rootIdx];
+  if (!scanRoot) throw projErr('BadRequestError', 'Invalid candidate key (unknown scan root).');
+  if (rel.includes('..') || rel.startsWith('/') || rel.includes('\0')) throw projErr('BadRequestError', 'Invalid candidate key (unsafe path).');
+  const rootReal = realpathSync(scanRoot);
+  const abs = rel === '.' ? rootReal : resolve(rootReal, rel);
+  const absReal = realpathSync(abs); // throws if gone
+  if (absReal !== rootReal && !absReal.startsWith(rootReal + sep)) throw projErr('BadRequestError', 'Candidate escapes the scan root.');
+  if (!existsSync(join(absReal, '.git'))) throw projErr('BadRequestError', 'Candidate is not a git repository.');
+
+  const registry = loadRegistry(); // strict: malformed registry blocks creation
+  for (const cfg of Object.values(registry)) {
+    try { if (realpathSync(cfg.root) === absReal) throw projErr('BadRequestError', 'That repository is already registered.'); } catch (e) { if ((e as Error).name === 'BadRequestError') throw e; }
+  }
+  const dirName = absReal.split(sep).pop() || 'project';
+  let id = requestedId ? requestedId.trim().toLowerCase() : slugify(dirName);
+  if (!ID_RE.test(id)) throw projErr('BadRequestError', `Project id must match ${ID_RE}.`);
+  if (registry[id]) throw projErr('BadRequestError', `Project id "${id}" is already taken.`);
+  const name = (requestedName || dirName).trim().slice(0, 80) || dirName;
+
+  const docs: Record<string, string> = { tasks: 'docs/TASKS.md' };
+  if (existsSync(join(absReal, 'README.md'))) docs.brief = 'README.md';
+  if (existsSync(join(absReal, 'FEATURES.md'))) docs.features = 'FEATURES.md';
+
+  // Atomic registry write with the same wx/rename discipline. Re-read the
+  // RAW file (not the validated view) so unknown fields like _comment are
+  // preserved byte-for-byte in spirit.
+  let rawObj: Record<string, unknown> = {};
+  if (existsSync(REGISTRY_PATH)) {
+    rawObj = JSON.parse(readFileSync(REGISTRY_PATH, 'utf8')) as Record<string, unknown>;
+  }
+  rawObj[id] = { name, root: absReal, docs };
+  const tmp = join(dirname(REGISTRY_PATH), `.projects-${randomBytes(6).toString('hex')}.tmp`);
+  writeFileSync(tmp, JSON.stringify(rawObj, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  try {
+    renameSync(tmp, REGISTRY_PATH);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* gone */ }
+    throw e;
+  }
+  console.log(`[project] registered "${id}" -> ${absReal}`);
+  return { id, name, docs: Object.keys(docs) };
 }
 
 function projErr(name: string, message: string): Error {
