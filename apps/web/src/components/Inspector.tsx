@@ -31,13 +31,13 @@ export function Inspector({ open, onClose, renderTab, initialTab = 'people' }: P
 
   const panel = (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex h-[52px] flex-shrink-0 items-center gap-1 border-b border-border-faint px-1.5">
+      <div className="flex h-[60px] flex-shrink-0 items-center gap-1 border-b border-border-faint px-1.5">
         <div className="flex min-w-0 flex-1 gap-1">
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`min-h-11 flex-1 rounded-lg px-2 text-[13px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
+              className={`min-h-12 flex-1 rounded-lg px-2 text-[14px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
             >
               {t.label}
             </button>

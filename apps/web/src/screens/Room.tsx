@@ -963,7 +963,7 @@ export function Room() {
           onToggleInspector={() => setInspectorOpen(v => !v)}
         />
 
-            <div ref={feedRef} className="flex-1 overflow-y-auto py-2 relative">
+            <div ref={feedRef} className="flex-1 overflow-y-auto py-4 relative">
               {/* T-21: cap the text column at a comfortable reading measure
                   on wide monitors; the feed surface stays full-bleed. Self
                   messages right-align WITHIN the measure instead of
