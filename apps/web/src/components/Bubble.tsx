@@ -33,7 +33,7 @@ export function Bubble({ message, self, ambiguousNames }: Props) {
   return (
     <div className={`flex w-full gap-2 ${self ? 'flex-row-reverse' : ''}`}>
       {!self && <Avatar initials={message.initials} color={message.color} size="md" />}
-      <div className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3 py-2 shadow-sm break-words ${bubble}`}>
+      <div className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3 py-2 shadow-sm break-words [overflow-wrap:anywhere] ${bubble}`}>
         {!self && (
           <div className="mb-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[12px] leading-tight">
             <span className="font-semibold" style={{ color: message.color }}>{message.name}</span>

@@ -662,7 +662,7 @@ export function Room() {
   return (
     <div className="h-full flex items-center justify-center sm:px-3 sm:py-4">
       {/* dvh (not vh) so mobile browser chrome doesn't push the composer off-screen. */}
-      <div className="w-full max-w-7xl h-[100dvh] sm:h-[88vh] grid grid-rows-[auto_auto_1fr] bg-surface border-0 sm:border border-border sm:rounded-xl shadow-card overflow-hidden">
+      <div className="w-full max-w-7xl h-[100dvh] sm:h-[88vh] grid grid-rows-[auto_auto_1fr] grid-cols-[minmax(0,1fr)] bg-surface border-0 sm:border border-border sm:rounded-xl shadow-card overflow-hidden">
         <header className="px-4 py-3 border-b border-border-faint flex justify-between items-center bg-surface">
           <div className="min-w-0 flex items-center gap-3">
             <AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" />
