@@ -30,12 +30,12 @@ function readStoredSelf(code: string): SelfIdentity | null {
 }
 
 // Cap auto-grow at ~8 lines so the input never eats the whole feed.
-const TEXTAREA_MAX_HEIGHT = 200;
+const TEXTAREA_MAX_HEIGHT = 260;
 // Touch devices get a taller resting composer and Enter-inserts-newline
 // (the Send button is the only send affordance); physical-keyboard
 // environments keep the Enter-to-send + Shift+Enter convention.
 const IS_TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-const TEXTAREA_MIN_HEIGHT = IS_TOUCH ? 72 : 42;
+const TEXTAREA_MIN_HEIGHT = IS_TOUCH ? 96 : 116;
 
 export function Room() {
   const { code = '' } = useParams();
@@ -746,7 +746,7 @@ export function Room() {
             <button
               key={key}
               onClick={() => setMobilePanel(key as 'chat' | 'people' | 'outputs')}
-              className={`rounded-lg px-2 py-2 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
+              className={`rounded-lg px-2 py-2 min-h-11 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
             >
               {label}
             </button>
@@ -1121,53 +1121,57 @@ export function Room() {
                   </button>
                   <span className="hidden sm:inline text-ink-faint">Prefills your message. You choose the agent and send.</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <VoiceButton
-                    onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
-                    disabled={ended}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    accept={Array.from(ALLOWED_ATTACHMENT_TYPES).join(',')}
-                    onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
-                    title="Attach files"
-                    className="h-9 rounded-lg bg-surface-softer border border-border px-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
-                  >
-                    {attachBusy ? '...' : 'Attach'}
-                  </button>
+                <div className="flex flex-col gap-2">
                   <textarea
                     ref={textareaRef}
                     value={text}
                     onChange={e => setText(e.target.value)}
                     onPaste={e => { void handlePaste(e); }}
                     onKeyDown={e => {
-                      // Desktop: Enter sends; Shift+Enter / IME composition lets
-                      // newlines through. Touch: Enter is a newline, Send sends.
-                      if (!IS_TOUCH && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      // Enter is always a newline (host direction, 2026-07-13).
+                      // Cmd/Ctrl+Enter sends on hardware keyboards.
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                         e.preventDefault();
                         send();
                       }
                     }}
-                    placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (Enter to send, Shift+Enter for newline)'}
-                    rows={1}
+                    placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (⌘/Ctrl+Enter to send)'}
+                    rows={4}
                     style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
                     /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
-                    className="flex-1 resize-none overflow-y-auto px-3 py-2 bg-surface-softer border border-border rounded-lg text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                    className="w-full resize-none overflow-y-auto px-3 py-2.5 bg-surface-softer border border-border rounded-xl text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
                   />
-                  <button
-                    onClick={send}
-                    disabled={!text.trim() && attachments.length === 0}
-                    className="self-end bg-accent text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Send
-                  </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <VoiceButton
+                        onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
+                        disabled={ended}
+                      />
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        accept={Array.from(ALLOWED_ATTACHMENT_TYPES).join(',')}
+                        onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
+                      />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
+                        title="Attach files"
+                        className="h-9 rounded-lg bg-surface-softer border border-border px-3 text-xs font-semibold text-ink-muted disabled:opacity-50"
+                      >
+                        {attachBusy ? '...' : 'Attach'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={send}
+                      disabled={!text.trim() && attachments.length === 0}
+                      className="bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
+                    >
+                      Send
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
