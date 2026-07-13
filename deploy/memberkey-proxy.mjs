@@ -24,9 +24,21 @@
 // Env: PROXY_PORT (default 8211), UPSTREAM (default http://127.0.0.1:8210).
 
 import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 
 const PORT = Number(process.env.PROXY_PORT || 8211);
 const UPSTREAM = new URL(process.env.UPSTREAM || 'http://127.0.0.1:8210');
+// One instance serves ONE agent (Codex T-31 decision). If PROXY_TOKEN is set,
+// the path secret MUST equal it — a wrong token on the right port is rejected.
+// Unset = dev/scratch only (any token accepted, namespaced by value).
+const EXPECT_TOKEN = process.env.PROXY_TOKEN || '';
+
+function tokenOk(got) {
+  if (!EXPECT_TOKEN) return true;
+  const a = Buffer.from(got);
+  const b = Buffer.from(EXPECT_TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /** secret -> Map<roomCode, memberKey>. In-memory only. */
 const keyStore = new Map();
@@ -66,9 +78,14 @@ const server = http.createServer(async (req, res) => {
   try {
     // Path shape: /t/<secret>/<upstream-path...>
     const m = /^\/t\/([^/]+)(\/.*)?$/.exec(req.url || '');
-    if (!m) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"proxy: expected /t/<secret>/..."}'); return; }
+    if (!m) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"proxy: bad path"}'); return; }
     const secret = decodeURIComponent(m[1]);
+    if (!tokenOk(secret)) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end('{"error":"proxy: forbidden"}'); return; }
     const upstreamPath = m[2] || '/';
+    // Only ever proxy the room API + KV surface; reject anything unexpected.
+    if (!(upstreamPath === '/api/room' || upstreamPath.startsWith('/kv') || upstreamPath.startsWith('/api/'))) {
+      res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"proxy: path not allowed"}'); return;
+    }
     const raw = await readBody(req);
 
     let outBody = raw;
