@@ -6,7 +6,7 @@ function reportKey(code: string): string { return `room-report:${code}`; }
 export const REPORT_RETENTION = 'permanent' as const;
 
 export function buildRoomReport(room: Room, messages: Message[]): RoomReport {
-  const userMessages = messages.filter(m => m.type === 'msg' && m.text.trim());
+  const userMessages = messages.filter(m => m.type === 'msg' && (m.text ?? '').trim());
   const artifacts = extractArtifacts(userMessages);
   const highlights = pickLines(userMessages, 8);
   const markedDecisions = artifacts.filter(a => a.kind === 'decision').map(a => `${a.author}: ${clip(a.text)}`);
@@ -61,7 +61,7 @@ export async function getRoomReport(
 function pickLines(messages: Message[], limit: number): string[] {
   const lines: string[] = [];
   for (const m of messages) {
-    const first = m.text.trim().split('\n').find(line => line.trim().length > 10)?.trim();
+    const first = (m.text ?? '').trim().split('\n').find(line => line.trim().length > 10)?.trim();
     if (!first) continue;
     lines.push(`${m.name}: ${clip(first)}`);
     if (lines.length >= limit) break;
@@ -72,7 +72,7 @@ function pickLines(messages: Message[], limit: number): string[] {
 function pickMatching(messages: Message[], pattern: RegExp, limit: number): string[] {
   const lines: string[] = [];
   for (const m of messages) {
-    const matched = m.text
+    const matched = (m.text ?? '')
       .split('\n')
       .map(line => line.trim())
       .find(line => line.length > 8 && pattern.test(line));

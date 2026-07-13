@@ -1,11 +1,14 @@
 import { useRef, useState, useEffect, useCallback, type ClipboardEvent, type DragEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
-import { Bubble } from '../components/Bubble.js';
+import { MessageRow, isSameGroup } from '../components/MessageRow.js';
+import { RoomHeader } from '../components/RoomHeader.js';
+import { Inspector } from '../components/Inspector.js';
+import { WorkspaceRail } from '../components/WorkspaceRail.js';
+import { RoomListPane } from '../components/RoomListPane.js';
 import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
-import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
@@ -28,13 +31,18 @@ function readStoredSelf(code: string): SelfIdentity | null {
   }
 }
 
-// Cap auto-grow at ~8 lines so the input never eats the whole feed.
-const TEXTAREA_MAX_HEIGHT = 260;
-// Touch devices get a taller resting composer and Enter-inserts-newline
-// (the Send button is the only send affordance); physical-keyboard
-// environments keep the Enter-to-send + Shift+Enter convention.
+// T-05 composer (host direction 2026-07-13): rest as ONE line so reading
+// gets the screen back, auto-grow line-by-line while typing up to ~6
+// lines, then scroll internally. An explicit expand control opens a
+// larger writing surface for long drafting. Supersedes T-09's
+// always-four-line resting height.
+const TEXTAREA_MIN_HEIGHT = 44;
+const TEXTAREA_MAX_HEIGHT = 180;
+const TEXTAREA_EXPANDED_MIN = 240;
+const TEXTAREA_EXPANDED_MAX = 360;
+// Enter is a newline on every device (host direction); Cmd/Ctrl+Enter
+// sends on hardware keyboards. IS_TOUCH only tunes the placeholder.
 const IS_TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-const TEXTAREA_MIN_HEIGHT = IS_TOUCH ? 128 : 132;
 
 export function Room() {
   const { code = '' } = useParams();
@@ -96,6 +104,8 @@ export function Room() {
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [composerExpanded, setComposerExpanded] = useState(false);
   const [now, setNow] = useState(Date.now());
   const feedRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -106,13 +116,23 @@ export function Room() {
   // Runs after every value change (typed, pasted, Draft injected, voice transcript).
   function autoGrow(el: HTMLTextAreaElement | null) {
     if (!el) return;
+    const min = composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT;
+    const max = composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT;
+    // Empty draft: snap to the resting height. Measuring scrollHeight here
+    // would pick up a WRAPPED placeholder (narrow viewports) and leave the
+    // box two lines tall after clearing.
+    if (!el.value) {
+      el.style.height = `${min}px`;
+      return;
+    }
     el.style.height = 'auto';
-    const next = Math.min(Math.max(el.scrollHeight, TEXTAREA_MIN_HEIGHT), TEXTAREA_MAX_HEIGHT);
+    const next = Math.min(Math.max(el.scrollHeight, min), max);
     el.style.height = `${next}px`;
   }
   useEffect(() => {
     autoGrow(textareaRef.current);
-  }, [text]);
+    // composerExpanded changes the min/max window, so re-measure on toggle.
+  }, [text, composerExpanded]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 10_000);
@@ -331,7 +351,6 @@ export function Room() {
     }
   }
 
-  const [mobilePanel, setMobilePanel] = useState<'chat' | 'people' | 'outputs'>('chat');
   const [reportBusy, setReportBusy] = useState(false);
   const artifacts = extractArtifacts(messages);
 
@@ -360,16 +379,6 @@ export function Room() {
   useEffect(() => {
     feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
   }, [messages.length]);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const resetOnDesktop = () => {
-      if (mq.matches) setMobilePanel('chat');
-    };
-    resetOnDesktop();
-    mq.addEventListener('change', resetOnDesktop);
-    return () => mq.removeEventListener('change', resetOnDesktop);
-  }, []);
 
   if (error) return <div className="p-10 text-red-600">{error}</div>;
   if (!self) return <div className="p-10 text-ink-soft">Redirecting to join…</div>;
@@ -704,56 +713,12 @@ export function Room() {
     await addFiles(files);
   }
 
-  return (
-    <div className="h-full">
-      {/* dvh (not vh) so mobile browser chrome doesn't push the composer off-screen. */}
-      <div className="w-full h-[100dvh] grid grid-rows-[auto_auto_1fr] grid-cols-[minmax(0,1fr)] bg-surface-soft overflow-hidden">
-        <header className="px-3 py-2 sm:px-4 sm:py-3 border-b border-border-faint flex justify-between items-center bg-surface">
-          <div className="min-w-0 flex items-center gap-3">
-            <div className="hidden sm:block"><AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" /></div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">{room.topic}</div>
-              <div className="text-[10px] text-ink-soft">
-                {ended ? <span className="text-red-500 font-semibold">Meeting ended</span> : `${room.participants.length} participants`}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex">
-              {room.participants.slice(0, 5).map((p, i) => (
-                <div key={p.name} style={{ marginLeft: i === 0 ? 0 : -6 }} className="ring-2 ring-surface rounded-full">
-                  <Avatar initials={p.initials} color={p.color} size="sm" />
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => copyText(joinUrl, 'Invite link copied')}
-              className="text-[10px] font-semibold text-accent bg-accent-tint px-2 py-1 rounded hover:bg-accent/20"
-            >
-              Share
-            </button>
-            <div className="hidden sm:block"><MeetingCodePill code={code} /></div>
-          </div>
-        </header>
+  const listeningCount = activeRoom.participants.filter(p => (p.listenUntil ?? 0) > now).length;
 
-        <div className="lg:hidden grid grid-cols-3 gap-1 border-b border-border-faint bg-surface p-1.5 text-[13px]">
-          {[
-            ['chat', 'Chat'],
-            ['people', 'People'],
-            ['outputs', 'Outputs'],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setMobilePanel(key as 'chat' | 'people' | 'outputs')}
-              className={`rounded-lg px-2 py-2 min-h-11 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="min-h-0 grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)_300px] bg-surface-soft">
-          <aside className={`${mobilePanel === 'people' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col border-r border-border-faint bg-surface`}>
+  // Inspector tab contents. These reuse the pre-T-05 side-panel blocks
+  // verbatim; only the responsive chrome around them changed (permanent
+  // columns + mobile tab bar became one toggleable Inspector).
+  const roomInfoPanel = (
             <div className="p-4 border-b border-border-faint">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Room</div>
               <h2 className="text-sm font-semibold leading-snug">{room.topic}</h2>
@@ -847,8 +812,10 @@ export function Room() {
                 )}
               </div>
             </div>
+  );
 
-            <div className="flex-1 overflow-y-auto p-4">
+  const peoplePanel = (
+            <div className="p-4">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-1">Participants</div>
               <p className="mb-3 text-[10px] leading-relaxed text-ink-soft">
                 Listening = inside an active listen window. Disconnected = no heartbeat for 5+ min, likely the CLI session was killed without leaving cleanly — host can remove with the × button.
@@ -955,7 +922,9 @@ export function Room() {
                 })}
               </div>
             </div>
+  );
 
+  const roomFooterPanel = (
             <div className="p-4 border-t border-border-faint flex gap-2">
               {!ended && room.createdBy === self.name && (
                 <button
@@ -969,18 +938,23 @@ export function Room() {
                 Home
               </button>
             </div>
-          </aside>
+  );
 
-          <section className={`${mobilePanel === 'chat' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col`}>
-            <div className="hidden lg:flex px-5 py-3 border-b border-border-faint bg-surface items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">Discussion</div>
-                <div className="text-[10px] text-ink-soft">Live room chat</div>
-              </div>
-              {ended && <span className="text-[10px] font-semibold text-red-500">Ended</span>}
-            </div>
+  return (
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken">
+      <WorkspaceRail />
+      <RoomListPane activeCode={code} />
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
+        <RoomHeader
+          room={activeRoom}
+          ended={ended}
+          listeningCount={listeningCount}
+          inspectorOpen={inspectorOpen}
+          onShare={() => copyText(joinUrl, 'Invite link copied')}
+          onToggleInspector={() => setInspectorOpen(v => !v)}
+        />
 
-            <div ref={feedRef} className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col gap-2.5 sm:gap-3 bg-surface-soft relative">
+            <div ref={feedRef} className="flex-1 overflow-y-auto py-2 relative">
               {(() => {
                 // Names that appear with more than one client in the room get
                 // disambiguated as "Name · web" / "Name · cc" in each bubble.
@@ -991,11 +965,12 @@ export function Room() {
                 }
                 const ambiguousNames = new Set<string>();
                 for (const [n, cs] of byName) if (cs.size > 1) ambiguousNames.add(n);
-                return messages.map(m => (
-                  <Bubble
+                return messages.map((m, i) => (
+                  <MessageRow
                     key={m.id}
                     message={m}
-                    self={m.name === self.name}
+                    self={m.name === self.name && m.client === 'web'}
+                    grouped={isSameGroup(messages[i - 1], m)}
                     ambiguousNames={ambiguousNames}
                   />
                 ));
@@ -1120,7 +1095,30 @@ export function Room() {
                   </button>
                   <span className="hidden sm:inline text-ink-faint">Prefills your message. You choose the agent and send.</span>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex items-end gap-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept={Array.from(ALLOWED_ATTACHMENT_TYPES).join(',')}
+                    onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
+                    title="Attach files"
+                    aria-label="Attach files"
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50"
+                  >
+                    {attachBusy ? (
+                      <span className="text-xs font-semibold">…</span>
+                    ) : (
+                      <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="m13 7.5-4.9 4.9a3.1 3.1 0 0 1-4.4-4.4l5.3-5.3a2.1 2.1 0 0 1 3 3l-5.3 5.3a1.1 1.1 0 0 1-1.6-1.6L9.8 4.7" />
+                      </svg>
+                    )}
+                  </button>
                   <textarea
                     ref={textareaRef}
                     value={text}
@@ -1135,48 +1133,63 @@ export function Room() {
                       }
                     }}
                     placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (⌘/Ctrl+Enter to send)'}
-                    rows={4}
-                    style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
+                    rows={1}
+                    style={{
+                      height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
+                      maxHeight: composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
+                    }}
                     /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
-                    className="w-full resize-none overflow-y-auto px-3 py-2.5 bg-surface-softer border border-border rounded-xl text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                    className="min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border border-border bg-surface-softer px-3 py-2.5 text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
                   />
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <VoiceButton
-                        onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
-                        disabled={ended}
-                      />
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        accept={Array.from(ALLOWED_ATTACHMENT_TYPES).join(',')}
-                        onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
-                      />
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
-                        title="Attach files"
-                        className="min-h-11 rounded-lg bg-surface-softer border border-border px-3 text-xs font-semibold text-ink-muted disabled:opacity-50"
-                      >
-                        {attachBusy ? '...' : 'Attach'}
-                      </button>
-                    </div>
-                    <button
-                      onClick={send}
-                      disabled={!text.trim() && attachments.length === 0}
-                      className="min-h-11 bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
-                    >
-                      Send
-                    </button>
-                  </div>
+                  <VoiceButton
+                    onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
+                    disabled={ended}
+                  />
+                  <button
+                    onClick={() => setComposerExpanded(v => !v)}
+                    title={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
+                    aria-label={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
+                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition sm:flex ${composerExpanded ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
+                  >
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {composerExpanded
+                        ? <path d="M5.5 2.5h-3v3M13.5 10.5v3h-3M2.5 5.5 6 9M13.5 13.5 10 10" transform="rotate(90 8 8)" />
+                        : <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.25 6.75M2.5 13.5l4.25-4.25" />}
+                    </svg>
+                  </button>
+                  <button
+                    onClick={send}
+                    disabled={!text.trim() && attachments.length === 0}
+                    title="Send"
+                    aria-label="Send message"
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+                      <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             )}
-          </section>
+      </main>
 
-          <aside className={`${mobilePanel === 'outputs' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col border-l border-border-faint bg-surface`}>
+      <Inspector
+        open={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+        renderTab={tab =>
+          tab === 'people' ? peoplePanel
+            : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
+            : renderOutputs()}
+      />
+    </div>
+  );
+
+  // Hoisted below the return on purpose: keeps the Outputs JSX in its
+  // pre-T-05 source position (smaller diff) while the Inspector calls it
+  // lazily per open tab.
+  function renderOutputs() {
+    return (
+          <div>
             <div className="p-4 border-b border-border-faint">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Outputs</div>
               <div className="grid grid-cols-2 gap-2">
@@ -1185,7 +1198,7 @@ export function Room() {
                   <div className="text-[10px] text-ink-soft">Messages</div>
                 </div>
                 <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
-                  <div className="text-base font-semibold">{room.participants.length}</div>
+                  <div className="text-base font-semibold">{activeRoom.participants.length}</div>
                   <div className="text-[10px] text-ink-soft">People</div>
                 </div>
               </div>
@@ -1229,11 +1242,9 @@ export function Room() {
                 Ask an agent to generate minutes from the composer. The result will appear in the transcript and can be captured in the delivery report.
               </div>
             </div>
-          </aside>
-        </div>
-      </div>
-    </div>
-  );
+          </div>
+    );
+  }
 }
 
 function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {

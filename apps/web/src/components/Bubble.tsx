@@ -22,30 +22,38 @@ export function Bubble({ message, self, ambiguousNames }: Props) {
   }
 
   // WhatsApp-style: own messages right-aligned in a solid accent bubble with no
-  // avatar; everyone else left-aligned with an avatar and a colored name inside
-  // the bubble. The squared-off corner (rounded-*-sm) is the tail.
+  // avatar; everyone else left-aligned with an avatar, tinted with that sender's
+  // own color so each person is visually distinct. The squared-off corner is the tail.
   const ambiguous = ambiguousNames?.has(message.name);
   const time = new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const bubble = self
-    ? 'bg-accent text-white rounded-2xl rounded-br-sm'
-    : 'bg-surface text-ink rounded-2xl rounded-bl-sm';
+  // Agent clients can send a message with no text at all (attachment-only, or a
+  // dropped `text` arg). The write path persists those as-is, so the renderer
+  // must tolerate them — an unguarded .trim() here takes the whole room down.
+  const body = message.text ?? '';
 
   return (
     <div className={`flex w-full gap-2 ${self ? 'flex-row-reverse' : ''}`}>
       {!self && <Avatar initials={message.initials} color={message.color} size="md" />}
-      <div className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3 py-2 shadow-sm break-words [overflow-wrap:anywhere] ${bubble}`}>
+      <div
+        className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3.5 py-2.5 shadow-sm break-words [overflow-wrap:anywhere] rounded-2xl ${
+          self ? 'bg-accent text-white rounded-br-sm' : 'text-ink rounded-bl-sm'
+        }`}
+        // Per-sender tint: a translucent wash of the sender's avatar color over the
+        // dark surface, with a matching border. Self keeps the solid accent bubble.
+        style={self ? undefined : { backgroundColor: `${message.color}24`, border: `1px solid ${message.color}59` }}
+      >
         {!self && (
-          <div className="mb-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[12px] leading-tight">
-            <span className="font-semibold" style={{ color: message.color }}>{message.name}</span>
-            {ambiguous && <span className="text-ink-faint">· {message.client}</span>}
-            {message.role && <span className="text-ink-faint">· {message.role}</span>}
+          <div className="mb-1 flex flex-wrap items-baseline gap-x-1.5 text-[14px] leading-tight">
+            <span className="font-bold" style={{ color: message.color }}>{message.name}</span>
+            {ambiguous && <span className="text-[12px] text-ink-faint">· {message.client}</span>}
+            {message.role && <span className="text-[12px] text-ink-faint">· {message.role}</span>}
           </div>
         )}
-        <div className="text-[15px] leading-relaxed">
-          {message.text.trim() && <MessageText text={message.text} />}
+        <div className="text-[17px] leading-relaxed">
+          {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
-        <div className={`mt-1 text-[11px] leading-none text-right ${self ? 'text-white/70' : 'text-ink-faint'}`}>
+        <div className={`mt-1 text-[12px] leading-none text-right ${self ? 'text-white/70' : 'text-ink-faint'}`}>
           {time}
         </div>
       </div>
@@ -53,7 +61,8 @@ export function Bubble({ message, self, ambiguousNames }: Props) {
   );
 }
 
-function systemEventLabel(message: Message): string {
+// Exported for MessageRow (T-05 editorial rows).
+export function systemEventLabel(message: Message): string {
   const eventType = message.metadata?.eventType;
   const target = message.metadata?.targetAgentName ? `@${message.metadata.targetAgentName}` : '';
   if (eventType === 'mode_changed') {
@@ -68,10 +77,11 @@ function systemEventLabel(message: Message): string {
   if (eventType === 'lead_left' && target) return `${target} left. Switched to Open mode`;
   if (eventType === 'moderator_left' && target) return `${target} left. Switched to Open mode`;
   if (eventType === 'moderator_fallback') return 'Moderator unavailable. Switched to Open mode';
-  return message.text;
+  return message.text ?? '';
 }
 
-function AttachmentList({ attachments }: { attachments: MessageAttachment[] }) {
+// Exported for MessageRow (T-05 editorial rows) — same renderer, new layout.
+export function AttachmentList({ attachments }: { attachments: MessageAttachment[] }) {
   return (
     <div className="mt-2 space-y-2">
       {attachments.map(attachment => (
@@ -159,7 +169,8 @@ function formatBytes(size: number): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function MessageText({ text }: { text: string }) {
+// Exported for MessageRow (T-05 editorial rows).
+export function MessageText({ text }: { text: string }) {
   // Defensively unescape literal `\n` / `\t` sequences before parsing —
   // some agent clients (Cursor's Composer is the documented offender)
   // double-escape multi-line bodies before passing them as the `text` arg

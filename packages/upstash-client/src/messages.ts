@@ -262,8 +262,12 @@ export async function appendMessage(
 // stays in lock-step with the list — listMessages relies on the invariant
 // `totalCount - listLen = number of LTRIMmed entries` to compensate cursors.
 async function rpushMessage(client: UpstashClient, code: string, message: Message): Promise<void> {
+  // Normalize `text` at the persistence boundary. Agent clients can omit it
+  // (attachment-only sends, or a dropped arg), and a stored message with no
+  // `text` field crashes every reader that calls .trim() on it.
+  const normalized: Message = { ...message, text: message.text ?? '' };
   await client.pipeline([
-    ['RPUSH', msgsKey(code), JSON.stringify(message)],
+    ['RPUSH', msgsKey(code), JSON.stringify(normalized)],
     ['INCR', msgCountKey(code)],
     ['LTRIM', msgsKey(code), -MAX_MESSAGES_PER_ROOM, -1],
     ['EXPIRE', msgsKey(code), ROOM_TTL_SECONDS],
