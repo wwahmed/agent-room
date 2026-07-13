@@ -61,8 +61,16 @@ export function Home() {
         <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-card sm:p-8">
           <AgentRoomLogo markClassName="h-10 w-10" wordmarkClassName="text-2xl" />
           {identity && (
-            <p className="mt-3 text-sm text-ink-soft">
-              Welcome back, <span className="font-semibold text-ink">{identity.name}</span>. Tap a room to jump in.
+            <p className="mt-3 flex items-center justify-between gap-3 text-sm text-ink-soft">
+              <span>
+                Welcome back, <span className="font-semibold text-ink">{identity.name}</span>. Tap a room to jump in.
+              </span>
+              <a
+                href="/cdn-cgi/access/logout"
+                className="flex-shrink-0 rounded-lg border border-border-faint px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-border hover:text-ink"
+              >
+                Log out
+              </a>
             </p>
           )}
 

@@ -31,7 +31,11 @@ function readStoredSelf(code: string): SelfIdentity | null {
 
 // Cap auto-grow at ~8 lines so the input never eats the whole feed.
 const TEXTAREA_MAX_HEIGHT = 200;
-const TEXTAREA_MIN_HEIGHT = 42;
+// Touch devices get a taller resting composer and Enter-inserts-newline
+// (the Send button is the only send affordance); physical-keyboard
+// environments keep the Enter-to-send + Shift+Enter convention.
+const IS_TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+const TEXTAREA_MIN_HEIGHT = IS_TOUCH ? 72 : 42;
 
 export function Room() {
   const { code = '' } = useParams();
@@ -1144,13 +1148,14 @@ export function Room() {
                     onChange={e => setText(e.target.value)}
                     onPaste={e => { void handlePaste(e); }}
                     onKeyDown={e => {
-                      // Enter sends; Shift+Enter / IME composition lets newlines through.
-                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      // Desktop: Enter sends; Shift+Enter / IME composition lets
+                      // newlines through. Touch: Enter is a newline, Send sends.
+                      if (!IS_TOUCH && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                         e.preventDefault();
                         send();
                       }
                     }}
-                    placeholder="Message the room… (Enter to send, Shift+Enter for newline)"
+                    placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (Enter to send, Shift+Enter for newline)'}
                     rows={1}
                     style={{ height: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
                     /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
