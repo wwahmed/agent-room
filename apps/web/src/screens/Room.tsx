@@ -709,9 +709,9 @@ export function Room() {
     <div className="h-full flex items-center justify-center sm:px-3 sm:py-4">
       {/* dvh (not vh) so mobile browser chrome doesn't push the composer off-screen. */}
       <div className="w-full max-w-7xl h-[100dvh] sm:h-[88vh] grid grid-rows-[auto_auto_1fr] grid-cols-[minmax(0,1fr)] bg-surface border-0 sm:border border-border sm:rounded-xl shadow-card overflow-hidden">
-        <header className="px-4 py-3 border-b border-border-faint flex justify-between items-center bg-surface">
+        <header className="px-3 py-2 sm:px-4 sm:py-3 border-b border-border-faint flex justify-between items-center bg-surface">
           <div className="min-w-0 flex items-center gap-3">
-            <AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" />
+            <div className="hidden sm:block"><AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" /></div>
             <div className="min-w-0">
               <div className="text-sm font-semibold truncate">{room.topic}</div>
               <div className="text-[10px] text-ink-soft">
@@ -733,11 +733,11 @@ export function Room() {
             >
               Share
             </button>
-            <MeetingCodePill code={code} />
+            <div className="hidden sm:block"><MeetingCodePill code={code} /></div>
           </div>
         </header>
 
-        <div className="lg:hidden grid grid-cols-3 gap-1 border-b border-border-faint bg-surface p-2 text-[13px]">
+        <div className="lg:hidden grid grid-cols-3 gap-1 border-b border-border-faint bg-surface p-1.5 text-[13px]">
           {[
             ['chat', 'Chat'],
             ['people', 'People'],
@@ -746,7 +746,7 @@ export function Room() {
             <button
               key={key}
               onClick={() => setMobilePanel(key as 'chat' | 'people' | 'outputs')}
-              className={`rounded-lg px-2 py-2.5 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
+              className={`rounded-lg px-2 py-2 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
             >
               {label}
             </button>
@@ -973,7 +973,7 @@ export function Room() {
           </aside>
 
           <section className={`${mobilePanel === 'chat' ? 'flex' : 'hidden'} lg:flex min-h-0 min-w-0 flex-col`}>
-            <div className="px-5 py-3 border-b border-border-faint bg-surface flex items-center justify-between">
+            <div className="hidden lg:flex px-5 py-3 border-b border-border-faint bg-surface items-center justify-between">
               <div>
                 <div className="text-sm font-semibold">Discussion</div>
                 <div className="text-[10px] text-ink-soft">Live room chat</div>
@@ -981,7 +981,7 @@ export function Room() {
               {ended && <span className="text-[10px] font-semibold text-red-500">Ended</span>}
             </div>
 
-            <div ref={feedRef} className="flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-surface-soft relative">
+            <div ref={feedRef} className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col gap-2.5 sm:gap-3 bg-surface-soft relative">
               {(() => {
                 // Names that appear with more than one client in the room get
                 // disambiguated as "Name · web" / "Name · cc" in each bubble.
@@ -1103,7 +1103,7 @@ export function Room() {
                     ))}
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                <div className="hidden lg:flex flex-wrap items-center gap-2 text-[10px]">
                   <span className="font-semibold text-ink-faint">Ask your agents:</span>
                   <button
                     type="button"
