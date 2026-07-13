@@ -341,6 +341,26 @@ function writeFileFsync(path: string, data: string, mode: number): void {
   } finally { closeSync(fd); }
 }
 
+// T-18 r7 (T-32 F1): fsync the CONTAINING DIRECTORY so a file's create/unlink
+// (its directory entry, i.e. the journal's NAME) is durable — data fsync
+// alone does not guarantee the dirent survives a crash. Best-effort: a
+// platform that rejects dir fsync (rare) degrades to data-only durability.
+// HONEST BOUNDARY (Codex "report, don't approximate"): on macOS `fsync(2)`
+// — which is all Node exposes — flushes to the drive but NOT necessarily to
+// the platter (that needs fcntl F_FULLFSYNC, which Node cannot issue). So
+// against SUDDEN POWER LOSS on a macOS host a residual window remains where
+// the journal dirent may be lost; recovery then finds no journal and the
+// ledger stays a FAIL-CLOSED conflict (operator `force` rebuilds) — never
+// silent corruption or a partial ledger exposed as success.
+function fsyncDir(dir: string): void {
+  let fd: number | null = null;
+  try {
+    fd = openSync(dir, fsConstants.O_RDONLY);
+    fsyncSync(fd);
+  } catch { /* platform without dir-fsync: data fsync still applied */ }
+  finally { if (fd !== null) { try { closeSync(fd); } catch { /* closed */ } } }
+}
+
 /**
  * Recovery: automatic + idempotent, run before every ledger read/write. If a
  * committed journal exists for this ledger, reconcile the on-disk ledger to
@@ -375,7 +395,7 @@ function recoverLedger(abs: string, rootReal: string, key: string): void {
       writeFdTextRaw(fd, journal.content);
     }
   } finally { closeSync(fd); }
-  try { unlinkSync(jp); } catch { /* gone */ }
+  try { unlinkSync(jp); fsyncDir(STATE_DIR); } catch { /* gone */ }
 }
 
 // ---------- no-follow filesystem primitives (Codex T-18 round 4) ----------
@@ -594,6 +614,7 @@ export function syncTaskLedger(
     const jp = journalPathFor(key);
     const journal: LedgerJournal = { v: 1, target: abs, contentHash: sectionHash(next), content: next };
     writeFileFsync(jp, JSON.stringify(journal), 0o600);
+    fsyncDir(STATE_DIR); // the journal's NAME must be durable before we touch the ledger
     crashPoint('after-journal-fsync');
     // 2. Apply to the ledger fd (truncate+write+fsync). A crash anywhere in
     //    here leaves a torn ledger, but the journal above holds the full
@@ -601,8 +622,8 @@ export function syncTaskLedger(
     writeFdTextHooked(ledgerFd, next);
     crashPoint('after-ledger-fsync');
     // 3. Clear the journal; a crash here just leaves recovery to notice the
-    //    ledger already matches and drop the journal.
-    try { unlinkSync(jp); } catch { /* gone */ }
+    //    ledger already matches and drop the journal (idempotent).
+    try { unlinkSync(jp); fsyncDir(STATE_DIR); } catch { /* gone */ }
     crashPoint('after-journal-cleanup');
     return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };
   } finally {
@@ -620,12 +641,19 @@ export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt
   // we parse it, so a resume never sees a partially-written board.
   const rootReal = realpathSync(cfg.root);
   const canonical = join(realpathSync(dirname(abs)), abs.split(sep).pop()!);
-  if (canonical === rootReal || canonical.startsWith(rootReal + sep)) {
-    const key = stateKeyFor(canonical);
-    const lockPath = acquireLedgerLock(key);
-    try { recoverLedger(abs, rootReal, key); } finally { try { unlinkSync(lockPath); } catch { /* gone */ } }
-  }
-  const slice = managedSlice(readFileSync(abs, 'utf8'));
+  if (canonical !== rootReal && !canonical.startsWith(rootReal + sep)) return null;
+  // T-32 F3: recover AND read the ledger while HOLDING the lock, via the same
+  // no-follow fd — so a concurrent writer can't slip a torn/partial state
+  // between recovery and the parse.
+  const key = stateKeyFor(canonical);
+  const lockPath = acquireLedgerLock(key);
+  let content: string;
+  try {
+    recoverLedger(abs, rootReal, key);
+    const fd = openNoFollow(abs, fsConstants.O_CREAT | fsConstants.O_RDONLY, 0o644, rootReal);
+    try { content = readFdText(fd); } finally { closeSync(fd); }
+  } finally { try { unlinkSync(lockPath); } catch { /* gone */ } }
+  const slice = managedSlice(content);
   if (!slice) return null;
   const sb = slice.section.indexOf(STATE_BEGIN);
   const se = slice.section.indexOf(STATE_END, sb);

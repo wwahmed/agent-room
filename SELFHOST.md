@@ -99,16 +99,24 @@ This fork runs the full Agent Room stack on one always-on Mac
   The lock + journal live in a SERVER-OWNED state dir (`LEDGER_STATE_DIR`,
   default `~/.wakichat/ledger-state`, 0700), keyed by the canonical
   ledger path — so a repo parent/lock swap can never redirect them. The
-  full next content is fsync'd to the journal BEFORE the fd truncate+
-  write; `recoverLedger()` runs before every read AND write and
-  re-applies the journal idempotently, so a crash at any boundary leaves
-  the ledger either exactly pre-write or exactly the intended next state
-  — never a torn ledger exposed as success. A torn ledger with no usable
-  journal FAILS CLOSED (conflict), never a second appended section.
-  Only the marker-fenced section changes; all other bytes are preserved.
+  full next content is fsync'd to the journal (data AND its containing
+  directory) BEFORE the fd truncate+write; `recoverLedger()` runs before
+  every read AND write and re-applies the journal idempotently.
+- Durability, stated honestly: this NEVER exposes a torn ledger as
+  success and NEVER silently corrupts — a torn ledger with no usable
+  journal FAILS CLOSED (conflict; `projectSync` `force: true` rebuilds),
+  never a second appended section. Auto-recovery of an interrupted write
+  depends on the journal's directory entry being durable, which the dir
+  fsync provides on normal `fsync(2)` semantics. BOUNDARY: on macOS,
+  `fsync(2)` (all Node exposes — it cannot issue `fcntl F_FULLFSYNC`) may
+  not flush to the platter, so under sudden POWER LOSS on the Mac host a
+  narrow window can lose the journal dirent; the outcome then downgrades
+  from auto-recover to the same FAIL-CLOSED conflict — still never
+  corruption. Process/OS-crash recovery is fully covered.
+- Only the marker-fenced section changes; all other bytes are preserved.
   Hand-edits INSIDE the markers are detected via a hash EMBEDDED IN THE
-  SECTION ITSELF (`wakichat:hash`). Resolve conflicts by reviewing the
-  file and calling `projectSync` with `force: true`.
+  SECTION ITSELF (`wakichat:hash`, 64-bit — accidental-corruption grade,
+  not an adversarial primitive; the lock is the real serializer).
 - Backup/rollback: the ledger is a normal tracked file — `git diff`
   audits every sync and `git checkout -- docs/TASKS.md` rolls back.
   The server never commits; committing stays deliberate.
