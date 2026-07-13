@@ -21,9 +21,56 @@ function mmss(ms: number): string {
 
 const IDLE: DictationSnapshot = { state: 'idle', finalText: '', interim: '', elapsedMs: 0, error: null };
 
+// Truthful mic-level meter: taps the real input via getUserMedia + an
+// AnalyserNode and returns a 0..1 RMS level while `active`. If the mic can't be
+// tapped (denied, or a browser that won't share it alongside SpeechRecognition)
+// it stays 0 — the pulsing dot + timer still signal recording; we don't fake it.
+function useMicLevel(active: boolean): number {
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    if (!active) { setLevel(0); return; }
+    const AC: typeof AudioContext | undefined =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC || !navigator.mediaDevices?.getUserMedia) return;
+    let stream: MediaStream | null = null;
+    let ctx: AudioContext | null = null;
+    let raf = 0;
+    let cancelled = false;
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(s => {
+      if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
+      stream = s;
+      ctx = new AC();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      ctx.createMediaStreamSource(s).connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) { const v = ((data[i] ?? 128) - 128) / 128; sum += v * v; }
+        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3)); // speech RMS ~0.05–0.3
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }).catch(() => { /* no level available; dot + timer still indicate recording */ });
+    return () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      stream?.getTracks().forEach(t => t.stop());
+      ctx?.close().catch(() => {});
+    };
+  }, [active]);
+  return level;
+}
+
 export function VoiceButton({ onTranscript, disabled }: Props) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const ctrlRef = useRef<DictationController | null>(null);
+  // hooks must run before the early return; `active` gates the mic tap.
+  const level = useMicLevel(snap.state === 'recording');
+
+  // Abort any in-flight session if the composer unmounts (accidental navigation).
+  useEffect(() => () => { ctrlRef.current?.cancel(); }, []);
 
   if (!SpeechRecognitionImpl) return null;
 
@@ -38,9 +85,6 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
     }
     return ctrlRef.current;
   }
-
-  // Abort any in-flight session if the composer unmounts (accidental navigation).
-  useEffect(() => () => { ctrlRef.current?.cancel(); }, []);
 
   const active = snap.state !== 'idle';
   const recording = snap.state === 'recording';
@@ -78,12 +122,14 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
             <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${recording ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`} aria-hidden="true" />
             <span className="text-[13px] font-semibold text-ink">{recording ? 'Recording' : 'Paused'}</span>
             {recording && (
-              <span className="ml-0.5 flex items-end gap-0.5" aria-hidden="true">
-                {[0, 1, 2, 3].map(i => (
+              // Real mic level (0..1) drives the bar heights; per-bar weights
+              // give a small waveform shape. Falls flat if the mic can't be tapped.
+              <span className="ml-0.5 flex h-4 items-center gap-0.5" aria-hidden="true">
+                {[0.6, 1, 0.8, 0.45].map((w, i) => (
                   <span
                     key={i}
-                    className="w-0.5 rounded-full bg-red-400/80 animate-[voicebar_0.9s_ease-in-out_infinite]"
-                    style={{ height: 6 + (i % 3) * 4, animationDelay: `${i * 0.12}s` }}
+                    className="w-0.5 rounded-full bg-red-400/80 transition-[height] duration-75"
+                    style={{ height: `${Math.max(3, Math.min(16, 3 + level * w * 16))}px` }}
                   />
                 ))}
               </span>

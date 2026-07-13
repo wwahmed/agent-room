@@ -1,28 +1,22 @@
 // T-40: a real dictation state machine, split from the SpeechRecognition DOM
-// binding so the reliability behavior (short-pause tolerance, preserve text
-// across pauses, finalize only on Stop, restart backoff, safety limit) is
-// unit-testable with a fake recognizer + injectable clock.
+// binding so the reliability behavior is unit-testable with a fake recognizer +
+// injectable clock/timers.
 //
 // The old VoiceButton set continuous=false and delivered text on `onend`, so a
-// brief pause ended the session and dumped partial text into the composer.
-// Here, an `onend` while still recording is treated as a pause to auto-recover
-// from (re-start the recognizer), NOT as the end of dictation — only an explicit
-// Stop (or the hard safety limit) finalizes and delivers.
+// brief pause ended the session and dumped partial text into the composer. Here
+// an `onend` while still recording is a pause to auto-recover from (restart),
+// NOT the end — only an explicit Stop (or a pause-aware hard deadline) finalizes.
 
 export type DictationState = 'idle' | 'recording' | 'paused';
 
 export interface DictationSnapshot {
   state: DictationState;
-  /** committed text so far (survives pauses/restarts) */
-  finalText: string;
-  /** current not-yet-final words being recognized */
-  interim: string;
-  /** active recording time in ms, excluding paused time */
-  elapsedMs: number;
+  finalText: string; // committed text (survives pauses/restarts)
+  interim: string;   // current not-yet-final words
+  elapsedMs: number; // active recording time, excluding paused time
   error: string | null;
 }
 
-// Minimal shape of the browser SpeechRecognition we depend on.
 export interface RecognizerLike {
   lang: string;
   continuous: boolean;
@@ -42,32 +36,32 @@ export interface RecognitionEventLike {
 export interface DictationOptions {
   createRecognizer: () => RecognizerLike;
   onChange: (snapshot: DictationSnapshot) => void;
-  onFinalize: (text: string) => void; // called on Stop or safety-limit only
+  onFinalize: (text: string) => void; // Stop or hard-deadline only
   lang?: string;
-  maxMs?: number; // hard safety limit; default 5 min
-  restartBackoffMs?: number; // delay before auto-restart after an end while recording
-  now?: () => number; // injectable clock (default Date.now)
-  setTimer?: (fn: () => void, ms: number) => unknown; // injectable (default setTimeout)
+  maxMs?: number;
+  restartBackoffMs?: number;
+  maxConsecutiveStartFailures?: number;
+  now?: () => number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (id: unknown) => void;
 }
 
 const DEFAULT_MAX_MS = 5 * 60 * 1000;
-
-// SpeechRecognition errors that mean "stop, the user must act" vs. transient.
 const FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture']);
 
 export class DictationController {
   private state: DictationState = 'idle';
   private finalText = '';
+  private liveFinal = '';
   private interim = '';
   private error: string | null = null;
 
-  private rec: RecognizerLike | null = null;
-  private stopping = false; // an explicit Stop is in flight (deliver on next end)
-  private cancelling = false;
+  private rec: RecognizerLike | null = null; // the CURRENT recognizer; events from any other are stale
+  private stopping = false;
   private restartTimer: unknown = null;
+  private deadlineTimer: unknown = null;
+  private startFailures = 0;
 
-  // timing (active time only)
   private activeMs = 0;
   private segmentStart = 0;
 
@@ -81,6 +75,7 @@ export class DictationController {
       lang: opts.lang,
       maxMs: opts.maxMs ?? DEFAULT_MAX_MS,
       restartBackoffMs: opts.restartBackoffMs ?? 250,
+      maxConsecutiveStartFailures: opts.maxConsecutiveStartFailures ?? 3,
       now: opts.now ?? (() => Date.now()),
       setTimer: opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms) as unknown),
       clearTimer: opts.clearTimer ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>)),
@@ -90,9 +85,7 @@ export class DictationController {
   snapshot(): DictationSnapshot {
     return {
       state: this.state,
-      // committed text + the current session's finalized-but-not-yet-committed
-      // words, so the display reflects everything recognized so far.
-      finalText: (this.finalText + this.liveFinal).trim(),
+      finalText: DictationController.join(this.finalText, this.liveFinal).trim(),
       interim: this.interim,
       elapsedMs: this.elapsed(),
       error: this.error,
@@ -102,102 +95,135 @@ export class DictationController {
   private elapsed(): number {
     return this.activeMs + (this.state === 'recording' ? this.o.now() - this.segmentStart : 0);
   }
-
   private emit() { this.o.onChange(this.snapshot()); }
 
-  private spawn() {
+  private spawn(initial: boolean) {
     const rec = this.o.createRecognizer();
     rec.continuous = true;
     rec.interimResults = true;
     if (this.o.lang) rec.lang = this.o.lang;
 
+    // Generation guard: only the CURRENT recognizer's events mutate state, so a
+    // delayed event from a replaced/aborted recognizer can't corrupt the session.
+    const isCurrent = () => this.rec === rec;
+
     rec.onresult = (e) => {
-      // Rebuild this session's final + interim from the cumulative results.
-      let sessionFinal = '';
-      let sessionInterim = '';
+      if (!isCurrent()) return;
+      let sf = '';
+      let si = '';
       for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
         if (!r) continue;
-        if (r.isFinal) sessionFinal += r[0].transcript;
-        else sessionInterim += r[0].transcript;
+        if (r.isFinal) sf += r[0].transcript;
+        else si += r[0].transcript;
       }
-      this.liveFinal = sessionFinal;
-      this.interim = sessionInterim;
-      if (this.elapsed() >= this.o.maxMs) { this.stop(); return; } // safety limit
+      this.liveFinal = sf;
+      this.interim = si;
       this.emit();
     };
     rec.onerror = (e) => {
+      if (!isCurrent()) return;
       const err = e?.error ?? 'unknown';
       if (FATAL_ERRORS.has(err)) {
-        this.error = err === 'not-allowed' || err === 'service-not-allowed'
-          ? 'Microphone access was blocked. Enable mic permission to dictate.'
-          : 'No microphone available.';
+        this.error = err === 'audio-capture'
+          ? 'No microphone available.'
+          : 'Microphone access was blocked. Enable mic permission to dictate.';
+        this.clearRestart();
+        this.clearDeadline();
         this.hardReset('idle');
         this.emit();
       }
-      // transient ('no-speech','network','aborted') → handled by onend/restart
+      // transient (no-speech/network/aborted) → handled by onend
     };
     rec.onend = () => {
-      // commit whatever this recognizer finalized before it ended
+      if (!isCurrent()) return;
       this.commitLive();
-      if (this.cancelling) { this.cancelling = false; return; }
       if (this.stopping) { this.finish(); return; }
       if (this.state === 'recording') {
-        // Premature end (a pause, silence, or transient hiccup) — keep going.
-        if (this.elapsed() >= this.o.maxMs) { this.finish(); return; }
+        // premature end (pause/silence/hiccup) — keep going, don't finalize
+        this.rec = null; // ignore any further late events from this recognizer
         this.scheduleRestart();
       }
     };
 
     this.rec = rec;
-    try { rec.start(); } catch { /* start() can throw if called too fast */ }
+    try {
+      rec.start();
+      this.startFailures = 0;
+    } catch {
+      // Synchronous start() failure must NOT leave a false "Recording" state.
+      this.rec = null;
+      this.startFailures++;
+      if (initial || this.startFailures > this.o.maxConsecutiveStartFailures) {
+        this.error = 'Could not start the microphone. Close other apps using it and retry.';
+        this.clearDeadline();
+        this.hardReset('idle');
+        this.emit();
+      } else if (this.state === 'recording') {
+        this.scheduleRestart();
+      }
+    }
   }
 
-  private liveFinal = '';
+  // Join two text runs with exactly one separating space when neither side
+  // already provides whitespace (browsers are inconsistent about trailing
+  // spaces on final results).
+  private static join(a: string, b: string): string {
+    if (!a) return b;
+    if (!b) return a;
+    return /\s$/.test(a) || /^\s/.test(b) ? a + b : `${a} ${b}`;
+  }
   private commitLive() {
-    if (this.liveFinal) { this.finalText += this.liveFinal; this.liveFinal = ''; }
-    // interim is intentionally kept for display until a new session overwrites it
+    if (this.liveFinal) { this.finalText = DictationController.join(this.finalText, this.liveFinal); this.liveFinal = ''; }
   }
 
   private scheduleRestart() {
     if (this.restartTimer) return;
     this.restartTimer = this.o.setTimer(() => {
       this.restartTimer = null;
-      if (this.state === 'recording' && !this.stopping && !this.cancelling) this.spawn();
+      if (this.state === 'recording' && !this.stopping) this.spawn(false);
     }, this.o.restartBackoffMs);
   }
-
   private clearRestart() {
     if (this.restartTimer) { this.o.clearTimer(this.restartTimer); this.restartTimer = null; }
+  }
+
+  // Pause-aware hard deadline: fires Stop when ACTIVE time reaches maxMs even
+  // during total silence (no recognizer events). Rescheduled on resume.
+  private scheduleDeadline() {
+    this.clearDeadline();
+    const remaining = this.o.maxMs - this.elapsed();
+    if (remaining <= 0) { this.stop(); return; }
+    this.deadlineTimer = this.o.setTimer(() => { this.deadlineTimer = null; this.stop(); }, remaining);
+  }
+  private clearDeadline() {
+    if (this.deadlineTimer) { this.o.clearTimer(this.deadlineTimer); this.deadlineTimer = null; }
   }
 
   // ---- public controls ----
 
   start() {
     if (this.state !== 'idle') return;
-    this.finalText = '';
-    this.interim = '';
-    this.liveFinal = '';
-    this.error = null;
-    this.activeMs = 0;
+    this.finalText = ''; this.liveFinal = ''; this.interim = '';
+    this.error = null; this.activeMs = 0; this.stopping = false; this.startFailures = 0;
     this.segmentStart = this.o.now();
-    this.stopping = false;
-    this.cancelling = false;
     this.state = 'recording';
-    this.spawn();
-    this.emit();
+    this.scheduleDeadline();
+    this.spawn(true);
+    if (this.state === 'recording') this.emit(); // spawn may have failed → already idle+emitted
   }
 
   pause() {
     if (this.state !== 'recording') return;
+    // preserve BOTH finalized and interim words spoken before the pause
     this.commitLive();
+    if (this.interim) { this.finalText = DictationController.join(this.finalText, this.interim); this.interim = ''; }
     this.activeMs += this.o.now() - this.segmentStart;
     this.state = 'paused';
     this.clearRestart();
-    // abort() (not stop()) so this end doesn't finalize; text is already committed.
-    this.cancelling = true; // suppress restart/finish on the resulting onend
-    try { this.rec?.abort(); } catch { /* ignore */ }
-    this.rec = null;
+    this.clearDeadline();
+    const rec = this.rec; this.rec = null; // stale-guard: ignore this recognizer's later events
+    try { rec?.abort(); } catch { /* ignore */ }
     this.emit();
   }
 
@@ -205,34 +231,38 @@ export class DictationController {
     if (this.state !== 'paused') return;
     this.state = 'recording';
     this.segmentStart = this.o.now();
-    this.cancelling = false;
     this.stopping = false;
-    this.spawn();
-    this.emit();
+    this.scheduleDeadline();
+    this.spawn(false);
+    if (this.state === 'recording') this.emit();
   }
 
   stop() {
     if (this.state === 'idle') return;
-    // include the current interim so trailing words aren't lost
     if (this.state === 'recording') this.activeMs += this.o.now() - this.segmentStart;
     this.commitLive();
     this.clearRestart();
-    if (this.state === 'paused' || !this.rec) { this.finish(); return; }
+    this.clearDeadline();
+    const rec = this.rec;
+    if (this.state === 'paused' || !rec) { this.finish(); return; }
     this.stopping = true;
-    try { this.rec.stop(); } catch { this.finish(); }
+    try { rec.stop(); } catch { this.finish(); }
   }
 
   cancel() {
     if (this.state === 'idle') return;
-    this.cancelling = true;
     this.clearRestart();
-    try { this.rec?.abort(); } catch { /* ignore */ }
+    this.clearDeadline();
+    const rec = this.rec; this.rec = null;
+    try { rec?.abort(); } catch { /* ignore */ }
     this.hardReset('idle');
     this.emit();
   }
 
   private finish() {
     const text = (this.finalText + (this.interim ? ` ${this.interim}` : '')).replace(/\s+/g, ' ').trim();
+    this.clearRestart();
+    this.clearDeadline();
     this.hardReset('idle');
     this.emit();
     if (text) this.o.onFinalize(text);
@@ -240,12 +270,7 @@ export class DictationController {
 
   private hardReset(state: DictationState) {
     this.state = state;
-    this.finalText = '';
-    this.interim = '';
-    this.liveFinal = '';
-    this.stopping = false;
-    this.cancelling = false;
-    this.rec = null;
-    this.clearRestart();
+    this.finalText = ''; this.liveFinal = ''; this.interim = '';
+    this.stopping = false; this.rec = null;
   }
 }
