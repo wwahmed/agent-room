@@ -39,6 +39,7 @@ import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
+import { roomActivityAt } from './roomactivity.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -1099,6 +1100,19 @@ const server = createServer(async (req, res) => {
             code: string; topic: string; status: string; createdBy: string; createdAt: number;
             participants?: Array<unknown>;
           };
+          // T-35: cheap per-room activity — last message's `time` (tail of the
+          // room-msgs list) and the maintained count key. Empty/unreadable
+          // rooms fall back to createdAt so a brand-new room still sorts sanely.
+          let lastMsgTime: number | undefined;
+          try {
+            const lastRaw = await redis.lindex(`room-msgs:${r.code}`, -1);
+            if (lastRaw) lastMsgTime = Number((JSON.parse(lastRaw) as { time?: number }).time);
+          } catch {
+            /* no messages / unparseable tail → fall back to createdAt */
+          }
+          const lastActivityAt = roomActivityAt(Number(r.createdAt), lastMsgTime);
+          const cntRaw = await redis.get(`room-msg-count:${r.code}`);
+          const messageCount = Number.isFinite(Number(cntRaw)) ? Number(cntRaw) : 0;
           rooms.push({
             code: r.code,
             topic: r.topic,
@@ -1106,12 +1120,16 @@ const server = createServer(async (req, res) => {
             createdBy: r.createdBy,
             createdAt: r.createdAt,
             participants: (r.participants || []).length,
+            lastActivityAt,
+            messageCount,
           });
         } catch {
           // skip unparseable rooms
         }
       }
-      rooms.sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+      // Recent-activity-first (Waqas: "surface recent rooms"). Stable tiebreak
+      // on createdAt keeps ordering deterministic when activity ties.
+      rooms.sort((a, b) => Number(b.lastActivityAt) - Number(a.lastActivityAt) || Number(b.createdAt) - Number(a.createdAt));
       return sendJson(res, 200, { rooms });
     }
 
