@@ -8,7 +8,7 @@ import { useState, type ReactNode } from 'react';
 // host handlers); this component only owns the responsive chrome, the
 // tab strip, and dismissal.
 
-export type InspectorTab = 'people' | 'outputs' | 'room';
+export type InspectorTab = 'people' | 'project' | 'outputs' | 'room';
 
 interface Props {
   open: boolean;
@@ -19,6 +19,7 @@ interface Props {
 
 const TABS: Array<{ key: InspectorTab; label: string }> = [
   { key: 'people', label: 'People' },
+  { key: 'project', label: 'Project' },
   { key: 'outputs', label: 'Outputs' },
   { key: 'room', label: 'Room' },
 ];

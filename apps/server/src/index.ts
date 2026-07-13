@@ -32,10 +32,12 @@ import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
 import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { verifyAccessJwt, allowedEmails } from './access.js';
+import { getProject, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, type SyncResult } from './projects.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
   appendSystemMessage,
+  casRoom,
   createRoom,
   createRoomReport,
   directInvoke,
@@ -283,6 +285,18 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
         createdBy: String(payload.createdBy || ''),
       });
       const { hostKey, ...room } = created;
+      // T-18: optional project binding at create time (the web form makes
+      // it required; MCP clients may attach later via attachProject).
+      const projectId = String(payload.projectId || '');
+      if (projectId) {
+        if (!getProject(projectId)) {
+          const err = new Error(`Unknown project "${projectId}". Ids come from GET /api/projects.`);
+          err.name = 'BadRequestError';
+          throw err;
+        }
+        const withProject = await casRoom(client, newCode, (cur) => ({ ...cur, projectId }));
+        return { room: withProject, hostKey };
+      }
       return { room, hostKey };
     }
     case 'get': {
@@ -321,6 +335,40 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
     }
     case 'getReport': {
       return { report: await getRoomReport(client, code) };
+    }
+    case 'attachProject': {
+      // Host-gated: binding a room to a project decides where its task
+      // ledger lands on disk.
+      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      const projectId = String(payload.projectId || '');
+      if (!getProject(projectId)) {
+        const err = new Error(`Unknown project "${projectId}". Ids come from GET /api/projects.`);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      const room = await casRoom(client, code, (cur) => ({ ...cur, projectId }));
+      // Resume: an empty board + an existing ledger means a prior room's
+      // state outlived Redis — hydrate it so work continues seamlessly.
+      const board = await getTaskBoard(code);
+      let resumed = 0;
+      if (board.tasks.length === 0) {
+        const ledger = loadLedgerBoard(projectId);
+        if (ledger && ledger.board.tasks.length > 0) {
+          await saveTaskBoard(code, ledger.board as unknown as TaskBoard);
+          resumed = ledger.board.tasks.length;
+        }
+      }
+      const sync = await syncProjectForRoom(code, Boolean(payload.force));
+      return { room, resumed, sync };
+    }
+    case 'projectSync': {
+      const room = await getRoom(client, code);
+      if (!room.projectId) {
+        const err = new Error('This room is not attached to a project. Use attachProject first.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      return { sync: await syncProjectForRoom(code, Boolean(payload.force)) };
     }
     case 'join': {
       const participant = payload.participant as Participant;
@@ -479,6 +527,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       }
       board.tasks.push(task);
       await saveTaskBoard(code, board);
+      queueProjectSync(code);
       return { board, task };
     }
     case 'taskClaim': {
@@ -492,6 +541,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       task.state = 'in_progress';
       task.claimedAt = nowMs();
       await saveTaskBoard(code, board);
+      queueProjectSync(code);
       return { board, task };
     }
     case 'taskSubmit': {
@@ -521,6 +571,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       };
       task.submittedAt = nowMs();
       await saveTaskBoard(code, board);
+      queueProjectSync(code);
       return { board, task };
     }
     case 'taskVerify': {
@@ -546,6 +597,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       task.verifiedBy = name;
       task.verifiedAt = nowMs();
       await saveTaskBoard(code, board);
+      queueProjectSync(code);
       return { board, task };
     }
     default:
@@ -612,6 +664,38 @@ async function getTaskBoard(code: string): Promise<TaskBoard> {
 
 async function saveTaskBoard(code: string, board: TaskBoard): Promise<void> {
   await redis.set(taskBoardKey(code), JSON.stringify(board), 'EX', ROOM_TTL_SECONDS);
+}
+
+// ---------- project ledger sync (T-18) ----------
+
+function ledgerHashKey(projectId: string): string {
+  return `proj-ledger-hash:${projectId}`; // no TTL: survives room expiry
+}
+
+/**
+ * Serialize the room's live board into the attached project's durable
+ * Markdown ledger. Returns the SyncResult (with `conflict` set instead
+ * of throwing when the managed section was hand-edited).
+ */
+async function syncProjectForRoom(code: string, force = false): Promise<SyncResult | { skipped: string }> {
+  const room = await getRoom(client, code);
+  if (!room.projectId) return { skipped: 'room has no project' };
+  const board = await getTaskBoard(code);
+  const lastHash = await redis.get(ledgerHashKey(room.projectId));
+  const res = syncTaskLedger(room.projectId, code, board, lastHash, force);
+  if (res.conflict) {
+    console.warn(`[project] ledger sync conflict for ${room.projectId} (room ${code}): ${res.conflict}`);
+  } else {
+    await redis.set(ledgerHashKey(room.projectId), res.hash);
+  }
+  return res;
+}
+
+/** Fire-and-forget ledger sync after task mutations; never fails the action. */
+function queueProjectSync(code: string): void {
+  void syncProjectForRoom(code).catch((err) => {
+    console.warn(`[project] background ledger sync failed for room ${code}:`, err instanceof Error ? err.message : err);
+  });
 }
 
 // ---------- static web UI ----------
@@ -749,6 +833,28 @@ const server = createServer(async (req, res) => {
       }
       rooms.sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
       return sendJson(res, 200, { rooms });
+    }
+
+    // ---------- T-18: project registry (ids + doc roles only, never paths) ----------
+    if (path === '/api/projects' && req.method === 'GET') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      return sendJson(res, 200, { projects: listProjects() });
+    }
+
+    if (path === '/api/project/doc' && req.method === 'GET') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const q = new URL(req.url || '/', 'http://x').searchParams;
+      try {
+        // readDoc resolves the role through the registry with realpath
+        // containment; role "tasks" is readable here too but only ever
+        // WRITTEN via the room actions.
+        return sendJson(res, 200, readDoc(String(q.get('id') || ''), String(q.get('role') || '')));
+      } catch (e) {
+        const err = e as Error;
+        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+      }
     }
 
     if (path === '/api/version' && req.method === 'GET') {

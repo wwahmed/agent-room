@@ -141,6 +141,8 @@ export interface CreateRoomInput {
   code?: string;
   topic: string;
   createdBy: string;
+  /** T-18: registry project id; required by the web create form. */
+  projectId?: string;
 }
 
 export async function createRoom(
@@ -151,6 +153,7 @@ export async function createRoom(
     action: 'create',
     topic: input.topic,
     createdBy: input.createdBy,
+    projectId: input.projectId,
   });
   return { ...out.room, hostKey: out.hostKey };
 }
@@ -362,4 +365,62 @@ export async function getRoomReport(
   code: string,
 ): Promise<RoomReport | null> {
   return (await call<{ report: RoomReport | null }>({ action: 'getReport', code })).report;
+}
+
+// ---------- projects (T-18) ----------
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  docs: string[];
+}
+
+export interface BoardTask {
+  id: string;
+  title: string;
+  state: 'todo' | 'in_progress' | 'awaiting_review' | 'done' | 'rejected';
+  createdBy: string;
+  owner?: string;
+  ownerClient?: ClientKind;
+  verifier?: string;
+  dod?: string;
+  note?: string;
+  verifiedBy?: string;
+  createdAt?: number;
+  submittedAt?: number;
+  verifiedAt?: number;
+}
+
+export async function listProjects(): Promise<ProjectSummary[]> {
+  const res = await fetch('/api/projects', { credentials: 'same-origin' });
+  if (!res.ok) return [];
+  return ((await res.json()) as { projects?: ProjectSummary[] }).projects ?? [];
+}
+
+export async function readProjectDoc(
+  id: string,
+  role: string,
+): Promise<{ role: string; rel: string; content: string; truncated: boolean } | null> {
+  const res = await fetch(`/api/project/doc?id=${encodeURIComponent(id)}&role=${encodeURIComponent(role)}`, { credentials: 'same-origin' });
+  if (!res.ok) return null;
+  return (await res.json()) as { role: string; rel: string; content: string; truncated: boolean };
+}
+
+export async function getTaskBoard(_client: ApiClient, code: string): Promise<{ tasks: BoardTask[] }> {
+  return (await call<{ board: { tasks: BoardTask[] } }>({ action: 'taskBoard', code })).board;
+}
+
+export async function attachProject(
+  _client: ApiClient,
+  code: string,
+  projectId: string,
+  auth: HostAuth = {},
+): Promise<{ room: Room; resumed: number }> {
+  return await call<{ room: Room; resumed: number }>({
+    action: 'attachProject',
+    code,
+    projectId,
+    requesterName: auth.requesterName,
+    hostKey: auth.hostKey ?? storedHostKey(code),
+  });
 }

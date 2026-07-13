@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { createClient, createRoom } from '../lib/api.js';
+import { createClient, createRoom, listProjects, type ProjectSummary } from '../lib/api.js';
 import { ROLE_PRESETS } from '@agent-room/shared';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
@@ -22,7 +22,18 @@ export function CreateMeeting() {
   const [role, setRole] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // T-18: project attachment is required for new web-created rooms when
+  // the registry has projects (it always does on the self-host).
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projectId, setProjectId] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void listProjects().then(list => {
+      setProjects(list);
+      if (list.length === 1 && list[0]) setProjectId(list[0].id);
+    });
+  }, []);
 
   const template = templateById(templateId);
 
@@ -37,12 +48,20 @@ export function CreateMeeting() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!topic.trim() || !name.trim()) return;
+    if (projects.length > 0 && !projectId) {
+      setError('Pick a project — new rooms need a durable home for their task board.');
+      return;
+    }
     setBusy(true); setError(null);
     try {
       const client = createClient();
       // The server allocates the room code (it can check collisions
       // against Redis; the browser can't).
-      const created = await createRoom(client, { topic: topic.trim(), createdBy: name.trim() });
+      const created = await createRoom(client, {
+        topic: topic.trim(),
+        createdBy: name.trim(),
+        projectId: projectId || undefined,
+      });
       const code = created.code;
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
       // Stash the host key — required to claim the host's display name on
@@ -128,6 +147,23 @@ export function CreateMeeting() {
           </span>
         )}
       </label>
+      {projects.length > 0 && (
+        <label className="block mb-4">
+          <span className="text-xs font-semibold text-ink-muted block mb-1.5">Project</span>
+          <select
+            value={projectId}
+            onChange={e => setProjectId(e.target.value)}
+            required
+            className="w-full min-h-11 px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint"
+          >
+            <option value="">Choose a project…</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+          </select>
+          <span className="text-[10px] text-ink-faint mt-1 block">
+            The room's task board syncs to this project's repo as a durable Markdown ledger.
+          </span>
+        </label>
+      )}
       <label className="block mb-4">
         <span className="text-xs font-semibold text-ink-muted block mb-1.5">Your name</span>
         <input value={name} onChange={e => setName(e.target.value)} required

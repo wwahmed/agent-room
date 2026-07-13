@@ -132,6 +132,9 @@ export interface Room {
   // created before this field existed continue to work.
   replyMode?: ReplyMode;
   modeConfig?: ReplyModeConfig;
+  // T-18: id of the server-registered project this room is attached to.
+  // Always a registry slug, never a filesystem path.
+  projectId?: string;
 }
 
 export type MessageKind = 'msg' | 'sys';

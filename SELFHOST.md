@@ -51,6 +51,33 @@ This fork runs the full Agent Room stack on one always-on Mac
 | DNS | proxied CNAME `chat.wakilabs.dev` → `<tunnel-id>.cfargotunnel.com` in the `wakilabs.dev` zone |
 | Allowlist | `IDENTITY_MAP` keys in `.env` (or explicit `ALLOWED_EMAILS`) |
 
+## Project-backed rooms (T-18)
+
+- Registry: `deploy/projects.json` (override with `PROJECTS_FILE`).
+  Maps slug ids to `{ name, root, docs: { role: relative/path } }`.
+  Browsers/MCP clients only ever send project IDS; every path resolves
+  server-side with realpath containment under `root` — `..`, absolute
+  paths, and symlink escapes are all denied (tested).
+- Canonical-source rule: the room's Redis board is the fast LIVE view
+  (24h TTL); the project's `tasks` doc (e.g. `docs/TASKS.md`) is the
+  DURABLE ledger. Every task mutation auto-syncs the ledger; the
+  managed section between the `wakichat:tasks` markers carries both the
+  human-readable tasks and an embedded machine JSON block used to
+  resume the board in future rooms (`attachProject` hydrates an empty
+  board from the ledger).
+- Writes are atomic (tmp + rename) and only replace the marker-fenced
+  section; all other file content is preserved. Hand-edits INSIDE the
+  markers are detected via a content hash kept in Redis
+  (`proj-ledger-hash:<id>`) and surface as a sync conflict; resolve by
+  reviewing the file and calling `projectSync` with `force: true`.
+- Backup/rollback: the ledger is a normal tracked file — `git diff`
+  audits every sync and `git checkout -- docs/TASKS.md` rolls back.
+  The server never commits; committing stays deliberate.
+- Onboarding a project: add an entry to `deploy/projects.json` (id slug,
+  absolute repo root, at least a `tasks` doc role), restart the server,
+  then pick it in New room or `attachProject`. Only the `tasks` role is
+  ever written; all other roles are read-only through `/api/project/doc`.
+
 ## Deploying changes
 
 - **Web UI:** `bin/deploy-web` - never run the vite build by hand (the

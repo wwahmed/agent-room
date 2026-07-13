@@ -6,6 +6,7 @@ import { RoomHeader } from '../components/RoomHeader.js';
 import { Inspector } from '../components/Inspector.js';
 import { WorkspaceRail } from '../components/WorkspaceRail.js';
 import { RoomListPane } from '../components/RoomListPane.js';
+import { ProjectPanel } from '../components/ProjectPanel.js';
 import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
@@ -1184,6 +1185,7 @@ export function Room() {
         onClose={() => setInspectorOpen(false)}
         renderTab={tab =>
           tab === 'people' ? peoplePanel
+            : tab === 'project' ? <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
             : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
             : renderOutputs()}
       />

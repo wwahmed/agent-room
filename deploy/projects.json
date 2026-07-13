@@ -1,0 +1,21 @@
+{
+  "wakichat": {
+    "name": "WakiChat",
+    "root": "/Users/wahmed/workspaces/agent-room",
+    "docs": {
+      "tasks": "docs/TASKS.md",
+      "features": "FEATURES.md",
+      "brief": "README.md",
+      "selfhost": "SELFHOST.md",
+      "protocol": "docs/AGENT_ROOM_PROTOCOL.md"
+    }
+  },
+  "waki-homelab": {
+    "name": "Waki Homelab",
+    "root": "/Users/wahmed/workspaces/wakilabs/waki-homelab",
+    "docs": {
+      "tasks": "docs/WAKICHAT-TASKS.md",
+      "brief": "README.md"
+    }
+  }
+}
