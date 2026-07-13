@@ -111,6 +111,14 @@ function storedHostKey(code: string): string | undefined {
   }
 }
 
+function storeHostKey(code: string, key: string): void {
+  try {
+    localStorage.setItem(`room:${code}:hostKey`, key);
+  } catch {
+    /* private mode: recovery still succeeds server-side this session */
+  }
+}
+
 // T-30 (F2): the one-time member credential the server issues at join. Kept
 // per-tab in sessionStorage; presented on every send/presence so a display
 // name alone cannot authenticate.
@@ -290,6 +298,21 @@ export async function verifyHostKey(
   hostKey: string | undefined,
 ): Promise<void> {
   await call({ action: 'verifyHostKey', code, hostKey });
+}
+
+// T-45 / T-36: one-tap host recovery. The armed server migrates the orphaned
+// host identity onto Waqas's authenticated + keyed web session (the Access
+// cookie proves who he is; the memberKey binds his live session). keyedCall
+// self-heals a stale memberKey (T-37) and retries once. The returned hostKey is
+// stored where storedHostKey() reads it and is NEVER returned to the caller or
+// surfaced in the UI — we hand back only the count of migrated bindings.
+export async function recoverHost(_client: ApiClient, code: string): Promise<{ migrated: number }> {
+  const out = await keyedCall<{ recovered?: boolean; migrated?: string[]; hostKey?: string }>(
+    (mk) => ({ action: 'recoverHost', code, memberKey: mk }),
+    code,
+  );
+  if (out.hostKey) storeHostKey(code, out.hostKey);
+  return { migrated: out.migrated?.length ?? 0 };
 }
 
 export async function setMuted(

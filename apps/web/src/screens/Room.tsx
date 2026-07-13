@@ -4,6 +4,7 @@ import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { Inspector } from '../components/Inspector.js';
+import { RecoverHostButton } from '../components/RecoverHostButton.js';
 import { WorkspaceRail } from '../components/WorkspaceRail.js';
 import { RoomListPane } from '../components/RoomListPane.js';
 import { ProjectPanel } from '../components/ProjectPanel.js';
@@ -926,18 +927,25 @@ export function Room() {
   );
 
   const roomFooterPanel = (
-            <div className="p-4 border-t border-border-faint flex gap-2">
-              {!ended && room.createdBy === self.name && (
-                <button
-                  onClick={handleEndMeeting}
-                  className="flex-1 text-[11px] font-semibold text-red-300 bg-red-500/10 px-3 py-2 rounded-lg hover:bg-red-500/20"
-                >
-                  End
+            <div className="border-t border-border-faint">
+              {/* T-45: phone-friendly host recovery (no console). Safe to always
+                  show — the server 403s harmlessly when it isn't armed. */}
+              <div className="px-4 pt-4">
+                <RecoverHostButton code={code} />
+              </div>
+              <div className="p-4 flex gap-2">
+                {!ended && room.createdBy === self.name && (
+                  <button
+                    onClick={handleEndMeeting}
+                    className="flex-1 text-[11px] font-semibold text-red-300 bg-red-500/10 px-3 py-2 rounded-lg hover:bg-red-500/20"
+                  >
+                    End
+                  </button>
+                )}
+                <button onClick={() => navigate('/')} className="flex-1 text-[11px] font-semibold text-ink-muted bg-surface-softer px-3 py-2 rounded-lg">
+                  Home
                 </button>
-              )}
-              <button onClick={() => navigate('/')} className="flex-1 text-[11px] font-semibold text-ink-muted bg-surface-softer px-3 py-2 rounded-lg">
-                Home
-              </button>
+              </div>
             </div>
   );
 
