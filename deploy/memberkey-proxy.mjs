@@ -48,6 +48,20 @@ function keysFor(secret) {
   return m;
 }
 
+// Hop-by-hop / framing headers must NOT be forwarded verbatim: we buffer the
+// full body and set our own Content-Length, so passing upstream's
+// `Transfer-Encoding: chunked` (or a stale Content-Length) through creates an
+// invalid response (both framings present) that strict clients like undici
+// reject with a bare "fetch failed". Strip them in both directions; also drop
+// content-encoding since we may rewrite the (now identity) body.
+const HOP = ['connection', 'keep-alive', 'transfer-encoding', 'te', 'trailer', 'upgrade', 'proxy-authenticate', 'proxy-authorization'];
+function stripFraming(h) {
+  for (const k of HOP) delete h[k];
+  delete h['content-encoding'];
+  delete h['content-length'];
+  return h;
+}
+
 function readBody(req) {
   return new Promise((res, rej) => {
     const chunks = [];
@@ -110,9 +124,11 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Rebuild headers for upstream (fix content-length, drop hop-by-hop host).
-    const headers = { ...req.headers };
+    // Rebuild headers for upstream: drop host, strip hop-by-hop/framing, force
+    // identity encoding (so any body rewrite stays valid), set our length.
+    const headers = stripFraming({ ...req.headers });
     delete headers['host'];
+    delete headers['accept-encoding'];
     headers['content-length'] = String(outBody.length);
 
     const upRes = await forward(req.method || 'GET', upstreamPath, headers, outBody);
@@ -131,7 +147,9 @@ const server = http.createServer(async (req, res) => {
       } catch { /* non-JSON: pass through */ }
     }
 
-    const outHeaders = { ...upRes.headers };
+    // Strip upstream's framing headers (chunked/keep-alive/content-length) and
+    // set our own length for the buffered body — never emit conflicting framing.
+    const outHeaders = stripFraming({ ...upRes.headers });
     outHeaders['content-length'] = String(respBody.length);
     res.writeHead(upRes.status, outHeaders);
     res.end(respBody);

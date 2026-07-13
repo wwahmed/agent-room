@@ -53,4 +53,12 @@ export AGENT_ROOM_BASE_URL="$URL"
 # inside the agent-room monorepo resolves the local workspace package of the
 # same name (no bin link) and fails "command not found". --package forces the
 # published package + version regardless of cwd.
-exec npx -y --package=agent-room-mcp@0.25.4 agent-room-mcp "$@"
+#
+# Defense-in-depth token redaction: the closed 0.25.x client echoes
+# AGENT_ROOM_BASE_URL (which carries /t/<token>) inside fetch-error messages,
+# which would deposit the token into the agent's transcript. Filter the
+# client's stdout, rewriting any /t/<32-hex> to /t/<32 x 'X'> — length
+# preserving, and MCP stdio is newline-delimited JSON-RPC (verified), so
+# per-line redaction cannot corrupt message framing. stdin is left untouched.
+exec npx -y --package=agent-room-mcp@0.25.4 agent-room-mcp "$@" \
+  | /usr/bin/perl -pe 'BEGIN{$|=1} s{(/t/)[0-9a-f]{32}}{$1.("X"x32)}ge'
