@@ -662,6 +662,19 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { rooms });
     }
 
+    if (path === '/api/version' && req.method === 'GET') {
+      // The bundle filename hash changes on every web deploy; clients poll
+      // this to show the update banner. Read from disk each time (cheap,
+      // and always reflects what bin/deploy-web just wrote).
+      try {
+        const html = await readFile(join(WEB_DIST, 'index.html'), 'utf8');
+        const match = html.match(/assets\/index-([A-Za-z0-9_-]+)\.js/);
+        return sendJson(res, 200, { bundle: match?.[1] ?? 'unknown' });
+      } catch {
+        return sendJson(res, 200, { bundle: 'unknown' });
+      }
+    }
+
     if (path === '/healthz') {
       const pong = await redis.ping();
       return sendJson(res, pong === 'PONG' ? 200 : 500, { ok: pong === 'PONG' });
