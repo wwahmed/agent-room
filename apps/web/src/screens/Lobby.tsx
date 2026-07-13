@@ -161,7 +161,7 @@ export function Lobby() {
 
       <div className="flex gap-2">
         <button onClick={() => navigate('/')} className="flex-1 bg-surface border border-border py-2.5 rounded-lg text-sm font-semibold text-ink-muted">Invite later</button>
-        <button onClick={() => navigate(`/r/${code}`)} className="flex-1 bg-accent text-surface-sunken py-2.5 rounded-lg text-sm font-semibold">Enter room →</button>
+        <button onClick={() => navigate(`/r/${code}`)} className="flex-1 bg-accent text-white py-2.5 rounded-lg text-sm font-semibold">Enter room →</button>
       </div>
       </div>
     </>

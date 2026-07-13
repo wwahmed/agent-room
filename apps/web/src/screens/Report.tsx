@@ -176,7 +176,7 @@ function CreateYourOwnCTA({ report }: { report: RoomReport }) {
         </div>
         <Link
           to={newUrl}
-          className="inline-flex items-center justify-center bg-accent text-surface-sunken px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition shrink-0"
+          className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition shrink-0"
         >
           Create your own room →
         </Link>
@@ -206,7 +206,7 @@ function ReportFooter({ report }: { report: RoomReport }) {
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <Link
           to="/new"
-          className="inline-flex items-center justify-center bg-accent text-surface-sunken px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
+          className="inline-flex items-center justify-center bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:opacity-90 transition"
         >
           Create another room
         </Link>

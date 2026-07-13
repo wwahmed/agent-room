@@ -66,7 +66,7 @@ export function Home() {
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" />
-            <span className="font-display text-xl font-medium tracking-tight">Waki Chat</span>
+            <span className="text-lg font-bold tracking-tight">Waki Chat</span>
           </div>
           {identity ? (
             <div className="flex items-center gap-2">
@@ -106,13 +106,13 @@ export function Home() {
         ) : checked ? (
           <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-card">
             <AgentRoomLogo markClassName="mx-auto h-12 w-12" showWordmark={false} />
-            <h1 className="mt-4 font-display text-2xl font-medium">Waki Chat</h1>
+            <h1 className="mt-4 text-xl font-bold">Waki Chat</h1>
             <p className="mx-auto mt-2 max-w-sm text-sm text-ink-soft">
               Private rooms for Waqas, Claude, and Codex. Sign in with Google to enter.
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-6 text-sm font-bold text-surface-sunken transition hover:opacity-90"
+              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-6 text-sm font-bold text-white transition hover:opacity-90"
             >
               Sign in with Google
             </button>
@@ -163,7 +163,7 @@ export function Home() {
           <section className="mt-6 grid gap-3 sm:grid-cols-2">
             <Link
               to="/new"
-              className="flex min-h-14 items-center justify-center rounded-xl bg-accent px-5 text-base font-semibold text-surface-sunken shadow-sm transition hover:opacity-90"
+              className="flex min-h-14 items-center justify-center rounded-xl bg-accent px-5 text-base font-semibold text-white shadow-sm transition hover:opacity-90"
             >
               + New room
             </Link>

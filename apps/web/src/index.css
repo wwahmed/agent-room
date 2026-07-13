@@ -4,7 +4,4 @@
 
 html { color-scheme: dark; }
 html, body, #root { height: 100%; }
-body {
-  background: radial-gradient(120% 90% at 20% 0%, #12100e 0%, #0b0a0e 55%, #070605 100%) fixed #0b0a0e;
-  color: #f3f1f6;
-}
+body { background: #0B0F16; color: #E8EBF1; }
