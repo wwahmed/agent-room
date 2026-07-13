@@ -93,7 +93,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
     // avatar/name (you know who you are). Timestamp inside, quiet.
     return (
       <div className={`flex justify-end px-3 sm:px-4 ${grouped ? 'mt-1' : 'mt-4'}`}>
-        <div className="min-w-0 max-w-[88%] sm:max-w-[70%] rounded-xl rounded-br-sm bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
+        <div className="min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
           {body.trim() && (
             <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
               <MessageText text={body} />
@@ -108,41 +108,47 @@ export function MessageRow({ message, self, grouped, ambiguousNames }: Props) {
 
   const ambiguous = ambiguousNames?.has(message.name);
 
-  // Host feedback (04:10): every sender gets a stable tinted surface
-  // derived from their identity color, so Waqas/Claude/Codex read apart
-  // at a glance before the name does. Saturation stays low (hex alpha
-  // ~9%) so long technical text keeps full contrast on the dark theme.
-  const tint = { backgroundColor: `${message.color}17`, borderLeft: `2px solid ${message.color}66` };
+  // Host feedback ("you guys have boxes, you should have bubbles too"): every
+  // incoming sender now gets a rounded chat bubble in their own identity color
+  // (soft tinted fill + faint colored border), left-aligned beside the avatar,
+  // separated by white space — mirroring the host's own message bubbles. The
+  // tint stays low-saturation so long technical text keeps full contrast.
+  const bubble = { backgroundColor: `${message.color}1f`, borderColor: `${message.color}3d` };
+  const bubbleBase =
+    'inline-block max-w-full break-words rounded-2xl border px-3.5 py-2.5 text-[16px] leading-[1.7] sm:max-w-[85%] sm:text-[15px] sm:leading-[1.75] [overflow-wrap:anywhere]';
 
   if (grouped) {
-    // Follow-up message in a group: no header, body aligns with the
-    // text column above (avatar gutter preserved for hover timestamp).
+    // Follow-up in a group: another bubble under the first, no header. The
+    // avatar gutter is preserved to reveal a hover timestamp and keep the
+    // bubbles aligned under the sender.
     return (
-      <div className="group flex gap-3 py-1 pl-3 pr-3 sm:pr-4" style={tint}>
-        <div className="w-9 flex-shrink-0 pt-1 text-right text-[9px] leading-none text-ink-faint opacity-0 group-hover:opacity-100">
+      <div className="group mt-1 flex gap-2.5 pl-3 pr-3 sm:pr-4">
+        <div className="w-9 flex-shrink-0 pt-3 text-right text-[9px] leading-none text-ink-faint opacity-0 group-hover:opacity-100">
           {timeLabel(message.time)}
         </div>
-        <div className="min-w-0 flex-1 break-words text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75] [overflow-wrap:anywhere]">
-          {body.trim() && <MessageText text={body} />}
-          {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
+        <div className="min-w-0">
+          <div className={bubbleBase} style={bubble}>
+            {body.trim() && <MessageText text={body} />}
+            {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="group mt-4 flex gap-3 py-1.5 pl-3 pr-3 sm:pr-4" style={tint}>
-      <div className="pt-0.5">
+    <div className="group mt-4 flex gap-2.5 pl-3 pr-3 sm:pr-4">
+      <div className="flex-shrink-0 pt-0.5">
         <SenderAvatar message={message} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 leading-tight">
+        <div className="mb-1 flex flex-wrap items-baseline gap-x-2 pl-1 leading-tight">
           <span className="text-[15px] font-bold sm:text-[16px]" style={{ color: message.color }}>{message.name}</span>
           {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="truncate text-[11px] text-ink-faint">{message.role}</span>}
           <span className="text-[10px] text-ink-faint">{timeLabel(message.time)}</span>
         </div>
-        <div className="mt-0.5 break-words text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75] [overflow-wrap:anywhere]">
+        <div className={`${bubbleBase} rounded-tl-md`} style={bubble}>
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
