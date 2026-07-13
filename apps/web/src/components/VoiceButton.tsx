@@ -88,7 +88,7 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
         onClick={listening ? stop : start}
         aria-label={listening ? 'Stop voice input' : 'Start voice input'}
         title={listening ? 'Stop voice input' : 'Start voice input'}
-        className={`text-base leading-none w-9 h-9 flex items-center justify-center rounded-lg transition ${
+        className={`text-base leading-none w-11 h-11 flex items-center justify-center rounded-lg transition ${
           listening
             ? 'bg-red-500/15 text-red-300 animate-pulse'
             : 'bg-surface-softer text-ink-soft hover:bg-accent-tint hover:text-accent'

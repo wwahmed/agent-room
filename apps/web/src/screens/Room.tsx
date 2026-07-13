@@ -35,7 +35,7 @@ const TEXTAREA_MAX_HEIGHT = 260;
 // (the Send button is the only send affordance); physical-keyboard
 // environments keep the Enter-to-send + Shift+Enter convention.
 const IS_TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-const TEXTAREA_MIN_HEIGHT = IS_TOUCH ? 96 : 116;
+const TEXTAREA_MIN_HEIGHT = IS_TOUCH ? 128 : 132;
 
 export function Room() {
   const { code = '' } = useParams();
@@ -1159,7 +1159,7 @@ export function Room() {
                         onClick={() => fileInputRef.current?.click()}
                         disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
                         title="Attach files"
-                        className="h-9 rounded-lg bg-surface-softer border border-border px-3 text-xs font-semibold text-ink-muted disabled:opacity-50"
+                        className="min-h-11 rounded-lg bg-surface-softer border border-border px-3 text-xs font-semibold text-ink-muted disabled:opacity-50"
                       >
                         {attachBusy ? '...' : 'Attach'}
                       </button>
@@ -1167,7 +1167,7 @@ export function Room() {
                     <button
                       onClick={send}
                       disabled={!text.trim() && attachments.length === 0}
-                      className="bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
+                      className="min-h-11 bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
                     >
                       Send
                     </button>
