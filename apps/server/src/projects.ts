@@ -22,9 +22,10 @@
 // The "tasks" role is the ONLY writable role; all other docs are
 // read-only through the API.
 
-import { readFileSync, existsSync, realpathSync, statSync, unlinkSync, readdirSync, openSync, closeSync, readSync, fstatSync, ftruncateSync, writeSync, fsyncSync, constants as fsConstants } from 'node:fs';
+import { readFileSync, existsSync, realpathSync, statSync, unlinkSync, readdirSync, mkdirSync, openSync, closeSync, readSync, fstatSync, ftruncateSync, writeSync, fsyncSync, constants as fsConstants } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { createHash, randomBytes } from 'node:crypto';
 
 export interface ProjectConfig {
@@ -279,6 +280,104 @@ export interface SyncResult {
 
 const LOCK_STALE_MS = 30_000;
 
+// ---------- server-owned state dir: locks + write-ahead journal (T-18 r6) ----------
+//
+// Round-5 finding: the lock and the truncate-in-place write both still
+// touched the repo (the attacker-swappable parent), and truncate-in-place
+// is not crash-atomic — a crash mid-write left a torn ledger that the next
+// sync silently appended to (two BEGIN markers). Node has no
+// openat/renameat, so we cannot make a same-dir rename swap-proof. Instead:
+//
+//   1. Lock + journal live in a SERVER-OWNED dir (LEDGER_STATE_DIR, 0700),
+//      keyed by the canonical ledger realpath. No lock/journal path op ever
+//      addresses the repo parent, so a parent/lock swap cannot redirect
+//      create/stat/unlink outside anything the server owns.
+//   2. A write-ahead journal makes the (non-atomic) fd write crash-safe:
+//      the FULL next content is fsync'd to the journal BEFORE the ledger is
+//      touched, then re-applied idempotently by recovery. A crash at ANY
+//      point leaves the ledger either exactly pre-write or exactly the
+//      intended next state — never a torn ledger exposed as success.
+//   3. recoverLedger() runs before every read AND write; a torn ledger with
+//      no usable journal FAILS CLOSED (throws) rather than appending.
+const STATE_DIR = (() => {
+  const dir = process.env.LEDGER_STATE_DIR || join(homedir(), '.wakichat', 'ledger-state');
+  try { mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch { /* exists */ }
+  try { return realpathSync(dir); } catch { return dir; }
+})();
+
+// Idempotent — the state dir may be absent (fresh box, cleaned, or a test
+// tmp). Ensure it before every lock/journal write.
+function ensureStateDir(): void {
+  try { mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 }); } catch { /* exists */ }
+}
+
+// Exported for tests (lock/journal live in the server-owned STATE_DIR now).
+export function stateKeyFor(canonicalLedgerPath: string): string {
+  return createHash('sha256').update(canonicalLedgerPath).digest('hex').slice(0, 32);
+}
+export function lockPathFor(key: string): string { return join(STATE_DIR, `${key}.lock`); }
+function journalPathFor(key: string): string { return join(STATE_DIR, `${key}.journal`); }
+
+// Test-only deterministic crash injection. Set WAKICHAT_TEST_CRASH_AT to a
+// stage name; the write throws right after that stage's durability point so
+// tests can assert recovery from every crash boundary. No effect unset.
+function crashPoint(stage: string): void {
+  if (process.env.WAKICHAT_TEST_CRASH_AT === stage) {
+    const err = new Error(`injected crash at ${stage}`);
+    err.name = 'InjectedCrash';
+    throw err;
+  }
+}
+
+interface LedgerJournal { v: 1; target: string; contentHash: string; content: string }
+
+function writeFileFsync(path: string, data: string, mode: number): void {
+  const fd = openSync(path, fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_WRONLY, mode);
+  try {
+    const buf = Buffer.from(data, 'utf8');
+    let off = 0;
+    while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off, off);
+    fsyncSync(fd);
+  } finally { closeSync(fd); }
+}
+
+/**
+ * Recovery: automatic + idempotent, run before every ledger read/write. If a
+ * committed journal exists for this ledger, reconcile the on-disk ledger to
+ * the journal's intended content. Safe to run any number of times.
+ *   - journal absent            -> nothing to do.
+ *   - journal unparseable/torn   -> a pre-mutation partial (the ledger was
+ *                                   never touched); discard it.
+ *   - ledger already == journal  -> the write finished; clear the journal.
+ *   - ledger != journal          -> torn write; re-apply the journal content
+ *                                   to the ledger fd, fsync, verify, clear.
+ * A ledger open that fails containment/no-follow throws (fail closed).
+ */
+function recoverLedger(abs: string, rootReal: string, key: string): void {
+  const jp = journalPathFor(key);
+  if (!existsSync(jp)) return;
+  let journal: LedgerJournal | null = null;
+  try {
+    const raw = readFileSync(jp, 'utf8');
+    const j = JSON.parse(raw) as LedgerJournal;
+    if (j && j.v === 1 && typeof j.content === 'string' && typeof j.contentHash === 'string'
+        && sectionHash(j.content) === j.contentHash && j.target === abs) {
+      journal = j;
+    }
+  } catch { journal = null; }
+  if (!journal) { try { unlinkSync(jp); } catch { /* gone */ } return; }
+
+  const fd = openNoFollow(abs, fsConstants.O_CREAT | fsConstants.O_RDWR, 0o644, rootReal);
+  try {
+    const cur = readFdText(fd);
+    if (sectionHash(cur) !== journal.contentHash) {
+      // Torn or pre-write ledger: re-apply the durable intended content.
+      writeFdTextRaw(fd, journal.content);
+    }
+  } finally { closeSync(fd); }
+  try { unlinkSync(jp); } catch { /* gone */ }
+}
+
 // ---------- no-follow filesystem primitives (Codex T-18 round 4) ----------
 //
 // The round-4 finding: creating the lock/tmp and renaming through a
@@ -286,14 +385,14 @@ const LOCK_STALE_MS = 30_000;
 // artifacts outside the project root — an fs.watch probe caught
 // transient outside events. Node has no openat/renameat, so the fix is
 // Darwin's O_NOFOLLOW_ANY: the kernel refuses to traverse a symlink in
-// ANY path component of the open. Every write below goes through a file
+// ANY path component of the open. Every ledger write goes through a file
 // descriptor obtained with that flag — once the fd is open, later path
-// swaps are irrelevant because writes address the fd, not the path.
-// There is deliberately NO tmp+rename anymore: rename is inherently
-// lexical and unfixable without renameat. Losing rename atomicity is
-// covered by (a) the advisory lock serializing writers and (b) the
-// embedded section hash turning any torn write into a detected
-// conflict that `force` repairs.
+// swaps cannot redirect writes (they address the inode, not the path).
+// Rename is inherently lexical and unfixable without renameat, so we do
+// NOT rename. CRASH-ATOMICITY instead comes from the write-ahead journal
+// (see STATE_DIR / recoverLedger): the full next content is fsync'd to a
+// server-owned journal BEFORE the fd truncate+write, and recovery
+// re-applies it idempotently, so a crash never exposes a torn ledger.
 // On non-Darwin platforms the flag degrades to O_NOFOLLOW (final
 // component only) plus the realpath pre-checks — documented weaker.
 const O_NOFOLLOW_ANY = process.platform === 'darwin' ? 0x20000000 : fsConstants.O_NOFOLLOW;
@@ -337,7 +436,7 @@ function readFdText(fd: number): string {
 }
 
 /** Truncate + write + fsync through the fd. Path swaps after open cannot redirect this. */
-function writeFdText(fd: number, text: string): void {
+function writeFdTextRaw(fd: number, text: string): void {
   ftruncateSync(fd, 0);
   const buf = Buffer.from(text, 'utf8');
   let off = 0;
@@ -347,66 +446,68 @@ function writeFdText(fd: number, text: string): void {
   fsyncSync(fd);
 }
 
+/** As writeFdTextRaw, with test-only crash points across the torn window. */
+function writeFdTextHooked(fd: number, text: string): void {
+  ftruncateSync(fd, 0);
+  crashPoint('after-ledger-truncate'); // ledger empty; only the journal holds `text`
+  const buf = Buffer.from(text, 'utf8');
+  let off = 0;
+  while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off, off);
+  crashPoint('before-ledger-fsync');
+  fsyncSync(fd);
+}
+
 /**
- * Advisory per-ledger lock: `<file>.lock` created with wx (fails if it
- * exists). Contents = pid + timestamp; a lock older than LOCK_STALE_MS
- * is taken over with a warning (crashed writer). The server itself is a
- * single synchronous writer, so this guards external tooling and any
- * future second process, not the event loop.
+ * Advisory per-ledger lock, held in the SERVER-OWNED state dir (0700),
+ * keyed by the canonical ledger identity. Because the dir is the server's
+ * own — not the attacker-swappable repo parent — plain O_EXCL create /
+ * stat / unlink are safe here; a parent/lock swap in the repo cannot
+ * redirect any of these operations. A lock older than LOCK_STALE_MS is a
+ * crashed writer and is taken over.
  */
-function acquireFileLock(target: string, mustBeUnder?: string): string {
-  const lockPath = `${target}.lock`;
+function acquireLedgerLock(key: string): string {
+  ensureStateDir();
+  const lockPath = lockPathFor(key);
   const payload = JSON.stringify({ pid: process.pid, at: Date.now() });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      // wx + no-follow-any: cannot land through a swapped parent.
-      const fd = openNoFollow(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600, mustBeUnder);
-      let realLock: string;
-      try {
-        writeFdText(fd, payload);
-        // Capture the REAL path now, while it provably points inside; the
-        // finally-unlink uses this so a later parent swap can't redirect
-        // the deletion at an attacker-chosen file.
-        realLock = realpathSync(lockPath);
-      } catch (e) {
-        closeSync(fd);
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-          // Our fresh lock vanished: another writer misjudged and stole it.
-          throw projErr('LedgerConflictError', 'Lost a lock takeover race; retry shortly.');
-        }
-        throw e;
-      }
-      closeSync(fd);
-      return realLock;
+      writeFileFsyncExcl(lockPath, payload, 0o600);
+      return lockPath;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-      // Staleness judged by the FILE's mtime, not its content — the
-      // create(wx) and payload write are two steps, so a reader can see
-      // an empty-but-fresh lock and must NOT treat it as crashed.
       let stale = false;
       try {
         stale = Date.now() - statSync(lockPath).mtimeMs > LOCK_STALE_MS;
       } catch {
-        continue; // vanished between EEXIST and stat: holder released; retry create
+        continue; // vanished between EEXIST and stat: retry create
       }
       if (!stale) {
         throw projErr('LedgerConflictError', 'Another writer holds the ledger lock; retry shortly.');
       }
-      console.warn(`[project] taking over stale ledger lock ${lockPath}`);
-      try { unlinkSync(lockPath); } catch { /* raced with the owner's cleanup */ }
+      console.warn(`[project] taking over stale ledger lock ${key}`);
+      try { unlinkSync(lockPath); } catch { /* raced */ }
     }
   }
   throw projErr('LedgerConflictError', 'Could not acquire the ledger lock.');
 }
 
+function writeFileFsyncExcl(path: string, data: string, mode: number): void {
+  const fd = openSync(path, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, mode);
+  try {
+    const buf = Buffer.from(data, 'utf8');
+    let off = 0;
+    while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off, off);
+    fsyncSync(fd);
+  } finally { closeSync(fd); }
+}
+
 /**
  * Write the board into the project's task ledger. Conflict detection is
- * FILE-derived (sectionIntegrity): a hand edit inside the markers, or a
- * pre-hash "legacy" section, refuses the write unless `force` — no
- * external state, so it survives Redis loss and room expiry. The whole
- * read → integrity check → write sequence runs synchronously INSIDE an
- * advisory lock; the tmp file is wx-created 0600 and cleaned up on any
- * failure.
+ * FILE-derived (sectionIntegrity): a hand edit inside the markers, a
+ * pre-hash "legacy" section, or a torn/incomplete section refuses the
+ * write unless `force` — no external state, so it survives Redis loss and
+ * room expiry. The whole recover → read → integrity check → journalled
+ * write runs synchronously INSIDE the server-owned advisory lock.
  */
 export function syncTaskLedger(
   projectId: string,
@@ -419,17 +520,27 @@ export function syncTaskLedger(
   const section = renderManagedSection(board, roomCode, now);
 
   const rootRealForIo = realpathSync(cfg.root);
-  const lockPath = acquireFileLock(abs, rootRealForIo);
-  // Open the ledger ITSELF with no-follow-any before reading: from here
-  // on every byte moves through this fd, so the read → integrity check →
-  // write sequence cannot be redirected by any path/parent swap.
+  // Canonical ledger identity keys the server-owned lock + journal. The
+  // repo parent is swappable; the state dir is ours.
+  const canonical = join(realpathSync(dirname(abs)), abs.split(sep).pop()!);
+  if (canonical !== rootRealForIo && !canonical.startsWith(rootRealForIo + sep)) {
+    throw projErr('BadRequestError', 'Ledger path resolves outside the project root.');
+  }
+  const key = stateKeyFor(canonical);
+  const lockPath = acquireLedgerLock(key);
   let ledgerFd: number | null = null;
   try {
+    // Recover FIRST: reconcile any journal from a crashed prior write so we
+    // always read/write a consistent ledger, never a torn one.
+    recoverLedger(abs, rootRealForIo, key);
+
     let before = `# Task ledger — ${cfg.name}\n\nDurable record of WakiChat room task boards for this project. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
     let after = '\n';
     ledgerFd = openNoFollow(abs, fsConstants.O_CREAT | fsConstants.O_RDWR, 0o644, rootRealForIo);
     const current = readFdText(ledgerFd);
     if (current.length > 0) {
+      const hasBegin = current.includes(BEGIN_MARK);
+      const hasEnd = current.includes(END_MARK);
       const slice = managedSlice(current);
       if (slice) {
         const integrity = sectionIntegrity(slice.section);
@@ -456,28 +567,43 @@ export function syncTaskLedger(
         }
         before = slice.before;
         after = slice.after;
+      } else if (hasBegin || hasEnd) {
+        // TORN: exactly one marker present (recovery found no usable
+        // journal). Do NOT append a second section — fail closed. `force`
+        // rewrites the whole ledger from scratch as an operator repair.
+        if (!force) {
+          return { rel, bytes: 0, changed: false, hash: sectionHash(current), conflict: 'ledger has an incomplete managed section (torn write); review the file and run projectSync with force to rebuild it' };
+        }
+        before = `# Task ledger — ${cfg.name}\n\n`;
+        after = '\n';
       } else {
-        // File exists but has no managed section yet: append one, keep
-        // every existing byte.
+        // Genuinely no managed section (user file, both markers absent):
+        // append one, preserving every existing byte.
         before = current.endsWith('\n') ? current + '\n' : current + '\n\n';
         after = '\n';
       }
     }
 
     const next = before + section + after;
-    // Belt-and-suspenders containment check (load-bearing on non-Darwin
-    // where O_NOFOLLOW_ANY degrades): the fd we already hold must live
-    // inside the project root.
-    const realNow = realpathSync(abs);
-    const rootReal = realpathSync(cfg.root);
-    if (realNow !== rootReal && !realNow.startsWith(rootReal + sep)) {
-      throw projErr('BadRequestError', 'Ledger path escaped the project root between check and write.');
-    }
-    // fd-anchored write: truncate + write + fsync through the descriptor
-    // opened above. No tmp file, no rename, no lexical-path window. A
-    // crash mid-write leaves a torn section, which the embedded hash
-    // classifies as a conflict on the next sync — repaired with force.
-    writeFdText(ledgerFd, next);
+
+    // ---- crash-safe commit (write-ahead journal) ----
+    // 1. Persist the FULL intended content to the journal and fsync it
+    //    BEFORE touching the ledger. A crash before this point leaves the
+    //    ledger exactly pre-write.
+    ensureStateDir();
+    const jp = journalPathFor(key);
+    const journal: LedgerJournal = { v: 1, target: abs, contentHash: sectionHash(next), content: next };
+    writeFileFsync(jp, JSON.stringify(journal), 0o600);
+    crashPoint('after-journal-fsync');
+    // 2. Apply to the ledger fd (truncate+write+fsync). A crash anywhere in
+    //    here leaves a torn ledger, but the journal above holds the full
+    //    next content, so recovery re-applies it idempotently.
+    writeFdTextHooked(ledgerFd, next);
+    crashPoint('after-ledger-fsync');
+    // 3. Clear the journal; a crash here just leaves recovery to notice the
+    //    ledger already matches and drop the journal.
+    try { unlinkSync(jp); } catch { /* gone */ }
+    crashPoint('after-journal-cleanup');
     return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };
   } finally {
     if (ledgerFd !== null) { try { closeSync(ledgerFd); } catch { /* closed */ } }
@@ -487,8 +613,18 @@ export function syncTaskLedger(
 
 /** Read the embedded machine state back out of the ledger (board resume). */
 export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt: number; board: LedgerBoardShape } | null {
-  const { abs } = resolveDocPath(projectId, 'tasks');
+  const { abs, cfg } = resolveDocPath(projectId, 'tasks');
   if (!existsSync(abs)) return null;
+  // Recovery runs before this READ too (Codex guardrail): a torn ledger left
+  // by a crashed write is reconciled from the journal under the lock before
+  // we parse it, so a resume never sees a partially-written board.
+  const rootReal = realpathSync(cfg.root);
+  const canonical = join(realpathSync(dirname(abs)), abs.split(sep).pop()!);
+  if (canonical === rootReal || canonical.startsWith(rootReal + sep)) {
+    const key = stateKeyFor(canonical);
+    const lockPath = acquireLedgerLock(key);
+    try { recoverLedger(abs, rootReal, key); } finally { try { unlinkSync(lockPath); } catch { /* gone */ } }
+  }
   const slice = managedSlice(readFileSync(abs, 'utf8'));
   if (!slice) return null;
   const sb = slice.section.indexOf(STATE_BEGIN);
@@ -598,11 +734,14 @@ export function createProjectFromCandidate(key: string, requestedId?: string, re
   if (!underAllowedRoot) throw projErr('BadRequestError', 'Candidate escaped the scan roots since discovery.');
   if (!existsSync(join(absReal, '.git'))) throw projErr('BadRequestError', 'Candidate is not a git repository.');
 
-  // Round-3 item 4: registry writes hold the same advisory lock as the
-  // ledger, and the raw file is re-read INSIDE the lock (CAS), so two
-  // concurrent registrations can't lose each other's entries.
+  // Registry writes hold the same server-owned lock as the ledger (keyed by
+  // the canonical registry dir), and re-read INSIDE the lock (CAS) so two
+  // concurrent registrations can't lose each other's entries. A torn
+  // registry write fails CLOSED on the next strict loadRegistry (503), never
+  // a silent partial — so it does not need the ledger's journal.
   const registryDirReal = realpathSync(dirname(REGISTRY_PATH));
-  const lockPath = acquireFileLock(REGISTRY_PATH, registryDirReal);
+  const regKey = stateKeyFor('registry:' + join(registryDirReal, REGISTRY_PATH.split(sep).pop()!));
+  const lockPath = acquireLedgerLock(regKey);
   try {
     const registry = loadRegistry(); // strict: malformed registry blocks creation
     for (const cfg of Object.values(registry)) {
@@ -624,7 +763,7 @@ export function createProjectFromCandidate(key: string, requestedId?: string, re
       const rawText = readFdText(regFd);
       const rawObj: Record<string, unknown> = rawText.trim() ? JSON.parse(rawText) as Record<string, unknown> : {};
       rawObj[id] = { name, root: absReal, docs };
-      writeFdText(regFd, JSON.stringify(rawObj, null, 2) + '\n');
+      writeFdTextRaw(regFd, JSON.stringify(rawObj, null, 2) + '\n');
     } finally {
       closeSync(regFd);
     }

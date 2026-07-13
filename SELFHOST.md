@@ -94,13 +94,21 @@ This fork runs the full Agent Room stack on one always-on Mac
   reconverges. The managed section carries the human-readable tasks
   plus an embedded machine JSON block used to resume the board in
   future rooms (`attachProject` hydrates an empty board).
-- Writes are atomic (tmp + rename) and only replace the marker-fenced
-  section; all other file content is preserved. Hand-edits INSIDE the
-  markers are detected via a hash EMBEDDED IN THE SECTION ITSELF
-  (`wakichat:hash` line) — purely file-derived, so Redis restarts,
-  restores, or room expiry can never silently authorize an overwrite.
-  Resolve conflicts by reviewing the file and calling `projectSync`
-  with `force: true`.
+- Writes are crash-safe via a write-ahead journal, NOT tmp+rename (Node
+  lacks renameat, so a same-dir rename can't be made parent-swap-proof).
+  The lock + journal live in a SERVER-OWNED state dir (`LEDGER_STATE_DIR`,
+  default `~/.wakichat/ledger-state`, 0700), keyed by the canonical
+  ledger path — so a repo parent/lock swap can never redirect them. The
+  full next content is fsync'd to the journal BEFORE the fd truncate+
+  write; `recoverLedger()` runs before every read AND write and
+  re-applies the journal idempotently, so a crash at any boundary leaves
+  the ledger either exactly pre-write or exactly the intended next state
+  — never a torn ledger exposed as success. A torn ledger with no usable
+  journal FAILS CLOSED (conflict), never a second appended section.
+  Only the marker-fenced section changes; all other bytes are preserved.
+  Hand-edits INSIDE the markers are detected via a hash EMBEDDED IN THE
+  SECTION ITSELF (`wakichat:hash`). Resolve conflicts by reviewing the
+  file and calling `projectSync` with `force: true`.
 - Backup/rollback: the ledger is a normal tracked file — `git diff`
   audits every sync and `git checkout -- docs/TASKS.md` rolls back.
   The server never commits; committing stays deliberate.

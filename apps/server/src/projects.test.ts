@@ -5,7 +5,7 @@
 // PROJECTS_FILE is fixed to a temp path BEFORE the module import below
 // (module reads it at load time); each test rewrites that file's content.
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync, unlinkSync, utimesSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -14,6 +14,8 @@ const WORK = mkdtempSync(join(tmpdir(), 'wakichat-t18-'));
 const REGISTRY = join(WORK, 'projects.json');
 process.env.PROJECTS_FILE = REGISTRY;
 process.env.PROJECT_SCAN_ROOTS = join(WORK, 'scan');
+// Server-owned lock/journal dir — isolate from ~/.wakichat during tests.
+process.env.LEDGER_STATE_DIR = join(WORK, 'state');
 
 const {
   loadRegistry,
@@ -24,6 +26,8 @@ const {
   sectionIntegrity,
   listProjectCandidates,
   createProjectFromCandidate,
+  stateKeyFor,
+  lockPathFor,
 } = await import('./projects.js');
 
 const REPO = join(WORK, 'repo');
@@ -163,30 +167,35 @@ describe('ledger integrity', () => {
   });
 });
 
-describe('lock discipline', () => {
+describe('lock discipline (server-owned STATE_DIR)', () => {
   it('refuses while a fresh lock is held, then takes over a stale one', () => {
-    const lock = join(REPO, 'docs', 'TASKS.md.lock');
+    // The lock lives in the server-owned STATE_DIR now, keyed by the
+    // canonical ledger path — NOT in the repo (that was the round-5 race).
+    syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD); // create the ledger so realpath resolves
+    const canonical = realpathSync(join(REPO, 'docs', 'TASKS.md'));
+    const lock = lockPathFor(stateKeyFor(canonical));
     writeFileSync(lock, JSON.stringify({ pid: 99999, at: Date.now() }));
-    expect(() => syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD)).toThrowError(/lock/);
-    // Staleness is judged by file mtime (content can be mid-write), so
-    // age the lock the way a crashed writer's lock actually ages.
+    expect(() => syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD2)).toThrowError(/lock/);
     const past = new Date(Date.now() - 60_000);
-    utimesSync(lock, past, past);
-    const res = syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD);
+    utimesSync(lock, past, past); // age it like a crashed writer's lock
+    const res = syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD2);
     expect(res.changed).toBe(true);
     expect(existsSync(lock)).toBe(false); // released
+    // A stray lock in the REPO must NOT block writes (it did before r6).
+    const strayRepoLock = join(REPO, 'docs', 'TASKS.md.lock');
+    writeFileSync(strayRepoLock, 'x');
+    expect(syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD).changed).toBeDefined();
   });
 
   it('serializes many sequential writers without corruption', () => {
-    // The server is a single synchronous writer; this exercises the full
-    // lock/acquire/release cycle 25 times with alternating boards.
     for (let i = 0; i < 25; i++) {
       const res = syncTaskLedger('proj', 'AAA-BBB-CCC', i % 2 ? BOARD2 : BOARD);
       expect(res.conflict).toBeUndefined();
     }
     const loaded = loadLedgerBoard('proj');
     expect(loaded?.board.tasks.length).toBe(1); // last write was BOARD (i=24)
-    expect(existsSync(join(REPO, 'docs', 'TASKS.md.lock'))).toBe(false);
+    const canonical = realpathSync(join(REPO, 'docs', 'TASKS.md'));
+    expect(existsSync(lockPathFor(stateKeyFor(canonical)))).toBe(false);
   });
 });
 
