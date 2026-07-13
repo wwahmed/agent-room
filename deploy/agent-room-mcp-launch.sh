@@ -18,9 +18,12 @@
 #     other character => reject (fall through).
 #   - The file is NEVER sourced and the value is NEVER eval'd; it is read by
 #     awk/grep and passed only through a quoted export. Never print it.
-#   - The session dir is resolved with the physical cwd (/bin/pwd -P), which
-#     ignores a spoofed $PWD, so a bogus environment cannot redirect us to a
-#     config in another directory.
+#   - Config selection: if WAKICHAT_AGENT_FILE is set (a NON-secret absolute
+#     path — used by agents whose cwd is shared/ambiguous, e.g. Codex), that
+#     fixed file is the config; otherwise the per-session file is the physical
+#     cwd's .wakichat-agent, resolved with /bin/pwd -P (ignores a spoofed $PWD
+#     so a bogus environment cannot redirect us). Either way EVERY gate below
+#     (regular-file/symlink/owner/600/size/one-line/strict-endpoint) applies.
 #   - Residual: a same-user TOCTOU exists between the stat gates and the read
 #     (another same-uid process could swap the file). This is a bounded
 #     same-user residual, accepted and documented rather than contorting
@@ -28,8 +31,12 @@
 set -eu
 
 DEFAULT_URL="http://127.0.0.1:8210"
-DIR=$(/bin/pwd -P 2>/dev/null) || DIR=$(pwd -P)
-CFG="$DIR/.wakichat-agent"
+if [ -n "${WAKICHAT_AGENT_FILE:-}" ]; then
+  CFG="$WAKICHAT_AGENT_FILE"          # fixed-file selector (non-secret path); no cwd dependency
+else
+  DIR=$(/bin/pwd -P 2>/dev/null) || DIR=$(pwd -P)
+  CFG="$DIR/.wakichat-agent"          # per-session, physical-cwd derived
+fi
 URL="$DEFAULT_URL"
 
 if [ -f "$CFG" ] && [ ! -L "$CFG" ]; then
