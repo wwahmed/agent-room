@@ -278,7 +278,7 @@ export interface SyncResult {
   conflict?: string;
 }
 
-const LOCK_STALE_MS = 30_000;
+const LOCK_STALE_MS = Number(process.env.LEDGER_LOCK_STALE_MS || 30_000);
 
 // ---------- server-owned state dir: locks + write-ahead journal (T-18 r6) ----------
 //
@@ -485,14 +485,17 @@ function writeFdTextHooked(fd: number, text: string): void {
  * redirect any of these operations. A lock older than LOCK_STALE_MS is a
  * crashed writer and is taken over.
  */
-function acquireLedgerLock(key: string): string {
+interface LedgerLock { lockPath: string; owner: string }
+
+function acquireLedgerLock(key: string): LedgerLock {
   ensureStateDir();
   const lockPath = lockPathFor(key);
-  const payload = JSON.stringify({ pid: process.pid, at: Date.now() });
+  const owner = randomBytes(16).toString('hex'); // unforgeable ownership nonce
+  const payload = JSON.stringify({ pid: process.pid, at: Date.now(), owner });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       writeFileFsyncExcl(lockPath, payload, 0o600);
-      return lockPath;
+      return { lockPath, owner };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
       let stale = false;
@@ -509,6 +512,29 @@ function acquireLedgerLock(key: string): string {
     }
   }
   throw projErr('LedgerConflictError', 'Could not acquire the ledger lock.');
+}
+
+// T-18 r8 (T-32 F4, Codex): OBSERVABLE stale-takeover invariant. A slow
+// writer whose lock was taken over (stale takeover by a second process)
+// MUST fail closed at commit rather than silently overwrite the taker's
+// completed write. We re-read the lock immediately before each durable
+// step; if it no longer carries our ownership nonce, the lock was stolen —
+// abort with a conflict. Cheap (a small read) and the check→write window is
+// synchronous and sub-millisecond, far inside the 30s staleness threshold.
+function assertLockOwner(lock: LedgerLock): void {
+  let held: { owner?: string } | null = null;
+  try { held = JSON.parse(readFileSync(lock.lockPath, 'utf8')) as { owner?: string }; } catch { held = null; }
+  if (!held || held.owner !== lock.owner) {
+    throw projErr('LedgerConflictError', 'Lock was taken over by another writer (stale takeover); this write was aborted to avoid overwriting a concurrent completed write — retry.');
+  }
+}
+
+// Release ONLY if we still own it — never unlink a successor's lock.
+function releaseLedgerLock(lock: LedgerLock): void {
+  try {
+    const held = JSON.parse(readFileSync(lock.lockPath, 'utf8')) as { owner?: string };
+    if (held.owner === lock.owner) { unlinkSync(lock.lockPath); fsyncDir(STATE_DIR); }
+  } catch { /* gone or not ours */ }
 }
 
 function writeFileFsyncExcl(path: string, data: string, mode: number): void {
@@ -547,7 +573,11 @@ export function syncTaskLedger(
     throw projErr('BadRequestError', 'Ledger path resolves outside the project root.');
   }
   const key = stateKeyFor(canonical);
-  const lockPath = acquireLedgerLock(key);
+  const lock = acquireLedgerLock(key);
+  // Test-only: hold the lock synchronously so a second process can observe
+  // staleness and take over — exercises the F4 CAS. No effect unset.
+  const holdMs = Number(process.env.WAKICHAT_TEST_HOLD_MS || 0);
+  if (holdMs > 0) { const until = Date.now() + holdMs; while (Date.now() < until) { /* busy-hold */ } }
   let ledgerFd: number | null = null;
   try {
     // Recover FIRST: reconcile any journal from a crashed prior write so we
@@ -611,6 +641,9 @@ export function syncTaskLedger(
     //    BEFORE touching the ledger. A crash before this point leaves the
     //    ledger exactly pre-write.
     ensureStateDir();
+    // CAS: we must still own the lock. If a stale takeover happened while we
+    // were slow, abort fail-closed rather than clobber the taker's write.
+    assertLockOwner(lock);
     const jp = journalPathFor(key);
     const journal: LedgerJournal = { v: 1, target: abs, contentHash: sectionHash(next), content: next };
     writeFileFsync(jp, JSON.stringify(journal), 0o600);
@@ -618,7 +651,9 @@ export function syncTaskLedger(
     crashPoint('after-journal-fsync');
     // 2. Apply to the ledger fd (truncate+write+fsync). A crash anywhere in
     //    here leaves a torn ledger, but the journal above holds the full
-    //    next content, so recovery re-applies it idempotently.
+    //    next content, so recovery re-applies it idempotently. Re-check
+    //    ownership one last time immediately before the mutation.
+    assertLockOwner(lock);
     writeFdTextHooked(ledgerFd, next);
     crashPoint('after-ledger-fsync');
     // 3. Clear the journal; a crash here just leaves recovery to notice the
@@ -628,7 +663,7 @@ export function syncTaskLedger(
     return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };
   } finally {
     if (ledgerFd !== null) { try { closeSync(ledgerFd); } catch { /* closed */ } }
-    try { unlinkSync(lockPath); } catch { /* already gone */ }
+    releaseLedgerLock(lock); // only unlinks if we still own it
   }
 }
 
@@ -646,13 +681,13 @@ export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt
   // no-follow fd — so a concurrent writer can't slip a torn/partial state
   // between recovery and the parse.
   const key = stateKeyFor(canonical);
-  const lockPath = acquireLedgerLock(key);
+  const lock = acquireLedgerLock(key);
   let content: string;
   try {
     recoverLedger(abs, rootReal, key);
     const fd = openNoFollow(abs, fsConstants.O_CREAT | fsConstants.O_RDONLY, 0o644, rootReal);
     try { content = readFdText(fd); } finally { closeSync(fd); }
-  } finally { try { unlinkSync(lockPath); } catch { /* gone */ } }
+  } finally { releaseLedgerLock(lock); }
   const slice = managedSlice(content);
   if (!slice) return null;
   const sb = slice.section.indexOf(STATE_BEGIN);
@@ -769,7 +804,7 @@ export function createProjectFromCandidate(key: string, requestedId?: string, re
   // a silent partial — so it does not need the ledger's journal.
   const registryDirReal = realpathSync(dirname(REGISTRY_PATH));
   const regKey = stateKeyFor('registry:' + join(registryDirReal, REGISTRY_PATH.split(sep).pop()!));
-  const lockPath = acquireLedgerLock(regKey);
+  const lock = acquireLedgerLock(regKey);
   try {
     const registry = loadRegistry(); // strict: malformed registry blocks creation
     for (const cfg of Object.values(registry)) {
@@ -799,7 +834,7 @@ export function createProjectFromCandidate(key: string, requestedId?: string, re
     console.log(`[project] registered "${id}" -> ${absReal}`);
     return { id, name, docs: Object.keys(docs) };
   } finally {
-    try { unlinkSync(lockPath); } catch { /* gone */ }
+    releaseLedgerLock(lock);
   }
 }
 

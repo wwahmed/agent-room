@@ -21,9 +21,12 @@ const OUTSIDE = join(WORK, 'outside');
 const DIST = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'dist', 'projects.js');
 const DIST_URL = pathToFileURL(DIST).href;
 
+const STATE = join(WORK, 'state');
+
 function childScript(body: string): string {
   return `
     process.env.PROJECTS_FILE = ${JSON.stringify(REGISTRY)};
+    process.env.LEDGER_STATE_DIR = process.env.LEDGER_STATE_DIR || ${JSON.stringify(STATE)};
     const m = await import(${JSON.stringify(DIST_URL)});
     ${body}
   `;
@@ -160,5 +163,45 @@ describe('multi-process contention (real children on dist/projects.js)', () => {
     expect(Object.keys(finalReg)).toContain('repo-a');
     expect(Object.keys(finalReg)).toContain('repo-b');
     expect(Object.keys(finalReg)).toContain('proj'); // original preserved
+  }, 60_000);
+
+  it('F4: a stale-lock takeover cannot silently overwrite the taker (loser fails CLOSED)', async () => {
+    // Fresh ledger.
+    rmSync(join(REPO, 'docs'), { recursive: true, force: true });
+    rmSync(STATE, { recursive: true, force: true });
+    mkdirSync(join(REPO, 'docs'), { recursive: true });
+    const done = (n: number) => `{ tasks: [{ id: 'T-0${n}', title: 'writer-${n}', state: 'done', createdBy: 'C' }] }`;
+    await spawnChild(`m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(0)}, true); console.log('seed');`);
+
+    // Writer A: acquires the lock and HOLDS it 1500ms — past the 250ms
+    // staleness threshold — then attempts to commit board A(1).
+    const A = spawnChild(
+      `try { m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(1)}, true); console.log('A:committed'); }
+       catch (e) { console.log('A:' + e.name); }`,
+      { WAKICHAT_TEST_HOLD_MS: '1500', LEDGER_LOCK_STALE_MS: '250' },
+    );
+    // Writer B: starts after A holds the lock; sees it stale, takes over,
+    // completes board B(2), releases — all while A is still holding.
+    const B = new Promise<{ ok: boolean; out: string }>(resolve => {
+      setTimeout(() => {
+        spawnChild(
+          `try { m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(2)}, true); console.log('B:committed'); }
+           catch (e) { console.log('B:' + e.name); }`,
+          { LEDGER_LOCK_STALE_MS: '250' },
+        ).then(resolve);
+      }, 500);
+    });
+    const [a, b] = await Promise.all([A, B]);
+
+    // B completed; A was taken over and MUST fail closed (never a silent
+    // overwrite). Observable invariant: A reports a LedgerConflictError.
+    expect(b.out).toContain('B:committed');
+    expect(a.out).toContain('A:LedgerConflictError');
+    // The durable ledger is B's write, intact and single-section — A's
+    // aborted write did not clobber it.
+    const content = readFileSync(join(REPO, 'docs', 'TASKS.md'), 'utf8');
+    expect(content).toContain('writer-2');
+    expect(content).not.toContain('writer-1');
+    expect((content.match(/wakichat:tasks:begin/g) || []).length).toBe(1);
   }, 60_000);
 });

@@ -117,6 +117,15 @@ This fork runs the full Agent Room stack on one always-on Mac
   Hand-edits INSIDE the markers are detected via a hash EMBEDDED IN THE
   SECTION ITSELF (`wakichat:hash`, 64-bit — accidental-corruption grade,
   not an adversarial primitive; the lock is the real serializer).
+- Stale-lock takeover is safe by an OWNERSHIP CAS, not just a timeout: the
+  lock carries a random owner nonce; a writer re-verifies it still owns the
+  lock immediately before the journal write AND before the ledger write. If
+  a second process took over the (30s) stale lock while the first was slow,
+  the first FAILS CLOSED with `LedgerConflictError` at commit — it can
+  never silently overwrite the taker's completed write. `releaseLedgerLock`
+  likewise only unlinks a lock it still owns. Proven with a real
+  two-process test (`projects.race.test.ts` F4). Tune the window with
+  `LEDGER_LOCK_STALE_MS`.
 - Backup/rollback: the ledger is a normal tracked file — `git diff`
   audits every sync and `git checkout -- docs/TASKS.md` rolls back.
   The server never commits; committing stays deliberate.
