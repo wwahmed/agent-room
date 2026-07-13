@@ -49,4 +49,8 @@ if [ -f "$CFG" ] && [ ! -L "$CFG" ]; then
 fi
 
 export AGENT_ROOM_BASE_URL="$URL"
-exec npx -y agent-room-mcp "$@"
+# Pin the REGISTRY package explicitly: a bare `npx -y agent-room-mcp` run from
+# inside the agent-room monorepo resolves the local workspace package of the
+# same name (no bin link) and fails "command not found". --package forces the
+# published package + version regardless of cwd.
+exec npx -y --package=agent-room-mcp@0.25.4 agent-room-mcp "$@"
