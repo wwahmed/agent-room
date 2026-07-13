@@ -33,10 +33,6 @@ export function isSameGroup(prev: Message | undefined, m: Message): boolean {
   );
 }
 
-function timeLabel(t: number): string {
-  return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 // Host direction (04:14): the well-known agents use their real public
 // app marks (fetched from claude.ai / Wikimedia Commons at his request);
 // everyone else keeps the initials block until per-user avatars land.
@@ -45,7 +41,7 @@ const AGENT_LOGOS: Record<string, string> = {
   codex: '/brand/agents/codex.png',
 };
 
-function SenderAvatar({ message }: { message: Message }) {
+function SenderAvatar({ message, sizeClass = 'h-9 w-9', textClass = 'text-[11px]' }: { message: Message; sizeClass?: string; textClass?: string }) {
   const agent = message.client === 'cc';
   const logo = agent ? AGENT_LOGOS[message.name.trim().toLowerCase()] : undefined;
   if (logo) {
@@ -53,14 +49,14 @@ function SenderAvatar({ message }: { message: Message }) {
       <img
         src={logo}
         alt=""
-        className="h-9 w-9 flex-shrink-0 select-none rounded-lg"
+        className={`${sizeClass} flex-shrink-0 select-none rounded-md`}
         aria-hidden="true"
       />
     );
   }
   return (
     <div
-      className={`flex h-9 w-9 flex-shrink-0 select-none items-center justify-center text-[11px] font-bold text-white ${agent ? 'rounded-lg' : 'rounded-full'}`}
+      className={`flex ${sizeClass} flex-shrink-0 select-none items-center justify-center ${textClass} font-bold text-white ${agent ? 'rounded-md' : 'rounded-full'}`}
       style={{ backgroundColor: message.color }}
       aria-hidden="true"
     >
@@ -122,41 +118,37 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now }: Prop
   // separated by white space — mirroring the host's own message bubbles. The
   // tint stays low-saturation so long technical text keeps full contrast.
   const bubble = { backgroundColor: `${message.color}1f`, borderColor: `${message.color}3d` };
-  const bubbleBase =
-    'inline-block max-w-full break-words rounded-2xl border px-3.5 py-2.5 text-[16px] leading-[1.7] sm:max-w-[85%] sm:text-[15px] sm:leading-[1.75] [overflow-wrap:anywhere]';
+  const headerBorder = { borderColor: `${message.color}33` };
+  const bodyClass =
+    'break-words px-3.5 py-2.5 text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75] [overflow-wrap:anywhere]';
 
   if (grouped) {
-    // Follow-up in a group: another bubble under the first, no header. The
-    // avatar gutter is preserved to reveal a hover timestamp and keep the
-    // bubbles aligned under the sender.
+    // Follow-up in a group: a plain full-width bubble under the first, no
+    // header; hover reveals the exact time.
     return (
-      <div className="group mt-1 flex gap-2.5 pl-3 pr-3 sm:pr-4">
-        <div className="w-9 flex-shrink-0 pt-3 text-right text-[9px] leading-none text-ink-faint opacity-0 group-hover:opacity-100">
-          {timeLabel(message.time)}
-        </div>
-        <div className="min-w-0">
-          <div className={bubbleBase} style={bubble}>
-            {body.trim() && <MessageText text={body} />}
-            {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
-          </div>
+      <div className="group mt-1 px-3 sm:px-4" title={exactTime(message.time)}>
+        <div className={`rounded-2xl border ${bodyClass}`} style={bubble}>
+          {body.trim() && <MessageText text={body} />}
+          {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
       </div>
     );
   }
 
+  // T-50 (host: "give bubbles maximum width"): the avatar + name + time live in
+  // a header row INSIDE the top of the bubble (divider under it), so the bubble
+  // spans the full reading width instead of surrendering a left avatar gutter.
   return (
-    <div className="group mt-4 flex gap-2.5 pl-3 pr-3 sm:pr-4">
-      <div className="flex-shrink-0 pt-0.5">
-        <SenderAvatar message={message} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex flex-wrap items-baseline gap-x-2 pl-1 leading-tight">
-          <span className="text-[15px] font-bold sm:text-[16px]" style={{ color: message.color }}>{message.name}</span>
+    <div className="group mt-4 px-3 sm:px-4">
+      <div className="overflow-hidden rounded-2xl border" style={bubble}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b px-3.5 pt-2 pb-1.5" style={headerBorder}>
+          <SenderAvatar message={message} sizeClass="h-6 w-6" textClass="text-[10px]" />
+          <span className="text-[14px] font-bold sm:text-[15px]" style={{ color: message.color }}>{message.name}</span>
           {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="truncate text-[11px] text-ink-faint">{message.role}</span>}
-          <span className="text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
+          <span className="ml-auto flex-shrink-0 text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
         </div>
-        <div className={`${bubbleBase} rounded-tl-md`} style={bubble}>
+        <div className={bodyClass}>
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
