@@ -34,7 +34,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
@@ -396,14 +396,23 @@ async function authenticateSender(
 
 async function handleRoomAction(payload: Record<string, unknown>, caller: Caller): Promise<unknown> {
   const action = String(payload.action || '');
-  const code = String(payload.code || '');
+  // T-47: accept a code in either format, any case/separator, and route on its
+  // canonical form (legacy → UPPER-dashed, words → lower-dashed). An
+  // unparseable value passes through unchanged so it still fails as
+  // RoomNotFound rather than being masked. Existing legacy codes canonicalize
+  // to themselves, so this is a no-op for every room created before word codes.
+  const rawCode = String(payload.code || '');
+  const code = canonicalizeCode(rawCode) ?? rawCode;
 
   switch (action) {
     case 'create': {
-      // Generate a code that isn't in use (createRoom itself overwrites).
+      // T-47: generate a human-friendly word code (door-cat-hall) that isn't
+      // in use. generateRoomCode skips embarrassing combos; the async loop here
+      // owns collision detection against live rooms (redis is async, so it
+      // can't run inside the generator's sync isTaken).
       let newCode = '';
       for (let i = 0; i < 8; i++) {
-        const candidate = generateCode();
+        const candidate = generateRoomCode();
         try {
           await getRoom(client, candidate);
         } catch (err) {

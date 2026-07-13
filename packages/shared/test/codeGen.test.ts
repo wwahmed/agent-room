@@ -48,7 +48,10 @@ describe('isValidCode', () => {
     expect(isValidCode('ABCDEFGHJ')).toBe(false);
   });
 
-  it('is case sensitive (uppercase only)', () => {
-    expect(isValidCode('abc-def-ghj')).toBe(false);
+  it('is case-INSENSITIVE (T-47): lowercase legacy input is accepted', () => {
+    // T-47 made codes case-insensitive with a format-aware canonical form
+    // (legacy → UPPER). A user typing their code in lowercase must still match.
+    // Canonicalization itself is covered in ../src/codeGen.test.ts.
+    expect(isValidCode('abc-def-ghj')).toBe(true);
   });
 });
