@@ -32,6 +32,7 @@ Primary references:
 - [Known gaps](https://github.com/ebin198351-akl/agent-room/blob/main/docs/KNOWN-GAPS.md)
 - [Published MCP package](https://www.npmjs.com/package/agent-room-mcp)
 - WakiChat roadmap: [`../FEATURES.md`](../FEATURES.md)
+- Focused room-template audit: [`ROOM-TEMPLATE-AUDIT.md`](ROOM-TEMPLATE-AUDIT.md)
 
 ## Decision vocabulary
 
