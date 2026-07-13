@@ -88,7 +88,6 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
 
   const active = snap.state !== 'idle';
   const recording = snap.state === 'recording';
-  const preview = (snap.finalText + (snap.interim ? ` ${snap.interim}` : '')).trim();
 
   return (
     <div className="relative flex-shrink-0">
@@ -111,69 +110,55 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
       </button>
 
       {active && (
-        // Recording panel floats ABOVE the composer so it never covers the
-        // bottom controls. aria-live announces recording/paused changes.
+        // Compact WhatsApp/Teams-style recorder: a slim inline pill above the
+        // composer — discard · live dot+timer · waveform · send. No Pause
+        // (short silences are tolerated under the hood, not by a button).
         <div
           role="group"
-          aria-label="Dictation controls"
-          className="absolute bottom-full left-0 z-30 mb-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-3 shadow-lg"
+          aria-label="Voice recording"
+          className="absolute bottom-full left-0 z-30 mb-2 flex items-center gap-2 rounded-full border border-border bg-surface py-1 pl-1.5 pr-1 shadow-lg"
         >
-          <div className="flex items-center gap-2" aria-live="polite">
-            <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${recording ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`} aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink">{recording ? 'Recording' : 'Paused'}</span>
-            {recording && (
-              // Real mic level (0..1) drives the bar heights; per-bar weights
-              // give a small waveform shape. Falls flat if the mic can't be tapped.
-              <span className="ml-0.5 flex h-4 items-center gap-0.5" aria-hidden="true">
-                {[0.6, 1, 0.8, 0.45].map((w, i) => (
-                  <span
-                    key={i}
-                    className="w-0.5 rounded-full bg-red-400/80 transition-[height] duration-75"
-                    style={{ height: `${Math.max(3, Math.min(16, 3 + level * w * 16))}px` }}
-                  />
-                ))}
-              </span>
-            )}
-            <span className="ml-auto font-mono text-[12px] tabular-nums text-ink-soft" aria-label={`Elapsed ${mmss(snap.elapsedMs)}`}>
-              {mmss(snap.elapsedMs)}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => controller().cancel()}
+            aria-label="Discard recording"
+            title="Discard"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
+          >
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 4.5h10M6.4 4.5V3.6a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v.9M4.8 4.5l.4 8a1 1 0 0 0 1 .95h3.6a1 1 0 0 0 1-.95l.4-8" />
+            </svg>
+          </button>
 
-          {snap.error && <div className="mt-2 text-[11px] font-semibold text-red-300">{snap.error}</div>}
+          <span className="flex items-center gap-1.5" aria-live="polite">
+            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-red-400 animate-pulse" aria-hidden="true" />
+            <span className="font-mono text-[12px] tabular-nums text-ink" aria-label={`Recording ${mmss(snap.elapsedMs)}`}>{mmss(snap.elapsedMs)}</span>
+          </span>
 
-          <div className="mt-2 max-h-20 overflow-y-auto text-[13px] leading-snug text-ink-soft">
-            {preview ? (
-              <span>{snap.finalText}{snap.interim && <span className="italic text-ink-faint"> {snap.interim}</span>}</span>
-            ) : (
-              <span className="italic text-ink-faint">Listening… speak now. Short pauses are fine.</span>
-            )}
-          </div>
+          {/* real mic level (0..1) drives the waveform; flat if the mic can't be tapped */}
+          <span className="flex h-4 items-center gap-0.5" aria-hidden="true">
+            {[0.5, 0.85, 1, 0.7, 0.9, 0.6].map((w, i) => (
+              <span
+                key={i}
+                className="w-0.5 rounded-full bg-red-400/70 transition-[height] duration-75"
+                style={{ height: `${Math.max(3, Math.min(15, 3 + level * w * 15))}px` }}
+              />
+            ))}
+          </span>
 
-          <div className="mt-2.5 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => (recording ? controller().pause() : controller().resume())}
-              className="min-h-9 flex-1 rounded-lg bg-surface-softer px-2 text-[12px] font-semibold text-ink transition hover:bg-surface"
-            >
-              {recording ? '⏸ Pause' : '▶ Resume'}
-            </button>
-            <button
-              type="button"
-              onClick={() => controller().stop()}
-              aria-label="Stop and insert the transcript"
-              className="min-h-9 flex-1 rounded-lg bg-accent px-2 text-[12px] font-bold text-white transition hover:opacity-90"
-            >
-              ✓ Stop
-            </button>
-            <button
-              type="button"
-              onClick={() => controller().cancel()}
-              aria-label="Discard the transcript"
-              className="min-h-9 rounded-lg border border-border px-2.5 text-[12px] font-semibold text-ink-muted transition hover:border-red-400/40 hover:text-red-300"
-            >
-              Cancel
-            </button>
-          </div>
+          {snap.error && <span className="max-w-[130px] truncate text-[10px] font-semibold text-red-300">{snap.error}</span>}
+
+          <button
+            type="button"
+            onClick={() => controller().stop()}
+            aria-label="Send transcript to the message box"
+            title="Insert transcript"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:opacity-90"
+          >
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
+              <path d="M2 7.4 13.2 2.6a.5.5 0 0 1 .66.64L9.3 14.2a.5.5 0 0 1-.94-.02L7 9.6 2.02 8.35a.5.5 0 0 1-.02-.95Z" />
+            </svg>
+          </button>
         </div>
       )}
     </div>
