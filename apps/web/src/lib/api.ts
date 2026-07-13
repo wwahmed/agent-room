@@ -151,6 +151,84 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
   return body as T;
 }
 
+// ---------- T-37: self-healing member credential ----------
+//
+// Both send and updatePresence present the per-tab memberKey. That key can go
+// stale (a new tab with empty sessionStorage, a reload after the row was
+// re-keyed, or the strict-auth cutover invalidating a pre-cutover key), and the
+// server then answers MemberAuthError. Previously the presence heartbeat
+// swallowed that (`.catch(()=>{})`) so a keyed user silently showed offline.
+//
+// Recovery: on a MemberAuthError, re-join WITH priorIdentity (which reclaims the
+// same row without a "(2)" suffix and re-issues a fresh memberKey), store the
+// new key, and retry the call once. The self participant captured at join time
+// is what lets us re-mint without threading identity through every caller.
+// The plaintext key is never logged or thrown — only stored.
+
+function storedSelf(code: string): Participant | undefined {
+  try {
+    const raw = sessionStorage.getItem(`room:${code}:self`);
+    return raw ? (JSON.parse(raw) as Participant) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeSelf(code: string, participant: Participant): void {
+  try {
+    sessionStorage.setItem(`room:${code}:self`, JSON.stringify(participant));
+  } catch { /* private mode */ }
+}
+
+function isMemberAuthError(e: unknown): boolean {
+  return e instanceof ApiError && e.name === 'MemberAuthError';
+}
+
+// Dedupe concurrent recovery: 18 heartbeats failing at once must trigger ONE
+// re-mint, not 18 re-joins.
+const reminting = new Map<string, Promise<boolean>>();
+
+function remintMemberKey(code: string): Promise<boolean> {
+  const inflight = reminting.get(code);
+  if (inflight) return inflight;
+  const p = (async () => {
+    const self = storedSelf(code);
+    if (!self) return false; // no captured identity → can't re-mint; fail closed
+    try {
+      const out = await call<{ memberKey?: string }>({
+        action: 'join',
+        code,
+        participant: self,
+        // reclaim THIS row (no suffix) and re-issue the credential
+        priorIdentity: { name: self.name, client: self.client },
+        wantMemberKey: true,
+      });
+      if (out.memberKey) {
+        storeMemberKey(code, out.memberKey);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  })();
+  reminting.set(code, p);
+  return p.finally(() => reminting.delete(code));
+}
+
+// Run a keyed request; on MemberAuthError, re-mint the credential once and retry
+// with the fresh key. `build` is re-invoked so the retry reads the NEW key.
+async function keyedCall<T>(build: (memberKey: string | undefined) => Record<string, unknown>, code: string): Promise<T> {
+  try {
+    return await call<T>(build(storedMemberKey(code)));
+  } catch (e) {
+    if (!isMemberAuthError(e)) throw e;
+    const recovered = await remintMemberKey(code);
+    if (!recovered) throw e; // fail closed — surface the auth error
+    return await call<T>(build(storedMemberKey(code)));
+  }
+}
+
 // ---------- rooms ----------
 
 export interface CreateRoomInput {
@@ -200,6 +278,9 @@ export async function joinRoom(
     wantMemberKey: true,
   });
   storeMemberKey(code, out.memberKey);
+  // T-37: remember the final (possibly suffixed) row identity so a later
+  // credential re-mint can reclaim THIS row via priorIdentity.
+  storeSelf(code, out.participant);
   return { ...out.room, participant: out.participant };
 }
 
@@ -295,7 +376,8 @@ export async function updatePresence(
   name: string,
   at: number,
 ): Promise<void> {
-  await call({ action: 'updatePresence', code, name, at, memberKey: storedMemberKey(code) });
+  // T-37: presents the current memberKey and self-heals a stale/absent one.
+  await keyedCall(mk => ({ action: 'updatePresence', code, name, at, memberKey: mk }), code);
 }
 
 // ---------- messages ----------
@@ -321,7 +403,9 @@ export async function appendMessage(
   message: Message,
 ): Promise<AppendResult> {
   // T-30 (F2): present the member credential; a name alone no longer sends.
-  return (await call<{ result: AppendResult }>({ action: 'send', code, message, memberKey: storedMemberKey(code) })).result;
+  // T-37: same self-healing recovery as presence, so a send never fails on a
+  // recoverable stale key.
+  return (await keyedCall<{ result: AppendResult }>(mk => ({ action: 'send', code, message, memberKey: mk }), code)).result;
 }
 
 export async function appendSystemMessage(
