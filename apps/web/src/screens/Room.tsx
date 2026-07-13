@@ -110,6 +110,11 @@ export function Room() {
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [now, setNow] = useState(Date.now());
   const feedRef = useRef<HTMLDivElement>(null);
+  // T-48 scroll-anchoring: only auto-stick to the bottom when the reader is
+  // already there; if they've scrolled up, hold their spot and count arrivals.
+  const atBottomRef = useRef(true);
+  const prevLenRef = useRef(0);
+  const [unseenCount, setUnseenCount] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -378,8 +383,33 @@ export function Room() {
     }
   }
 
+  function scrollToBottom() {
+    const el = feedRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight });
+    setUnseenCount(0);
+  }
+
+  function onFeedScroll() {
+    const el = feedRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    atBottomRef.current = distanceFromBottom < 80;
+    if (atBottomRef.current) setUnseenCount(0);
+  }
+
+  // T-48: on new messages, stick to the bottom only for the initial load or when
+  // the reader is already at the bottom; otherwise preserve their scroll position
+  // and surface a "↓ N new" pill (below) instead of yanking them down.
   useEffect(() => {
-    feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
+    const len = messages.length;
+    const added = len - prevLenRef.current;
+    if (prevLenRef.current === 0 || atBottomRef.current) {
+      feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
+      setUnseenCount(0);
+    } else if (added > 0) {
+      setUnseenCount((n) => n + added);
+    }
+    prevLenRef.current = len;
   }, [messages.length]);
 
   if (error) return <div className="p-10 text-red-600">{error}</div>;
@@ -963,7 +993,7 @@ export function Room() {
           onToggleInspector={() => setInspectorOpen(v => !v)}
         />
 
-            <div ref={feedRef} className="flex-1 overflow-y-auto py-4 relative">
+            <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto py-4 relative">
               {/* T-21: cap the text column at a comfortable reading measure
                   on wide monitors; the feed surface stays full-bleed. Self
                   messages right-align WITHIN the measure instead of
@@ -986,6 +1016,7 @@ export function Room() {
                     self={m.name === self.name && m.client === 'web'}
                     grouped={isSameGroup(messages[i - 1], m)}
                     ambiguousNames={ambiguousNames}
+                    now={now}
                   />
                 ));
               })()}
@@ -1005,6 +1036,19 @@ export function Room() {
                 </div>
               )}
               </div>
+
+              {/* T-48: pinned jump-to-latest pill; only while scrolled up with
+                  unseen arrivals, so the reader never loses their reading spot. */}
+              {unseenCount > 0 && (
+                <button
+                  type="button"
+                  onClick={scrollToBottom}
+                  className="sticky bottom-4 z-20 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
+                >
+                  <span aria-hidden="true">↓</span>
+                  {unseenCount} new message{unseenCount === 1 ? '' : 's'}
+                </button>
+              )}
             </div>
 
             {ended ? (
