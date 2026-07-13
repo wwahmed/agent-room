@@ -173,6 +173,8 @@ function statusForError(err: Error): number {
     case 'ModeNotSupportedError':
     case 'BadRequestError':
       return 400;
+    case 'LedgerConflictError':
+      return 409;
     default:
       return 500;
   }
@@ -526,8 +528,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
         throw taskError('BadRequestError', 'verifier must be a different agent than the owner');
       }
       board.tasks.push(task);
-      await saveTaskBoard(code, board);
-      queueProjectSync(code);
+      await commitBoard(code, board);
       return { board, task };
     }
     case 'taskClaim': {
@@ -540,8 +541,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       task.ownerClient = (payload.client as 'web' | 'cc') || 'cc';
       task.state = 'in_progress';
       task.claimedAt = nowMs();
-      await saveTaskBoard(code, board);
-      queueProjectSync(code);
+      await commitBoard(code, board);
       return { board, task };
     }
     case 'taskSubmit': {
@@ -570,8 +570,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
         exitCode: Number(ev.exitCode),
       };
       task.submittedAt = nowMs();
-      await saveTaskBoard(code, board);
-      queueProjectSync(code);
+      await commitBoard(code, board);
       return { board, task };
     }
     case 'taskVerify': {
@@ -596,8 +595,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       task.note = (payload.note as string) || undefined;
       task.verifiedBy = name;
       task.verifiedAt = nowMs();
-      await saveTaskBoard(code, board);
-      queueProjectSync(code);
+      await commitBoard(code, board);
       return { board, task };
     }
     default:
@@ -668,34 +666,39 @@ async function saveTaskBoard(code: string, board: TaskBoard): Promise<void> {
 
 // ---------- project ledger sync (T-18) ----------
 
-function ledgerHashKey(projectId: string): string {
-  return `proj-ledger-hash:${projectId}`; // no TTL: survives room expiry
-}
-
 /**
  * Serialize the room's live board into the attached project's durable
- * Markdown ledger. Returns the SyncResult (with `conflict` set instead
- * of throwing when the managed section was hand-edited).
+ * Markdown ledger. Conflict state is derived from the FILE (embedded
+ * section hash), so no Redis state is involved and Redis loss cannot
+ * silently authorize an overwrite.
  */
 async function syncProjectForRoom(code: string, force = false): Promise<SyncResult | { skipped: string }> {
   const room = await getRoom(client, code);
   if (!room.projectId) return { skipped: 'room has no project' };
   const board = await getTaskBoard(code);
-  const lastHash = await redis.get(ledgerHashKey(room.projectId));
-  const res = syncTaskLedger(room.projectId, code, board, lastHash, force);
-  if (res.conflict) {
-    console.warn(`[project] ledger sync conflict for ${room.projectId} (room ${code}): ${res.conflict}`);
-  } else {
-    await redis.set(ledgerHashKey(room.projectId), res.hash);
-  }
-  return res;
+  return syncTaskLedger(room.projectId, code, board, force);
 }
 
-/** Fire-and-forget ledger sync after task mutations; never fails the action. */
-function queueProjectSync(code: string): void {
-  void syncProjectForRoom(code).catch((err) => {
-    console.warn(`[project] background ledger sync failed for room ${code}:`, err instanceof Error ? err.message : err);
-  });
+/**
+ * Durable-first board commit: for project-attached rooms the Markdown
+ * ledger is written SYNCHRONOUSLY with the post-mutation board BEFORE
+ * Redis is updated. A ledger conflict or write error fails the whole
+ * mutation with the live board untouched — no silent split-brain. If
+ * the Redis write after a successful ledger write fails, the durable
+ * side is AHEAD (safe direction); the next successful mutation or
+ * projectSync reconverges.
+ */
+async function commitBoard(code: string, board: TaskBoard): Promise<void> {
+  const room = await getRoom(client, code);
+  if (room.projectId) {
+    const res = syncTaskLedger(room.projectId, code, board, false);
+    if (res.conflict) {
+      const err = new Error(`Project ledger conflict: ${res.conflict}`);
+      err.name = 'LedgerConflictError';
+      throw err;
+    }
+  }
+  await saveTaskBoard(code, board);
 }
 
 // ---------- static web UI ----------

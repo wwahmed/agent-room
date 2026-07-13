@@ -48,6 +48,12 @@ const BEGIN_MARK = '<!-- wakichat:tasks:begin v1 — machine-managed section; ed
 const END_MARK = '<!-- wakichat:tasks:end -->';
 const STATE_BEGIN = '<!-- wakichat:state:begin';
 const STATE_END = 'wakichat:state:end -->';
+// Integrity line embedded INSIDE the managed section: the hash of the
+// section with this line normalized to the placeholder. Conflict
+// detection is therefore derived purely from the file — surviving Redis
+// restarts, restores, and room TTL expiry (Codex T-18 review, item 3).
+const HASH_LINE_RE = /<!-- wakichat:hash:[0-9a-f]{16} -->/;
+const HASH_PLACEHOLDER = '<!-- wakichat:hash:0000000000000000 -->';
 
 export function loadRegistry(): Record<string, ProjectConfig> {
   try {
@@ -174,8 +180,9 @@ export function renderManagedSection(board: LedgerBoardShape, roomCode: string, 
   const summary = [...counts.entries()].map(([s, n]) => `${n} ${s}`).join(', ') || 'no tasks';
   const body = board.tasks.map(t => renderTask(t as Record<string, unknown>)).join('\n\n');
   const stateJson = JSON.stringify({ v: 1, roomCode, syncedAt: syncedAtMs, board });
-  return [
+  const withPlaceholder = [
     BEGIN_MARK,
+    HASH_PLACEHOLDER,
     '',
     `_Last sync: ${iso(syncedAtMs)} from room ${roomCode} · ${board.tasks.length} tasks (${summary})_`,
     '',
@@ -188,6 +195,22 @@ export function renderManagedSection(board: LedgerBoardShape, roomCode: string, 
     `${STATE_END}`,
     END_MARK,
   ].join('\n');
+  const h = sectionHash(withPlaceholder);
+  return withPlaceholder.replace(HASH_PLACEHOLDER, `<!-- wakichat:hash:${h} -->`);
+}
+
+/**
+ * File-derived integrity check: 'clean' when the embedded hash matches
+ * the section content, 'tampered' when it doesn't (hand edit inside the
+ * markers), 'legacy' when no hash line exists (pre-hash section — treat
+ * as clean once, the next write adds the line).
+ */
+export function sectionIntegrity(section: string): 'clean' | 'tampered' | 'legacy' {
+  const m = HASH_LINE_RE.exec(section);
+  if (!m) return 'legacy';
+  const recorded = /<!-- wakichat:hash:([0-9a-f]{16}) -->/.exec(m[0])![1];
+  const normalized = section.replace(HASH_LINE_RE, HASH_PLACEHOLDER);
+  return sectionHash(normalized) === recorded ? 'clean' : 'tampered';
 }
 
 function managedSlice(content: string): { before: string; section: string; after: string } | null {
@@ -215,17 +238,15 @@ export interface SyncResult {
 }
 
 /**
- * Write the board into the project's task ledger. `lastHash` is the hash
- * of the managed section as WE last wrote it (kept in Redis by the
- * caller); if the on-disk section differs from that, someone hand-edited
- * inside the markers and we refuse unless `force` — the caller surfaces
- * the conflict instead of clobbering.
+ * Write the board into the project's task ledger. Conflict detection is
+ * FILE-derived (sectionIntegrity): a hand edit inside the markers makes
+ * the embedded hash mismatch and the write is refused unless `force` —
+ * no external state, so it survives Redis loss and room expiry.
  */
 export function syncTaskLedger(
   projectId: string,
   roomCode: string,
   board: LedgerBoardShape,
-  lastHash: string | null,
   force = false,
 ): SyncResult {
   const { abs, rel, cfg } = resolveDocPath(projectId, 'tasks');
@@ -238,23 +259,19 @@ export function syncTaskLedger(
     const current = readFileSync(abs, 'utf8');
     const slice = managedSlice(current);
     if (slice) {
-      const currentHash = sectionHash(slice.section);
-      if (lastHash && currentHash !== lastHash && !force) {
-        return { rel, bytes: 0, changed: false, hash: currentHash, conflict: 'managed section was modified outside WakiChat since the last sync; re-sync with force after reviewing the file' };
+      const integrity = sectionIntegrity(slice.section);
+      if (integrity === 'tampered' && !force) {
+        return { rel, bytes: 0, changed: false, hash: sectionHash(slice.section), conflict: 'managed section was modified outside WakiChat since the last sync; review the file and re-sync with force' };
       }
-      // Idempotence: identical board => no write, no timestamp churn.
-      // ONLY when the on-disk section is exactly what we last wrote and
-      // this isn't a forced repair — a force sync must always rewrite,
-      // otherwise a hand-edited section with an unchanged board would
-      // survive the "fix it" path.
-      const clean = !force && (!lastHash || currentHash === lastHash);
-      if (clean) {
+      // Idempotence: identical board on a clean section => no write, no
+      // timestamp churn. A forced repair must always rewrite.
+      if (integrity === 'clean' && !force) {
         const jsonMatch = /```json\n([\s\S]*?)\n```/.exec(slice.section);
         if (jsonMatch) {
           try {
             const prev = JSON.parse(jsonMatch[1]) as { board?: LedgerBoardShape };
             if (prev.board && JSON.stringify(prev.board) === JSON.stringify(board)) {
-              return { rel, bytes: Buffer.byteLength(current), changed: false, hash: currentHash };
+              return { rel, bytes: Buffer.byteLength(current), changed: false, hash: sectionHash(slice.section) };
             }
           } catch { /* fall through to a fresh write */ }
         }
@@ -270,7 +287,16 @@ export function syncTaskLedger(
   }
 
   const next = before + section + after;
-  const tmp = join(dirname(abs), `.tasks-sync-${randomBytes(4).toString('hex')}.tmp`);
+  // TOCTOU guard: re-verify containment of the (possibly re-created or
+  // symlink-swapped) parent directory immediately before writing the tmp
+  // file and renaming. Node's fs API can't hold a directory handle, so a
+  // microscopic window remains; this closes the practical swap race.
+  const parentReal = realpathSync(dirname(abs));
+  const rootReal = realpathSync(cfg.root);
+  if (parentReal !== rootReal && !parentReal.startsWith(rootReal + sep)) {
+    throw projErr('BadRequestError', 'Ledger parent directory escaped the project root between check and write.');
+  }
+  const tmp = join(parentReal, `.tasks-sync-${randomBytes(4).toString('hex')}.tmp`);
   writeFileSync(tmp, next, 'utf8');
   renameSync(tmp, abs); // atomic on the same filesystem
   return { rel, bytes: Buffer.byteLength(next), changed: true, hash: sectionHash(section) };

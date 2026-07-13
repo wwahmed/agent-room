@@ -53,23 +53,32 @@ This fork runs the full Agent Room stack on one always-on Mac
 
 ## Project-backed rooms (T-18)
 
-- Registry: `deploy/projects.json` (override with `PROJECTS_FILE`).
-  Maps slug ids to `{ name, root, docs: { role: relative/path } }`.
-  Browsers/MCP clients only ever send project IDS; every path resolves
-  server-side with realpath containment under `root` — `..`, absolute
-  paths, and symlink escapes are all denied (tested).
-- Canonical-source rule: the room's Redis board is the fast LIVE view
-  (24h TTL); the project's `tasks` doc (e.g. `docs/TASKS.md`) is the
-  DURABLE ledger. Every task mutation auto-syncs the ledger; the
-  managed section between the `wakichat:tasks` markers carries both the
-  human-readable tasks and an embedded machine JSON block used to
-  resume the board in future rooms (`attachProject` hydrates an empty
-  board from the ledger).
+- Registry: `deploy/projects.json` is GITIGNORED (machine-specific
+  absolute paths never leave this Mac; the repo carries only
+  `deploy/projects.example.json`). Override location with
+  `PROJECTS_FILE`. Maps slug ids to `{ name, root, docs: { role:
+  relative/path } }`. Browsers/MCP clients only ever send project IDS;
+  every path resolves server-side with realpath containment under
+  `root` — `..`, absolute paths, and symlink escapes are all denied,
+  and containment is re-checked immediately before the atomic rename.
+- Canonical-source rule: the project's `tasks` doc (e.g.
+  `docs/TASKS.md`) is the DURABLE ledger; the room's Redis board is the
+  fast LIVE view (24h TTL). Task mutations in a project-attached room
+  are DURABLE-FIRST: the ledger is written synchronously with the
+  post-mutation board BEFORE Redis, so a ledger conflict or write error
+  fails the mutation (409 LedgerConflictError) with the live board
+  untouched — no silent split-brain. If Redis fails after a successful
+  ledger write, the durable side is ahead (safe); the next sync
+  reconverges. The managed section carries the human-readable tasks
+  plus an embedded machine JSON block used to resume the board in
+  future rooms (`attachProject` hydrates an empty board).
 - Writes are atomic (tmp + rename) and only replace the marker-fenced
   section; all other file content is preserved. Hand-edits INSIDE the
-  markers are detected via a content hash kept in Redis
-  (`proj-ledger-hash:<id>`) and surface as a sync conflict; resolve by
-  reviewing the file and calling `projectSync` with `force: true`.
+  markers are detected via a hash EMBEDDED IN THE SECTION ITSELF
+  (`wakichat:hash` line) — purely file-derived, so Redis restarts,
+  restores, or room expiry can never silently authorize an overwrite.
+  Resolve conflicts by reviewing the file and calling `projectSync`
+  with `force: true`.
 - Backup/rollback: the ledger is a normal tracked file — `git diff`
   audits every sync and `git checkout -- docs/TASKS.md` rolls back.
   The server never commits; committing stays deliberate.
