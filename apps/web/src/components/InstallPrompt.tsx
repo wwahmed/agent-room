@@ -71,7 +71,7 @@ export function InstallPrompt() {
               void deferred.prompt();
               void deferred.userChoice.finally(() => setDeferred(null));
             }}
-            className="mt-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="mt-2 rounded-lg bg-accent px-4 py-2 min-h-11 text-sm font-semibold text-surface-sunken transition hover:opacity-90"
           >
             Install
           </button>

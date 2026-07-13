@@ -706,14 +706,14 @@ export function Room() {
   }
 
   return (
-    <div className="h-full flex items-center justify-center sm:px-3 sm:py-4">
+    <div className="h-full">
       {/* dvh (not vh) so mobile browser chrome doesn't push the composer off-screen. */}
-      <div className="w-full max-w-7xl h-[100dvh] sm:h-[88vh] grid grid-rows-[auto_auto_1fr] grid-cols-[minmax(0,1fr)] bg-surface border-0 sm:border border-border sm:rounded-xl shadow-card overflow-hidden">
+      <div className="w-full h-[100dvh] grid grid-rows-[auto_auto_1fr] grid-cols-[minmax(0,1fr)] bg-surface-soft overflow-hidden">
         <header className="px-3 py-2 sm:px-4 sm:py-3 border-b border-border-faint flex justify-between items-center bg-surface">
           <div className="min-w-0 flex items-center gap-3">
             <div className="hidden sm:block"><AgentRoomLogo showWordmark={false} markClassName="h-8 w-8" /></div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">{room.topic}</div>
+              <div className="font-display text-[17px] font-medium truncate">{room.topic}</div>
               <div className="text-[10px] text-ink-soft">
                 {ended ? <span className="text-red-500 font-semibold">Meeting ended</span> : `${room.participants.length} participants`}
               </div>
@@ -746,7 +746,7 @@ export function Room() {
             <button
               key={key}
               onClick={() => setMobilePanel(key as 'chat' | 'people' | 'outputs')}
-              className={`rounded-lg px-2 py-2 min-h-11 font-semibold ${mobilePanel === key ? 'bg-accent text-white' : 'text-ink-soft bg-surface-softer'}`}
+              className={`rounded-lg px-2 py-2 min-h-11 font-semibold ${mobilePanel === key ? 'bg-accent text-surface-sunken' : 'text-ink-soft bg-surface-softer'}`}
             >
               {label}
             </button>
@@ -1007,7 +1007,7 @@ export function Room() {
                   <p className="text-sm font-semibold text-ink mb-1">No activity for 1 hour</p>
                   <p className="text-xs text-ink-soft mb-3">Meeting will close in <span className="font-bold text-red-600">{countdown}s</span></p>
                   <div className="flex gap-2 justify-center">
-                    <button onClick={dismissIdlePrompt} className="px-4 py-1.5 bg-accent text-white text-xs font-semibold rounded-lg">
+                    <button onClick={dismissIdlePrompt} className="px-4 py-1.5 bg-accent text-surface-sunken text-xs font-semibold rounded-lg">
                       Keep open
                     </button>
                     <button onClick={handleEndMeeting} className="px-4 py-1.5 bg-red-500/10 text-red-300 text-xs font-semibold rounded-lg border border-red-400/30">
@@ -1035,7 +1035,7 @@ export function Room() {
                   <button
                     onClick={handleExportReport}
                     disabled={reportBusy || messages.length === 0}
-                    className="text-xs font-semibold text-white bg-accent px-4 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-xs font-semibold text-surface-sunken bg-accent px-4 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {reportBusy ? 'Saving…' : 'Save & Share'}
                   </button>
@@ -1167,7 +1167,7 @@ export function Room() {
                     <button
                       onClick={send}
                       disabled={!text.trim() && attachments.length === 0}
-                      className="min-h-11 bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
+                      className="min-h-11 bg-accent text-surface-sunken px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
                     >
                       Send
                     </button>
@@ -1199,7 +1199,7 @@ export function Room() {
                 <button
                   onClick={handleExportReport}
                   disabled={reportBusy || messages.length === 0}
-                  className="w-full bg-accent text-white text-[11px] font-semibold px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-accent text-surface-sunken text-[11px] font-semibold px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {reportBusy ? 'Saving…' : 'Save & Share'}
                 </button>

@@ -27,7 +27,7 @@ export function Bubble({ message, self, ambiguousNames }: Props) {
   const ambiguous = ambiguousNames?.has(message.name);
   const time = new Date(message.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const bubble = self
-    ? 'bg-accent text-white rounded-2xl rounded-br-sm'
+    ? 'bg-accent text-surface-sunken rounded-2xl rounded-br-sm'
     : 'bg-surface text-ink rounded-2xl rounded-bl-sm';
 
   return (

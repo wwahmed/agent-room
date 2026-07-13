@@ -143,7 +143,7 @@ export function Join() {
               className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
           </label>
 
-          <button disabled={busy} onClick={join} className="w-full bg-accent text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50">
+          <button disabled={busy} onClick={join} className="w-full bg-accent text-surface-sunken py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50">
             {busy ? 'Joining…' : 'Join meeting →'}
           </button>
         </>
