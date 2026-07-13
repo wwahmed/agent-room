@@ -36,8 +36,27 @@ function timeLabel(t: number): string {
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// Host direction (04:14): the well-known agents use their real public
+// app marks (fetched from claude.ai / Wikimedia Commons at his request);
+// everyone else keeps the initials block until per-user avatars land.
+const AGENT_LOGOS: Record<string, string> = {
+  claude: '/brand/agents/claude.png',
+  codex: '/brand/agents/codex.png',
+};
+
 function SenderAvatar({ message }: { message: Message }) {
   const agent = message.client === 'cc';
+  const logo = agent ? AGENT_LOGOS[message.name.trim().toLowerCase()] : undefined;
+  if (logo) {
+    return (
+      <img
+        src={logo}
+        alt=""
+        className="h-8 w-8 flex-shrink-0 select-none rounded-lg"
+        aria-hidden="true"
+      />
+    );
+  }
   return (
     <div
       className={`flex h-8 w-8 flex-shrink-0 select-none items-center justify-center text-[11px] font-bold text-white ${agent ? 'rounded-lg' : 'rounded-full'}`}
