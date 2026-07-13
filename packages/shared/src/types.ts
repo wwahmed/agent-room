@@ -13,6 +13,13 @@ export interface Participant {
   // existed (treated as legacy-approved). New joiners default to false until
   // the host (createdBy) approves them via approveParticipant.
   canSpeak?: boolean;
+  // T-30 (F2): SHA-256 of a server-issued, room-scoped `memberKey` handed to
+  // the client once at join. When present, the send/presence path REQUIRES
+  // the matching plaintext key — a claimed display name alone no longer
+  // authenticates. Absent on rows from credential-unaware clients (MCP
+  // 0.25.x), which fall to the flag-gated, fail-closed-on-ambiguity legacy
+  // path. Only the hash is ever stored; the plaintext lives client-side.
+  memberKeyHash?: string;
 }
 
 // How agent responses are coordinated in this room.

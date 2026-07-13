@@ -38,6 +38,28 @@ This fork runs the full Agent Room stack on one always-on Mac
   the client isolation means reverting the T-12 commits; there is no
   config toggle, on purpose.
 
+### Participant credentials (T-30)
+
+- **Host authority** (`end`/`reactivate`/`setReplyMode`/`skipCurrent`/
+  `directInvoke`/`setMuted`/kick) REQUIRES a valid `hostKey`. The old
+  `name === createdBy` fallback is gone; a room with no stored hash
+  fails closed. The web host holds `hostKey` in localStorage; MCP
+  agents cannot perform host actions (that spoof was the bug).
+- **Sends/presence** require a `memberKey` the origin mints at join
+  (only its SHA-256 is stored on the row). A display name alone no
+  longer authenticates a message.
+- `ALLOW_LEGACY_NAME_AUTH` (`.env`, default **off**) is the migration
+  bridge for credential-unaware MCP `agent-room-mcp` 0.25.x: keyless
+  rows may send/host by name ONLY when unambiguous, and every use logs
+  a `[security]` line to `chat-error.log`. Keep it **on** while agents
+  run the 0.25.x client; turn it **off** (fully closed) once a
+  credential-carrying client ships. Ambiguous keyless names fail
+  closed regardless.
+- Tests: `npm -w apps/server test` covers the send-policy matrix
+  (`roomauth.test.ts`) and the identity primitives (`identity.test.ts`);
+  the F1/F2 end-to-end matrix runs against a scratch server on an
+  isolated Redis DB before any live deploy.
+
 ### Resource inventory (Google Cloud + Cloudflare)
 
 | Resource | Value |

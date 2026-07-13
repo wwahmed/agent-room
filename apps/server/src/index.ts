@@ -23,6 +23,9 @@
 //   REDIS_URL       redis connection string        (default redis://127.0.0.1:6379)
 //   KV_TOKEN        bearer token for /kv           (required)
 //   WEB_DIST        path to built web UI           (default ../../web/dist relative to this file)
+//   ALLOW_LEGACY_NAME_AUTH  T-30 migration bridge  (default off = fully closed)
+//                   When on, keyless MCP 0.25.x rows may host/send by name
+//                   ONLY when unambiguous; every use logs a [security] event.
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -33,6 +36,7 @@ import Redis from 'ioredis';
 import { generateCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
+import { decideSenderAuth } from './roomauth.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -42,6 +46,7 @@ import {
   createRoomReport,
   directInvoke,
   endRoom,
+  generateMemberKey,
   getMessageTotalCount,
   getRoom,
   getRoomReport,
@@ -55,6 +60,7 @@ import {
   setListenUntil,
   setMuted,
   setReplyMode,
+  sha256Hex,
   sweepTimeouts,
   updatePresence,
   verifyHostKey,
@@ -64,6 +70,13 @@ import {
 const PORT = Number(process.env.PORT || 8210);
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const KV_TOKEN = process.env.KV_TOKEN || '';
+// T-30 migration bridge. Default OFF = fully closed (F1/F2): host actions and
+// sends on keyless rows are denied. Set ON in an env that still runs
+// credential-unaware MCP 0.25.x clients (they cannot carry a memberKey), so
+// their host/send actions keep working via the name path — but ONLY when
+// unambiguous, and every use is logged as a security event. Remove once a
+// credential-carrying client ships (T-25/T-31).
+const ALLOW_LEGACY_NAME_AUTH = /^(1|true|yes|on)$/i.test(process.env.ALLOW_LEGACY_NAME_AUTH || '');
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = resolve(process.env.WEB_DIST || join(HERE, '..', '..', 'web', 'dist'));
 
@@ -168,6 +181,7 @@ function statusForError(err: Error): number {
     case 'MutedError':
     case 'NotYourTurnError':
     case 'NotHostError':
+    case 'MemberAuthError':
       return 403;
     case 'InvalidModeConfigError':
     case 'ModeNotSupportedError':
@@ -271,22 +285,71 @@ async function handleKv(req: IncomingMessage, res: ServerResponse, path: string)
 
 // ---------- /api/room — dispatcher for the agent-room-mcp client ----------
 
-async function requireHost(code: string, requesterName: string | undefined, hostKey: string | undefined): Promise<void> {
-  // hostKey is the strong credential. Fall back to name equality for
-  // requesters that predate key storage — acceptable in a single-user,
-  // Access-gated deployment.
-  if (hostKey) {
-    await verifyHostKey(client, code, hostKey);
-    return;
-  }
-  const room = await getRoom(client, code);
-  if (requesterName && requesterName === room.createdBy) return;
-  const err = new Error(`Only the host (${room.createdBy}) can do that.`);
-  err.name = 'NotHostError';
-  throw err;
+function securityEvent(msg: string): void {
+  // Distinct prefix so `chat-error.log` greps cleanly for anything that took
+  // a relaxed (flag-gated) authentication path.
+  console.warn(`[security] ${msg}`);
 }
 
-async function handleRoomAction(payload: Record<string, unknown>): Promise<unknown> {
+function memberAuthError(message: string): Error {
+  const err = new Error(message);
+  err.name = 'MemberAuthError';
+  return err;
+}
+
+// T-30 (F1): host authority now REQUIRES a valid hostKey — the name-equality
+// fallback is gone. `verifyHostKey` fails closed on a room with no stored
+// hash unless the migration flag is on (in which case the relaxation is
+// logged). Applies to end/reactivate/setReplyMode/directInvoke/skipCurrent
+// AND (routed here at the server) setMuted/removeParticipant.
+async function requireHost(code: string, hostKey: string | undefined): Promise<void> {
+  await verifyHostKey(client, code, hostKey, { allowLegacyNoHash: ALLOW_LEGACY_NAME_AUTH });
+  if (!hostKey && ALLOW_LEGACY_NAME_AUTH) {
+    securityEvent(`host action on ${code} authorized via legacy no-hash path (ALLOW_LEGACY_NAME_AUTH) — no hostKey presented`);
+  }
+}
+
+// T-30 (F2): authenticate a sender/presence caller against the row it claims.
+// A row carrying a memberKeyHash REQUIRES the matching plaintext memberKey —
+// a claimed display name never authenticates. A keyless row (credential-
+// unaware MCP 0.25.x) is accepted only via the flag-gated legacy path, and
+// only when the (name, client) tuple is unambiguous; otherwise it fails
+// closed. Never trusts a client-supplied identity beyond what it can prove.
+async function authenticateSender(
+  code: string,
+  name: string,
+  clientKind: 'web' | 'cc',
+  memberKey: string | undefined,
+  caller: Caller,
+): Promise<void> {
+  const room = await getRoom(client, code);
+  const rows = room.participants.filter(p => p.name === name && p.client === clientKind);
+  // No row yet: let the downstream speaker gate (findSpeaker → MutedError)
+  // produce the not-in-room signal; there is nothing to authenticate against.
+  if (rows.length === 0) return;
+
+  const presentedHash = memberKey ? await sha256Hex(memberKey) : undefined;
+  const decision = decideSenderAuth(rows, presentedHash, ALLOW_LEGACY_NAME_AUTH);
+  if (decision.ok) {
+    if (decision.via === 'legacy-name') {
+      securityEvent(`send/presence as "${name}" (${clientKind}) on ${code} via legacy name path (ALLOW_LEGACY_NAME_AUTH); caller=${caller.kind}`);
+    }
+    return;
+  }
+  switch (decision.reason) {
+    case 'need-key':
+      throw memberAuthError(`This participant requires its member credential. Rejoin the room to obtain one, then retry.`);
+    case 'bad-key':
+      throw memberAuthError(`Member credential does not match "${name}". A display name alone cannot authenticate.`);
+    case 'ambiguous':
+      throw memberAuthError(`"${name}" (${clientKind}) is ambiguous — ${rows.length} rows share it. Rejoin with a distinct name or a member credential.`);
+    case 'no-flag':
+    default:
+      throw memberAuthError(`Sender authentication required for "${name}". Rejoin to obtain a member credential.`);
+  }
+}
+
+async function handleRoomAction(payload: Record<string, unknown>, caller: Caller): Promise<unknown> {
   const action = String(payload.action || '');
   const code = String(payload.code || '');
 
@@ -338,11 +401,16 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       return { ok: true };
     }
     case 'setMuted': {
+      // T-30 (F1): mute/unmute is host-only and now REQUIRES a hostKey. The
+      // underlying setMuted still name-checks as defense in depth, so pass
+      // the verified host name (createdBy), never the caller's claim.
+      await requireHost(code, payload.hostKey as string | undefined);
+      const room = await getRoom(client, code);
       return {
         room: await setMuted(
           client,
           code,
-          String(payload.requesterName || ''),
+          room.createdBy,
           String(payload.targetName || ''),
           (payload.targetClient as 'web' | 'cc') || 'web',
           Boolean(payload.muted),
@@ -352,8 +420,11 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
     case 'updatePresence': {
       // Web heartbeat: stamps lastSeenAt on the participant row. Distinct
       // from 'presence' (setListenUntil), which is the agents' listen-window
-      // marker.
-      await updatePresence(client, code, String(payload.name || ''), Number(payload.at || Date.now()));
+      // marker. T-30 (F2): authenticate the heartbeat like a send so a name
+      // alone can't refresh someone else's presence.
+      const pName = String(payload.name || '');
+      await authenticateSender(code, pName, 'web', payload.memberKey as string | undefined, caller);
+      await updatePresence(client, code, pName, Number(payload.at || Date.now()));
       return { ok: true };
     }
     case 'messageCount': {
@@ -367,7 +438,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
     case 'attachProject': {
       // Host-gated: binding a room to a project decides where its task
       // ledger lands on disk.
-      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined);
       const projectId = String(payload.projectId || '');
       if (!getProject(projectId)) {
         const err = new Error(`Unknown project "${projectId}". Ids come from GET /api/projects.`);
@@ -404,13 +475,19 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       const priorIdentity = payload.priorIdentity as { name: string; client: 'web' | 'cc' } | undefined;
       const room = await getRoom(client, code);
       if (participant.name === room.createdBy) {
-        // Claiming the host slot requires the key (legacy rooms without a
-        // hash pass verifyHostKey unconditionally).
-        await verifyHostKey(client, code, hostKey);
+        // T-30 (F1): claiming the host slot requires a valid hostKey; a room
+        // with no stored hash fails closed unless the migration flag is on.
+        await verifyHostKey(client, code, hostKey, { allowLegacyNoHash: ALLOW_LEGACY_NAME_AUTH });
       }
-      const joined = await joinRoom(client, code, participant, { priorIdentity });
-      const { participant: outParticipant, ...roomRest } = joined;
-      return { room: roomRest, participant: outParticipant };
+      // T-30 (F2): credential-aware clients (web) set wantMemberKey and get a
+      // one-time member credential minted for their row. MCP 0.25.x never
+      // sets it, so its row stays keyless and takes the legacy send path.
+      const joined = await joinRoom(client, code, participant, {
+        priorIdentity,
+        issueMemberKey: Boolean(payload.wantMemberKey),
+      });
+      const { participant: outParticipant, memberKey, ...roomRest } = joined;
+      return { room: roomRest, participant: outParticipant, memberKey };
     }
     case 'messages': {
       return { messages: await listMessages(client, code, Number(payload.cursor || 0)) };
@@ -442,6 +519,16 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
         err.name = 'BadRequestError';
         throw err;
       }
+      // T-30 (F2): the sender must prove it owns the row it claims. A member
+      // credential (if the row has one) or the flag-gated legacy path — a
+      // display name alone never authenticates a send.
+      await authenticateSender(
+        code,
+        String(message.name),
+        (message.client as 'web' | 'cc') || 'cc',
+        payload.memberKey as string | undefined,
+        caller,
+      );
       if (kind === 'status') {
         // Status updates append without touching the turn machinery.
         await getRoom(client, code);
@@ -462,22 +549,35 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       return { turnState: await getTurnState(client, code) };
     }
     case 'removeParticipant': {
+      const targetName = String(payload.targetName || '');
+      const targetClient = (payload.targetClient as 'web' | 'cc') || 'cc';
+      const requesterName = String(payload.requesterName || '');
+      // T-30 (F1/F2): kicking SOMEONE ELSE is host-only (hostKey required);
+      // removing YOURSELF (leave) must prove the row is yours via member
+      // credential / legacy path. Either way, a bare name never authorizes.
+      let effectiveRequester = requesterName;
+      if (requesterName === targetName) {
+        await authenticateSender(code, targetName, targetClient, payload.memberKey as string | undefined, caller);
+      } else {
+        await requireHost(code, payload.hostKey as string | undefined);
+        effectiveRequester = (await getRoom(client, code)).createdBy;
+      }
       return {
         room: await removeParticipant(
           client,
           code,
-          String(payload.requesterName || ''),
-          String(payload.targetName || ''),
-          (payload.targetClient as 'web' | 'cc') || 'cc',
+          effectiveRequester,
+          targetName,
+          targetClient,
         ),
       };
     }
     case 'end': {
-      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined);
       return { room: await endRoom(client, code) };
     }
     case 'reactivate': {
-      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined);
       return { room: await reactivateRoom(client, code) };
     }
     case 'createReport': {
@@ -486,7 +586,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       return { report: await createRoomReport(client, room, messages) };
     }
     case 'setReplyMode': {
-      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined);
       const room = await setReplyMode(
         client,
         code,
@@ -497,7 +597,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       return { room };
     }
     case 'directInvoke': {
-      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined);
       return {
         added: await directInvoke(
           client,
@@ -508,7 +608,7 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
       };
     }
     case 'skipCurrent': {
-      await requireHost(code, payload.requesterName as string | undefined, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined);
       const room = await getRoom(client, code);
       const skipped = await hostSkipCurrent(client, code, room);
       if (skipped) {
@@ -786,7 +886,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'BadRequest', message: 'invalid JSON body' });
       }
       try {
-        return sendJson(res, 200, await handleRoomAction(payload));
+        return sendJson(res, 200, await handleRoomAction(payload, roomCaller));
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
         // Log rejected actions with enough identity context to diagnose

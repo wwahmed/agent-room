@@ -111,6 +111,23 @@ function storedHostKey(code: string): string | undefined {
   }
 }
 
+// T-30 (F2): the one-time member credential the server issues at join. Kept
+// per-tab in sessionStorage; presented on every send/presence so a display
+// name alone cannot authenticate.
+function storedMemberKey(code: string): string | undefined {
+  try {
+    return sessionStorage.getItem(`room:${code}:memberKey`) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeMemberKey(code: string, key: string | undefined): void {
+  try {
+    if (key) sessionStorage.setItem(`room:${code}:memberKey`, key);
+  } catch { /* private mode */ }
+}
+
 async function call<T>(payload: Record<string, unknown>): Promise<T> {
   const res = await fetch('/api/room', {
     method: 'POST',
@@ -173,13 +190,16 @@ export async function joinRoom(
   participant: Participant,
   options: JoinRoomOptions = {},
 ): Promise<{ participant: Participant } & Omit<Room, never>> {
-  const out = await call<{ room: Room; participant: Participant }>({
+  const out = await call<{ room: Room; participant: Participant; memberKey?: string }>({
     action: 'join',
     code,
     participant,
     priorIdentity: options.priorIdentity,
     hostKey: options.hostKey ?? storedHostKey(code),
+    // T-30 (F2): ask the origin to mint a member credential for this row.
+    wantMemberKey: true,
   });
+  storeMemberKey(code, out.memberKey);
   return { ...out.room, participant: out.participant };
 }
 
@@ -275,7 +295,7 @@ export async function updatePresence(
   name: string,
   at: number,
 ): Promise<void> {
-  await call({ action: 'updatePresence', code, name, at });
+  await call({ action: 'updatePresence', code, name, at, memberKey: storedMemberKey(code) });
 }
 
 // ---------- messages ----------
@@ -300,7 +320,8 @@ export async function appendMessage(
   code: string,
   message: Message,
 ): Promise<AppendResult> {
-  return (await call<{ result: AppendResult }>({ action: 'send', code, message })).result;
+  // T-30 (F2): present the member credential; a name alone no longer sends.
+  return (await call<{ result: AppendResult }>({ action: 'send', code, message, memberKey: storedMemberKey(code) })).result;
 }
 
 export async function appendSystemMessage(

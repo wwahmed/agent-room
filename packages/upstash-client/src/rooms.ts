@@ -21,10 +21,19 @@ function generateHostKey(): string {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function sha256Hex(input: string): Promise<string> {
+export async function sha256Hex(input: string): Promise<string> {
   const cryptoObj: Crypto = (globalThis as unknown as { crypto: Crypto }).crypto;
   const buf = await cryptoObj.subtle.digest('SHA-256', new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// T-30 (F2): a room-scoped, 128-bit member credential. Same shape/entropy as
+// the host key. Handed to the joining client once; only its hash is stored.
+export function generateMemberKey(): string {
+  const bytes = new Uint8Array(16);
+  const cryptoObj: Crypto = (globalThis as unknown as { crypto: Crypto }).crypto;
+  cryptoObj.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export interface CreateRoomInput {
@@ -140,6 +149,11 @@ export interface JoinRoomOptions {
   // gets updated in place. Without it, the join is treated as fresh and
   // collisions get suffixed.
   priorIdentity?: { name: string; client: 'web' | 'cc' };
+  // T-30 (F2): mint a one-time member credential for this row. The server
+  // sets this ONLY for credential-capable callers (web/edge). Credential-
+  // unaware MCP joins leave it false so the row stays keyless and takes the
+  // flag-gated legacy send path — a re-joining MCP agent is never locked out.
+  issueMemberKey?: boolean;
 }
 
 // Returns the updated Room with an extra `participant` field showing the
@@ -147,7 +161,7 @@ export interface JoinRoomOptions {
 // was suffixed). Existing callers reading `result.participants` etc. still
 // work; new callers can read `result.participant.name` to learn what name
 // was actually assigned.
-export type JoinRoomResult = Room & { participant: Participant };
+export type JoinRoomResult = Room & { participant: Participant; memberKey?: string };
 
 function isPriorIdentity(
   p: Participant,
@@ -195,8 +209,18 @@ export async function joinRoom(
   options: JoinRoomOptions = {}
 ): Promise<JoinRoomResult> {
   let outParticipant = participant;
+  // T-30 (F2): mint the credential (async crypto) BEFORE the synchronous CAS
+  // mutator, exactly like hostKey. The plaintext is returned once; only the
+  // hash is stored on the row.
+  let memberKey: string | undefined;
+  let memberKeyHash: string | undefined;
+  if (options.issueMemberKey) {
+    memberKey = generateMemberKey();
+    memberKeyHash = await sha256Hex(memberKey);
+  }
   const room = await casRoom(client, code, (current) => {
-    let next = { ...participant };
+    // Never trust a client-supplied hash on the incoming participant row.
+    let next = { ...participant, memberKeyHash: undefined as string | undefined };
     const isClaimingHost = participant.name === current.createdBy;
 
     if (isClaimingHost) {
@@ -233,6 +257,8 @@ export async function joinRoom(
     if (next.canSpeak === undefined) {
       next = { ...next, canSpeak: true };
     }
+    // T-30: stamp the credential hash (or clear it for keyless joins).
+    next = { ...next, memberKeyHash };
     // Assigned AFTER the canSpeak materialization so the returned
     // `outParticipant` reflects the final stored row, including its
     // approval state (callers like the MCP room_join handler look at this
@@ -252,7 +278,7 @@ export async function joinRoom(
     return { ...current, participants: [...keep, next] };
   });
 
-  return { ...room, participant: outParticipant };
+  return { ...room, participant: outParticipant, memberKey };
 }
 
 // Pre-flight check used by callers that intend to join with the host's name.
@@ -264,11 +290,18 @@ export async function verifyHostKey(
   client: UpstashClient,
   code: string,
   hostKey: string | undefined,
+  opts?: { allowLegacyNoHash?: boolean },
 ): Promise<void> {
   const room = await getRoom(client, code);
-  // Legacy rooms created before hostKeyHash existed: allow any claim. New
-  // rooms (post this change) must always present a key.
-  if (!room.hostKeyHash) return;
+  // T-30 (F1): a room with no stored hash used to auto-pass ANY claim — the
+  // legacy bypass that made host authority a name assertion. Now it FAILS
+  // CLOSED. `allowLegacyNoHash` (server sets it only from the
+  // ALLOW_LEGACY_NAME_AUTH migration flag) is the sole, explicit escape, and
+  // the server logs a security event when it is taken.
+  if (!room.hostKeyHash) {
+    if (opts?.allowLegacyNoHash) return;
+    throw new HostNameTakenError(room.createdBy);
+  }
   if (!hostKey) throw new HostNameTakenError(room.createdBy);
   const hash = await sha256Hex(hostKey);
   if (hash !== room.hostKeyHash) throw new HostNameTakenError(room.createdBy);

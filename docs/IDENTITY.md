@@ -61,6 +61,36 @@ Old clients identify by `name + client`. Rules:
   legacy names stay name-only (flagged in board output).
 - No history is dropped.
 
+## T-30 — F1/F2 closed (credential enforcement before P1)
+
+The T-26 review (docs/IDENTITY-REVIEW.md, F1/F2/F3/F6) showed P1 would
+**relabel** identity without **authenticating** it. T-30 lands the
+credential layer first, so pid becomes the *result* of authentication:
+
+- **F1 (host authority).** `requireHost` now REQUIRES a valid `hostKey`;
+  the `name === createdBy` fallback is deleted. `verifyHostKey` fails
+  closed on a room with no stored hash. `setMuted`/`removeParticipant`
+  (which name-checked internally) route through it; self-leave is
+  authenticated as the caller's own row, not by bare name.
+- **F2 (sender identity).** Join mints a room-scoped, 128-bit
+  `memberKey`; only its SHA-256 lands on the participant row
+  (`memberKeyHash`). `send`/`updatePresence` REQUIRE the matching key
+  when the row has one — a display name never authenticates. The pure
+  policy is `decideSenderAuth()` (unit-tested); the server computes the
+  hash and logs/denies.
+- **Migration bridge.** MCP `agent-room-mcp` 0.25.x cannot carry a
+  credential (T-26 F8). A keyless row is accepted ONLY behind
+  `ALLOW_LEGACY_NAME_AUTH` (default **off** = fully closed), ONLY when
+  the name+client tuple is **unambiguous**, and every use logs a
+  `[security]` event. Ambiguous keyless rows fail closed. Turn the flag
+  off once a credential-carrying client ships (this P1 / T-31).
+- **A9 (never trust client-supplied credentials).** The API never
+  accepts a pid or a `memberKeyHash` from the client; `joinRoom` strips
+  any incoming hash and the server derives everything.
+
+With F1/F2 closed, P1's pid/alias work binds authority to a credential
+the caller *presents*, not a name the server resolved on its behalf.
+
 ## Worktree convention (process, enforced socially + documented)
 
 One builder = one git worktree. `main` checkout belongs to the host
