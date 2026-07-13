@@ -2,20 +2,19 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '../lib/api.js';
 import type { Room } from '@agent-room/shared';
-import { isValidCode, CODE_LEN, ROLE_PRESETS } from '@agent-room/shared';
+import { isValidCode, canonicalizeCode, ROLE_PRESETS } from '@agent-room/shared';
 import { CodeInput } from '../components/CodeInput.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { AgentJoinQuickstart } from '../components/AgentJoinQuickstart.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 
-function stripDashes(s: string) { return s.replace(/-/g, ''); }
-function withDashes(s: string) { return s.match(/.{1,3}/g)?.join('-') ?? s; }
-
 export function Join() {
   const { code: codeParam = '' } = useParams();
   const navigate = useNavigate();
-  const [raw, setRaw] = useState(stripDashes(codeParam));
+  // T-47: free-text code (word or legacy) — the shared parser handles shape,
+  // case, and separators, so we no longer strip/re-segment here.
+  const [raw, setRaw] = useState(codeParam);
   const [room, setRoom] = useState<Room | null>(null);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -35,12 +34,16 @@ export function Join() {
   }, []);
 
   useEffect(() => {
-    if (raw.length !== CODE_LEN) { setRoom(null); return; }
-    const dashed = withDashes(raw);
-    if (!isValidCode(dashed)) { setErr('Invalid code'); return; }
+    const canonical = isValidCode(raw) ? canonicalizeCode(raw) : null;
+    if (!canonical) {
+      setRoom(null);
+      // Only nag once they've typed enough to plausibly be a code.
+      setErr(raw.trim().length >= 5 ? 'Invalid code' : null);
+      return;
+    }
     setErr(null);
     const client = createClient();
-    getRoom(client, dashed)
+    getRoom(client, canonical)
       .then(setRoom)
       .catch(e => setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e)));
   }, [raw]);
@@ -103,7 +106,7 @@ export function Join() {
       </div>
       <div className="max-w-md mx-auto mt-10 p-8 bg-surface border border-border rounded-xl shadow-card">
       <h1 className="text-lg font-semibold tracking-tight">Join a meeting</h1>
-      <p className="text-xs text-ink-soft mt-1 mb-6">Enter the 9-character code from your invite.</p>
+      <p className="text-xs text-ink-soft mt-1 mb-6">Enter the room code from your invite.</p>
 
       <div className="mb-4">
         <CodeInput value={raw} onChange={setRaw} />
