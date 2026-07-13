@@ -117,15 +117,25 @@ This fork runs the full Agent Room stack on one always-on Mac
   Hand-edits INSIDE the markers are detected via a hash EMBEDDED IN THE
   SECTION ITSELF (`wakichat:hash`, 64-bit — accidental-corruption grade,
   not an adversarial primitive; the lock is the real serializer).
-- Stale-lock takeover is safe by an OWNERSHIP CAS, not just a timeout: the
-  lock carries a random owner nonce; a writer re-verifies it still owns the
-  lock immediately before the journal write AND before the ledger write. If
-  a second process took over the (30s) stale lock while the first was slow,
-  the first FAILS CLOSED with `LedgerConflictError` at commit — it can
-  never silently overwrite the taker's completed write. `releaseLedgerLock`
-  likewise only unlinks a lock it still owns. Proven with a real
-  two-process test (`projects.race.test.ts` F4). Tune the window with
-  `LEDGER_LOCK_STALE_MS`.
+- Lock reclaim is LIVENESS-BASED, never time-based — there is no staleness
+  timeout to steal a slow-but-live writer's lock. The lock records its
+  owner's `{pid, start}` (process start time from `ps -o lstart=`). A second
+  writer reclaims the lock ONLY when that owner is PROVABLY DEAD: the pid is
+  gone (`process.kill(pid,0)` → ESRCH) OR its recorded start time no longer
+  matches the live pid (PID reuse). Any live owner — even one paused
+  arbitrarily long mid-write — is left alone and the second writer FAILS
+  CLOSED with `LedgerConflictError`. This closes the assert→write TOCTOU: no
+  timing window can ever hand a live owner's lock to another process, so a
+  slow writer can never be silently overwritten. A crashed writer's lock is
+  still reclaimed (no deadlock). As defense-in-depth the lock also carries a
+  random owner nonce and each writer re-verifies ownership immediately before
+  the journal write AND before the ledger write; `releaseLedgerLock` only
+  unlinks a lock it still owns. Proven with real two-process tests
+  (`projects.race.test.ts` F4a: a live owner paused in the assert→write gap
+  is never stolen; F4b: a dead owner's lock is reclaimed). ASSUMPTION: this
+  is a SINGLE-HOST deployment (one Mac) — pid/start-time liveness is only
+  meaningful within one machine's process namespace; do not point a second
+  host at the same ledger path.
 - Backup/rollback: the ledger is a normal tracked file — `git diff`
   audits every sync and `git checkout -- docs/TASKS.md` rolls back.
   The server never commits; committing stays deliberate.
@@ -133,8 +143,9 @@ This fork runs the full Agent Room stack on one always-on Mac
   project API fail closed with a `ProjectRegistryError` (503) naming
   the problem; startup logs the validation result. A missing file is a
   valid empty registry.
-- Writes hold an advisory `<ledger>.lock` (wx-created, pid+timestamp,
-  stale >30s taken over with a warning) around the whole
+- Writes hold an advisory `<ledger>.lock` (wx-created, records the owner's
+  `{pid, start, owner-nonce}`; reclaimed only when the owner is provably dead,
+  see the liveness-reclaim note above — never on a timeout) around the whole
   read → integrity → write sequence; the tmp file is wx-created 0600
   and unlinked on failure. A managed section WITHOUT a hash line
   ("legacy") is fail-closed like a tamper — `force` migrates it.

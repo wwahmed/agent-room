@@ -5,7 +5,7 @@
 // PROJECTS_FILE is fixed to a temp path BEFORE the module import below
 // (module reads it at load time); each test rewrites that file's content.
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync, unlinkSync, utimesSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, rmSync, unlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -28,6 +28,8 @@ const {
   createProjectFromCandidate,
   stateKeyFor,
   lockPathFor,
+  isLockReclaimable,
+  procStartTime,
 } = await import('./projects.js');
 
 const REPO = join(WORK, 'repo');
@@ -167,23 +169,32 @@ describe('ledger integrity', () => {
   });
 });
 
-describe('lock discipline (server-owned STATE_DIR)', () => {
-  it('refuses while a fresh lock is held, then takes over a stale one', () => {
-    // The lock lives in the server-owned STATE_DIR now, keyed by the
-    // canonical ledger path — NOT in the repo (that was the round-5 race).
-    syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD); // create the ledger so realpath resolves
-    const canonical = realpathSync(join(REPO, 'docs', 'TASKS.md'));
-    const lock = lockPathFor(stateKeyFor(canonical));
-    writeFileSync(lock, JSON.stringify({ pid: 99999, at: Date.now() }));
-    expect(() => syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD2)).toThrowError(/lock/);
-    const past = new Date(Date.now() - 60_000);
-    utimesSync(lock, past, past); // age it like a crashed writer's lock
-    const res = syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD2);
-    expect(res.changed).toBe(true);
+describe('lock discipline (liveness-based reclaim, no time stealing)', () => {
+  it('isLockReclaimable: reclaim ONLY a provably-dead owner', () => {
+    const alive = (pid: number) => pid === 100;   // pid 100 "alive", others dead
+    const startOf = (pid: number) => (pid === 100 ? 'START-A' : '');
+    // dead pid -> reclaimable
+    expect(isLockReclaimable({ pid: 200, start: 'x', owner: 'o' }, alive, startOf)).toBe(true);
+    // alive, SAME start -> NOT reclaimable (a live owner is never stolen, even if old)
+    expect(isLockReclaimable({ pid: 100, start: 'START-A', owner: 'o' }, alive, startOf)).toBe(false);
+    // alive but DIFFERENT start -> PID reused by a new process -> reclaimable
+    expect(isLockReclaimable({ pid: 100, start: 'STALE-START', owner: 'o' }, alive, startOf)).toBe(true);
+  });
+
+  it('reclaims a lock owned by a dead pid; refuses a lock owned by a LIVE pid', () => {
+    syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD); // create the ledger
+    const lock = lockPathFor(stateKeyFor(realpathSync(join(REPO, 'docs', 'TASKS.md'))));
+    // Dead owner (pid nobody is running): reclaimed regardless of age.
+    writeFileSync(lock, JSON.stringify({ pid: 999999, start: 'ghost', owner: 'z' }));
+    expect(syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD2).changed).toBe(true);
     expect(existsSync(lock)).toBe(false); // released
-    // A stray lock in the REPO must NOT block writes (it did before r6).
-    const strayRepoLock = join(REPO, 'docs', 'TASKS.md.lock');
-    writeFileSync(strayRepoLock, 'x');
+    // LIVE owner (this very test process, real start time): NEVER stolen —
+    // fails closed even though we could "wait it out".
+    writeFileSync(lock, JSON.stringify({ pid: process.pid, start: procStartTime(process.pid), owner: 'z' }));
+    expect(() => syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD)).toThrowError(/live writer/);
+    unlinkSync(lock);
+    // A stray lock in the REPO must NOT block writes (it lives in STATE_DIR).
+    writeFileSync(join(REPO, 'docs', 'TASKS.md.lock'), 'x');
     expect(syncTaskLedger('proj', 'AAA-BBB-CCC', BOARD).changed).toBeDefined();
   });
 

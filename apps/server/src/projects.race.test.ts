@@ -165,43 +165,59 @@ describe('multi-process contention (real children on dist/projects.js)', () => {
     expect(Object.keys(finalReg)).toContain('proj'); // original preserved
   }, 60_000);
 
-  it('F4: a stale-lock takeover cannot silently overwrite the taker (loser fails CLOSED)', async () => {
-    // Fresh ledger.
+  const done = (n: number) => `{ tasks: [{ id: 'T-0${n}', title: 'writer-${n}', state: 'done', createdBy: 'C' }] }`;
+  const resetLedger = async () => {
     rmSync(join(REPO, 'docs'), { recursive: true, force: true });
     rmSync(STATE, { recursive: true, force: true });
     mkdirSync(join(REPO, 'docs'), { recursive: true });
-    const done = (n: number) => `{ tasks: [{ id: 'T-0${n}', title: 'writer-${n}', state: 'done', createdBy: 'C' }] }`;
     await spawnChild(`m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(0)}, true); console.log('seed');`);
+  };
 
-    // Writer A: acquires the lock and HOLDS it 1500ms — past the 250ms
-    // staleness threshold — then attempts to commit board A(1).
+  it('F4a: a LIVE owner is NEVER taken over — even paused in the assert→write gap; the second writer fails closed', async () => {
+    await resetLedger();
+    // Writer A holds the lock ALIVE and pauses 1500ms AFTER its final
+    // ownership check — the exact TOCTOU Codex named. With liveness-based
+    // reclaim, A is never stolen from, so A commits board 1.
     const A = spawnChild(
       `try { m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(1)}, true); console.log('A:committed'); }
        catch (e) { console.log('A:' + e.name); }`,
-      { WAKICHAT_TEST_HOLD_MS: '1500', LEDGER_LOCK_STALE_MS: '250' },
+      { WAKICHAT_TEST_HOLD_AFTER_ASSERT_MS: '1500' },
     );
-    // Writer B: starts after A holds the lock; sees it stale, takes over,
-    // completes board B(2), releases — all while A is still holding.
+    // Writer B fires mid-gap; it must see A alive and FAIL CLOSED, never steal.
     const B = new Promise<{ ok: boolean; out: string }>(resolve => {
       setTimeout(() => {
         spawnChild(
           `try { m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(2)}, true); console.log('B:committed'); }
            catch (e) { console.log('B:' + e.name); }`,
-          { LEDGER_LOCK_STALE_MS: '250' },
         ).then(resolve);
       }, 500);
     });
     const [a, b] = await Promise.all([A, B]);
+    expect(a.out).toContain('A:committed');            // live owner completed
+    expect(b.out).toContain('B:LedgerConflictError');  // second writer fenced out
+    const content = readFileSync(join(REPO, 'docs', 'TASKS.md'), 'utf8');
+    expect(content).toContain('writer-1');             // A's write is the durable one
+    expect(content).not.toContain('writer-2');         // B never wrote
+    expect((content.match(/wakichat:tasks:begin/g) || []).length).toBe(1);
+  }, 60_000);
 
-    // B completed; A was taken over and MUST fail closed (never a silent
-    // overwrite). Observable invariant: A reports a LedgerConflictError.
+  it('F4b: a DEAD owner IS reclaimed — a crashed writer never deadlocks the ledger', async () => {
+    await resetLedger();
+    // Writer A acquires the lock then dies hard (process.exit) WITHOUT
+    // releasing — a crashed writer leaving a lock behind.
+    const a = await spawnChild(
+      `m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(1)}, true); console.log('A:should-not-print');`,
+      { WAKICHAT_TEST_ABANDON_LOCK: '1' },
+    );
+    expect(a.out).not.toContain('should-not-print'); // A died holding the lock
+    // Writer B: sees the lock's owner pid is dead → reclaims → commits.
+    const b = await spawnChild(
+      `try { m.syncTaskLedger('proj','RAC-ERA-CEE', ${done(2)}, true); console.log('B:committed'); }
+       catch (e) { console.log('B:' + e.name + ':' + e.message); }`,
+    );
     expect(b.out).toContain('B:committed');
-    expect(a.out).toContain('A:LedgerConflictError');
-    // The durable ledger is B's write, intact and single-section — A's
-    // aborted write did not clobber it.
     const content = readFileSync(join(REPO, 'docs', 'TASKS.md'), 'utf8');
     expect(content).toContain('writer-2');
-    expect(content).not.toContain('writer-1');
     expect((content.match(/wakichat:tasks:begin/g) || []).length).toBe(1);
   }, 60_000);
 });

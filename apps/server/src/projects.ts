@@ -26,6 +26,7 @@ import { readFileSync, existsSync, realpathSync, statSync, unlinkSync, readdirSy
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 
 export interface ProjectConfig {
@@ -278,7 +279,6 @@ export interface SyncResult {
   conflict?: string;
 }
 
-const LOCK_STALE_MS = Number(process.env.LEDGER_LOCK_STALE_MS || 30_000);
 
 // ---------- server-owned state dir: locks + write-ahead journal (T-18 r6) ----------
 //
@@ -485,29 +485,74 @@ function writeFdTextHooked(fd: number, text: string): void {
  * redirect any of these operations. A lock older than LOCK_STALE_MS is a
  * crashed writer and is taken over.
  */
+// ---------- liveness-based lock reclaim (T-18 r9, Codex T-32 F4) ----------
+//
+// Time-based stealing is fundamentally racy: however narrow the window, a
+// slow-but-ALIVE owner can be descheduled past the timeout, its lock stolen,
+// and then resume and clobber the taker (the assert→write TOCTOU). Codex's
+// prescription: NEVER reclaim on time. Reclaim a lock ONLY when its owning
+// process is PROVABLY DEAD; otherwise fail closed (conflict / manual
+// recovery) even if the lock is old. A live owner is therefore never stolen
+// from, so the gap cannot be exploited.
+//
+// "Provably dead" = the recorded PID is not running, OR it is running but is
+// a DIFFERENT process instance (PID reuse) — disambiguated by the OS process
+// start time. ASSUMPTION (documented): a single host. The lock lives on the
+// local fs (~/.wakichat) and these checks are host-local; a shared-fs /
+// multi-host deployment would need a different fencing primitive.
+
+interface LockRecord { pid: number; start: string; owner: string }
+
+export function procStartTime(pid: number): string {
+  try {
+    // `ps -o lstart=` is portable (macOS + Linux); the start time defeats
+    // PID reuse. Empty when the pid is not running.
+    return execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 }).trim();
+  } catch { return ''; }
+}
+
+function pidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; }
+  catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } // EPERM = exists (other uid); ESRCH = dead
+}
+
+/**
+ * Pure decision (unit-tested): may we reclaim a lock held by `rec`?
+ * Reclaim ONLY if the owner is provably dead — not running, or a different
+ * process instance now occupies its PID. A live same-instance owner is
+ * NEVER reclaimable, no matter how old.
+ */
+export function isLockReclaimable(rec: LockRecord, alive: (pid: number) => boolean, startOf: (pid: number) => string): boolean {
+  if (!alive(rec.pid)) return true;              // owner process gone
+  if (rec.start && startOf(rec.pid) !== rec.start) return true; // PID reused by a new process
+  return false;                                   // alive, same instance → hands off
+}
+
 interface LedgerLock { lockPath: string; owner: string }
 
 function acquireLedgerLock(key: string): LedgerLock {
   ensureStateDir();
   const lockPath = lockPathFor(key);
   const owner = randomBytes(16).toString('hex'); // unforgeable ownership nonce
-  const payload = JSON.stringify({ pid: process.pid, at: Date.now(), owner });
+  const rec: LockRecord = { pid: process.pid, start: procStartTime(process.pid), owner };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      writeFileFsyncExcl(lockPath, payload, 0o600);
+      writeFileFsyncExcl(lockPath, JSON.stringify(rec), 0o600);
       return { lockPath, owner };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-      let stale = false;
-      try {
-        stale = Date.now() - statSync(lockPath).mtimeMs > LOCK_STALE_MS;
-      } catch {
-        continue; // vanished between EEXIST and stat: retry create
+      let held: LockRecord | null = null;
+      try { held = JSON.parse(readFileSync(lockPath, 'utf8')) as LockRecord; }
+      catch { continue; } // vanished/garbage between EEXIST and read: retry create
+      if (!held || typeof held.pid !== 'number') {
+        // Malformed lock with no identifiable owner: cannot prove death →
+        // fail closed rather than steal.
+        throw projErr('LedgerConflictError', 'Ledger lock is malformed; manual recovery needed (remove the stale .lock after confirming no writer is running).');
       }
-      if (!stale) {
-        throw projErr('LedgerConflictError', 'Another writer holds the ledger lock; retry shortly.');
+      if (!isLockReclaimable(held, pidAlive, procStartTime)) {
+        throw projErr('LedgerConflictError', `Ledger lock is held by a live writer (pid ${held.pid}); retry shortly.`);
       }
-      console.warn(`[project] taking over stale ledger lock ${key}`);
+      console.warn(`[project] reclaiming ledger lock ${key} from dead owner pid ${held.pid}`);
       try { unlinkSync(lockPath); } catch { /* raced */ }
     }
   }
@@ -574,8 +619,11 @@ export function syncTaskLedger(
   }
   const key = stateKeyFor(canonical);
   const lock = acquireLedgerLock(key);
-  // Test-only: hold the lock synchronously so a second process can observe
-  // staleness and take over — exercises the F4 CAS. No effect unset.
+  // Test-only: die HARD right after acquiring, leaving the lock behind, to
+  // simulate a crashed writer (a dead owner whose lock must be reclaimable).
+  if (process.env.WAKICHAT_TEST_ABANDON_LOCK) { process.exit(37); }
+  // Test-only: hold the lock synchronously (alive) so a second process
+  // observes a LIVE owner and must NOT steal it. No effect unset.
   const holdMs = Number(process.env.WAKICHAT_TEST_HOLD_MS || 0);
   if (holdMs > 0) { const until = Date.now() + holdMs; while (Date.now() < until) { /* busy-hold */ } }
   let ledgerFd: number | null = null;
@@ -654,6 +702,12 @@ export function syncTaskLedger(
     //    next content, so recovery re-applies it idempotently. Re-check
     //    ownership one last time immediately before the mutation.
     assertLockOwner(lock);
+    // Test-only: pause in the assert→write gap (the exact TOCTOU Codex
+    // named). Liveness-based reclaim means a LIVE owner is never stolen, so
+    // even a long pause here cannot let a second writer commit and be
+    // clobbered — the second writer fails closed instead.
+    const holdAfter = Number(process.env.WAKICHAT_TEST_HOLD_AFTER_ASSERT_MS || 0);
+    if (holdAfter > 0) { const until = Date.now() + holdAfter; while (Date.now() < until) { /* busy-hold */ } }
     writeFdTextHooked(ledgerFd, next);
     crashPoint('after-ledger-fsync');
     // 3. Clear the journal; a crash here just leaves recovery to notice the
