@@ -83,7 +83,7 @@ export function Lobby() {
   }, [code]);
 
   const header = (
-    <div className="bg-white px-6 py-5">
+    <div className="bg-surface px-6 py-5">
       <div className="mx-auto max-w-6xl">
         <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
           <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />
@@ -132,7 +132,7 @@ export function Lobby() {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {template.suggestedRoleIds.map(rid => (
-              <span key={rid} className="text-[10px] font-semibold text-accent bg-white border border-accent-tint-border px-2 py-0.5 rounded">
+              <span key={rid} className="text-[10px] font-semibold text-accent bg-surface border border-accent-tint-border px-2 py-0.5 rounded">
                 {roleLabelFor(rid)}
               </span>
             ))}

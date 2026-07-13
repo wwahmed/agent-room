@@ -42,7 +42,7 @@ export function Report() {
   if (missing) {
     return (
       <div className="min-h-full bg-surface-soft px-6 py-12">
-        <div className="max-w-3xl mx-auto bg-white border border-border rounded-xl p-8">
+        <div className="max-w-3xl mx-auto bg-surface border border-border rounded-xl p-8">
           <h1 className="text-2xl font-bold mb-3">Report not found</h1>
           <p className="text-sm text-ink-soft mb-5">This room has not been exported yet.</p>
           <Link to={`/r/${code}`} className="text-sm font-semibold text-accent">Back to room</Link>
@@ -75,7 +75,7 @@ export function Report() {
             </button>
             <button
               onClick={() => downloadMarkdown(report, artifacts)}
-              className="rounded-lg border border-white/25 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+              className="rounded-lg border border-white/25 bg-surface/5 px-4 py-2 text-xs font-semibold text-white hover:bg-surface/10"
             >
               Download Markdown
             </button>
@@ -89,7 +89,7 @@ export function Report() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <section className="grid md:grid-cols-3 gap-4">
           {report.participants.map(p => (
-            <div key={`${p.name}-${p.client}`} className="bg-white border border-border rounded-lg p-4">
+            <div key={`${p.name}-${p.client}`} className="bg-surface border border-border rounded-lg p-4">
               <div className="text-sm font-semibold">{p.name}</div>
               <div className="text-xs text-ink-soft">{[p.role, p.client].filter(Boolean).join(' · ')}</div>
             </div>
@@ -112,7 +112,7 @@ export function Report() {
           transcript={report.transcript}
         />
 
-        <section className="bg-white border border-border rounded-xl p-5">
+        <section className="bg-surface border border-border rounded-xl p-5">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-lg font-semibold">Transcript</h2>
             <Link to={`/r/${report.code}`} className="text-xs font-semibold text-accent">Open room</Link>
@@ -195,7 +195,7 @@ function ReportFooter({ report }: { report: RoomReport }) {
   const hoursLeft = Math.max(0, Math.round((expiresAt - Date.now()) / (60 * 60 * 1000)));
 
   return (
-    <section className="bg-white border border-border rounded-xl p-6 text-center">
+    <section className="bg-surface border border-border rounded-xl p-6 text-center">
       <div className="text-[11px] uppercase tracking-widest font-semibold text-ink-faint mb-2">Exported report · expires in {hoursLeft}h</div>
       <p className="text-base font-semibold text-ink mb-1">
         Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Agent Room</a>
@@ -214,7 +214,7 @@ function ReportFooter({ report }: { report: RoomReport }) {
           href="https://github.com/ebin198351-akl/agent-room/blob/main/docs/AGENT_ROOM_PROTOCOL.md"
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center justify-center bg-white border border-border px-5 py-2.5 rounded-lg text-sm font-semibold text-ink-muted hover:bg-surface-soft transition"
+          className="inline-flex items-center justify-center bg-surface border border-border px-5 py-2.5 rounded-lg text-sm font-semibold text-ink-muted hover:bg-surface-soft transition"
         >
           Protocol docs
         </a>
@@ -287,7 +287,7 @@ function DecisionBoard({
   const visible = cols.filter(c => c.cards.length || c.fallbackText.length);
 
   return (
-    <section className="bg-white border border-border rounded-xl p-5">
+    <section className="bg-surface border border-border rounded-xl p-5">
       <div className="flex items-baseline justify-between gap-4 mb-4">
         <h2 className="text-lg font-semibold">Outcome Board</h2>
         <span className="text-[11px] text-ink-faint">
@@ -422,7 +422,7 @@ function clipWithEllipsis(s: string, max: number): string {
 
 function ReportSection({ title, items }: { title: string; items: string[] }) {
   return (
-    <section className="bg-white border border-border rounded-xl p-5">
+    <section className="bg-surface border border-border rounded-xl p-5">
       <h2 className="text-lg font-semibold mb-3">{title}</h2>
       <ul className="space-y-2">
         {items.map((item, index) => (

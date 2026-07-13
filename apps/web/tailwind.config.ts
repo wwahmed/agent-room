@@ -8,35 +8,38 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
+      // Dark theme. The app is written against semantic tokens (ink =
+      // foreground ramp, surface = background ramp, border, accent), so the
+      // theme flips here in one place; components keep the same classnames.
       colors: {
         ink: {
-          DEFAULT: '#111318',
-          muted: '#374151',
-          soft: '#6B7280',
-          faint: '#9CA3AF',
+          DEFAULT: '#E8EBF1',
+          muted: '#C3C9D4',
+          soft: '#98A1B0',
+          faint: '#6E7787',
         },
         surface: {
-          DEFAULT: '#FFFFFF',
-          soft: '#FAFBFC',
-          softer: '#F7F8FA',
-          sunken: '#F4F5F7',
+          DEFAULT: '#161B24',
+          soft: '#131822',
+          softer: '#10141D',
+          sunken: '#0B0F16',
         },
         border: {
-          DEFAULT: '#E5E7EB',
-          faint: '#EEF0F3',
+          DEFAULT: '#2A3140',
+          faint: '#1F2531',
         },
         accent: {
-          DEFAULT: '#5B6AFF',
-          tint: '#EEF0FF',
-          'tint-border': '#DCE1FF',
-          deep: '#1E2A8C',
+          DEFAULT: '#6D7BFF',
+          tint: '#202749',
+          'tint-border': '#3A4380',
+          deep: '#B9C1FF',
         },
       },
       letterSpacing: {
         tight: '-0.011em',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06)',
+        card: '0 1px 2px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.35)',
       },
     },
   },

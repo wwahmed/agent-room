@@ -723,7 +723,7 @@ export function Room() {
               <div className="mt-3 rounded-lg border border-border-faint bg-surface-softer p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-[10px] font-semibold uppercase text-ink-faint">Reply mode</span>
-                  <span className="rounded bg-white px-1.5 py-0.5 text-[9px] font-semibold text-ink-soft">
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[9px] font-semibold text-ink-soft">
                     {modeLabel(replyMode)}
                   </span>
                 </div>
@@ -733,7 +733,7 @@ export function Room() {
                       value={replyMode}
                       onChange={e => { void updateReplyMode(e.target.value as ReplyMode); }}
                       disabled={modeBusy}
-                      className="h-9 w-full rounded-md border border-border bg-white px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
+                      className="h-9 w-full rounded-md border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
                     >
                       <option value="open">Open</option>
                       <option value="sequential">Sequential</option>
@@ -744,7 +744,7 @@ export function Room() {
                         value={selectedLeadAgentName}
                         onChange={e => { void updateReplyMode('sequential', { leadAgentName: e.target.value, leadAgentClient: 'cc' }); }}
                         disabled={modeBusy || activeRoomAgents.length === 0}
-                        className="h-9 w-full rounded-md border border-border bg-white px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
+                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
                         aria-label="Lead agent"
                       >
                         {activeRoomAgents.length === 0 ? (
@@ -759,7 +759,7 @@ export function Room() {
                         value={selectedModeratorAgentName}
                         onChange={e => { void updateReplyMode('moderator', { moderatorAgentName: e.target.value, moderatorAgentClient: 'cc' }); }}
                         disabled={modeBusy || activeRoomAgents.length === 0}
-                        className="h-9 w-full rounded-md border border-border bg-white px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
+                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
                         aria-label="Moderator agent"
                       >
                         {activeRoomAgents.length === 0 ? (
@@ -770,7 +770,7 @@ export function Room() {
                       </select>
                     )}
                     {replyMode !== 'open' && (
-                      <div className="rounded-md border border-border-faint bg-white px-2 py-1.5">
+                      <div className="rounded-md border border-border-faint bg-surface px-2 py-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="truncate text-[11px] font-semibold text-ink">
@@ -956,7 +956,7 @@ export function Room() {
               })()}
 
               {showIdlePrompt && !ended && (
-                <div className="sticky bottom-0 mx-auto bg-white border border-border rounded-xl shadow-lg p-4 text-center max-w-sm">
+                <div className="sticky bottom-0 mx-auto bg-surface border border-border rounded-xl shadow-lg p-4 text-center max-w-sm">
                   <p className="text-sm font-semibold text-ink mb-1">No activity for 1 hour</p>
                   <p className="text-xs text-ink-soft mb-3">Meeting will close in <span className="font-bold text-red-600">{countdown}s</span></p>
                   <div className="flex gap-2 justify-center">

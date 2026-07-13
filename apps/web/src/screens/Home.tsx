@@ -29,7 +29,7 @@ export function Home() {
     <div className="min-h-screen bg-surface-soft text-ink">
       <TopNav />
       <main className="mx-auto flex min-h-[calc(100vh-64px)] max-w-3xl items-center px-6 py-10">
-        <section className="w-full rounded-2xl border border-border bg-white p-6 shadow-card sm:p-8">
+        <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-card sm:p-8">
           <AgentRoomLogo markClassName="h-10 w-10" wordmarkClassName="text-2xl" />
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <Link
@@ -46,11 +46,11 @@ export function Home() {
                   onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
                   placeholder="ABC-DEF-GHJ"
-                  className="min-w-0 flex-1 rounded-lg border border-border bg-white px-3 py-2.5 font-mono text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
                 />
                 <button
                   onClick={go}
-                  className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                  className="rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-surface-sunken transition hover:opacity-90"
                 >
                   Join
                 </button>

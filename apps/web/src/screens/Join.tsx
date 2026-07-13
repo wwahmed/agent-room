@@ -81,7 +81,7 @@ export function Join() {
 
   return (
     <>
-      <div className="bg-white px-6 py-5">
+      <div className="bg-surface px-6 py-5">
         <div className="mx-auto max-w-6xl">
           <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
             <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />

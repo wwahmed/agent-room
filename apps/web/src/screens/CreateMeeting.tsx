@@ -67,7 +67,7 @@ export function CreateMeeting() {
 
   return (
     <>
-      <div className="bg-white px-6 py-5">
+      <div className="bg-surface px-6 py-5">
         <div className="mx-auto max-w-6xl">
           <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
             <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />
@@ -93,7 +93,7 @@ export function CreateMeeting() {
                 className={`text-left rounded-lg border px-3 py-2.5 transition ${
                   active
                     ? 'border-accent bg-accent-tint ring-2 ring-accent/20'
-                    : 'border-border bg-white hover:border-accent/40'
+                    : 'border-border bg-surface hover:border-accent/40'
                 }`}
               >
                 <div className="flex items-center gap-2 text-sm font-semibold">
@@ -104,7 +104,7 @@ export function CreateMeeting() {
                 {t.suggestedRoleIds.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {t.suggestedRoleIds.map(rid => (
-                      <span key={rid} className="text-[9px] font-semibold text-accent bg-white border border-accent-tint-border px-1.5 py-px rounded">
+                      <span key={rid} className="text-[9px] font-semibold text-accent bg-surface border border-accent-tint-border px-1.5 py-px rounded">
                         {roleLabelFor(rid)}
                       </span>
                     ))}
