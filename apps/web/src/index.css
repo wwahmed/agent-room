@@ -5,3 +5,7 @@
 html { color-scheme: dark; }
 html, body, #root { height: 100%; }
 body { background: #0B0F16; color: #E8EBF1; }
+
+/* T-40: live dictation activity bars (equalizer) */
+@keyframes voicebar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+.animate-\[voicebar_0\.9s_ease-in-out_infinite\] { transform-origin: bottom; }
