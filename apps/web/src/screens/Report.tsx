@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { artifactLabel, extractArtifacts, normalizeEscapedWhitespace, type ArtifactKind, type Message, type RoomArtifact, type RoomReport } from '@agent-room/shared';
-import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '@agent-room/upstash-client';
-import { ENV } from '../env.js';
+import { createClient, createRoomReport, getRoom, getRoomReport, listMessages } from '../lib/api.js';
 
 export function Report() {
   const { code = '' } = useParams();
@@ -12,7 +11,7 @@ export function Report() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    const client = createClient(ENV.upstash);
+    const client = createClient();
     getRoomReport(client, code)
       .then(found => {
         setReport(found);
@@ -25,7 +24,7 @@ export function Report() {
     setRefreshing(true);
     setError(null);
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       const room = await getRoom(client, code);
       const messages = await listMessages(client, code, 0);
       const next = await createRoomReport(client, room, messages);
@@ -127,7 +126,7 @@ export function Report() {
                   {m.role && <span> · {m.role}</span>}
                   <span> · {new Date(m.time).toLocaleString()}</span>
                 </div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{normalizeEscapedWhitespace(m.text)}</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{normalizeEscapedWhitespace(m.text ?? '')}</p>
               </article>
             ))}
           </div>
@@ -524,7 +523,7 @@ function buildMarkdown(report: RoomReport, artifacts: RoomArtifact[], unlocked: 
     lines.push('');
     // Indent message body so existing markdown inside the message keeps its
     // structure but is visually nested under the speaker line.
-    for (const line of m.text.split('\n')) lines.push(`> ${line}`);
+    for (const line of (m.text ?? '').split('\n')) lines.push(`> ${line}`);
     lines.push('');
   }
 

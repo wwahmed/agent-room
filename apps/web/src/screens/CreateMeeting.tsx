@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { createClient, createRoom } from '@agent-room/upstash-client';
-import { generateCode, ROLE_PRESETS } from '@agent-room/shared';
-import { ENV } from '../env.js';
+import { createClient, createRoom } from '../lib/api.js';
+import { ROLE_PRESETS } from '@agent-room/shared';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 
@@ -40,9 +39,11 @@ export function CreateMeeting() {
     if (!topic.trim() || !name.trim()) return;
     setBusy(true); setError(null);
     try {
-      const client = createClient(ENV.upstash);
-      const code = generateCode();
-      const created = await createRoom(client, { code, topic: topic.trim(), createdBy: name.trim() });
+      const client = createClient();
+      // The server allocates the room code (it can check collisions
+      // against Redis; the browser can't).
+      const created = await createRoom(client, { topic: topic.trim(), createdBy: name.trim() });
+      const code = created.code;
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
       // Stash the host key — required to claim the host's display name on
       // any future join (refresh, second tab, accidental End → Reactivate

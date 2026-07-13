@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '@agent-room/upstash-client';
+import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '../lib/api.js';
 import type { Room } from '@agent-room/shared';
 import { isValidCode, CODE_LEN, ROLE_PRESETS } from '@agent-room/shared';
-import { ENV } from '../env.js';
 import { CodeInput } from '../components/CodeInput.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { AgentJoinQuickstart } from '../components/AgentJoinQuickstart.js';
@@ -40,7 +39,7 @@ export function Join() {
     const dashed = withDashes(raw);
     if (!isValidCode(dashed)) { setErr('Invalid code'); return; }
     setErr(null);
-    const client = createClient(ENV.upstash);
+    const client = createClient();
     getRoom(client, dashed)
       .then(setRoom)
       .catch(e => setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e)));
@@ -50,7 +49,7 @@ export function Join() {
     if (!room || !name.trim()) return;
     setBusy(true); setErr(null);
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       const trimmed = name.trim();
       // Host-name lock: claiming the host's display name requires the host
       // key (set on createRoom). Without it we throw before sending join.

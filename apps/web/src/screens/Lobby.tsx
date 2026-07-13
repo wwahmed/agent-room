@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '@agent-room/upstash-client';
+import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '../lib/api.js';
 import type { Room } from '@agent-room/shared';
 import { ROOM_POLL_MS } from '@agent-room/shared';
-import { ENV } from '../env.js';
 import { Avatar } from '../components/Avatar.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
@@ -17,7 +16,7 @@ export function Lobby() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const client = createClient(ENV.upstash);
+    const client = createClient();
     const stored = sessionStorage.getItem(`room:${code}:self`);
     const self = stored ? JSON.parse(stored) as { name: string; role: string } : null;
 

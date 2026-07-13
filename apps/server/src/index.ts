@@ -3,19 +3,20 @@
 // Replaces three pieces of the hosted (Vercel + Upstash) deployment:
 //
 //   1. `/kv` + `/kv/pipeline` — Upstash-REST-compatible proxy in front of a
-//      local Redis. The web client talks this protocol directly from the
-//      browser (VITE_UPSTASH_REDIS_REST_URL points here at build time).
-//   2. `POST /api/room`      — the room API the `agent-room-mcp` npm package
-//      talks to (AGENT_ROOM_BASE_URL). The hosted implementation is not in
+//      local Redis. LOCAL TOOLING ONLY (agents/scripts on this Mac with the
+//      bearer token). The browser never speaks this protocol (T-12).
+//   2. `POST /api/room`      — the room API for BOTH the `agent-room-mcp`
+//      npm package (AGENT_ROOM_BASE_URL) and the web client
+//      (apps/web/src/lib/api.ts). The hosted implementation is not in
 //      the public repo; this one dispatches straight onto the exported
 //      functions of @agent-room/upstash-client over the same local Redis.
 //   3. Static hosting of the built web UI (apps/web/dist) with SPA fallback.
 //
-// Auth model: the public hostname (chat.wakilabs.dev) is gated by Cloudflare
-// Access at the edge; local processes (Claude / Codex MCP servers) reach
-// 127.0.0.1 directly. The /kv proxy additionally requires the bearer token
-// baked into the web bundle so a mis-scoped tunnel rule can't expose raw
-// Redis without it.
+// Auth model (T-12): the shell is public; every data surface is enforced
+// HERE at the origin. Browsers authenticate via a fully validated
+// Cloudflare Access JWT (header or CF_Authorization cookie); local
+// processes (Claude / Codex MCP servers) reach 127.0.0.1 directly and are
+// trusted only when the request did not traverse the Cloudflare edge.
 //
 // Env:
 //   PORT            listen port                    (default 8210)
@@ -39,7 +40,9 @@ import {
   createRoomReport,
   directInvoke,
   endRoom,
+  getMessageTotalCount,
   getRoom,
+  getRoomReport,
   getTurnState,
   hostSkipCurrent,
   joinRoom,
@@ -48,8 +51,10 @@ import {
   removeParticipant,
   RoomNotFoundError,
   setListenUntil,
+  setMuted,
   setReplyMode,
   sweepTimeouts,
+  updatePresence,
   verifyHostKey,
   type UpstashClient,
 } from '@agent-room/upstash-client';
@@ -164,6 +169,7 @@ function statusForError(err: Error): number {
       return 403;
     case 'InvalidModeConfigError':
     case 'ModeNotSupportedError':
+    case 'BadRequestError':
       return 400;
     default:
       return 500;
@@ -189,13 +195,14 @@ function sysMessage(text: string, metadata: Record<string, unknown>): Message {
 
 async function handleKv(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'POST only' });
-  // Auth: a validated Access identity (browser through the tunnel) or the
-  // local trust boundary (agents/tooling on this Mac). The bearer token
-  // remains for local scripts but is never shipped in the web bundle.
+  // Auth: local tooling ONLY (trusted loopback or the server-side bearer
+  // token). Browsers get no raw Redis access at all — even authenticated
+  // Access users must go through the typed /api/room surface (T-12). An
+  // arbitrary-command proxy is too much power to hand a web session.
   const caller = await resolveCaller(req);
   const auth = req.headers.authorization || '';
   const bearerOk = auth === `Bearer ${KV_TOKEN}`;
-  if (caller.kind === 'anonymous' && !bearerOk) return sendJson(res, 401, { error: 'unauthorized' });
+  if (caller.kind !== 'local' && !bearerOk) return sendJson(res, 401, { error: 'unauthorized' });
 
   let body: unknown;
   try {
@@ -280,6 +287,40 @@ async function handleRoomAction(payload: Record<string, unknown>): Promise<unkno
     }
     case 'get': {
       return { room: await getRoom(client, code) };
+    }
+    case 'verifyHostKey': {
+      // Pre-flight for a web client about to claim the host slot. Throws
+      // HostNameTakenError (403) on a wrong key; legacy rooms without a
+      // hostKeyHash always pass, matching joinRoom's own check.
+      await verifyHostKey(client, code, payload.hostKey as string | undefined);
+      return { ok: true };
+    }
+    case 'setMuted': {
+      return {
+        room: await setMuted(
+          client,
+          code,
+          String(payload.requesterName || ''),
+          String(payload.targetName || ''),
+          (payload.targetClient as 'web' | 'cc') || 'web',
+          Boolean(payload.muted),
+        ),
+      };
+    }
+    case 'updatePresence': {
+      // Web heartbeat: stamps lastSeenAt on the participant row. Distinct
+      // from 'presence' (setListenUntil), which is the agents' listen-window
+      // marker.
+      await updatePresence(client, code, String(payload.name || ''), Number(payload.at || Date.now()));
+      return { ok: true };
+    }
+    case 'messageCount': {
+      // Absolute message counter (survives LTRIM). The web poller anchors
+      // its cursor to this so trimmed history can't desync it.
+      return { total: await getMessageTotalCount(client, code) };
+    }
+    case 'getReport': {
+      return { report: await getRoomReport(client, code) };
     }
     case 'join': {
       const participant = payload.participant as Participant;

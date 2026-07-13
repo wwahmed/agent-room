@@ -14,8 +14,7 @@ import {
   appendMessage,
   updatePresence,
   getMessageTotalCount,
-} from '@agent-room/upstash-client';
-import { ENV } from '../env.js';
+} from '../lib/api.js';
 
 interface UseRoomState {
   room: Room | null;
@@ -26,7 +25,7 @@ interface UseRoomState {
 export function useRoom(code: string, selfName: string) {
   const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null });
   const cursor = useRef(0);
-  const clientRef = useRef(createClient(ENV.upstash));
+  const clientRef = useRef(createClient());
 
   // In-flight guard with TIMEOUT escape hatch. Two failure modes we hit:
   //

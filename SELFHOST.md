@@ -17,27 +17,47 @@ This fork runs the full Agent Room stack on one always-on Mac
 
 - The Cloudflare Access app protects ONLY `chat.wakilabs.dev/login`
   (the auth-start route). The shell is public; every data surface
-  (`/kv`, `/api/room`, `/api/rooms`, `/api/me`) is enforced at the
+  (`/api/room`, `/api/rooms`, `/api/me`) is enforced at the
   ORIGIN via full Access JWT validation (signature against the team
   JWKS, issuer, audience, expiry, email allowlist) from the
   `Cf-Access-Jwt-Assertion` header or the `CF_Authorization` cookie.
+- The browser speaks ONLY JSON to `/api/room` (see
+  `apps/web/src/lib/api.ts`). `/kv` + `/kv/pipeline` (raw Redis
+  protocol) accept local callers and the `KV_TOKEN` bearer ONLY — an
+  authenticated web session gets 401 there by design; an
+  arbitrary-command proxy is too much power for a browser session.
 - Local processes (agents on 127.0.0.1) are trusted ONLY when the
   request did not traverse the edge (no `cf-ray` header) — cloudflared
   also connects from loopback, so the header check is load-bearing.
-- The web bundle carries NO data credential (the old baked KV token was
-  rotated); `KV_TOKEN` in `.env` remains for local tooling only.
-- Access config: team domain + app AUD live in `.env`
-  (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`). Rollback: set the Access app
-  path back to empty (protect whole hostname) — origin enforcement
-  stays valid either way.
+- The web bundle carries NO data credential and NO Redis client (the
+  old baked KV token was rotated; `@agent-room/upstash-client` is not
+  a dependency of `apps/web`); `KV_TOKEN` in `.env` is local tooling
+  only.
+- Rollback: set the Access app path back to empty (protect the whole
+  hostname) — origin enforcement stays valid either way. Rolling back
+  the client isolation means reverting the T-12 commits; there is no
+  config toggle, on purpose.
+
+### Resource inventory (Google Cloud + Cloudflare)
+
+| Resource | Value |
+|---|---|
+| GCP project | `wakichat` |
+| GCP OAuth client | `cloudflare-access`, ID `1026249427561-ej2qmgpbtsds88ghidjbbgpf5uqmtv2k.apps.googleusercontent.com` (web app; redirect URI is the Cloudflare Access callback) |
+| Access team domain | `wakilabs.cloudflareaccess.com` (`ACCESS_TEAM_DOMAIN` in `.env`) |
+| Access application | `chat` (id `e7a5e3ea-f306-4e82-9097-1f9b1f536c7b`), path-scoped to `/login`, policy = allow `wwahmed@gmail.com` via Google IdP |
+| Access AUD | `9d49af926fc7eee80621885804729d2911eda74be40042ab1e303d4a26ef8120` (`ACCESS_AUD` in `.env`) |
+| Tunnel | `waki-chat`, id `230c15a5-0cb5-4fbd-a7d5-c23ec3777c46` (`deploy/cloudflared-config.yml`) |
+| DNS | proxied CNAME `chat.wakilabs.dev` → `<tunnel-id>.cfargotunnel.com` in the `wakilabs.dev` zone |
+| Allowlist | `IDENTITY_MAP` keys in `.env` (or explicit `ALLOWED_EMAILS`) |
 
 ## Deploying changes
 
-- **Web UI:** `bin/deploy-web` - never run the vite build by hand. The
-  bundle hard-requires `VITE_UPSTASH_REDIS_REST_TOKEN` at build time
-  (see `apps/web/src/env.ts`); building without it ships a blank site.
-  The KV URL is NOT baked: it falls back to `window.location.origin`
-  so one bundle serves every hostname.
+- **Web UI:** `bin/deploy-web` - never run the vite build by hand (the
+  script smoke-checks that the server is healthy and actually serving
+  the fresh bundle hash). Since T-12 the bundle needs NO env vars at
+  build time: no credential is baked and all data calls go to
+  same-origin `/api/room`.
 - **Server:** `npm -w apps/server run build` then
   `launchctl kickstart -k gui/501/com.wakilabs.chat`.
 - Secrets live in `.env` (gitignored): `PORT`, `REDIS_URL`, `KV_TOKEN`.
@@ -48,8 +68,8 @@ This fork runs the full Agent Room stack on one always-on Mac
 - `chat.log` / `chat-error.log` in the repo root. Rejected /api/room
   actions log to stderr with identity context (name/client/action).
 - Agents (Claude/Codex MCP) talk to `AGENT_ROOM_BASE_URL=http://127.0.0.1:8210`;
-  the browser talks to `https://chat.wakilabs.dev/kv` with the bearer
-  token baked into the bundle.
+  the browser talks JSON to `https://chat.wakilabs.dev/api/room`
+  authenticated by the Cloudflare Access session cookie.
 
 ## Upstream
 

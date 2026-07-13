@@ -8,8 +8,7 @@ import { Avatar } from '../components/Avatar.js';
 import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '@agent-room/upstash-client';
-import { ENV } from '../env.js';
+import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -61,7 +60,7 @@ export function Room() {
         return;
       }
       try {
-        const client = createClient(ENV.upstash);
+        const client = createClient();
         const room = await getRoom(client, code);
         if (identity.name === room.createdBy) {
           const hostKey = localStorage.getItem(`room:${code}:hostKey`)
@@ -146,7 +145,7 @@ export function Room() {
     let cancelled = false;
     async function pullTurnState() {
       try {
-        const client = createClient(ENV.upstash);
+        const client = createClient();
         const next = await getTurnState(client, code);
         if (!cancelled) setTurnState(next);
       } catch {
@@ -289,7 +288,7 @@ export function Room() {
     if (!room || !self || room.createdBy !== self.name) return;
     const wantMuted = p.canSpeak !== false; // currently can speak → going to mute
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       await setMuted(client, code, self.name, p.name, p.client, wantMuted);
       await refreshRoom();
     } catch (e) {
@@ -306,7 +305,7 @@ export function Room() {
     if (p.name === self.name && p.client === 'web') return; // host can't kick themselves
     if (!confirm(`Remove ${p.name} (${p.client}) from the room?`)) return;
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       await removeParticipant(client, code, self.name, p.name, p.client);
       await refreshRoom();
     } catch (e) {
@@ -317,8 +316,8 @@ export function Room() {
 
   async function handleEndMeeting() {
     try {
-      const client = createClient(ENV.upstash);
-      await endRoomApi(client, code);
+      const client = createClient();
+      await endRoomApi(client, code, { requesterName: self?.name });
       setEnded(true);
       setShowIdlePrompt(false);
       if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
@@ -340,10 +339,10 @@ export function Room() {
     if (!room) return;
     setReportBusy(true);
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       await createRoomReport(client, room, messages);
       // A1: copy the permanent share link to clipboard alongside navigating.
-      // The report key is stored without TTL (see packages/upstash-client/src/reports.ts),
+      // The report key is stored without TTL (see apps/server: reports are stored without TTL),
       // so the link survives past the 24h room TTL — that's exactly the "Save"
       // half of "Save & Share". Copy first so the toast lives across the
       // route change (ToastHost is mounted at router level).
@@ -443,7 +442,7 @@ export function Room() {
     }
     setModeBusy(true);
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       await setReplyMode(client, code, me.name, mode, nextConfig);
       await refreshRoom();
       const { showToast } = await import('../components/Toast.js');
@@ -458,7 +457,7 @@ export function Room() {
 
   async function refreshTurnAndMessages() {
     try {
-      const client = createClient(ENV.upstash);
+      const client = createClient();
       setTurnState(await getTurnState(client, code));
     } catch {
       setTurnState(null);
@@ -472,7 +471,7 @@ export function Room() {
     target: { name: string; client: 'web' | 'cc' },
     extra: Partial<NonNullable<Message['metadata']>> = {},
   ) {
-    const client = createClient(ENV.upstash);
+    const client = createClient();
     const nowMs = Date.now();
     const msg: Message = {
       id: nowMs,
@@ -508,8 +507,8 @@ export function Room() {
     }
     setModeBusy(true);
     try {
-      const client = createClient(ENV.upstash);
-      const added = await directInvoke(client, code, { name: p.name, client: p.client }, 'host');
+      const client = createClient();
+      const added = await directInvoke(client, code, { name: p.name, client: p.client }, 'host', { requesterName: self?.name });
       if (!added) {
         const { showToast } = await import('../components/Toast.js');
         showToast(`${p.name} is already queued for a direct reply.`);
@@ -534,8 +533,8 @@ export function Room() {
     if (!canConfigureReplyMode || !currentSpeaker) return;
     setModeBusy(true);
     try {
-      const client = createClient(ENV.upstash);
-      const skipped = await hostSkipCurrent(client, code, activeRoom);
+      const client = createClient();
+      const skipped = await hostSkipCurrent(client, code, activeRoom, { requesterName: self?.name });
       if (!skipped) {
         const { showToast } = await import('../components/Toast.js');
         showToast('No active agent to skip.');
@@ -1042,8 +1041,8 @@ export function Room() {
                   <button
                     onClick={async () => {
                       try {
-                        const client = createClient(ENV.upstash);
-                        await reactivateRoomApi(client, code);
+                        const client = createClient();
+                        await reactivateRoomApi(client, code, { requesterName: self?.name });
                         // Reset the full idle pipeline. Without these the idle timer
                         // would immediately re-fire (lastMsgTimeRef is still hours
                         // old, showIdlePrompt may still be true) and the room would
