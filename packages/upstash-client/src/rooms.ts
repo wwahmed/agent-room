@@ -154,6 +154,19 @@ export interface JoinRoomOptions {
   // unaware MCP joins leave it false so the row stays keyless and takes the
   // flag-gated legacy send path — a re-joining MCP agent is never locked out.
   issueMemberKey?: boolean;
+  // T-25 reclaim anchor (a): the plaintext memberKey the caller already holds
+  // and is presenting on this (re)join (the same key it sends to authenticate).
+  // joinRoom hashes it (async, before the CAS mutator) and, when it matches an
+  // existing row's memberKeyHash, reclaims that row in place — the durable
+  // anchor for AGENTS, whose MCP client persists the key.
+  reclaimMemberKey?: string;
+  // T-25 reclaim anchor (b): the caller's server-VERIFIED identity (the Access
+  // JWT email). The server sets this ONLY for authenticated web callers
+  // (caller.kind === 'user'); it is NEVER derived from client-supplied data.
+  // joinRoom hashes it to `authIdHash` (the raw value is never stored — rows
+  // are room-visible) and uses it both to reclaim the caller's existing row
+  // (durable anchor for a human across tabs/sessions) and to stamp the row.
+  authId?: string;
 }
 
 // Returns the updated Room with an extra `participant` field showing the
@@ -163,21 +176,55 @@ export interface JoinRoomOptions {
 // was actually assigned.
 export type JoinRoomResult = Room & { participant: Participant; memberKey?: string };
 
-function isPriorIdentity(
-  p: Participant,
-  priorIdentity: JoinRoomOptions['priorIdentity'],
-): boolean {
-  return Boolean(priorIdentity && p.name === priorIdentity.name && p.client === priorIdentity.client);
+// T-25: locate the caller's existing row to reclaim on (re)join, so a returning
+// participant updates their SAME row instead of proliferating "(2)", "(3)" …
+// rows. Anchors are tried most-durable first:
+//   (a) memberKeyHash — the member credential the caller is presenting. Durable
+//       anchor for AGENTS (their MCP client persists the key).
+//   (b) authIdHash — the caller's server-VERIFIED Access identity. Durable
+//       anchor for a HUMAN across tabs/sessions (the web memberKey is per-tab
+//       sessionStorage; the Access cookie is not).
+//   (c) priorIdentity — the (name, client) tuple the client remembered. This
+//       branch is UNAUTHENTICATED, so it may reclaim ONLY an unprotected row
+//       (no memberKeyHash AND no authIdHash). A bare name claim must never
+//       displace a key- or auth-protected identity's row.
+// Returns the matched row (an actual element of current.participants), or
+// undefined for a genuinely new identity. `reclaimMemberKeyHash` and
+// `authIdHash` are resolved by joinRoom (hashed outside the CAS mutator).
+interface ReclaimAnchors {
+  reclaimMemberKeyHash?: string;
+  authIdHash?: string;
+  priorIdentity?: JoinRoomOptions['priorIdentity'];
+}
+function findReclaimRow(current: Room, anchors: ReclaimAnchors): Participant | undefined {
+  if (anchors.reclaimMemberKeyHash) {
+    const byKey = current.participants.find(p => p.memberKeyHash === anchors.reclaimMemberKeyHash);
+    if (byKey) return byKey;
+  }
+  if (anchors.authIdHash) {
+    const byAuth = current.participants.find(p => p.authIdHash === anchors.authIdHash);
+    if (byAuth) return byAuth;
+  }
+  const prior = anchors.priorIdentity;
+  if (prior) {
+    const byPrior = current.participants.find(p =>
+      p.name === prior.name
+      && p.client === prior.client
+      && !p.memberKeyHash
+      && !p.authIdHash);
+    if (byPrior) return byPrior;
+  }
+  return undefined;
 }
 
 function uniqueNameForRoom(
   desiredName: string,
   current: Room,
-  priorIdentity: JoinRoomOptions['priorIdentity'],
+  selfRow: Participant | undefined,
 ): string {
   const taken = new Set(
     current.participants
-      .filter(p => !isPriorIdentity(p, priorIdentity))
+      .filter(p => p !== selfRow)
       .map(p => p.name),
   );
   if (!taken.has(desiredName) || desiredName === current.createdBy) return desiredName;
@@ -191,11 +238,11 @@ function uniqueNameForRoom(
 function uniqueColorForRoom(
   desiredColor: string,
   current: Room,
-  priorIdentity: JoinRoomOptions['priorIdentity'],
+  selfRow: Participant | undefined,
 ): string {
   const used = new Set(
     current.participants
-      .filter(p => !isPriorIdentity(p, priorIdentity))
+      .filter(p => p !== selfRow)
       .map(p => p.color),
   );
   if (!used.has(desiredColor)) return desiredColor;
@@ -218,7 +265,23 @@ export async function joinRoom(
     memberKey = generateMemberKey();
     memberKeyHash = await sha256Hex(memberKey);
   }
+  // T-25: resolve the reclaim anchors (async crypto) BEFORE the synchronous CAS
+  // mutator. The presented key is hashed for a hash-vs-hash match; the verified
+  // identity is hashed so the raw email never lands on a room-visible row.
+  const reclaimMemberKeyHash = options.reclaimMemberKey
+    ? await sha256Hex(options.reclaimMemberKey)
+    : undefined;
+  const authIdHash = options.authId ? await sha256Hex(options.authId) : undefined;
   const room = await casRoom(client, code, (current) => {
+    // T-25: find the caller's existing row to reclaim (memberKeyHash →
+    // authIdHash → priorIdentity). Reclaiming updates that row IN PLACE; a
+    // genuinely new identity (reclaim === undefined) is suffixed on collision.
+    const reclaim = findReclaimRow(current, {
+      reclaimMemberKeyHash,
+      authIdHash,
+      priorIdentity: options.priorIdentity,
+    });
+
     // Never trust a client-supplied hash on the incoming participant row.
     let next = { ...participant, memberKeyHash: undefined as string | undefined };
     const isClaimingHost = participant.name === current.createdBy;
@@ -232,15 +295,15 @@ export async function joinRoom(
       // already proven they own the host slot.
     } else {
       // Non-host name collision: names are room-visible labels, so keep
-      // them unique across client kinds too (web Robin vs agent Robin).
-      // priorIdentity bypasses the suffix when the caller is updating their
-      // own previous row.
-      next = { ...next, name: uniqueNameForRoom(participant.name, current, options.priorIdentity) };
+      // them unique across client kinds too (web Robin vs agent Robin). The
+      // reclaimed row is excluded from the collision set so updating your own
+      // row never suffixes you against yourself.
+      next = { ...next, name: uniqueNameForRoom(participant.name, current, reclaim) };
     }
 
     next = {
       ...next,
-      color: uniqueColorForRoom(next.color, current, options.priorIdentity),
+      color: uniqueColorForRoom(next.color, current, reclaim),
     };
 
     // Default canSpeak: TRUE for everyone (host, agents, walk-ins). The
@@ -257,21 +320,31 @@ export async function joinRoom(
     if (next.canSpeak === undefined) {
       next = { ...next, canSpeak: true };
     }
-    // T-30: stamp the credential hash (or clear it for keyless joins).
-    next = { ...next, memberKeyHash };
+    // T-30/T-25: stamp the identity anchors on the stored row.
+    //  - memberKeyHash: the freshly issued key's hash when issuing; otherwise
+    //    PRESERVE the reclaimed row's existing hash. A keyless refresh must not
+    //    silently strip an agent's credential binding (the old code cleared it,
+    //    which let a bare re-join drop a keyed row's protection).
+    //  - authIdHash: stamp the server-verified value when the caller is an
+    //    authenticated web user; otherwise preserve any existing anchor on the
+    //    reclaimed row. Only ever a server-verified value — never client input.
+    next = {
+      ...next,
+      memberKeyHash: memberKeyHash ?? reclaim?.memberKeyHash,
+      authIdHash: authIdHash ?? reclaim?.authIdHash,
+    };
     // Assigned AFTER the canSpeak materialization so the returned
     // `outParticipant` reflects the final stored row, including its
     // approval state (callers like the MCP room_join handler look at this
     // to tell the agent whether it can speak immediately).
     outParticipant = next;
 
-    // Replace the row matching priorIdentity if given, otherwise replace by
-    // the (final) (name, client) tuple. This makes refreshes idempotent
-    // without losing earlier presence data.
+    // Drop the reclaimed row (updated in place) and any exact (name, client)
+    // duplicate of the final row, then append the fresh row. This keeps
+    // (re)joins idempotent and lets a reclaim collapse a stale duplicate
+    // that happens to sit on the final name.
     const keep = current.participants.filter(p => {
-      if (options.priorIdentity
-        && p.name === options.priorIdentity.name
-        && p.client === options.priorIdentity.client) return false;
+      if (reclaim && p === reclaim) return false;
       return !(p.name === next.name && p.client === next.client);
     });
 

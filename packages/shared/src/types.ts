@@ -20,6 +20,16 @@ export interface Participant {
   // 0.25.x), which fall to the flag-gated, fail-closed-on-ambiguity legacy
   // path. Only the hash is ever stored; the plaintext lives client-side.
   memberKeyHash?: string;
+  // T-25: SHA-256 of the server-VERIFIED authenticated identity (the Access
+  // JWT email) of a web participant. This is the DURABLE reclaim anchor for a
+  // human, because the web memberKey lives in per-tab sessionStorage and is
+  // gone in a fresh tab / after a browser restart — but the Access cookie
+  // persists. On (re)join, a web caller whose verified email hashes to this
+  // value reclaims THIS row instead of being suffixed into a new one. Only the
+  // hash is stored (rows are room-visible, so the raw email must never be),
+  // and it is only ever set from the server-verified caller, never a client
+  // claim. Absent on agent (cc) rows, which reclaim by memberKeyHash instead.
+  authIdHash?: string;
 }
 
 // How agent responses are coordinated in this room.

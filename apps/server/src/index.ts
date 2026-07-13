@@ -527,9 +527,23 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // T-30 (F2): credential-aware clients (web) set wantMemberKey and get a
       // one-time member credential minted for their row. MCP 0.25.x never
       // sets it, so its row stays keyless and takes the legacy send path.
+      //
+      // T-25 identity reclaim anchors:
+      //  - reclaimMemberKey: the key the caller already holds (same field it
+      //    sends to authenticate). Lets a returning AGENT reclaim its own row
+      //    by hash instead of proliferating "(2)", "(3)" … rows.
+      //  - authId: the caller's SERVER-VERIFIED Access email, and ONLY that —
+      //    set for authenticated web callers only, never from client input. It
+      //    is the durable anchor for a HUMAN whose per-tab memberKey is gone in
+      //    a fresh tab but whose Access cookie persists. Scoped to web so an
+      //    agent row can never be reclaimed via a human's identity.
+      const authId =
+        caller.kind === 'user' && participant.client === 'web' ? caller.email : undefined;
       const joined = await joinRoom(client, code, participant, {
         priorIdentity,
         issueMemberKey: Boolean(payload.wantMemberKey),
+        reclaimMemberKey: payload.memberKey as string | undefined,
+        authId,
       });
       const { participant: outParticipant, memberKey, ...roomRest } = joined;
       return { room: roomRest, participant: outParticipant, memberKey };
