@@ -71,6 +71,21 @@ describe('updatePresence — keyed + self-healing (T-37)', () => {
     expect(retried[retried.length - 1].memberKey).toBe('FRESH'); // retry used the fresh key
   });
 
+  it('recovers when the memberKey is ABSENT (not just wrong) but self is captured', async () => {
+    // no :memberKey at all → first presence presents undefined → server need-key
+    store.set(`room:${CODE}:self`, JSON.stringify(SELF));
+    let presenceCalls = 0;
+    const { calls } = installFetch({
+      updatePresence: (b) => (++presenceCalls === 1 && b.memberKey == null ? memberAuth : { json: {} }),
+      join: () => ({ json: { memberKey: 'FRESH' } }),
+    });
+    await updatePresence(client, CODE, 'Waqas', 123);
+    expect(calls.filter(c => c.action === 'join')).toHaveLength(1);
+    expect(store.get(`room:${CODE}:memberKey`)).toBe('FRESH');
+    const retried = calls.filter(c => c.action === 'updatePresence');
+    expect(retried[retried.length - 1].memberKey).toBe('FRESH');
+  });
+
   it('fails closed (surfaces the error) when there is no captured self to re-mint from', async () => {
     store.set(`room:${CODE}:memberKey`, 'STALE'); // note: NO :self stored
     const { calls } = installFetch({ updatePresence: () => memberAuth, join: () => ({ json: { memberKey: 'X' } }) });
