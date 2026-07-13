@@ -106,7 +106,28 @@ Codex already moved to `agent-room-t24`.
   task assign/verify/kick/resume matrix), identical name+client pairs.
 - **P2 (web)**: alias display everywhere (feed, People, header), host
   rename control, collision warning banner, self-alias editor.
-- **P3 (docs/board)**: identity docs, board pid backfill, SELFHOST note.
+- **P3 (docs/board)**: identity docs, board pid backfill, SELFHOST note,
+  and an AUTHENTICATED task owner/verifier reassignment path (see
+  stale-verifier test below).
+
+### Required migration test — stale task verifier (observed 2026-07-13)
+
+T-24's verifier was recorded as bare `Claude` before that session renamed
+to `Claude · Foundation`. `room_task_verify` then blocked the rename with
+`NotHostError`, and there is NO safe reassignment operation — so a
+verified-DONE task is stuck `awaiting_review`. This is the board-side
+twin of the send/host identity bug.
+
+P1/P3 must ship an AUTHENTICATED reassignment: the SAME principal
+(proven by its credential — memberKey/pid, never a bare name) may rebind
+a task's `owner`/`verifier` from an old alias to its current one; a
+different principal cannot. Tests:
+1. task verifier = alias A; that principal (credential) rebinds to alias
+   B → allowed; then verify succeeds under B.
+2. a DIFFERENT principal attempts the rebind → denied.
+3. a bare-name match with no credential → denied (no legacy fallback).
+4. ambiguous legacy verifier (2+ rows once shared the name) → fails
+   closed, requires explicit host disambiguation.
 
 ## Acceptance mapping (DoD)
 
