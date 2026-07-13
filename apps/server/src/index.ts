@@ -29,7 +29,8 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
@@ -285,6 +286,47 @@ async function handleKv(req: IncomingMessage, res: ServerResponse, path: string)
 }
 
 // ---------- /api/room — dispatcher for the agent-room-mcp client ----------
+
+// ---------- T-36 host-recovery: double-consent orphaned-host rescue ----------
+// (1) The host-machine OPERATOR arms recovery by writing a 0600 ARM_FILE (only
+// someone with host filesystem access can). (2) An authenticated allowlisted
+// USER presenting their live memberKey makes the recoverHost request. Only then
+// does the server mint a fresh hostKey, atomically re-host + run the declared
+// alias migration, and return the key in THAT response body (never logged).
+// Auto-disarms after one success; a rollback snapshot is written first.
+const RECOVERY_DIR = join(homedir(), '.wakichat');
+const ARM_FILE = join(RECOVERY_DIR, 'host-recovery.armed');
+interface ArmSpec {
+  code: string;
+  target: { name: string; client: 'web' | 'cc' };
+  migrations: { from: string; to: string; toClient?: 'web' | 'cc' }[];
+}
+function readArmSpec(): ArmSpec | null {
+  try {
+    if (!existsSync(ARM_FILE)) return null;
+    return JSON.parse(readFileSync(ARM_FILE, 'utf8')) as ArmSpec;
+  } catch {
+    return null;
+  }
+}
+function disarmRecovery(): void {
+  try {
+    unlinkSync(ARM_FILE);
+  } catch {
+    /* already gone */
+  }
+}
+function writeRecoveryRollback(code: string, data: unknown): void {
+  try {
+    mkdirSync(RECOVERY_DIR, { recursive: true, mode: 0o700 });
+  } catch {
+    /* exists */
+  }
+  const safe = code.replace(/[^A-Za-z0-9-]/g, '_');
+  writeFileSync(join(RECOVERY_DIR, `host-recovery.rollback.${safe}.json`), JSON.stringify(data, null, 2), {
+    mode: 0o600,
+  });
+}
 
 function securityEvent(msg: string): void {
   // Distinct prefix so `chat-error.log` greps cleanly for anything that took
@@ -764,6 +806,57 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       await commitBoard(code, board);
       securityEvent(`alias-migration on ${code}: @${from} -> @${to} (${toClient}); rewrote ${migrated.join(', ')} (host-authorized)`);
       return { board, migrated };
+    }
+    case 'recoverHost': {
+      // T-36: rescue a room whose host alias is defunct and whose hostKey is
+      // unrecoverable. DOUBLE consent — host-operator ARM_FILE (0600) + an
+      // authenticated allowlisted USER presenting the armed target's live
+      // memberKey. Atomic: snapshot → validate keyed targets → apply alias
+      // migration → commit board → mint+reset host authority → disarm. The new
+      // hostKey is returned ONLY in this response body (to that browser) and is
+      // never logged.
+      if (caller.kind !== 'user') {
+        throw taskError('NotHostError', 'host recovery requires an authenticated web session');
+      }
+      const arm = readArmSpec();
+      if (!arm || arm.code !== code) {
+        throw taskError('NotHostError', 'host recovery is not armed for this room');
+      }
+      const room = await getRoom(client, code);
+      const reqName = arm.target.name;
+      const reqClient = arm.target.client || 'web';
+      const reqRows = room.participants.filter((p) => p.name === reqName && p.client === reqClient);
+      const presentedHash = payload.memberKey ? await sha256Hex(String(payload.memberKey)) : undefined;
+      if (reqRows.length !== 1 || !reqRows[0].memberKeyHash || !presentedHash || presentedHash !== reqRows[0].memberKeyHash) {
+        throw taskError('MemberAuthError', `host recovery requires @${reqName}'s current member credential`);
+      }
+      // Snapshot BEFORE any mutation (rollback), then validate + apply every
+      // declared migration atomically against keyed targets.
+      const board = await getTaskBoard(code);
+      writeRecoveryRollback(code, { at: nowMs(), hostKeyHash: room.hostKeyHash ?? null, board });
+      const migrated: string[] = [];
+      for (const mig of arm.migrations) {
+        const toClient = mig.toClient || 'cc';
+        const tRows = room.participants.filter((p) => p.name === mig.to && p.client === toClient);
+        if (tRows.length !== 1 || !tRows[0].memberKeyHash) {
+          throw taskError('MemberAuthError', `migration target @${mig.to} (${toClient}) is not a uniquely keyed participant`);
+        }
+        try {
+          migrated.push(...applyAliasMigration(board.tasks, { from: mig.from, to: mig.to, toClient }));
+        } catch (e) {
+          const err = e as AliasMigrationError;
+          throw taskError(err.name || 'BadRequestError', err.message);
+        }
+      }
+      await commitBoard(code, board);
+      const newHostKey = generateMemberKey();
+      const newHash = await sha256Hex(newHostKey);
+      await casRoom(client, code, (cur) => ({ ...cur, hostKeyHash: newHash }));
+      disarmRecovery();
+      securityEvent(
+        `host-recovery on ${code}: re-hosted to @${reqName} (${caller.email}); migrated ${migrated.join(', ') || '(none)'} (operator-armed + user-authenticated)`,
+      );
+      return { recovered: true, migrated, hostKey: newHostKey };
     }
     default:
       throw new Error(`unknown action: ${action || '(none)'}`);
