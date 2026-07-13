@@ -419,6 +419,12 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, await handleRoomAction(payload));
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
+        // Log rejected actions with enough identity context to diagnose
+        // transient CAS/identity races without guessing (text bodies omitted).
+        const who = (payload.message as { name?: string; client?: string } | undefined);
+        console.warn(
+          `[api/room] ${payload.action} rejected: ${e.name} (${e.message}) code=${payload.code ?? ''} name=${who?.name ?? payload.name ?? payload.requesterName ?? ''} client=${who?.client ?? ''}`,
+        );
         return sendJson(res, statusForError(e), { error: e.name, message: e.message });
       }
     }
