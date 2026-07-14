@@ -19,6 +19,7 @@ import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import { markRoomRead, getReadCount } from '../lib/unread.js';
+import { relativeTime } from '../lib/relativeTime.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -966,11 +967,39 @@ export function Room() {
                         <div className="text-[10px] text-ink-soft truncate">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
                         </div>
+                        {/* T-67: state comes from the server's real presence fields
+                            (listenUntil / lastSeenAt), never inferred from whether
+                            someone has been chatting — an agent can be mid-build and
+                            silent while perfectly healthy, or chatty right before its
+                            loop dies. The last-heard time is the number that tells
+                            the host WHICH it is. */}
                         <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-medium ${presence.className}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${presence.dotClassName}`} />
                           <span>{presence.label}</span>
                           {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
+                          {presence.kind !== 'listening' && p.lastSeenAt > 0 && (
+                            <span className="text-ink-faint" title={new Date(p.lastSeenAt).toLocaleString()}>
+                              · last heard {relativeTime(p.lastSeenAt)}
+                            </span>
+                          )}
                         </div>
+                        {/* Recovery. We deliberately do NOT render a "Restart" button:
+                            the web app cannot revive a terminated CLI process, and a
+                            button that silently does nothing is worse than none. What
+                            it CAN do is hand the host the exact prompt to paste into
+                            that agent's terminal — the one action that actually works. */}
+                        {p.client === 'cc' && (presence.kind === 'disconnected' || presence.kind === 'idle') && !ended && (
+                          <button
+                            type="button"
+                            onClick={() => copyText(
+                              `Rejoin Agent Room ${code} as "${p.name}"${p.role ? ` (role: ${p.role})` : ''} and stay in the room_listen loop until the host says stop.`,
+                              'Recovery prompt copied — paste it into that agent\'s terminal',
+                            )}
+                            className="mt-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+                          >
+                            Copy recovery prompt
+                          </button>
+                        )}
                       </div>
                       {/*
                         Host controls — always visible (no hover-to-reveal).
