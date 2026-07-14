@@ -50,6 +50,38 @@ body {
   color: rgb(var(--ink));
 }
 
+/* T-61 legibility floor. Host: "why so tiny content? one of you has an obsession
+   with tiny text." Panels (Inspector/People/Project/Work, room list) were still
+   on 9-12px while the chat got bumped. Rather than chase each call site — which
+   is how 11px kept resurfacing — clamp the type utilities themselves so nothing
+   can render below the floor: 12px on desktop, 13px labels / 14px body on phones,
+   where the screen is smallest and the text was worst.
+
+   Opt out with `text-fixed` where the size is load-bearing rather than editorial
+   (avatar initials must stay inside their circle). */
+@layer utilities {
+  .text-\[9px\]:not(.text-fixed),
+  .text-\[10px\]:not(.text-fixed),
+  .text-\[11px\]:not(.text-fixed) {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 639px) {
+    .text-\[9px\]:not(.text-fixed),
+    .text-\[10px\]:not(.text-fixed),
+    .text-\[11px\]:not(.text-fixed) {
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .text-\[12px\]:not(.text-fixed),
+    .text-xs:not(.text-fixed) {
+      font-size: 14px;
+      line-height: 1.55;
+    }
+  }
+}
+
 /* T-54: brief highlight when jumping to a quoted message. */
 @keyframes reply-flash {
   0%, 100% { background-color: transparent; }
