@@ -956,6 +956,11 @@ export function Room() {
             </div>
   );
 
+  // T-68: derive the lookup before constructing peoplePanel. Declaring this
+  // below the panel left the render-time participant map inside JavaScript's
+  // temporal dead zone and crashed rooms with participants in production.
+  const healthById = indexHealth(health);
+
   const peoplePanel = (
             <div className="p-4">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-1">Participants</div>
@@ -1115,8 +1120,6 @@ export function Room() {
               </div>
             </div>
   );
-
-  const healthById = indexHealth(health);
 
   const renderPanel = (tab: InspectorTab) =>
     tab === 'people' ? peoplePanel
@@ -1593,4 +1596,3 @@ function artifactTone(kind: ArtifactKind): string {
       return 'text-violet-700';
   }
 }
-
