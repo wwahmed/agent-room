@@ -1188,28 +1188,33 @@ export function Room() {
                     ))}
                   </div>
                 )}
-                <div className="hidden lg:flex flex-wrap items-center gap-2 text-[10px]">
-                  <span className="font-semibold text-ink-faint">Ask your agents:</span>
-                  <button
-                    type="button"
-                    onClick={() => fillPrompt('minutes')}
-                    className="rounded-full border border-accent-tint-border bg-accent-tint px-2.5 py-1 font-semibold text-accent hover:bg-accent-tint-border transition"
-                  >
-                    Ask for minutes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillPrompt('reply')}
-                    className="rounded-full border border-border bg-surface-softer px-2.5 py-1 font-semibold text-ink-muted hover:border-accent/40 hover:text-accent transition"
-                  >
-                    Ask for reply draft
-                  </button>
-                  <span className="hidden sm:inline text-ink-faint">Prefills your message. You choose the agent and send.</span>
-                </div>
-                {/* Host feedback (04:09): tool buttons must NEVER steal width
-                    from the writing surface. Textarea spans the full composer
-                    width at every height; controls live on their own compact
-                    row below. */}
+                {/* T-63 (host: "this persistent big panel across the bottom …
+                    you are wasting so much space; notice how Teams does it").
+                    The chips were a permanent row of chrome. Teams floats its
+                    suggestions above the box and only when they're relevant — so
+                    these now appear only while the draft is empty and vanish the
+                    moment you type, giving the space back to the conversation. */}
+                {!text.trim() && (
+                  <div className="hidden lg:flex flex-wrap items-center gap-2 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => fillPrompt('minutes')}
+                      className="rounded-full border border-accent-tint-border bg-accent-tint px-2.5 py-1 font-semibold text-accent hover:bg-accent-tint-border transition"
+                    >
+                      Ask for minutes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fillPrompt('reply')}
+                      className="rounded-full border border-border bg-surface-softer px-2.5 py-1 font-semibold text-ink-muted hover:border-accent/40 hover:text-accent transition"
+                    >
+                      Ask for reply draft
+                    </button>
+                  </div>
+                )}
+                {/* One row, Teams-style: the tools sit INSIDE the input's right
+                    edge instead of claiming a row of their own below it. */}
+                <div className="flex items-end gap-0.5 rounded-2xl border border-border bg-surface-softer pl-1 pr-1.5 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
                 <textarea
                   ref={textareaRef}
                   value={text}
@@ -1229,10 +1234,11 @@ export function Room() {
                     height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
                     maxHeight: composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
                   }}
-                  /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus. */
-                  className="w-full resize-none overflow-y-auto rounded-xl border border-border bg-surface-softer px-3 py-2.5 text-base leading-relaxed outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                  /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus.
+                     Borderless — the wrapper owns the border and focus ring now. */
+                  className="min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-base leading-relaxed outline-none focus:ring-0"
                 />
-                <div className="flex items-center gap-1">
+                <div className="flex flex-shrink-0 items-center gap-0.5">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1285,19 +1291,20 @@ export function Room() {
                         : <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.25 6.75M2.5 13.5l4.25-4.25" />}
                     </svg>
                   </button>
-                  <div className="flex-1" />
+                  {/* Icon-only send (Teams parity). Stays 44px — a big tap target,
+                      just not a wide labelled slab eating the row. */}
                   <button
                     onClick={send}
                     disabled={!text.trim() && attachments.length === 0}
                     title="Send"
                     aria-label="Send message"
-                    className="flex h-11 min-w-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <span className="text-sm font-bold">Send</span>
-                    <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
                       <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
                     </svg>
                   </button>
+                </div>
                 </div>
                 </div>
               </div>
