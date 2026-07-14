@@ -197,7 +197,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     // Own messages: subtle right alignment, compact tinted block, no
     // avatar/name (you know who you are). Timestamp inside, quiet.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 px-3 sm:px-4 ${grouped ? 'mt-1' : 'mt-4'}`}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-0.5' : 'mt-3'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
@@ -222,42 +222,47 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // separated by white space — mirroring the host's own message bubbles. The
   // tint stays low-saturation so long technical text keeps full contrast.
   const bubble = { backgroundColor: `${message.color}1f`, borderColor: `${message.color}3d` };
-  const headerBorder = { borderColor: `${message.color}33` };
-  const bodyClass =
-    'break-words px-3.5 py-2.5 text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75] [overflow-wrap:anywhere]';
+  const agentSender = message.client === 'cc';
+  // T-56 (host: "wasting space at top", "empty margin on the right"): incoming
+  // bubbles are capped-width and left-aligned (pr-* leaves a right margin for
+  // the left/right rhythm); the top is tight — a small avatar overlaps the top
+  // corner, name + time sit on ONE line (no divider, no wrap), role hidden on
+  // mobile.
+  const rowClass = 'group relative pl-3 pr-10 sm:pr-16';
+  const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-2xl border sm:max-w-[86%] [overflow-wrap:anywhere]';
+  const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
 
   if (grouped) {
-    // Follow-up in a group: a plain full-width bubble under the first, no
-    // header; hover reveals the exact time.
+    // Follow-up in a group: a plain capped bubble under the first, no header.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className="group relative mt-1 px-3 sm:px-4" title={exactTime(message.time)}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-0.5`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
-        <div className={`relative z-10 rounded-2xl border ${bodyClass}`} style={{ ...bubble, ...swipe.style }}>
+        <div className={`${bubbleShape} px-3.5 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
-        <div className="absolute right-4 top-1 sm:right-5"><MessageMenu message={message} onReply={onReply} /></div>
+        <div className="absolute right-3 top-1"><MessageMenu message={message} onReply={onReply} /></div>
       </div>
     );
   }
 
-  // T-50 (host: "give bubbles maximum width"): the avatar + name + time live in
-  // a header row INSIDE the top of the bubble (divider under it), so the bubble
-  // spans the full reading width instead of surrendering a left avatar gutter.
   return (
-    <div id={`msg-${message.id}`} {...swipe.bind} className="group relative mt-4 px-3 sm:px-4">
+    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-3`}>
       <SwipeReplyIndicator progress={swipe.progress} />
-      <div className="relative z-10 overflow-hidden rounded-2xl border" style={{ ...bubble, ...swipe.style }}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b px-3.5 pt-2 pb-1.5" style={headerBorder}>
-          <SenderAvatar message={message} sizeClass="h-6 w-6" textClass="text-[10px]" />
-          <span className="text-[14px] font-bold sm:text-[15px]" style={{ color: message.color }}>{message.name}</span>
-          {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
-          {message.role && <span className="truncate text-[11px] text-ink-faint">{message.role}</span>}
-          <span className="ml-auto flex-shrink-0 text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
+      <div className={bubbleShape} style={{ ...bubble, ...swipe.style }}>
+        {/* small avatar badge overlapping the bubble's top-right corner */}
+        <div className={`absolute -top-2 right-1 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-md' : 'rounded-full'}`}>
+          <SenderAvatar message={message} sizeClass="h-6 w-6" textClass="text-[9px]" />
+        </div>
+        <div className="flex items-center gap-x-2 px-3.5 pr-9 pt-1.5">
+          <span className="text-[13px] font-bold" style={{ color: message.color }}>{message.name}</span>
+          {ambiguous && <span className="text-[10px] text-ink-faint">{message.client}</span>}
+          {message.role && <span className="hidden truncate text-[10px] text-ink-faint sm:inline">{message.role}</span>}
+          <span className="text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
           <MessageMenu message={message} onReply={onReply} />
         </div>
-        <div className={bodyClass}>
+        <div className={`px-3.5 pb-2 pt-0.5 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <MessageText text={body} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
