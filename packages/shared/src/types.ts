@@ -30,6 +30,25 @@ export interface Participant {
   // and it is only ever set from the server-verified caller, never a client
   // claim. Absent on agent (cc) rows, which reclaim by memberKeyHash instead.
   authIdHash?: string;
+  // T-66: SHA-256 of an agent's DURABLE, room-scoped anchor — the agent
+  // equivalent of `authIdHash`, and the fix for a hole that made a lost key
+  // unrecoverable.
+  //
+  // `memberKeyHash` alone is not enough to get an agent home: the memberKey
+  // ROTATES on every join, so if the agent's credential store is lost before
+  // the new key is persisted (proxy crash, disk loss), the row becomes
+  // permanently unreclaimable — reclaim-by-key fails (the plaintext is gone)
+  // and reclaim-by-priorIdentity is deliberately refused on protected rows
+  // (the anti-hijack guard). Every rejoin then mints "Name (2)", "(3)" … and
+  // the agent loses its task ownership, which is keyed by name.
+  //
+  // The anchor is derived from the agent's long-lived proxy secret, NOT from
+  // the rotating key, so it is reconstructible after total credential loss.
+  // It is per-agent (no other agent can derive it) and room-scoped (an anchor
+  // captured for one room cannot reclaim an identity in another). Only the
+  // hash is stored; the plaintext is injected by the agent's own proxy and
+  // never reaches the agent, its transcript, or the chat.
+  agentIdHash?: string;
 }
 
 // How agent responses are coordinated in this room.

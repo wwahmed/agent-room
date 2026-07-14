@@ -52,6 +52,7 @@ import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { roomActivityAt } from './roomactivity.js';
 import { redactRoomPayload } from './redact.js';
+import { roomHealth } from './health.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -581,17 +582,36 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       //    agent row can never be reclaimed via a human's identity.
       const authId =
         caller.kind === 'user' && participant.client === 'web' ? caller.email : undefined;
+      //  - agentId (T-66): the agent's DURABLE reclaim anchor, injected by that
+      //    agent's own memberkey-proxy. Accepted ONLY from a trusted LOCAL
+      //    caller on a 'cc' row. A browser reaches us through the Cloudflare
+      //    edge and is therefore never `local`, so a web client cannot mint or
+      //    present an agent anchor no matter what it puts in the body — the same
+      //    boundary that keeps `authId` server-verified, applied in reverse.
+      const agentId =
+        caller.kind === 'local' && participant.client === 'cc'
+          ? (payload.agentId as string | undefined)
+          : undefined;
       const joined = await joinRoom(client, code, participant, {
         priorIdentity,
         issueMemberKey: Boolean(payload.wantMemberKey),
         reclaimMemberKey: payload.memberKey as string | undefined,
         authId,
+        agentId,
       });
       const { participant: outParticipant, memberKey, ...roomRest } = joined;
       return { room: roomRest, participant: outParticipant, memberKey };
     }
     case 'messages': {
       return { messages: await listMessages(client, code, Number(payload.cursor || 0)) };
+    }
+    // T-66: per-participant listen-loop health, so the app can show who is
+    // ACTUALLY listening rather than leaving the host to guess whether an agent
+    // is thinking, rate-limited, or dead. Derived from real presence fields
+    // (listenUntil / lastSeenAt); carries no credential material.
+    case 'health': {
+      const room = await getRoom(client, code);
+      return { health: roomHealth(room.participants, Date.now()) };
     }
     case 'sweep': {
       const room = await getRoom(client, code);

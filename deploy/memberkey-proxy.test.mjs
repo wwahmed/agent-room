@@ -124,3 +124,98 @@ test('persists the rotated key and presents it after a proxy restart', async () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// T-66. The restart test above proves the key SURVIVES a restart. This proves
+// recovery when it does NOT — the store is deleted outright (proxy died before
+// persisting the rotated key, disk lost, file corrupted and refused at load).
+//
+// That is the case that used to be terminal: with no key to present, the server
+// could not reclaim the row, and the agent was suffixed "(2)" forever, losing
+// the task ownership that is keyed by its name. The durable anchor is DERIVED
+// from the long-lived proxy secret, so it is still there when the store is not.
+test('presents a stable durable anchor even after the key store is destroyed', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agent-room-proxy-'));
+  const store = join(dir, 'member-keys.json');
+  const token = 'fedcba9876543210fedcba9876543210';
+  const joins = [];
+  let nextKey = 1;
+  const upstream = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    joins.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      room: { code: 'ABC-DEF-GHJ', participants: [] },
+      participant: { name: 'Robin' },
+      memberKey: `member-key-${nextKey++}`,
+    }));
+  });
+
+  let proxy;
+  try {
+    const upstreamPort = await listen(upstream);
+    const probe = createServer();
+    const proxyPort = await listen(probe);
+    await stop(probe);
+    const config = { port: proxyPort, upstream: `http://127.0.0.1:${upstreamPort}`, token, store };
+
+    proxy = await startProxy(config);
+    await joinThrough(proxyPort, token);
+    const anchor = joins[0].agentId;
+    assert.match(anchor, /^[a-f0-9]{64}$/, 'join must carry a derived anchor');
+    assert.equal(joins[0].memberKey, undefined, 'first join has no prior key');
+    await stopChild(proxy);
+    proxy = undefined;
+
+    // Catastrophe: the credential store is gone.
+    rmSync(store, { force: true });
+
+    proxy = await startProxy(config);
+    await joinThrough(proxyPort, token);
+
+    assert.equal(joins[1].memberKey, undefined, 'the key really is lost');
+    assert.equal(joins[1].agentId, anchor, 'the anchor is re-derived and identical');
+    // and the fresh key issued on recovery is persisted for next time
+    const stored = JSON.stringify(JSON.parse(readFileSync(store, 'utf8')));
+    assert.equal(stored.includes('member-key-2'), true, 'recovery persists a fresh key');
+  } finally {
+    if (proxy) await stopChild(proxy);
+    await stop(upstream);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The anchor is what reclaims an identity, so it must be UNGUESSABLE by another
+// agent: a different proxy secret must never derive the same value.
+test('a different agent secret derives a different anchor (no cross-agent takeover)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agent-room-proxy-'));
+  const joins = [];
+  const upstream = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    joins.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ room: { code: 'ABC-DEF-GHJ' }, participant: {}, memberKey: 'k' }));
+  });
+
+  const kids = [];
+  try {
+    const upstreamPort = await listen(upstream);
+    for (const token of ['1'.repeat(32), '2'.repeat(32)]) {
+      const probe = createServer();
+      const port = await listen(probe);
+      await stop(probe);
+      const child = await startProxy({
+        port, token, upstream: `http://127.0.0.1:${upstreamPort}`,
+        store: join(dir, `store-${token.slice(0, 1)}.json`),
+      });
+      kids.push(child);
+      await joinThrough(port, token);
+    }
+    assert.notEqual(joins[0].agentId, joins[1].agentId, 'anchors must not collide across agents');
+  } finally {
+    for (const k of kids) await stopChild(k);
+    await stop(upstream);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

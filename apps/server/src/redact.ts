@@ -15,7 +15,10 @@
 // These are used ONLY server-side (findReclaimRow, the send/host auth checks),
 // so redacting them costs nothing. Applied at the single response choke point
 // rather than per-action, so a new action cannot silently reintroduce the leak.
-const SECRET_PARTICIPANT_FIELDS = ['memberKeyHash', 'authIdHash'] as const;
+// agentIdHash (T-66) is sha256 of an agent's durable anchor. It never rotates,
+// so leaking the verifier is strictly worse than leaking memberKeyHash — an
+// offline hit against it would be good forever. Redacted with the rest.
+const SECRET_PARTICIPANT_FIELDS = ['memberKeyHash', 'authIdHash', 'agentIdHash'] as const;
 
 export function redactParticipant<T extends Record<string, unknown>>(p: T): T {
   const out = { ...p };

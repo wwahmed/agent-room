@@ -24,7 +24,7 @@
 // Env: PROXY_PORT (default 8211), UPSTREAM (default http://127.0.0.1:8210).
 
 import http from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   chmodSync,
   closeSync,
@@ -129,6 +129,22 @@ function keysFor(secret) {
   return m;
 }
 
+/** T-66: this agent's DURABLE, room-scoped reclaim anchor.
+ *
+ * Derived (not stored) from the agent's long-lived path secret, so it is
+ * reconstructible even if the key store is deleted outright — which is the
+ * whole point. The rotating memberKey cannot do this job: it only exists in the
+ * store, so losing the store loses the identity forever.
+ *
+ * Room-scoped so an anchor is useless outside the room it was minted for, and
+ * secret-scoped so no other agent (which holds a different secret) can derive
+ * it. The domain-separation prefix keeps this value from colliding with any
+ * other hash we derive from the same secret.
+ */
+function agentAnchor(secret, code) {
+  return createHash('sha256').update(`agent-room:agent-anchor:v1:${secret}:${code}`).digest('hex');
+}
+
 // If a store exists but is unsafe or corrupt, fail closed at startup. Starting
 // with an empty map would make the next join silently create a duplicate row.
 loadStore();
@@ -202,6 +218,13 @@ const server = http.createServer(async (req, res) => {
           // then capture the rotated key from the response below.
           const k = keysFor(secret).get(code);
           if (k) payload.memberKey = k;
+          // T-66: also present the DURABLE anchor. The memberKey above rotates
+          // and lives in a file — lose that file before the rotated key is
+          // written and the row becomes permanently unreclaimable. The anchor is
+          // DERIVED from this agent's long-lived proxy secret, so it survives
+          // total loss of the key store: we can always recompute it. Overwrite
+          // rather than merge, so an agent can never assert its own anchor.
+          payload.agentId = agentAnchor(secret, code);
         } else if (action === 'send' || action === 'updatePresence') {
           const k = keysFor(secret).get(code);
           if (k) payload.memberKey = k;

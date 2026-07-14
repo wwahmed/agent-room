@@ -125,6 +125,19 @@ export class HostNameTakenError extends Error {
   }
 }
 
+// T-66: refused an attempt to bind an agent's durable anchor to a row the
+// caller has not proven it owns (the row carries a different anchor, or is
+// protected by a key/auth the caller did not present). Fails the join loudly
+// rather than silently suffixing, because a silent suffix is what let identity
+// fragmentation go unnoticed in the first place — and because binding an anchor
+// to someone else's row would be an irrevocable takeover.
+export class AgentAnchorConflictError extends Error {
+  constructor(rowName: string) {
+    super(`Refusing to bind an agent identity anchor to "${rowName}": that row belongs to a different identity.`);
+    this.name = 'AgentAnchorConflictError';
+  }
+}
+
 // Identity is (name, client). Same name + same client from the same logical
 // session is idempotent (browser refresh / agent reconnect just refreshes
 // presence). Two important rules layered on top:
@@ -160,6 +173,13 @@ export interface JoinRoomOptions {
   // existing row's memberKeyHash, reclaims that row in place — the durable
   // anchor for AGENTS, whose MCP client persists the key.
   reclaimMemberKey?: string;
+  // T-66 reclaim anchor (0): an agent's durable, room-scoped anchor (plaintext;
+  // joinRoom hashes it to `agentIdHash`). The server sets this ONLY for a
+  // trusted LOCAL caller on a 'cc' row — a web client can never supply it, so a
+  // browser cannot mint an agent identity. Unlike `reclaimMemberKey` this value
+  // does not rotate, so it still resolves after the agent's key store is lost.
+  // See Participant.agentIdHash for why the rotating key alone is not enough.
+  agentId?: string;
   // T-25 reclaim anchor (b): the caller's server-VERIFIED identity (the Access
   // JWT email). The server sets this ONLY for authenticated web callers
   // (caller.kind === 'user'); it is NEVER derived from client-supplied data.
@@ -192,11 +212,20 @@ export type JoinRoomResult = Room & { participant: Participant; memberKey?: stri
 // undefined for a genuinely new identity. `reclaimMemberKeyHash` and
 // `authIdHash` are resolved by joinRoom (hashed outside the CAS mutator).
 interface ReclaimAnchors {
+  agentIdHash?: string;
   reclaimMemberKeyHash?: string;
   authIdHash?: string;
   priorIdentity?: JoinRoomOptions['priorIdentity'];
 }
 function findReclaimRow(current: Room, anchors: ReclaimAnchors): Participant | undefined {
+  // T-66 anchor (0): the agent's DURABLE anchor, tried before the member key.
+  // It outranks the key precisely because it does not rotate — it is the only
+  // anchor that still resolves after the agent's key store is lost, which is
+  // the case this whole mechanism exists to recover.
+  if (anchors.agentIdHash) {
+    const byAgent = current.participants.find(p => p.agentIdHash === anchors.agentIdHash);
+    if (byAgent) return byAgent;
+  }
   if (anchors.reclaimMemberKeyHash) {
     const byKey = current.participants.find(p => p.memberKeyHash === anchors.reclaimMemberKeyHash);
     if (byKey) return byKey;
@@ -272,15 +301,51 @@ export async function joinRoom(
     ? await sha256Hex(options.reclaimMemberKey)
     : undefined;
   const authIdHash = options.authId ? await sha256Hex(options.authId) : undefined;
+  const agentIdHash = options.agentId ? await sha256Hex(options.agentId) : undefined;
   const room = await casRoom(client, code, (current) => {
-    // T-25: find the caller's existing row to reclaim (memberKeyHash →
-    // authIdHash → priorIdentity). Reclaiming updates that row IN PLACE; a
-    // genuinely new identity (reclaim === undefined) is suffixed on collision.
+    // T-25/T-66: find the caller's existing row to reclaim (agentIdHash →
+    // memberKeyHash → authIdHash → priorIdentity). Reclaiming updates that row
+    // IN PLACE; a genuinely new identity (reclaim === undefined) is suffixed on
+    // collision.
     const reclaim = findReclaimRow(current, {
+      agentIdHash,
       reclaimMemberKeyHash,
       authIdHash,
       priorIdentity: options.priorIdentity,
     });
+
+    // T-66: decide whether this join may BIND its agent anchor to the reclaimed
+    // row. Binding is what makes a row recoverable later, so the rule has to be
+    // tight — a permissive bind is a silent identity takeover.
+    //
+    // Binding is allowed only when the caller has ALREADY proven it owns the
+    // row, by one of:
+    //   - the row carries this exact anchor (a no-op re-bind), or
+    //   - the row is UNPROTECTED (no key, no auth, no other anchor) — the same
+    //     trust-on-first-use bar the priorIdentity branch already applies, or
+    //   - the caller authenticated to the row with its member key this join.
+    //
+    // Anything else is refused. In particular a caller CANNOT staple its anchor
+    // onto a row protected by someone else's key/auth/anchor — that is exactly
+    // the cross-agent takeover this guard exists to stop, and it would be a
+    // *permanent* one, since the anchor never rotates.
+    let bindAgentAnchor = false;
+    if (agentIdHash && reclaim) {
+      const rowAnchor = reclaim.agentIdHash;
+      if (rowAnchor === agentIdHash) {
+        bindAgentAnchor = true;
+      } else if (rowAnchor !== undefined) {
+        throw new AgentAnchorConflictError(reclaim.name);
+      } else {
+        const unprotected = !reclaim.memberKeyHash && !reclaim.authIdHash;
+        const provedWithKey =
+          reclaimMemberKeyHash !== undefined && reclaim.memberKeyHash === reclaimMemberKeyHash;
+        if (unprotected || provedWithKey) bindAgentAnchor = true;
+        else throw new AgentAnchorConflictError(reclaim.name);
+      }
+    } else if (agentIdHash && !reclaim) {
+      bindAgentAnchor = true; // brand-new row: nothing to take over
+    }
 
     // Never trust a client-supplied hash on the incoming participant row.
     let next = { ...participant, memberKeyHash: undefined as string | undefined };
@@ -328,10 +393,18 @@ export async function joinRoom(
     //  - authIdHash: stamp the server-verified value when the caller is an
     //    authenticated web user; otherwise preserve any existing anchor on the
     //    reclaimed row. Only ever a server-verified value — never client input.
+    //  - agentIdHash (T-66): stamp the durable agent anchor when this join is
+    //    allowed to bind it (see bindAgentAnchor above); otherwise PRESERVE the
+    //    reclaimed row's existing anchor. Never taken from client input on a web
+    //    row — the server only ever passes `agentId` for a trusted local 'cc'
+    //    caller. Preserving-on-refresh matters as much as it does for
+    //    memberKeyHash: a keyless re-join must not strip the very anchor that
+    //    makes the row recoverable.
     next = {
       ...next,
       memberKeyHash: memberKeyHash ?? reclaim?.memberKeyHash,
       authIdHash: authIdHash ?? reclaim?.authIdHash,
+      agentIdHash: bindAgentAnchor ? agentIdHash : reclaim?.agentIdHash,
     };
     // Assigned AFTER the canSpeak materialization so the returned
     // `outParticipant` reflects the final stored row, including its
