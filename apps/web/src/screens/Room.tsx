@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, type ClipboardEvent, type DragEvent } from 'react';
+import { Fragment, useRef, useState, useEffect, useCallback, type ClipboardEvent, type DragEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
@@ -18,7 +18,7 @@ import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
-import { markRoomRead } from '../lib/unread.js';
+import { markRoomRead, getReadCount } from '../lib/unread.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -133,6 +133,26 @@ export function Room() {
   const atBottomRef = useRef(true);
   const prevLenRef = useRef(0);
   const [unseenCount, setUnseenCount] = useState(0);
+  // T-65: is the reader parked at the bottom? (ref drives logic, state drives the
+  // jump-to-bottom button's visibility.)
+  const [atBottom, setAtBottom] = useState(true);
+
+  // T-65: the read marker AS IT WAS when we arrived. The mark-read effect below
+  // advances the stored marker the moment we're at the bottom, so we have to
+  // snapshot it first or "first unread" would always resolve to "nothing".
+  const arrivalReadRef = useRef<number | null>(null);
+  if (arrivalReadRef.current === null && messageTotal > 0) {
+    arrivalReadRef.current = getReadCount(code) ?? messageTotal;
+  }
+  const unreadOnArrival = Math.max(0, messageTotal - (arrivalReadRef.current ?? messageTotal));
+  // Index of the first message he hasn't read. The feed holds the tail of the
+  // absolute counter, so count back from the end.
+  const firstUnreadIdx = unreadOnArrival > 0 && unreadOnArrival <= messages.length
+    ? messages.length - unreadOnArrival
+    : -1;
+  const firstUnreadId = firstUnreadIdx >= 0 ? messages[firstUnreadIdx]?.id ?? null : null;
+  const firstUnreadIdRef = useRef<number | null>(null);
+  if (firstUnreadIdRef.current === null && firstUnreadId != null) firstUnreadIdRef.current = firstUnreadId;
 
   // T-62: while the reader is caught up (parked at the bottom of the feed), keep
   // this room's read marker level with the server's absolute counter. Reading
@@ -420,16 +440,34 @@ export function Room() {
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     atBottomRef.current = distanceFromBottom < 80;
+    setAtBottom(atBottomRef.current);
     if (atBottomRef.current) setUnseenCount(0);
   }
 
   // T-48: on new messages, stick to the bottom only for the initial load or when
   // the reader is already at the bottom; otherwise preserve their scroll position
   // and surface a "↓ N new" pill (below) instead of yanking them down.
+  //
+  // T-65 (host: "make sure I always scroll down to the first unread"): on the
+  // FIRST render of a room we land on the first unread message instead of the
+  // bottom, so catching up starts where he stopped reading rather than at the
+  // end of a conversation he hasn't seen.
   useEffect(() => {
     const len = messages.length;
     const added = len - prevLenRef.current;
-    if (prevLenRef.current === 0 || atBottomRef.current) {
+    if (prevLenRef.current === 0 && len > 0) {
+      const target = firstUnreadIdRef.current;
+      const el = target != null ? document.getElementById(`msg-${target}`) : null;
+      if (el) {
+        el.scrollIntoView({ block: 'start' });
+        // Landing above the bottom means there IS unread below — reflect that
+        // rather than silently claiming he's caught up.
+        onFeedScroll();
+      } else {
+        feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
+        setUnseenCount(0);
+      }
+    } else if (atBottomRef.current) {
       feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
       setUnseenCount(0);
     } else if (added > 0) {
@@ -1092,6 +1130,16 @@ export function Room() {
                 const ambiguousNames = new Set<string>();
                 for (const [n, cs] of byName) if (cs.size > 1) ambiguousNames.add(n);
                 return messages.map((m, i) => (
+                  <Fragment key={m.id}>
+                  {/* T-65: the line he stopped reading at, so catching up has a
+                      visible starting point instead of guesswork. */}
+                  {m.id === firstUnreadIdRef.current && (
+                    <div className="my-3 flex items-center gap-3 px-4" aria-label="New messages">
+                      <div className="h-px flex-1 bg-accent/40" />
+                      <span className="flex-shrink-0 text-[12px] font-bold uppercase tracking-wide text-accent">New messages</span>
+                      <div className="h-px flex-1 bg-accent/40" />
+                    </div>
+                  )}
                   <MessageRow
                     key={m.id}
                     message={m}
@@ -1102,6 +1150,7 @@ export function Room() {
                     onReply={startReply}
                     onJumpToQuote={jumpToMessage}
                   />
+                  </Fragment>
                 ));
               })()}
 
@@ -1123,14 +1172,22 @@ export function Room() {
 
               {/* T-48: pinned jump-to-latest pill; only while scrolled up with
                   unseen arrivals, so the reader never loses their reading spot. */}
-              {unseenCount > 0 && (
+              {/* T-65 (host: "an easy way to go to bottom"): whenever he's scrolled
+                  up, getting back to live is always one tap — with the count on it
+                  when there's something new. The old pill only appeared if messages
+                  arrived while he was away, so reading back through history left
+                  him to scroll all the way down by hand. */}
+              {(unseenCount > 0 || !atBottom) && (
                 <button
                   type="button"
                   onClick={scrollToBottom}
+                  aria-label={unseenCount > 0 ? `Jump to ${unseenCount} new messages` : 'Jump to latest messages'}
                   className="sticky bottom-4 z-20 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
                 >
                   <span aria-hidden="true">↓</span>
-                  {unseenCount} new message{unseenCount === 1 ? '' : 's'}
+                  {unseenCount > 0
+                    ? `${unseenCount} new message${unseenCount === 1 ? '' : 's'}`
+                    : 'Latest'}
                 </button>
               )}
             </div>

@@ -14,6 +14,11 @@
 
 const KEY = (code: string) => `wakichat:read:${code}`;
 
+/** How many messages this device has read. null = never opened. */
+export function getReadCount(code: string): number | null {
+  return readMarker(code);
+}
+
 function readMarker(code: string): number | null {
   try {
     const raw = localStorage.getItem(KEY(code));
