@@ -53,6 +53,7 @@ import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from '
 import { roomActivityAt } from './roomactivity.js';
 import { redactRoomPayload } from './redact.js';
 import { roomHealth } from './health.js';
+import { statusForError } from './httpstatus.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -210,28 +211,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-function statusForError(err: Error): number {
-  switch (err.name) {
-    case 'RoomNotFoundError':
-      return 404;
-    case 'HostNameTakenError':
-    case 'MutedError':
-    case 'NotYourTurnError':
-    case 'NotHostError':
-    case 'MemberAuthError':
-      return 403;
-    case 'InvalidModeConfigError':
-    case 'ModeNotSupportedError':
-    case 'BadRequestError':
-      return 400;
-    case 'LedgerConflictError':
-      return 409;
-    case 'ProjectRegistryError':
-      return 503; // registry misconfigured: project features fail closed
-    default:
-      return 500;
-  }
-}
 
 // Admin = an Access-authenticated allowlisted user (ADMIN_EMAILS env
 // narrows it further if set). Local agents are trusted for room data but
@@ -599,7 +578,19 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         authId,
         agentId,
       });
-      const { participant: outParticipant, memberKey, ...roomRest } = joined;
+      // T-66: credential recovery must NEVER be silent. A row changing hands is
+      // precisely the event an operator needs to see — and a stolen identity
+      // would look exactly like a quiet success. `anchorAudit` carries only
+      // room-visible identity (name/client/outcome): no anchors, hashes or keys,
+      // so it is safe to log verbatim.
+      const { participant: outParticipant, memberKey, anchorAudit, ...roomRest } = joined;
+      if (anchorAudit) {
+        securityEvent(
+          anchorAudit.outcome === 'anchor_recovery'
+            ? `agent-anchor RECOVERY on ${code}: "${anchorAudit.name}" (${anchorAudit.client}) reclaimed its key-protected row WITHOUT presenting a member key — rotating key was lost; a fresh key was issued`
+            : `agent-anchor bound on ${code}: "${anchorAudit.name}" (${anchorAudit.client}) is now recoverable (row was ${anchorAudit.reclaimedProtectedRow ? 'key-protected; ownership proven with its member key' : 'unprotected'})`,
+        );
+      }
       return { room: roomRest, participant: outParticipant, memberKey };
     }
     case 'messages': {

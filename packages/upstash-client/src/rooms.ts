@@ -194,7 +194,37 @@ export interface JoinRoomOptions {
 // was suffixed). Existing callers reading `result.participants` etc. still
 // work; new callers can read `result.participant.name` to learn what name
 // was actually assigned.
-export type JoinRoomResult = Room & { participant: Participant; memberKey?: string };
+// T-66: what the durable anchor DID on this join, so the caller can emit an
+// audit event. Credential recovery must never be silent — a row changing hands
+// is exactly the event an operator needs to see, and "it worked quietly" is how
+// a stolen identity would look too.
+//
+//   anchor_bound    — the anchor was attached to an existing row for the first
+//                     time (a pre-T-66 keyed row proving ownership with its key,
+//                     or an unprotected row). Nothing was recovered; the row is
+//                     now recoverable in future.
+//   anchor_recovery — THE ONE THAT MATTERS. A protected row was reclaimed using
+//                     ONLY the anchor, because the rotating member key was not
+//                     presented (lost store). This is the credential-loss
+//                     recovery path, and it is the one that must always be
+//                     audited.
+//
+// Carries no hashes, keys or anchors — only room-visible identity, so it is safe
+// to log verbatim.
+export type AnchorOutcome = 'anchor_bound' | 'anchor_recovery';
+export interface AnchorAudit {
+  outcome: AnchorOutcome;
+  name: string;
+  client: Participant['client'];
+  /** true when the reclaimed row carried a memberKeyHash the caller could not present. */
+  reclaimedProtectedRow: boolean;
+}
+
+export type JoinRoomResult = Room & {
+  participant: Participant;
+  memberKey?: string;
+  anchorAudit?: AnchorAudit;
+};
 
 // T-25: locate the caller's existing row to reclaim on (re)join, so a returning
 // participant updates their SAME row instead of proliferating "(2)", "(3)" …
@@ -285,6 +315,9 @@ export async function joinRoom(
   options: JoinRoomOptions = {}
 ): Promise<JoinRoomResult> {
   let outParticipant = participant;
+  // T-66: set inside the CAS mutator (and reset on each retry) so the caller can
+  // audit what the durable anchor did. See AnchorAudit.
+  let anchorAudit: AnchorAudit | undefined;
   // T-30 (F2): mint the credential (async crypto) BEFORE the synchronous CAS
   // mutator, exactly like hostKey. The plaintext is returned once; only the
   // hash is stored on the row.
@@ -330,21 +363,44 @@ export async function joinRoom(
     // the cross-agent takeover this guard exists to stop, and it would be a
     // *permanent* one, since the anchor never rotates.
     let bindAgentAnchor = false;
+    // Reset per attempt: casRoom may re-run this mutator on a CAS retry, and a
+    // stale audit from a losing attempt must not survive into the winning one.
+    anchorAudit = undefined;
     if (agentIdHash && reclaim) {
       const rowAnchor = reclaim.agentIdHash;
+      // Did the caller actually prove the member key for THIS row on THIS join?
+      const provedWithKey =
+        reclaimMemberKeyHash !== undefined && reclaim.memberKeyHash === reclaimMemberKeyHash;
+
       if (rowAnchor === agentIdHash) {
         bindAgentAnchor = true;
+        // Anchor matched, and the caller could NOT present the row's key while
+        // the row IS key-protected → the key is lost and the anchor alone
+        // brought them home. This is the credential-loss recovery: audit it.
+        if (reclaim.memberKeyHash && !provedWithKey) {
+          anchorAudit = {
+            outcome: 'anchor_recovery',
+            name: reclaim.name,
+            client: reclaim.client,
+            reclaimedProtectedRow: true,
+          };
+        }
       } else if (rowAnchor !== undefined) {
         throw new AgentAnchorConflictError(reclaim.name);
       } else {
         const unprotected = !reclaim.memberKeyHash && !reclaim.authIdHash;
-        const provedWithKey =
-          reclaimMemberKeyHash !== undefined && reclaim.memberKeyHash === reclaimMemberKeyHash;
-        if (unprotected || provedWithKey) bindAgentAnchor = true;
-        else throw new AgentAnchorConflictError(reclaim.name);
+        if (unprotected || provedWithKey) {
+          bindAgentAnchor = true;
+          anchorAudit = {
+            outcome: 'anchor_bound',
+            name: reclaim.name,
+            client: reclaim.client,
+            reclaimedProtectedRow: Boolean(reclaim.memberKeyHash),
+          };
+        } else throw new AgentAnchorConflictError(reclaim.name);
       }
     } else if (agentIdHash && !reclaim) {
-      bindAgentAnchor = true; // brand-new row: nothing to take over
+      bindAgentAnchor = true; // brand-new row: nothing to take over, nothing to audit
     }
 
     // Never trust a client-supplied hash on the incoming participant row.
@@ -424,7 +480,7 @@ export async function joinRoom(
     return { ...current, participants: [...keep, next] };
   });
 
-  return { ...room, participant: outParticipant, memberKey };
+  return { ...room, participant: outParticipant, memberKey, anchorAudit };
 }
 
 // Pre-flight check used by callers that intend to join with the host's name.

@@ -233,3 +233,87 @@ describe('T-66 authorization — no cross-agent takeover', () => {
     expect(JSON.stringify(r.participants)).not.toContain('anchor-plaintext-must-not-appear');
   });
 });
+
+// T-66 (rev2, per ProdMgr-Codex): credential recovery must not be SILENT.
+// A row changing hands is exactly what an operator needs to see — and a stolen
+// identity would otherwise look identical to a quiet success.
+describe('T-66 audit — anchor recovery is never silent', () => {
+  let client: UpstashClient;
+  let code: string;
+
+  beforeEach(async () => {
+    client = memoryClient();
+    const room = await createRoom(client, { code: 'ABC-DEF-GHJ', topic: 't', createdBy: 'Waqas' });
+    code = room.code;
+  });
+
+  it('emits NO audit on an ordinary first join (nothing changed hands)', async () => {
+    const r = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-A',
+    });
+    expect(r.anchorAudit).toBeUndefined();
+  });
+
+  it('emits anchor_bound when the anchor attaches to a pre-T-66 keyed row', async () => {
+    const first = await joinRoom(client, code, agent('Builder'), { issueMemberKey: true });
+    const bound = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      reclaimMemberKey: first.memberKey,
+      agentId: 'anchor-A',
+    });
+
+    expect(bound.anchorAudit).toEqual({
+      outcome: 'anchor_bound',
+      name: 'Builder',
+      client: 'cc',
+      reclaimedProtectedRow: true, // the row WAS key-protected; ownership was proven
+    });
+  });
+
+  it('emits anchor_recovery when a protected row is reclaimed with NO member key', async () => {
+    await joinRoom(client, code, agent('Builder'), { issueMemberKey: true, agentId: 'anchor-A' });
+
+    // The key store is gone: no memberKey presented, only the derived anchor.
+    const recovered = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-A',
+    });
+
+    expect(recovered.anchorAudit).toEqual({
+      outcome: 'anchor_recovery',
+      name: 'Builder',
+      client: 'cc',
+      reclaimedProtectedRow: true,
+    });
+  });
+
+  it('does NOT cry recovery when the agent still holds its key (a normal rejoin)', async () => {
+    const first = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-A',
+    });
+    const normal = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      reclaimMemberKey: first.memberKey, // key present → not a recovery
+      agentId: 'anchor-A',
+    });
+    expect(normal.anchorAudit).toBeUndefined();
+  });
+
+  it('the audit record leaks NO key, anchor or hash material', async () => {
+    await joinRoom(client, code, agent('Builder'), { issueMemberKey: true, agentId: 'anchor-A' });
+    const recovered = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-A',
+    });
+
+    const serialized = JSON.stringify(recovered.anchorAudit);
+    expect(serialized).not.toContain('anchor-A');           // the plaintext anchor
+    expect(serialized).not.toContain(recovered.memberKey!); // the freshly issued key
+    expect(serialized).not.toMatch(/[a-f0-9]{32,}/);        // any hash/secret material
+    expect(Object.keys(recovered.anchorAudit!).sort()).toEqual(
+      ['client', 'name', 'outcome', 'reclaimedProtectedRow'],
+    );
+  });
+});
