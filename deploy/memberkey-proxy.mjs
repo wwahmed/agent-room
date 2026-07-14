@@ -25,6 +25,21 @@
 
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 const PORT = Number(process.env.PROXY_PORT || 8211);
 const UPSTREAM = new URL(process.env.UPSTREAM || 'http://127.0.0.1:8210');
@@ -40,13 +55,83 @@ function tokenOk(got) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** secret -> Map<roomCode, memberKey>. In-memory only. */
+// Each proxy process gets its own state file. Three launchd processes run in
+// parallel on 8211/8212/8213; a shared file lets their read/modify/write cycles
+// overwrite each other and lose a different agent's credential. The port is a
+// stable, non-secret part of the per-agent binding.
+const STORE_FILE = process.env.MEMBERKEY_STORE
+  || join(homedir(), '.agent-room', `memberkey-proxy-${PORT}.json`);
+
+/** secret -> Map<roomCode, memberKey>. */
 const keyStore = new Map();
+
+function assertSecureStore(file) {
+  const st = lstatSync(file);
+  if (!st.isFile() || st.isSymbolicLink()) throw new Error('member-key store must be a regular file');
+  if ((st.mode & 0o777) !== 0o600) throw new Error('member-key store must have mode 0600');
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
+    throw new Error('member-key store must be owned by the current user');
+  }
+}
+
+function loadStore() {
+  if (!existsSync(STORE_FILE)) return;
+  assertSecureStore(STORE_FILE);
+  const parsed = JSON.parse(readFileSync(STORE_FILE, 'utf8'));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('member-key store is malformed');
+  }
+  for (const [secret, rooms] of Object.entries(parsed)) {
+    if (!rooms || typeof rooms !== 'object' || Array.isArray(rooms)) {
+      throw new Error('member-key store contains an invalid namespace');
+    }
+    const entries = Object.entries(rooms);
+    if (entries.some(([code, key]) => typeof code !== 'string' || typeof key !== 'string')) {
+      throw new Error('member-key store contains an invalid room credential');
+    }
+    keyStore.set(secret, new Map(entries));
+  }
+}
+
+function saveStore() {
+  const dir = dirname(STORE_FILE);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+
+  const serialized = {};
+  for (const [secret, rooms] of keyStore) serialized[secret] = Object.fromEntries(rooms);
+  const tmp = `${STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  let fd;
+  try {
+    fd = openSync(tmp, 'wx', 0o600);
+    writeFileSync(fd, JSON.stringify(serialized));
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+    renameSync(tmp, STORE_FILE);
+    chmodSync(STORE_FILE, 0o600);
+    // Best-effort directory fsync makes the rename durable across power loss.
+    try {
+      const dirFd = openSync(dir, 'r');
+      fsyncSync(dirFd);
+      closeSync(dirFd);
+    } catch { /* not supported by every filesystem */ }
+  } catch (error) {
+    if (fd !== undefined) try { closeSync(fd); } catch { /* already closed */ }
+    try { unlinkSync(tmp); } catch { /* absent */ }
+    throw error;
+  }
+}
+
 function keysFor(secret) {
   let m = keyStore.get(secret);
   if (!m) { m = new Map(); keyStore.set(secret, m); }
   return m;
 }
+
+// If a store exists but is unsafe or corrupt, fail closed at startup. Starting
+// with an empty map would make the next join silently create a duplicate row.
+loadStore();
 
 // Hop-by-hop / framing headers must NOT be forwarded verbatim: we buffer the
 // full body and set our own Content-Length, so passing upstream's
@@ -113,6 +198,10 @@ const server = http.createServer(async (req, res) => {
         const code = String(payload.code || '');
         if (action === 'join') {
           payload.wantMemberKey = true;
+          // Present the previous key so the server reclaims the canonical row,
+          // then capture the rotated key from the response below.
+          const k = keysFor(secret).get(code);
+          if (k) payload.memberKey = k;
         } else if (action === 'send' || action === 'updatePresence') {
           const k = keysFor(secret).get(code);
           if (k) payload.memberKey = k;
@@ -140,7 +229,13 @@ const server = http.createServer(async (req, res) => {
         const j = JSON.parse(upRes.body.toString('utf8'));
         if (j && typeof j === 'object' && typeof j.memberKey === 'string') {
           const code = String((j.room && j.room.code) || '');
-          if (code) keysFor(secret).set(code, j.memberKey);
+          if (code) {
+            keysFor(secret).set(code, j.memberKey);
+            // Persist the rotated key before acknowledging the join. The key
+            // remains in memory if persistence fails, and the request returns
+            // 502 rather than falsely claiming durable recovery.
+            saveStore();
+          }
           delete j.memberKey; // never let the plaintext reach the agent/logs
           respBody = Buffer.from(JSON.stringify(j));
         }
