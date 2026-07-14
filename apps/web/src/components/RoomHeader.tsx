@@ -56,7 +56,9 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
         onClick={onToggleInspector}
         aria-label={inspectorOpen ? 'Close room details' : 'Open room details'}
         title="People, outputs, room settings"
-        className={`flex h-12 min-w-12 flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 transition ${inspectorOpen ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
+        /* lg:hidden — on desktop these panels are peer tabs under the header
+           (T-64), so this toggle would open a sheet that no longer exists there. */
+        className={`flex h-12 min-w-12 flex-shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 transition lg:hidden ${inspectorOpen ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
       >
         <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="5.5" cy="5" r="2.25" />

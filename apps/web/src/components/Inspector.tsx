@@ -61,15 +61,14 @@ export function Inspector({ open, onClose, renderTab, initialTab = 'people' }: P
     </div>
   );
 
+  // Mobile only: a full-screen sheet over the chat. The desktop right column is
+  // gone — T-64 promoted these panels to peers of the chat inside <main>, so on a
+  // wide screen they get the full pane instead of a 320px gutter squeezing the
+  // conversation.
   return (
-    <>
-      {/* Mobile: full-screen sheet over the chat. */}
-      <div className="fixed inset-0 z-40 lg:hidden">
-        <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-        <div className="absolute inset-y-0 right-0 w-full max-w-[420px] shadow-2xl">{panel}</div>
-      </div>
-      {/* Desktop: right column inside the workspace grid. */}
-      <aside className="hidden min-h-0 w-[320px] flex-shrink-0 border-l border-border-faint lg:block">{panel}</aside>
-    </>
+    <div className="fixed inset-0 z-40 lg:hidden">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-y-0 right-0 w-full max-w-[420px] shadow-2xl">{panel}</div>
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { RoomHeader } from '../components/RoomHeader.js';
-import { Inspector } from '../components/Inspector.js';
+import { Inspector, type InspectorTab } from '../components/Inspector.js';
 import { RecoverHostButton } from '../components/RecoverHostButton.js';
 import { WorkspaceRail } from '../components/WorkspaceRail.js';
 import { RoomListPane } from '../components/RoomListPane.js';
@@ -39,6 +39,16 @@ function readStoredSelf(code: string): SelfIdentity | null {
 // lines, then scroll internally. An explicit expand control opens a
 // larger writing surface for long drafting. Supersedes T-09's
 // always-four-line resting height.
+// T-64: Chat sits alongside the former Inspector tabs as an equal.
+type MainTab = 'chat' | InspectorTab;
+const MAIN_TABS: Array<{ key: MainTab; label: string }> = [
+  { key: 'chat', label: 'Chat' },
+  { key: 'people', label: 'People' },
+  { key: 'project', label: 'Project' },
+  { key: 'outputs', label: 'Outputs' },
+  { key: 'room', label: 'Room' },
+];
+
 const TEXTAREA_MIN_HEIGHT = 44;
 const TEXTAREA_MAX_HEIGHT = 180;
 const TEXTAREA_EXPANDED_MIN = 240;
@@ -111,6 +121,8 @@ export function Room() {
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // T-64: on desktop the panels are peers of the chat rather than a side column.
+  const [mainTab, setMainTab] = useState<MainTab>('chat');
   const [composerExpanded, setComposerExpanded] = useState(false);
   // T-53/T-54: the message being quote-replied to (composer chip + send payload).
   const [replyingTo, setReplyingTo] = useState<MessageReplyRef | null>(null);
@@ -1011,6 +1023,12 @@ export function Room() {
             </div>
   );
 
+  const renderPanel = (tab: InspectorTab) =>
+    tab === 'people' ? peoplePanel
+      : tab === 'project' ? <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
+      : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
+      : renderOutputs();
+
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken">
       <WorkspaceRail />
@@ -1024,6 +1042,38 @@ export function Room() {
           onShare={() => copyText(joinUrl, 'Invite link copied')}
           onToggleInspector={() => setInspectorOpen(v => !v)}
         />
+
+        {/* T-64 (host: "instead of a sidebar with tabs, make all tabs peers of
+            the chat, so there's more space"). People/Project/Outputs/Room used to
+            live in a permanent 320px right column that squeezed the conversation
+            from both sides. They're now PEERS of Chat: pick one and it takes the
+            whole width. Chat gets the full pane back. Desktop only — the phone
+            keeps the slide-over sheet. */}
+        <div className="hidden flex-shrink-0 items-center gap-1 border-b border-border-faint px-3 lg:flex">
+          {MAIN_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setMainTab(t.key)}
+              aria-current={mainTab === t.key ? 'page' : undefined}
+              className={`-mb-px min-h-11 border-b-2 px-3 text-[14px] font-semibold transition ${
+                mainTab === t.key
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-ink-soft hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* A non-chat tab owns the pane on desktop. */}
+        {mainTab !== 'chat' && (
+          <div className="hidden min-h-0 flex-1 overflow-y-auto lg:block">
+            <div className="mx-auto w-full max-w-[860px]">{renderPanel(mainTab)}</div>
+          </div>
+        )}
+
+        <div className={`flex min-h-0 flex-1 flex-col ${mainTab === 'chat' ? '' : 'lg:hidden'}`}>
 
             <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto py-4 relative">
               {/* T-21: cap the text column at a comfortable reading measure
@@ -1309,17 +1359,13 @@ export function Room() {
                 </div>
               </div>
             )}
+        </div>
       </main>
 
-      <Inspector
-        open={inspectorOpen}
-        onClose={() => setInspectorOpen(false)}
-        renderTab={tab =>
-          tab === 'people' ? peoplePanel
-            : tab === 'project' ? <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
-            : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
-            : renderOutputs()}
-      />
+      {/* Mobile keeps the slide-over sheet — a phone has no room for peer tabs.
+          On desktop the same panels are peers of the chat inside <main>, so the
+          Inspector's desktop column is gone (T-64). */}
+      <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
     </div>
   );
 
