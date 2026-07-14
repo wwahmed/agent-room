@@ -88,5 +88,16 @@ describe('listen-loop health (T-68: server is the source of truth)', () => {
       expect(idx.get(healthKey('Waqas', 'web'))?.state).toBe('online');
       expect(idx.get(healthKey('Waqas', 'cc'))?.state).toBe('disconnected');
     });
+
+    it('a crafted name cannot forge another participant\'s key', () => {
+      // The key is JSON-encoded, so a name that embeds the separator is escaped
+      // rather than colliding with a real (name, client) pair.
+      expect(healthKey('Waqas","cc', 'web')).not.toBe(healthKey('Waqas', 'cc'));
+    });
+
+    it('the key is plain text — no control characters', () => {
+      // Regression: a NUL separator here made the whole source file binary to git.
+      expect(healthKey('Waqas', 'web')).not.toMatch(/[\u0000-\u001f]/);
+    });
   });
 });
