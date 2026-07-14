@@ -51,6 +51,7 @@ import { createProjectFromCandidate, getProject, listProjectCandidates, listProj
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { roomActivityAt } from './roomactivity.js';
+import { redactRoomPayload } from './redact.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
   appendMessage,
@@ -1093,7 +1094,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'BadRequest', message: 'invalid JSON body' });
       }
       try {
-        return sendJson(res, 200, await handleRoomAction(payload, roomCaller));
+        return sendJson(res, 200, redactRoomPayload(await handleRoomAction(payload, roomCaller)));
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
         // Log rejected actions with enough identity context to diagnose
