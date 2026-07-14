@@ -38,3 +38,6 @@ deploy/projects.json
 # T-31 proxy tokens + per-session endpoint files (never commit)
 deploy/.memberkey-tokens
 .wakichat-agent
+deploy/.memberkey-store.json
+deploy/mkproxy-*.log
+.env.bak-*
