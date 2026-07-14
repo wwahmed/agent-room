@@ -20,6 +20,7 @@ import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs,
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import { markRoomRead, getReadCount } from '../lib/unread.js';
 import { relativeTime } from '../lib/relativeTime.js';
+import { presenceFor, canRecover, recoveryPrompt } from '../lib/presence.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -988,14 +989,16 @@ export function Room() {
                             button that silently does nothing is worse than none. What
                             it CAN do is hand the host the exact prompt to paste into
                             that agent's terminal — the one action that actually works. */}
-                        {p.client === 'cc' && (presence.kind === 'disconnected' || presence.kind === 'idle') && !ended && (
+                        {canRecover(p, now, ended) && (
                           <button
                             type="button"
                             onClick={() => copyText(
-                              `Rejoin Agent Room ${code} as "${p.name}"${p.role ? ` (role: ${p.role})` : ''} and stay in the room_listen loop until the host says stop.`,
+                              recoveryPrompt(code, p.name, p.role),
                               'Recovery prompt copied — paste it into that agent\'s terminal',
                             )}
-                            className="mt-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+                            aria-label={`Copy the prompt to bring ${p.name} back into the room`}
+                            title={`${p.name} is not listening. Copy a prompt to paste into its terminal.`}
+                            className="mt-1.5 flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-9"
                           >
                             Copy recovery prompt
                           </button>
@@ -1567,47 +1570,15 @@ function artifactTone(kind: ArtifactKind): string {
 }
 
 function participantPresence(p: Participant, now: number) {
-  if (p.listenUntil && p.listenUntil > now) {
-    return {
-      kind: 'listening' as const,
-      label: 'Listening now',
-      detail: '',
-      className: 'text-emerald-700',
-      dotClassName: 'bg-emerald-500',
-    };
-  }
-
-  if (now - p.lastSeenAt <= PRESENCE_STALE_MS) {
-    return {
-      kind: 'online' as const,
-      label: 'Online',
-      detail: p.client === 'cc' ? 'hook unknown' : '',
-      className: 'text-blue-700',
-      dotClassName: 'bg-blue-500',
-    };
-  }
-
-  // Past 5 minutes silent → almost certainly disconnected. Most common cause:
-  // a CLI agent (Cursor / Claude Code / Codex) was terminated by the user
-  // without calling room_leave, so the participant row stays in the room
-  // forever. The "Disconnected" label is a hint to the host that this
-  // participant is unlikely to come back, paired with the always-visible
-  // kick button so they can clean up in one click.
-  if (now - p.lastSeenAt > PRESENCE_DISCONNECTED_MS) {
-    return {
-      kind: 'disconnected' as const,
-      label: 'Disconnected',
-      detail: p.client === 'cc' ? 'host can remove' : '',
-      className: 'text-ink-faint',
-      dotClassName: 'bg-slate-400',
-    };
-  }
-
-  return {
-    kind: 'idle' as const,
-    label: 'Idle',
-    detail: p.client === 'cc' ? 'not listening' : '',
-    className: 'text-ink-faint',
-    dotClassName: 'bg-slate-300',
-  };
+  // T-67: thresholds live in lib/presence.ts so they are unit-tested; this only
+  // maps the tested state onto colors. Keeping the logic here too would let the
+  // UI and the tests drift apart.
+  const base = presenceFor(p, now);
+  const style = {
+    listening: { className: 'text-emerald-700', dotClassName: 'bg-emerald-500' },
+    online: { className: 'text-blue-700', dotClassName: 'bg-blue-500' },
+    idle: { className: 'text-ink-faint', dotClassName: 'bg-slate-300' },
+    disconnected: { className: 'text-ink-faint', dotClassName: 'bg-slate-400' },
+  }[base.kind];
+  return { ...base, ...style };
 }
