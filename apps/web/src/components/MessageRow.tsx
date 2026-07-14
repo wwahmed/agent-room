@@ -228,7 +228,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // the left/right rhythm); the top is tight — a small avatar overlaps the top
   // corner, name + time sit on ONE line (no divider, no wrap), role hidden on
   // mobile.
-  const rowClass = 'group relative pl-3 pr-10 sm:pr-16';
+  const rowClass = 'group relative pl-4 pr-10 sm:pr-16';
   const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-2xl border sm:max-w-[86%] [overflow-wrap:anywhere]';
   const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
 
@@ -251,15 +251,17 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-3`}>
       <SwipeReplyIndicator progress={swipe.progress} />
       <div className={bubbleShape} style={{ ...bubble, ...swipe.style }}>
-        {/* small avatar badge overlapping the bubble's top-right corner */}
-        <div className={`absolute -top-2 right-1 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-md' : 'rounded-full'}`}>
-          <SenderAvatar message={message} sizeClass="h-6 w-6" textClass="text-[9px]" />
+        {/* T-58 (host: "others on the left", "can barely read the name"): the
+            avatar badge sits on the bubble's OUTER (left) edge, overlapping the
+            top corner, and is legible-sized. */}
+        <div className={`absolute -top-1 -left-2 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-lg' : 'rounded-full'}`}>
+          <SenderAvatar message={message} sizeClass="h-8 w-8" textClass="text-[11px]" />
         </div>
-        <div className="flex items-center gap-x-2 px-3.5 pr-9 pt-1.5">
-          <span className="text-[13px] font-bold" style={{ color: message.color }}>{message.name}</span>
-          {ambiguous && <span className="text-[10px] text-ink-faint">{message.client}</span>}
-          {message.role && <span className="hidden truncate text-[10px] text-ink-faint sm:inline">{message.role}</span>}
-          <span className="text-[10px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
+        <div className="flex items-center gap-x-2 pl-11 pr-3 pt-2">
+          <span className="text-[15px] font-bold" style={{ color: message.color }}>{message.name}</span>
+          {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
+          {message.role && <span className="hidden truncate text-[11px] text-ink-faint sm:inline">{message.role}</span>}
+          <span className="text-[11px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
           <MessageMenu message={message} onReply={onReply} />
         </div>
         <div className={`px-3.5 pb-2 pt-0.5 ${bodyText}`}>
