@@ -12,15 +12,16 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS, artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
+import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import { markRoomRead, getReadCount } from '../lib/unread.js';
+import { fetchHealth } from '../lib/api.js';
 import { relativeTime } from '../lib/relativeTime.js';
-import { presenceFor, canRecover, recoveryPrompt } from '../lib/presence.js';
+import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -50,6 +51,13 @@ const MAIN_TABS: Array<{ key: MainTab; label: string }> = [
   { key: 'outputs', label: 'Outputs' },
   { key: 'room', label: 'Room' },
 ];
+
+const STATE_TONE_PRESENCE = {
+  listening: { text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  online: { text: 'text-blue-700', dot: 'bg-blue-500' },
+  stale: { text: 'text-amber-700', dot: 'bg-amber-500' },
+  disconnected: { text: 'text-ink-faint', dot: 'bg-slate-400' },
+} as const;
 
 const TEXTAREA_MIN_HEIGHT = 44;
 const TEXTAREA_MAX_HEIGHT = 180;
@@ -125,6 +133,24 @@ export function Room() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
+  // T-68: the SERVER's listen-loop verdict (T-66 `health`). The web no longer
+  // classifies presence itself — two definitions of "dead" is the bug class that
+  // let presence lie in the first place.
+  const [health, setHealth] = useState<ParticipantHealth[]>([]);
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    const client = createClient();
+    const pull = async () => {
+      try {
+        const rows = await fetchHealth(client, code);
+        if (!cancelled) setHealth(rows);
+      } catch { /* health is advisory; never break the room over it */ }
+    };
+    void pull();
+    const id = window.setInterval(() => { void pull(); }, 15000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [code]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   // T-53/T-54: the message being quote-replied to (composer chip + send payload).
   const [replyingTo, setReplyingTo] = useState<MessageReplyRef | null>(null);
@@ -944,13 +970,14 @@ export function Room() {
                   const isMuted = p.canSpeak === false;
                   const canMuteToggle = isMeHost && !isSelf && !ended;
                   const canAsk = canConfigureReplyMode && p.client === 'cc' && !isMuted;
-                  const presence = participantPresence(p, now);
+                  const h = healthById.get(healthKey(p.name, p.client));
+                  const presence = h ? presenceView(h) : null;
                   // Whole-row visual fade for participants who haven't been
                   // seen in a while — keeps the row legible but signals
                   // "probably gone" without screaming about it.
-                  const rowFade = presence.kind === 'idle'
+                  const rowFade = presence?.state === 'stale'
                     ? 'opacity-65'
-                    : presence.kind === 'disconnected'
+                    : presence?.state === 'disconnected'
                       ? 'opacity-50'
                       : '';
                   return (
@@ -968,28 +995,24 @@ export function Room() {
                         <div className="text-[10px] text-ink-soft truncate">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
                         </div>
-                        {/* T-67: state comes from the server's real presence fields
-                            (listenUntil / lastSeenAt), never inferred from whether
-                            someone has been chatting — an agent can be mid-build and
-                            silent while perfectly healthy, or chatty right before its
-                            loop dies. The last-heard time is the number that tells
-                            the host WHICH it is. */}
-                        <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-medium ${presence.className}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${presence.dotClassName}`} />
-                          <span>{presence.label}</span>
-                          {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
-                          {presence.kind !== 'listening' && p.lastSeenAt > 0 && (
-                            <span className="text-ink-faint" title={new Date(p.lastSeenAt).toLocaleString()}>
-                              · last heard {relativeTime(p.lastSeenAt)}
-                            </span>
-                          )}
-                        </div>
-                        {/* Recovery. We deliberately do NOT render a "Restart" button:
-                            the web app cannot revive a terminated CLI process, and a
-                            button that silently does nothing is worse than none. What
-                            it CAN do is hand the host the exact prompt to paste into
-                            that agent's terminal — the one action that actually works. */}
-                        {canRecover(p, now, ended) && (
+                        {/* T-68: the state is the SERVER's verdict (T-66), not a
+                            second classification computed here. `listening` proves a
+                            loop is armed; `online` only means we heard from them
+                            recently — they stay distinct, because collapsing them is
+                            what let presence lie. */}
+                        {presence && (
+                          <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${STATE_TONE_PRESENCE[presence.state].dot}`} />
+                            <span>{presence.label}</span>
+                            {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
+                            {presence.state !== 'listening' && h && (
+                              <span className="text-ink-faint" title={new Date(Date.now() - h.lastSeenAgoMs).toLocaleString()}>
+                                · last heard {relativeTime(Date.now() - h.lastSeenAgoMs)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {h && canRecover(h, ended) && (
                           <button
                             type="button"
                             onClick={() => copyText(
@@ -1092,6 +1115,8 @@ export function Room() {
               </div>
             </div>
   );
+
+  const healthById = indexHealth(health);
 
   const renderPanel = (tab: InspectorTab) =>
     tab === 'people' ? peoplePanel
@@ -1569,16 +1594,3 @@ function artifactTone(kind: ArtifactKind): string {
   }
 }
 
-function participantPresence(p: Participant, now: number) {
-  // T-67: thresholds live in lib/presence.ts so they are unit-tested; this only
-  // maps the tested state onto colors. Keeping the logic here too would let the
-  // UI and the tests drift apart.
-  const base = presenceFor(p, now);
-  const style = {
-    listening: { className: 'text-emerald-700', dotClassName: 'bg-emerald-500' },
-    online: { className: 'text-blue-700', dotClassName: 'bg-blue-500' },
-    idle: { className: 'text-ink-faint', dotClassName: 'bg-slate-300' },
-    disconnected: { className: 'text-ink-faint', dotClassName: 'bg-slate-400' },
-  }[base.kind];
-  return { ...base, ...style };
-}

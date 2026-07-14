@@ -1,3 +1,4 @@
+import type { ParticipantHealth } from './presence.js';
 import type {
   ClientKind,
   Message,
@@ -424,6 +425,13 @@ export async function getMessageTotalCount(
   code: string,
 ): Promise<number | null> {
   return (await call<{ total: number | null }>({ action: 'messageCount', code })).total;
+}
+
+// T-68: the server's listen-loop health verdict (T-66). The web deliberately does
+// NOT re-derive these states — one definition of "dead", server-side.
+export async function fetchHealth(_client: ApiClient, code: string): Promise<ParticipantHealth[]> {
+  const out = await call<{ health: ParticipantHealth[] }>({ action: 'health', code });
+  return out.health ?? [];
 }
 
 export async function appendMessage(

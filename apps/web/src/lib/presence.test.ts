@@ -1,70 +1,63 @@
 import { describe, it, expect } from 'vitest';
-import { PRESENCE_STALE_MS, PRESENCE_DISCONNECTED_MS } from '@agent-room/shared';
-import { presenceFor, canRecover, recoveryPrompt } from './presence.js';
+import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from './presence.js';
 
-const NOW = 1_000_000_000;
-const cc = (over: Partial<{ listenUntil: number; lastSeenAt: number; client: 'cc' | 'web' }> = {}) => ({
-  client: 'cc' as const,
-  lastSeenAt: NOW,
+const h = (over: Partial<ParticipantHealth> = {}): ParticipantHealth => ({
+  name: 'Frontend-Claude',
+  client: 'cc',
+  role: 'Web UI',
+  state: 'listening',
+  lastSeenAgoMs: 0,
+  listenRemainingMs: 60_000,
   ...over,
 });
 
-describe('listen-loop health (T-67)', () => {
-  describe('thresholds', () => {
-    it('an open listen window is "listening", however long it has been quiet', () => {
-      // The whole point: silence is NOT death. A mid-build agent says nothing for
-      // ten minutes and is perfectly healthy — the open window proves it.
-      const p = cc({ listenUntil: NOW + 60_000, lastSeenAt: NOW - 10 * 60_000 });
-      expect(presenceFor(p, NOW).kind).toBe('listening');
-    });
+describe('listen-loop health (T-68: server is the source of truth)', () => {
+  it('renders the server state verbatim — the web never re-classifies', () => {
+    // The point of T-68: no thresholds live here. Whatever the server says, we show.
+    // A second definition of "dead" is what let presence lie in the first place.
+    expect(presenceView(h({ state: 'listening' })).label).toBe('Listening now');
+    expect(presenceView(h({ state: 'online' })).label).toBe('Online');
+    expect(presenceView(h({ state: 'stale' })).label).toBe('Stale');
+    expect(presenceView(h({ state: 'disconnected' })).label).toBe('Disconnected');
+  });
 
-    it('an EXPIRED listen window is not listening, even if it just expired', () => {
-      expect(presenceFor(cc({ listenUntil: NOW - 1, lastSeenAt: NOW }), NOW).kind).toBe('online');
-    });
+  it('keeps listening and online DISTINCT', () => {
+    // `listening` = a loop is genuinely armed. `online` = we merely heard from them
+    // recently, with no listener parked. Collapsing these into one green dot re-hides
+    // the exact "transport works while presence lies" failure the host hit.
+    const listening = presenceView(h({ state: 'listening', listenRemainingMs: 30_000 }));
+    const online = presenceView(h({ state: 'online', listenRemainingMs: 0, lastSeenAgoMs: 5_000 }));
+    expect(listening.label).not.toBe(online.label);
+    expect(online.detail).toBe('not in a listen window');
+  });
 
-    it('recently seen with no window → online', () => {
-      expect(presenceFor(cc({ lastSeenAt: NOW - (PRESENCE_STALE_MS - 1) }), NOW).kind).toBe('online');
-    });
-
-    it('exactly at the stale boundary is still online (inclusive)', () => {
-      expect(presenceFor(cc({ lastSeenAt: NOW - PRESENCE_STALE_MS }), NOW).kind).toBe('online');
-    });
-
-    it('past stale but within disconnected → idle', () => {
-      expect(presenceFor(cc({ lastSeenAt: NOW - (PRESENCE_STALE_MS + 1) }), NOW).kind).toBe('idle');
-      expect(presenceFor(cc({ lastSeenAt: NOW - PRESENCE_DISCONNECTED_MS }), NOW).kind).toBe('idle');
-    });
-
-    it('past the disconnected threshold → disconnected', () => {
-      expect(presenceFor(cc({ lastSeenAt: NOW - (PRESENCE_DISCONNECTED_MS + 1) }), NOW).kind).toBe('disconnected');
-    });
+  it('a long-quiet agent with an armed loop is still listening — silence is not death', () => {
+    const v = presenceView(h({ state: 'listening', lastSeenAgoMs: 10 * 60_000 }));
+    expect(v.label).toBe('Listening now');
   });
 
   describe('recovery control visibility', () => {
-    it('is offered for a dead CLI agent', () => {
-      expect(canRecover(cc({ lastSeenAt: NOW - 6 * 60_000 }), NOW, false)).toBe(true); // disconnected
-      expect(canRecover(cc({ lastSeenAt: NOW - 90_000 }), NOW, false)).toBe(true);     // idle
+    it('is offered for a stale or disconnected CLI agent', () => {
+      expect(canRecover(h({ state: 'stale' }), false)).toBe(true);
+      expect(canRecover(h({ state: 'disconnected' }), false)).toBe(true);
     });
 
-    it('is NOT offered to an agent that is actually listening', () => {
-      expect(canRecover(cc({ listenUntil: NOW + 1000, lastSeenAt: NOW - 9e6 }), NOW, false)).toBe(false);
-    });
-
-    it('is NOT offered to a healthy/online agent', () => {
-      expect(canRecover(cc({ lastSeenAt: NOW }), NOW, false)).toBe(false);
+    it('is NOT offered to an agent that is listening or merely online', () => {
+      expect(canRecover(h({ state: 'listening' }), false)).toBe(false);
+      expect(canRecover(h({ state: 'online' }), false)).toBe(false);
     });
 
     it('is NOT offered for web participants — a browser tab is not recoverable this way', () => {
-      expect(canRecover({ client: 'web', lastSeenAt: NOW - 9e6 }, NOW, false)).toBe(false);
+      expect(canRecover(h({ state: 'disconnected', client: 'web' }), false)).toBe(false);
     });
 
     it('is NOT offered once the room has ended', () => {
-      expect(canRecover(cc({ lastSeenAt: NOW - 9e6 }), NOW, true)).toBe(false);
+      expect(canRecover(h({ state: 'disconnected' }), true)).toBe(false);
     });
   });
 
-  describe('recovery prompt content', () => {
-    it('names the room and the exact identity to reclaim, and says to keep listening', () => {
+  describe('recovery prompt', () => {
+    it('names the room, the exact identity, and the listen loop', () => {
       const s = recoveryPrompt('D64-2UJ-FNR', 'Frontend-Claude', 'Web UI');
       expect(s).toContain('D64-2UJ-FNR');
       expect(s).toContain('"Frontend-Claude"');
@@ -78,11 +71,22 @@ describe('listen-loop health (T-67)', () => {
       );
     });
 
-    it('carries no credential or key material', () => {
+    it('carries no credential material', () => {
       const s = recoveryPrompt('D64-2UJ-FNR', 'Frontend-Claude', 'Web UI').toLowerCase();
-      for (const secret of ['key', 'token', 'secret', 'memberkey', 'session']) {
+      for (const secret of ['key', 'token', 'secret', 'memberkey', 'session', 'anchor']) {
         expect(s).not.toContain(secret);
       }
+    });
+  });
+
+  describe('indexing', () => {
+    it('keys on name AND client, so the same name on two clients does not collide', () => {
+      const idx = indexHealth([
+        h({ name: 'Waqas', client: 'web', state: 'online' }),
+        h({ name: 'Waqas', client: 'cc', state: 'disconnected' }),
+      ]);
+      expect(idx.get(healthKey('Waqas', 'web'))?.state).toBe('online');
+      expect(idx.get(healthKey('Waqas', 'cc'))?.state).toBe('disconnected');
     });
   });
 });
