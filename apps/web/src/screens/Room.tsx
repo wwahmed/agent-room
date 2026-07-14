@@ -101,6 +101,9 @@ export function Room() {
   }, [self, code, navigate]);
   const { room, messages, error, sendMessage, refreshRoom, forceRefresh } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
+  // T-59: the composer draft captured when dictation starts, so live transcript
+  // can stream in as `base + spoken` without clobbering what was already typed.
+  const dictationBaseRef = useRef<string | null>(null);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [attachBusy, setAttachBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -1245,7 +1248,20 @@ export function Room() {
                     )}
                   </button>
                   <VoiceButton
-                    onTranscript={(t) => setText(prev => prev.trim() ? `${prev.trim()} ${t}` : t)}
+                    onStart={() => { dictationBaseRef.current = text; }}
+                    onLiveTranscript={(live) => {
+                      const base = (dictationBaseRef.current ?? '').trim();
+                      setText(base && live ? `${base} ${live}` : live || dictationBaseRef.current || '');
+                    }}
+                    onTranscript={(t) => {
+                      const base = (dictationBaseRef.current ?? '').trim();
+                      setText(base && t ? `${base} ${t}` : t || base);
+                      dictationBaseRef.current = null;
+                    }}
+                    onCancel={() => {
+                      if (dictationBaseRef.current !== null) setText(dictationBaseRef.current);
+                      dictationBaseRef.current = null;
+                    }}
                     disabled={ended}
                   />
                   <button

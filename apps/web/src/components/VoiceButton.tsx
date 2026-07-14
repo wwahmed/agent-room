@@ -4,7 +4,20 @@ import { DictationController, type DictationSnapshot, type RecognizerLike } from
 interface Props {
   /** Called once with the final transcript when the user Stops (accepts). */
   onTranscript: (text: string) => void;
+  /** T-59: called continuously while recording with the live (final+interim)
+   *  transcript, so the words stream straight into the message box as they're
+   *  spoken and nothing is ever lost if the session ends unexpectedly. */
+  onLiveTranscript?: (text: string) => void;
+  /** Fired when recording begins, so the composer can snapshot its base draft. */
+  onStart?: () => void;
+  /** Fired when the user discards (🗑), so the composer can revert to the base. */
+  onCancel?: () => void;
   disabled?: boolean;
+}
+
+// The live transcript = committed words plus the not-yet-final interim tail.
+function liveText(s: DictationSnapshot): string {
+  return (s.finalText + (s.interim ? ` ${s.interim}` : '')).trim();
 }
 
 // Browser SpeechRecognition is non-standard; `any` avoids pulling a lib in for
@@ -64,11 +77,18 @@ function useMicLevel(active: boolean): number {
   return level;
 }
 
-export function VoiceButton({ onTranscript, disabled }: Props) {
+export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled }: Props) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const [tick, setTick] = useState(0);
   const ctrlRef = useRef<DictationController | null>(null);
   const level = useMicLevel(snap.state === 'recording');
+
+  // The controller is created once; keep the latest callbacks in refs so its
+  // long-lived onChange/onFinalize always call the current handlers.
+  const onTranscriptRef = useRef(onTranscript);
+  const onLiveRef = useRef(onLiveTranscript);
+  onTranscriptRef.current = onTranscript;
+  onLiveRef.current = onLiveTranscript;
 
   const recording = snap.state === 'recording';
   const active = snap.state !== 'idle';
@@ -97,8 +117,10 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
       ctrlRef.current = new DictationController({
         createRecognizer: () => new SpeechRecognitionImpl() as RecognizerLike,
         lang: navigator.language || undefined,
-        onChange: setSnap,
-        onFinalize: (text) => { if (text) onTranscript(text); },
+        // T-59: stream every update into the composer as it's spoken (not just at
+        // the end), so a dropped final event can never swallow what was said.
+        onChange: (s) => { setSnap(s); if (s.state !== 'idle') onLiveRef.current?.(liveText(s)); },
+        onFinalize: (text) => { if (text) onTranscriptRef.current?.(text); },
       });
     }
     return ctrlRef.current;
@@ -111,7 +133,11 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
       <button
         type="button"
         disabled={disabled}
-        onClick={() => (active ? controller().stop() : controller().start())}
+        onClick={() => {
+          if (active) { controller().stop(); return; }
+          onStart?.(); // snapshot the composer's base draft before words stream in
+          controller().start();
+        }}
         aria-label={active ? 'Stop dictation and insert text' : 'Start voice dictation'}
         title={active ? 'Stop dictation' : 'Start voice dictation'}
         aria-pressed={active}
@@ -140,7 +166,7 @@ export function VoiceButton({ onTranscript, disabled }: Props) {
           <div className="mx-auto flex w-full max-w-[860px] items-center gap-3">
             <button
               type="button"
-              onClick={() => controller().cancel()}
+              onClick={() => { controller().cancel(); onCancel?.(); }}
               aria-label="Discard recording"
               title="Discard"
               className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
