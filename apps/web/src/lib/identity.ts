@@ -15,6 +15,12 @@ export interface RoomSummary {
   createdBy: string;
   createdAt: number;
   participants: number;
+  /** Time of the newest message (falls back to createdAt server-side). The room
+   *  list aged off createdAt before T-62, which reported the room's birthday
+   *  instead of its last update. */
+  lastActivityAt?: number;
+  /** Server's absolute message counter — the currency the unread badge uses. */
+  messageCount?: number;
 }
 
 const LAST_ROLE_KEY = 'agentroom:lastRole';

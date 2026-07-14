@@ -4,6 +4,7 @@ import { isValidCode } from '@agent-room/shared';
 import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
+import { unreadCount } from '../lib/unread.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -121,22 +122,38 @@ export function Home() {
         {identity && activeRooms.length > 0 && (
           <section className="mt-5 space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Your rooms</h2>
-            {activeRooms.map(r => (
-              <button
-                key={r.code}
-                onClick={() => navigate(`/r/${r.code}`)}
-                className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint"
-              >
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent">◇</div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{r.topic}</div>
-                  <div className="mt-0.5 text-xs text-ink-soft">
-                    {r.participants} here · {timeAgo(r.createdAt)}
+            {activeRooms.map(r => {
+              // T-62: unread since this device last read to the bottom of the room.
+              const unread = unreadCount(r.code, r.messageCount);
+              // The card used to age off createdAt, so a room that had been busy
+              // all day still read "21h ago" — that's the room's birthday, not its
+              // last update. lastActivityAt is the one the host actually wants.
+              const updatedAt = r.lastActivityAt ?? r.createdAt;
+              return (
+                <button
+                  key={r.code}
+                  onClick={() => navigate(`/r/${r.code}`)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint"
+                >
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent">◇</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-semibold">{r.topic}</div>
+                    <div className="mt-0.5 text-xs text-ink-soft">
+                      {r.participants} here · updated {timeAgo(updatedAt)}
+                    </div>
                   </div>
-                </div>
-                <span className="flex-shrink-0 text-sm font-semibold text-accent">Enter →</span>
-              </button>
-            ))}
+                  {unread > 0 && (
+                    <span
+                      className="flex h-6 min-w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[13px] font-bold tabular-nums text-white"
+                      aria-label={`${unread} unread message${unread === 1 ? '' : 's'}`}
+                    >
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  )}
+                  <span className="flex-shrink-0 text-sm font-semibold text-accent">Enter →</span>
+                </button>
+              );
+            })}
           </section>
         )}
 

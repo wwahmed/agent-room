@@ -20,10 +20,14 @@ interface UseRoomState {
   room: Room | null;
   messages: Message[];
   error: string | null;
+  /** T-62: the server's ABSOLUTE message counter (survives LTRIM). This is the
+   *  currency the unread badge is denominated in — the retained list length
+   *  would silently under-count once history is trimmed. */
+  messageTotal: number;
 }
 
 export function useRoom(code: string, selfName: string) {
-  const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null });
+  const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null, messageTotal: 0 });
   const cursor = useRef(0);
   const clientRef = useRef(createClient());
 
@@ -96,6 +100,7 @@ export function useRoom(code: string, selfName: string) {
       // Two concurrent polls will both write the same value → no drift.
       const total = await getMessageTotalCount(clientRef.current, code);
       cursor.current = total ?? (cursor.current + fresh.length);
+      const anchored = cursor.current;
       setState(s => {
         const seen = new Set(s.messages.map(m => m.id));
         const deduped = fresh.filter(m => !seen.has(m.id));
@@ -106,8 +111,10 @@ export function useRoom(code: string, selfName: string) {
           newCursor: cursor.current,
           serverTotal: total,
         });
-        if (deduped.length === 0) return s;
-        return { ...s, messages: [...s.messages, ...deduped] };
+        if (deduped.length === 0) {
+          return s.messageTotal === anchored ? s : { ...s, messageTotal: anchored };
+        }
+        return { ...s, messages: [...s.messages, ...deduped], messageTotal: anchored };
       });
     } catch (e) {
       console.debug(traceTag, 'pullMessages.error', e);
@@ -149,7 +156,7 @@ export function useRoom(code: string, selfName: string) {
       ]);
       // Match server-side logical cursor (counter) so polling stays correct after LTRIM; legacy rooms fall back.
       cursor.current = total ?? fresh.length;
-      setState({ room: r, messages: fresh, error: null });
+      setState({ room: r, messages: fresh, error: null, messageTotal: cursor.current });
     } catch (e) {
       setState(s => ({ ...s, error: String(e) }));
     }
@@ -157,7 +164,7 @@ export function useRoom(code: string, selfName: string) {
 
   useEffect(() => {
     cursor.current = 0;
-    setState({ room: null, messages: [], error: null });
+    setState({ room: null, messages: [], error: null, messageTotal: 0 });
 
     let msgTimer: ReturnType<typeof setInterval> | null = null;
     let roomTimer: ReturnType<typeof setInterval> | null = null;

@@ -18,6 +18,7 @@ import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
+import { markRoomRead } from '../lib/unread.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -99,7 +100,7 @@ export function Room() {
     })();
     return () => { cancelled = true; };
   }, [self, code, navigate]);
-  const { room, messages, error, sendMessage, refreshRoom, forceRefresh } = useRoom(code, self?.name ?? '');
+  const { room, messages, error, sendMessage, refreshRoom, forceRefresh, messageTotal } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
@@ -120,6 +121,14 @@ export function Room() {
   const atBottomRef = useRef(true);
   const prevLenRef = useRef(0);
   const [unseenCount, setUnseenCount] = useState(0);
+
+  // T-62: while the reader is caught up (parked at the bottom of the feed), keep
+  // this room's read marker level with the server's absolute counter. Reading
+  // while scrolled UP deliberately does not mark read — those messages are still
+  // unseen, which is the whole point of the badge.
+  useEffect(() => {
+    if (messageTotal > 0 && atBottomRef.current) markRoomRead(code, messageTotal);
+  }, [messageTotal, code]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
