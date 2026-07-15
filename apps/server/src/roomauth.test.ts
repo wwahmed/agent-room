@@ -7,6 +7,31 @@ const KEYED = { memberKeyHash: 'aaa' };
 const KEYED2 = { memberKeyHash: 'bbb' };
 const KEYLESS = {};
 
+describe('decideSenderAuth — T-69 same human on multiple devices', () => {
+  const WEB = { memberKeyHash: 'latest-tab-key', authIdHash: 'verified-human' };
+
+  it('accepts the verified account even when this device holds an older tab key', () => {
+    expect(decideSenderAuth([WEB], 'older-tab-key', false, 'verified-human')).toEqual({
+      ok: true,
+      via: 'auth-id',
+    });
+  });
+
+  it('accepts the verified account with no tab key at all', () => {
+    expect(decideSenderAuth([WEB], undefined, false, 'verified-human')).toEqual({
+      ok: true,
+      via: 'auth-id',
+    });
+  });
+
+  it('rejects a different verified account even if it presents the current tab key', () => {
+    expect(decideSenderAuth([WEB], 'latest-tab-key', false, 'different-human')).toEqual({
+      ok: false,
+      reason: 'wrong-auth-id',
+    });
+  });
+});
+
 describe('decideSenderAuth — credentialed row (F2/F3)', () => {
   it('denies a send with NO presented key', () => {
     expect(decideSenderAuth([KEYED], undefined, false)).toEqual({ ok: false, reason: 'need-key' });

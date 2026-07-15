@@ -40,6 +40,8 @@ export interface CreateRoomInput {
   code: string;
   topic: string;
   createdBy: string;
+  /** Server-verified host identity (for example the Access JWT email). */
+  hostAuthId?: string;
   ownerId?: string;
   ownerEmail?: string;
   ownerName?: string;
@@ -68,6 +70,7 @@ export async function createRoom(client: UpstashClient, input: CreateRoomInput):
     version: 1,
     participants: [],
     hostKeyHash: await sha256Hex(hostKey),
+    hostAuthIdHash: input.hostAuthId ? await sha256Hex(input.hostAuthId) : undefined,
     // Default: open mode. Host can switch to 'sequential' / 'moderator' via
     // setReplyMode(). Stored explicitly (rather than relying on the
     // undefined-means-open fallback) so newly created rooms surface the
@@ -492,9 +495,22 @@ export async function verifyHostKey(
   client: UpstashClient,
   code: string,
   hostKey: string | undefined,
-  opts?: { allowLegacyNoHash?: boolean },
+  opts?: { allowLegacyNoHash?: boolean; authId?: string },
 ): Promise<void> {
   const room = await getRoom(client, code);
+  // T-69: the host key is browser-local, so it cannot identify the same host
+  // on another device. Accept the server-verified authenticated identity that
+  // created the room. For rooms created before hostAuthIdHash existed, the
+  // host participant's existing authIdHash is equally strong evidence: it was
+  // stamped only from a verified Access caller after a valid host-key join.
+  if (opts?.authId) {
+    const authIdHash = await sha256Hex(opts.authId);
+    const matchesRoomAnchor = room.hostAuthIdHash === authIdHash;
+    const matchesLegacyHostRow = room.participants.some(
+      p => p.name === room.createdBy && p.client === 'web' && p.authIdHash === authIdHash,
+    );
+    if (matchesRoomAnchor || matchesLegacyHostRow) return;
+  }
   // T-30 (F1): a room with no stored hash used to auto-pass ANY claim — the
   // legacy bypass that made host authority a name assertion. Now it FAILS
   // CLOSED. `allowLegacyNoHash` (server sets it only from the

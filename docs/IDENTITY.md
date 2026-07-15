@@ -91,6 +91,29 @@ credential layer first, so pid becomes the *result* of authentication:
 With F1/F2 closed, P1's pid/alias work binds authority to a credential
 the caller *presents*, not a name the server resolved on its behalf.
 
+## T-69 — one authenticated human, multiple devices
+
+The browser-local `hostKey` and per-tab `memberKey` remain supported, but they
+are no longer the primary identity for an authenticated web human:
+
+- Room creation stores only `SHA-256(verified Access email)` as
+  `hostAuthIdHash`. The origin derives it from the validated Access JWT; the
+  raw email is never written to the room, and the hash is redacted from room
+  responses.
+- Host preflight, host-name join, and host-only actions accept either the
+  correct `hostKey` or the matching verified Access identity. A different
+  authenticated account fails closed.
+- Pre-T-69 rooms can recover safely when their existing host participant row
+  already has the matching `authIdHash`; that row was stamped only after the
+  original browser proved its host key and joined through Access.
+- Web send/presence authorization prefers the participant row's matching
+  verified `authIdHash`. This prevents phone and desktop tabs from invalidating
+  one another when a rejoin rotates the per-tab member key. Agent (`cc`) rows
+  continue to require their member/durable-agent credentials.
+
+The invariant is: a signed-in human is one room participant across tabs and
+devices, while unrelated participant rows are never removed by that rejoin.
+
 ## Worktree convention (process, enforced socially + documented)
 
 One builder = one git worktree. `main` checkout belongs to the host

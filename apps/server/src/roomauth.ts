@@ -5,11 +5,12 @@
 
 export interface AuthRow {
   memberKeyHash?: string;
+  authIdHash?: string;
 }
 
 export type SenderDecision =
-  | { ok: true; via: 'member-key' | 'legacy-name' }
-  | { ok: false; reason: 'need-key' | 'bad-key' | 'no-flag' | 'ambiguous' };
+  | { ok: true; via: 'auth-id' | 'member-key' | 'legacy-name' }
+  | { ok: false; reason: 'wrong-auth-id' | 'need-key' | 'bad-key' | 'no-flag' | 'ambiguous' };
 
 /**
  * Decide whether a caller may send/refresh presence AS the participant
@@ -27,7 +28,19 @@ export function decideSenderAuth(
   rows: AuthRow[],
   presentedHash: string | undefined,
   allowLegacy: boolean,
+  verifiedAuthIdHash?: string,
 ): SenderDecision {
+  // T-69: an authenticated web participant is a person, not a browser tab.
+  // The memberKey is per-tab and rotates on rejoin, so using it as the primary
+  // web identity made two signed-in devices invalidate each other forever.
+  // Prefer the durable server-verified Access identity whenever the row has
+  // one. If an authenticated account is presented but does not match, fail
+  // closed even if it somehow obtained another tab's member key.
+  const authRows = rows.filter(r => r.authIdHash);
+  if (verifiedAuthIdHash && authRows.length > 0) {
+    if (authRows.some(r => r.authIdHash === verifiedAuthIdHash)) return { ok: true, via: 'auth-id' };
+    return { ok: false, reason: 'wrong-auth-id' };
+  }
   const keyed = rows.filter(r => r.memberKeyHash);
   if (keyed.length > 0) {
     if (!presentedHash) return { ok: false, reason: 'need-key' };

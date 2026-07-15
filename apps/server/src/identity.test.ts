@@ -64,6 +64,95 @@ describe('verifyHostKey — F1 fail-closed', () => {
   });
 });
 
+describe('verifyHostKey — T-69 authenticated host across devices', () => {
+  it('accepts the same verified account without a browser-local hostKey', async () => {
+    const client = memClient();
+    await createRoom(client, {
+      code: 'AAA-BBB-CCC',
+      topic: 't',
+      createdBy: 'Host',
+      hostAuthId: 'host@example.com',
+    });
+
+    await expect(
+      verifyHostKey(client, 'AAA-BBB-CCC', undefined, { authId: 'host@example.com' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects a different verified account', async () => {
+    const client = memClient();
+    await createRoom(client, {
+      code: 'AAA-BBB-CCC',
+      topic: 't',
+      createdBy: 'Host',
+      hostAuthId: 'host@example.com',
+    });
+
+    await expect(
+      verifyHostKey(client, 'AAA-BBB-CCC', undefined, { authId: 'other@example.com' }),
+    ).rejects.toBeInstanceOf(HostNameTakenError);
+  });
+
+  it('stores only a hash, never the raw authenticated identity', async () => {
+    const client = memClient();
+    await createRoom(client, {
+      code: 'AAA-BBB-CCC',
+      topic: 't',
+      createdBy: 'Host',
+      hostAuthId: 'host@example.com',
+    });
+    const room = await getRoom(client, 'AAA-BBB-CCC');
+    expect(room.hostAuthIdHash).toBeTruthy();
+    expect(JSON.stringify(room)).not.toContain('host@example.com');
+  });
+
+  it('recovers a pre-T-69 room from its verified host participant row', async () => {
+    const client = memClient();
+    const created = await createRoom(client, { code: 'AAA-BBB-CCC', topic: 't', createdBy: 'Host' });
+    // The original browser proved the host key, then its authenticated join
+    // stamped authIdHash on the host row. A second device has neither key.
+    await verifyHostKey(client, 'AAA-BBB-CCC', created.hostKey);
+    await joinRoom(client, 'AAA-BBB-CCC', P('Host', 'web'), {
+      issueMemberKey: true,
+      authId: 'host@example.com',
+    });
+
+    await expect(
+      verifyHostKey(client, 'AAA-BBB-CCC', undefined, { authId: 'host@example.com' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      verifyHostKey(client, 'AAA-BBB-CCC', undefined, { authId: 'other@example.com' }),
+    ).rejects.toBeInstanceOf(HostNameTakenError);
+  });
+
+  it('same-host rejoin preserves unrelated agents and keeps one host row', async () => {
+    const client = memClient();
+    await createRoom(client, {
+      code: 'AAA-BBB-CCC',
+      topic: 't',
+      createdBy: 'Host',
+      hostAuthId: 'host@example.com',
+    });
+    await joinRoom(client, 'AAA-BBB-CCC', P('CustomerService', 'cc'));
+    await joinRoom(client, 'AAA-BBB-CCC', P('AppManager', 'cc'));
+
+    // Device 1, then device 2: neither has to share browser storage.
+    await joinRoom(client, 'AAA-BBB-CCC', P('Host', 'web'), {
+      issueMemberKey: true,
+      authId: 'host@example.com',
+    });
+    await joinRoom(client, 'AAA-BBB-CCC', P('Host', 'web'), {
+      issueMemberKey: true,
+      authId: 'host@example.com',
+    });
+
+    const room = await getRoom(client, 'AAA-BBB-CCC');
+    expect(room.participants.filter(p => p.name === 'Host' && p.client === 'web')).toHaveLength(1);
+    expect(room.participants.filter(p => p.name === 'CustomerService' && p.client === 'cc')).toHaveLength(1);
+    expect(room.participants.filter(p => p.name === 'AppManager' && p.client === 'cc')).toHaveLength(1);
+  });
+});
+
 describe('joinRoom — F2 member credential', () => {
   let client: UpstashClient;
   beforeEach(async () => {

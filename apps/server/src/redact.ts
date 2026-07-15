@@ -34,6 +34,7 @@ export function redactRoomPayload<T>(result: T): T {
   if (room && typeof room === 'object') {
     const r = { ...(room as Record<string, unknown>) };
     delete r.hostKeyHash;
+    delete r.hostAuthIdHash;
     if (Array.isArray(r.participants)) r.participants = r.participants.map(redactParticipant);
     out.room = r;
   }

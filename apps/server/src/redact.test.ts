@@ -10,6 +10,7 @@ describe('T-66 redactRoomPayload — no secret-derived field leaves the server',
     code: 'ABC-DEF-GHJ',
     topic: 't',
     hostKeyHash: 'h'.repeat(64),
+    hostAuthIdHash: 'i'.repeat(64),
     participants: [
       { name: 'Waqas', client: 'web', memberKeyHash: 'm'.repeat(64), authIdHash: 'a'.repeat(64) },
       { name: 'Agent', client: 'cc', memberKeyHash: 'k'.repeat(64) },
@@ -21,9 +22,10 @@ describe('T-66 redactRoomPayload — no secret-derived field leaves the server',
     expect(out.room.participants.some((p: Record<string, unknown>) => 'authIdHash' in p)).toBe(false);
   });
 
-  it('strips memberKeyHash and hostKeyHash (auth verifiers)', () => {
+  it('strips memberKeyHash, hostKeyHash, and hostAuthIdHash (auth verifiers)', () => {
     const out = redactRoomPayload({ room: room() });
     expect('hostKeyHash' in out.room).toBe(false);
+    expect('hostAuthIdHash' in out.room).toBe(false);
     expect(out.room.participants.some((p: Record<string, unknown>) => 'memberKeyHash' in p)).toBe(false);
   });
 
@@ -52,6 +54,7 @@ describe('T-66 redactRoomPayload — no secret-derived field leaves the server',
     const original = room();
     redactRoomPayload({ room: original });
     expect(original.hostKeyHash).toBeDefined();
+    expect(original.hostAuthIdHash).toBeDefined();
     expect(original.participants[0].authIdHash).toBeDefined();
   });
 

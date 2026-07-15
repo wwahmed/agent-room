@@ -164,6 +164,12 @@ export interface Room {
   // they get HostNameTakenError. This stops trivial impersonation by anyone
   // who only knows the room code.
   hostKeyHash?: string;
+  // SHA-256 of the server-VERIFIED authenticated identity that created the
+  // room. This is the host equivalent of Participant.authIdHash: it lets the
+  // same Google/Access account recover host authority on another device where
+  // the browser-local hostKey is unavailable. Raw email is never stored, and
+  // the field is redacted from every API response.
+  hostAuthIdHash?: string;
   // Reply-mode coordination. Optional + undefined-means-'open' so rooms
   // created before this field existed continue to work.
   replyMode?: ReplyMode;

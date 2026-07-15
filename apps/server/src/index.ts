@@ -360,8 +360,11 @@ function memberAuthError(message: string): Error {
 // hash unless the migration flag is on (in which case the relaxation is
 // logged). Applies to end/reactivate/setReplyMode/directInvoke/skipCurrent
 // AND (routed here at the server) setMuted/removeParticipant.
-async function requireHost(code: string, hostKey: string | undefined): Promise<void> {
-  await verifyHostKey(client, code, hostKey, { allowLegacyNoHash: ALLOW_LEGACY_NAME_AUTH });
+async function requireHost(code: string, hostKey: string | undefined, caller: Caller): Promise<void> {
+  await verifyHostKey(client, code, hostKey, {
+    allowLegacyNoHash: ALLOW_LEGACY_NAME_AUTH,
+    authId: caller.kind === 'user' ? caller.email : undefined,
+  });
   if (!hostKey && ALLOW_LEGACY_NAME_AUTH) {
     securityEvent(`host action on ${code} authorized via legacy no-hash path (ALLOW_LEGACY_NAME_AUTH) — no hostKey presented`);
   }
@@ -387,7 +390,9 @@ async function authenticateSender(
   if (rows.length === 0) return;
 
   const presentedHash = memberKey ? await sha256Hex(memberKey) : undefined;
-  const decision = decideSenderAuth(rows, presentedHash, ALLOW_LEGACY_NAME_AUTH);
+  const verifiedAuthIdHash =
+    caller.kind === 'user' && clientKind === 'web' ? await sha256Hex(caller.email) : undefined;
+  const decision = decideSenderAuth(rows, presentedHash, ALLOW_LEGACY_NAME_AUTH, verifiedAuthIdHash);
   if (decision.ok) {
     if (decision.via === 'legacy-name') {
       securityEvent(`send/presence as "${name}" (${clientKind}) on ${code} via legacy name path (ALLOW_LEGACY_NAME_AUTH); caller=${caller.kind}`);
@@ -395,6 +400,8 @@ async function authenticateSender(
     return;
   }
   switch (decision.reason) {
+    case 'wrong-auth-id':
+      throw memberAuthError(`The signed-in account does not own the participant "${name}".`);
     case 'need-key':
       throw memberAuthError(`This participant requires its member credential. Rejoin the room to obtain one, then retry.`);
     case 'bad-key':
@@ -441,6 +448,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         code: newCode,
         topic: String(payload.topic || ''),
         createdBy: String(payload.createdBy || ''),
+        hostAuthId: caller.kind === 'user' ? caller.email : undefined,
       });
       const { hostKey, ...room } = created;
       // T-18: optional project binding at create time (the web form makes
@@ -464,14 +472,16 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // Pre-flight for a web client about to claim the host slot. Throws
       // HostNameTakenError (403) on a wrong key; legacy rooms without a
       // hostKeyHash always pass, matching joinRoom's own check.
-      await verifyHostKey(client, code, payload.hostKey as string | undefined);
+      await verifyHostKey(client, code, payload.hostKey as string | undefined, {
+        authId: caller.kind === 'user' ? caller.email : undefined,
+      });
       return { ok: true };
     }
     case 'setMuted': {
       // T-30 (F1): mute/unmute is host-only and now REQUIRES a hostKey. The
       // underlying setMuted still name-checks as defense in depth, so pass
       // the verified host name (createdBy), never the caller's claim.
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       const room = await getRoom(client, code);
       return {
         room: await setMuted(
@@ -505,7 +515,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     case 'attachProject': {
       // Host-gated: binding a room to a project decides where its task
       // ledger lands on disk.
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       const projectId = String(payload.projectId || '');
       if (!getProject(projectId)) {
         const err = new Error(`Unknown project "${projectId}". Ids come from GET /api/projects.`);
@@ -544,7 +554,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       if (participant.name === room.createdBy) {
         // T-30 (F1): claiming the host slot requires a valid hostKey; a room
         // with no stored hash fails closed unless the migration flag is on.
-        await verifyHostKey(client, code, hostKey, { allowLegacyNoHash: ALLOW_LEGACY_NAME_AUTH });
+        await verifyHostKey(client, code, hostKey, {
+          allowLegacyNoHash: ALLOW_LEGACY_NAME_AUTH,
+          authId: caller.kind === 'user' ? caller.email : undefined,
+        });
       }
       // T-30 (F2): credential-aware clients (web) set wantMemberKey and get a
       // one-time member credential minted for their row. MCP 0.25.x never
@@ -671,7 +684,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       if (requesterName === targetName) {
         await authenticateSender(code, targetName, targetClient, payload.memberKey as string | undefined, caller);
       } else {
-        await requireHost(code, payload.hostKey as string | undefined);
+        await requireHost(code, payload.hostKey as string | undefined, caller);
         effectiveRequester = (await getRoom(client, code)).createdBy;
       }
       return {
@@ -685,11 +698,11 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       };
     }
     case 'end': {
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       return { room: await endRoom(client, code) };
     }
     case 'reactivate': {
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       return { room: await reactivateRoom(client, code) };
     }
     case 'createReport': {
@@ -698,7 +711,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       return { report: await createRoomReport(client, room, messages) };
     }
     case 'setReplyMode': {
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       const room = await setReplyMode(
         client,
         code,
@@ -709,7 +722,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       return { room };
     }
     case 'directInvoke': {
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       return {
         added: await directInvoke(
           client,
@@ -720,7 +733,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       };
     }
     case 'skipCurrent': {
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       const room = await getRoom(client, code);
       const skipped = await hostSkipCurrent(client, code, room);
       if (skipped) {
@@ -845,7 +858,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // remap would create. Atomic: applyAliasMigration validates the whole
       // board before mutating, and we commit once. Historical message
       // attribution (room-msgs) is never touched.
-      await requireHost(code, payload.hostKey as string | undefined);
+      await requireHost(code, payload.hostKey as string | undefined, caller);
       const from = String(payload.from || '').trim();
       const to = String(payload.to || '').trim();
       const toClient = (payload.toClient as 'web' | 'cc') || 'cc';
