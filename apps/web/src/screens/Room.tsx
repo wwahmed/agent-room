@@ -509,6 +509,12 @@ export function Room() {
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
+  // Gate finding (T-83 aftermath): on a COLD load this effect first runs
+  // during bootstrap, when the chat column (and wrapper) does not exist yet;
+  // keyed on mainTab alone it never re-attached after the room arrived, so
+  // --composer-h stayed 0 and the floating pill overlapped the composer.
+  // roomReady re-arms it the moment the wrapper can render.
+  const roomReady = Boolean(room && self);
   useEffect(() => {
     const el = composerWrapRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -516,9 +522,8 @@ export function Room() {
     ro.observe(el);
     setComposerH(el.offsetHeight);
     return () => ro.disconnect();
-    // The wrapper element persists across ended/muted/composer swaps; the
-    // observer keys only on the tab remounting the chat column.
-  }, [mainTab]);
+    // The wrapper element persists across ended/muted/composer swaps.
+  }, [mainTab, roomReady]);
 
   // T-65: the read marker AS IT WAS when we arrived. The mark-read effect below
   // advances the stored marker the moment we're at the bottom, so we have to
