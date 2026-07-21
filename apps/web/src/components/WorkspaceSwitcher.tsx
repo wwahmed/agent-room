@@ -3,6 +3,12 @@
 // renders it as the second row of the same header below lg; total mobile
 // chrome 96px). Label-only on phones at the 17px floor (room-tab-label);
 // icons join at lg. No numeric badges at any width (design lead amendment).
+//
+// Semantics (design lead source gate): honest navigation — <nav> +
+// aria-current="page" — NOT an ARIA tablist, which would owe roving focus
+// and tabpanel wiring these page-level destinations don't have. Hover,
+// selected, and focus are three distinguishable states: hover tints the
+// surface, selected fills accent-tint, focus-visible draws the accent ring.
 
 export interface WorkspaceDestination {
   key: string;
@@ -17,15 +23,14 @@ export function WorkspaceSwitcher({ destinations, active, onSelect }: {
   onSelect: (key: string) => void;
 }) {
   return (
-    <div role="tablist" aria-label="Workspace sections" className="flex h-11 w-full items-center gap-1 lg:w-auto">
+    <nav aria-label="Workspace" className="flex h-11 w-full items-center gap-1 lg:w-auto">
       {destinations.map(d => (
         <button
           key={d.key}
           type="button"
-          role="tab"
-          aria-selected={active === d.key}
+          aria-current={active === d.key ? 'page' : undefined}
           onClick={() => onSelect(d.key)}
-          className={`room-tab-label flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1 font-semibold transition lg:flex-none lg:px-3.5 ${
+          className={`room-tab-label flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:flex-none lg:px-3.5 ${
             active === d.key
               ? 'bg-accent-tint text-accent'
               : 'text-ink-soft hover:bg-surface-softer hover:text-ink'
@@ -37,6 +42,6 @@ export function WorkspaceSwitcher({ destinations, active, onSelect }: {
           <span className="truncate">{d.label}</span>
         </button>
       ))}
-    </div>
+    </nav>
   );
 }

@@ -111,7 +111,10 @@ export function RoomHeader({
         </div>
 
         {workspaceNav && (
-          <div className="absolute left-1/2 hidden -translate-x-1/2 lg:block">{workspaceNav}</div>
+          /* Flex auto-margin centering, not absolute: the nav can squeeze
+             between the identity and control clusters but can never overlap
+             them (proven at 1024/1100/1280 — absolute centering collided). */
+          <div className="mx-auto hidden min-w-0 flex-shrink px-2 lg:block">{workspaceNav}</div>
         )}
         {!workspaceNav && (
         <button

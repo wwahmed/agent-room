@@ -2251,7 +2251,7 @@ export function Room() {
             independent scroll, >=1440 only. */}
         <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
           <section aria-label="Active agents">
-            <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
+            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
             <div className="space-y-1">
               {headerAgents.slice(0, 6).map(a => (
                 <button
@@ -2263,7 +2263,12 @@ export function Room() {
                 >
                   <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-bold text-white" style={{ backgroundColor: a.color }} aria-hidden="true">{a.initials}</span>
                   <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{a.name}</span>
-                  <span className={`flex flex-shrink-0 items-center ${STATE_TONE_PRESENCE[a.state].text}`} title={a.state}>{presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}</span>
+                  {/* Visible worded state — a bare glyph fails without color
+                      or icon comprehension (red-team finding). */}
+                  <span className={`flex flex-shrink-0 items-center gap-1 text-[14px] font-medium ${STATE_TONE_PRESENCE[a.state].text}`}>
+                    {presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}
+                    {a.state === 'listening' || a.state === 'online' ? 'Active' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
+                  </span>
                 </button>
               ))}
               {headerAgents.length === 0 && <p className="text-[14px] text-ink-soft">No agents connected yet.</p>}
@@ -2274,7 +2279,7 @@ export function Room() {
             const reviewCount = taskPulse.filter(t => t.state === 'awaiting_review').length;
             return (
               <section aria-label="Project pulse">
-                <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
+                <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
                 <button
                   type="button"
                   onClick={() => selectTab('project')}
@@ -2291,7 +2296,7 @@ export function Room() {
             );
           })()}
           <section aria-label="Recent outputs">
-            <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
+            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
             {artifacts.length > 0 ? (
               <ul className="space-y-1">
                 {artifacts.slice(-3).reverse().map(a => (

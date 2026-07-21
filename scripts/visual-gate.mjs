@@ -323,7 +323,9 @@ for (const vp of VIEWPORTS) {
               };
               grab('.msg-prose', 'prose');
               grab('.msg-author', 'author');
-              grab('[role="tab"]', 'tab');
+              // Workspace nav uses honest <nav>/aria-current semantics
+              // (T-71); the tab ROLE floor still reads whichever exists.
+              grab('[role="tab"], .room-tab-label', 'tab');
               grab('.msg-meta', 'meta');
               grab('.msg-disclosure', 'disclosure');
               const ta = document.querySelector('textarea');
