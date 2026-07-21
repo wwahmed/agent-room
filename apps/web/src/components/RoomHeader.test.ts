@@ -16,6 +16,10 @@ describe('room command bar composition', () => {
     expect(header).toContain('WakiChat');
     expect(header).toContain('Search rooms, messages, tasks…');
     expect(header).toContain('AgentFacepile');
+    expect(header).toContain('header-team-pill');
+    expect(header).toContain("agentCount === 1 ? 'agent' : 'agents'");
+    expect(header).toContain('header-room-presence');
+    expect(header).toContain('header-search-field');
     expect(header).toContain('More room actions');
     expect(rail).not.toContain('wakichat-icon-192.png');
     expect(pane).not.toContain('h-[60px]');

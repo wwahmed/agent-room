@@ -43,9 +43,10 @@ export function RoomHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const agentCount = agents.length;
-  const presence = ended
-    ? 'Meeting ended'
-    : `${room.participants.length} here${listeningCount > 0 ? ` · ${listeningCount} listening` : ''}`;
+  const activeAgentCount = Math.max(0, agentCount - agentStaleCount);
+  const agentStatus = agentStaleCount > 0
+    ? `${agentStaleCount} need attention`
+    : `${activeAgentCount} active`;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -64,8 +65,8 @@ export function RoomHeader({
   }, [menuOpen]);
 
   return (
-    <header className="app-command-bar fixed inset-x-0 top-0 z-40 flex h-[52px] items-center border-b border-border-subtle sm:h-14">
-      <div className="flex h-full min-w-0 flex-1 items-center px-1.5 sm:px-3">
+    <header className="app-command-bar fixed inset-x-0 top-0 z-40 flex h-[52px] items-center sm:h-14">
+      <div className="relative z-10 flex h-full min-w-0 flex-1 items-center px-1.5 sm:px-3">
         <div className="flex min-w-0 items-center">
           <Link
             to="/"
@@ -79,22 +80,25 @@ export function RoomHeader({
           <Link
             to="/"
             aria-label="WakiChat home"
-            className="mr-1 hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition hover:bg-surface-softer sm:flex"
+            className="header-brand-orb mr-1 hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition sm:flex"
           >
-            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-7 w-7 rounded-lg shadow-[0_4px_16px_rgb(var(--accent)/0.24)]" />
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-7 w-7 rounded-lg shadow-[0_4px_18px_rgb(var(--accent)/0.45)]" />
           </Link>
           <button
             type="button"
             onClick={onOpenRoom}
-            className="group min-h-11 min-w-0 rounded-xl px-1.5 py-1 text-left transition hover:bg-surface-softer sm:flex sm:items-center sm:gap-2"
+            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-2 py-1 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
             aria-label={`Open room settings for ${room.topic}`}
           >
             <span className="block max-w-[42vw] truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-ink sm:max-w-[220px] lg:max-w-[240px] xl:max-w-[300px]">
               {room.topic}
             </span>
-            <span className={`mt-0.5 block truncate text-[12px] leading-tight sm:mt-0 ${ended ? 'font-medium text-red-400' : 'text-ink-faint'}`}>
-              {!ended && <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle" aria-hidden="true" />}
-              {presence}
+            <span className={`header-room-presence mt-0.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full px-1.5 py-0.5 text-[12px] font-medium leading-none sm:mt-0 ${ended ? 'text-red-400' : 'text-ink-soft'}`}>
+              {!ended && <span className="header-live-dot inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />}
+              <span className="truncate">
+                {ended ? 'Meeting ended' : `${room.participants.length} here`}
+                {!ended && listeningCount > 0 && <span className="text-ink-faint"> · {listeningCount} listening</span>}
+              </span>
             </span>
             <svg className="hidden flex-shrink-0 text-ink-faint opacity-0 transition group-hover:opacity-100 lg:block" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
               <path d="m3 11.8.4-2.3L10.8 2l2.2 2.2-7.5 7.5-2.5.1Z" />
@@ -108,7 +112,7 @@ export function RoomHeader({
           aria-label="Search rooms, messages, and tasks"
           className="group absolute left-1/2 hidden h-11 w-[min(320px,28vw)] -translate-x-1/2 items-center text-[13px] text-ink-faint transition hover:text-ink-soft md:flex"
         >
-          <span className="flex h-8 w-full items-center rounded-[9px] border border-border-faint bg-surface-sunken/70 px-3 shadow-inner transition group-hover:border-border">
+          <span className="header-search-field flex h-9 w-full items-center rounded-[10px] px-3 transition">
             <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
               <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
             </svg>
@@ -130,7 +134,21 @@ export function RoomHeader({
           </button>
           <div className="hidden sm:block">{mentionNav}</div>
           {agentCount > 0 && (
-            <AgentFacepile code={room.code} agentCount={agentCount} agentStaleCount={agentStaleCount} agents={agents} />
+            <div
+              className={`header-team-pill flex min-h-11 items-center rounded-xl pr-1 sm:pr-2 ${agentStaleCount > 0 ? 'header-team-pill-warn' : ''}`}
+              aria-label={`${agentCount} agents, ${agentStatus}`}
+            >
+              <AgentFacepile code={room.code} agentCount={agentCount} agentStaleCount={agentStaleCount} agents={agents} />
+              <span className="hidden min-w-[62px] pr-1 leading-none xl:block">
+                <span className="block text-[13px] font-semibold tracking-[-0.01em] text-ink">
+                  {agentCount} {agentCount === 1 ? 'agent' : 'agents'}
+                </span>
+                <span className={`mt-1 flex items-center gap-1 text-[12px] font-medium ${agentStaleCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${agentStaleCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-hidden="true" />
+                  {agentStatus}
+                </span>
+              </span>
+            </div>
           )}
           <button
             type="button"
