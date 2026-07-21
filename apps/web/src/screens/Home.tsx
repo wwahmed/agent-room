@@ -30,6 +30,7 @@ export function Home() {
   const [err, setErr] = useState<string | null>(null);
   const [identity, setIdentity] = useState<WhoAmI | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
   const [nextRoomCursor, setNextRoomCursor] = useState<string | null>(null);
   const [loadingMoreRooms, setLoadingMoreRooms] = useState(false);
   const loadingMoreRef = useRef(false);
@@ -43,11 +44,12 @@ export function Home() {
       if (cancelled) return;
       setIdentity(me);
       setChecked(true);
-      if (!me) return;
+      if (!me) { setRoomsLoading(false); return; }
       const page = await fetchRooms();
       if (!cancelled) {
         setRooms(page.rooms);
         setNextRoomCursor(page.nextCursor);
+        setRoomsLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -151,6 +153,23 @@ export function Home() {
           </div>
         ) : null}
 
+        {identity && roomsLoading && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-5 flex min-h-24 items-center gap-4 rounded-2xl border border-accent-tint-border bg-surface px-5 py-4 shadow-card"
+          >
+            <span className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center" aria-hidden="true">
+              <span className="absolute inset-0 animate-pulse rounded-full bg-accent-tint motion-reduce:animate-none" />
+              <span className="relative h-7 w-7 animate-spin rounded-full border-[3px] border-accent/20 border-t-accent motion-reduce:animate-none" />
+            </span>
+            <span>
+              <span className="block text-[15px] font-semibold text-ink">Loading your latest rooms</span>
+              <span className="mt-0.5 block text-sm text-ink-soft">Syncing activity and unread state…</span>
+            </span>
+          </div>
+        )}
+
         {identity && activeRooms.length > 0 && (
           <section className="mt-5 space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Your rooms</h2>
@@ -217,7 +236,12 @@ export function Home() {
               disabled={loadingMoreRooms}
               className="min-h-11 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-ink disabled:opacity-60"
             >
-              {loadingMoreRooms ? 'Loading older rooms…' : 'Load older rooms'}
+              <span className="inline-flex items-center gap-2">
+                {loadingMoreRooms && (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
+                )}
+                {loadingMoreRooms ? 'Loading older rooms…' : 'Load older rooms'}
+              </span>
             </button>
           </div>
         )}
