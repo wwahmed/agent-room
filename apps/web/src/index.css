@@ -147,6 +147,31 @@ body {
   .room-tab-label {
     font-size: 14px;
   }
+  /* T-71 contrast ruling: 17px/600 is NORMAL text under WCAG (large starts
+     at 18.66px bold), and accent-on-tint measured 4.09:1 in dark — under
+     the 4.5:1 floor. Dark (the default theme) promotes the active workspace
+     label to full ink on the tint; light keeps accent (4.76:1, passing). */
+  .workspace-active {
+    background: rgb(var(--accent-tint));
+    color: rgb(var(--ink));
+  }
+  :root[data-theme='light'] .workspace-active {
+    color: rgb(var(--accent));
+  }
+  /* Idle labels measured 3.52:1 on the light command bar — same normal-text
+     floor applies to every label, not only the active pair. */
+  .workspace-idle {
+    color: rgb(var(--ink-soft));
+  }
+  .workspace-idle:hover {
+    color: rgb(var(--ink));
+  }
+  :root[data-theme='light'] .workspace-idle {
+    color: rgb(var(--ink) / 0.72);
+  }
+  :root[data-theme='light'] .workspace-idle:hover {
+    color: rgb(var(--ink));
+  }
   @media (max-width: 639px) {
     .msg-author { font-size: 18px; font-weight: 700; }
     .msg-meta { font-size: 15px; }

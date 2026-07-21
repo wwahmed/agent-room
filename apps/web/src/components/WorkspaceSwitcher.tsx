@@ -32,8 +32,8 @@ export function WorkspaceSwitcher({ destinations, active, onSelect }: {
           onClick={() => onSelect(d.key)}
           className={`room-tab-label flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:flex-none lg:px-3.5 ${
             active === d.key
-              ? 'bg-accent-tint text-accent'
-              : 'text-ink-soft hover:bg-surface-softer hover:text-ink'
+              ? 'workspace-active'
+              : 'workspace-idle hover:bg-surface-softer'
           }`}
         >
           <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="hidden lg:block">
