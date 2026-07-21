@@ -138,7 +138,7 @@ function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment
           </svg>
         </span>
       </button>
-      <figcaption className="flex h-8 items-center gap-1.5 border-t border-border-faint px-2.5 text-[11px] font-normal leading-none tracking-normal text-ink-faint">
+      <figcaption className="flex h-8 items-center gap-1.5 border-t border-border-faint px-2.5 text-[12px] font-normal leading-none tracking-normal text-ink-faint">
         <span className="min-w-0 truncate">{attachment.name}</span>
         <span aria-hidden="true">·</span>
         <span className="shrink-0">{formatBytes(attachment.size)}</span>

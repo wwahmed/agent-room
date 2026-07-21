@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { Room } from '@agent-room/shared';
 import {
   attachProject,
@@ -75,6 +76,7 @@ interface Props {
 }
 
 export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
+  const location = useLocation();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [tasks, setTasks] = useState<BoardTask[] | null>(null);
@@ -85,6 +87,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   const [completedLimit, setCompletedLimit] = useState(COMPLETED_PAGE_SIZE);
   const [docRole, setDocRole] = useState<string | null>(null);
   const [doc, setDoc] = useState<{ rel: string; content: string; truncated: boolean } | null>(null);
+  const handledTaskLinkRef = useRef<string | null>(null);
 
   useEffect(() => {
     void listProjects().then(setProjects);
@@ -126,6 +129,24 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
     });
     return () => { cancelled = true; };
   }, [room.projectId, docRole]);
+
+  // T-58/T-59: a command-search task hit is a real deep link, not merely a
+  // switch to the Project tab. Reveal the correct segment and move focus to it.
+  useEffect(() => {
+    const taskId = new URLSearchParams(location.search).get('task');
+    if (!taskId || !tasks || handledTaskLinkRef.current === taskId) return;
+    const target = tasks.find(task => task.id === taskId);
+    if (!target) return;
+    handledTaskLinkRef.current = taskId;
+    setTaskPreferences({
+      roomCode: room.code,
+      segment: target.state === 'done' ? 'completed' : 'pending',
+      status: 'all',
+      assignee: 'all',
+    });
+    setCompletedLimit(Math.max(COMPLETED_PAGE_SIZE, tasks.length));
+    window.setTimeout(() => document.getElementById(`task-${taskId}`)?.focus(), 50);
+  }, [location.search, room.code, tasks]);
 
   const project = projects.find(p => p.id === room.projectId);
   const assignees = useMemo(() => {
@@ -296,7 +317,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
           </div>
         )}
         {visible.map(t => (
-          <div key={t.id} className="rounded-lg border border-border-faint bg-surface-softer p-3">
+          <div id={`task-${t.id}`} key={t.id} tabIndex={-1} className="rounded-lg border border-border-faint bg-surface-softer p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-xs font-bold text-ink">{t.id}</span>
               <span className={`rounded border px-1.5 py-px text-[12px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>

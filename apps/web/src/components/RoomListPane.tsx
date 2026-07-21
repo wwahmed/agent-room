@@ -53,10 +53,10 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
 
   return (
     <aside className="hidden h-full w-[320px] flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex 2xl:w-[400px]" data-room-list-width="responsive">
-      <div className="flex h-[60px] flex-shrink-0 items-center border-b border-border-faint px-5">
-        <span className="text-[15px] font-medium">Rooms</span>
-      </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+        <div className="flex h-8 items-center px-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+          Rooms
+        </div>
         {rooms.map(r => {
           const active = r.code === activeCode;
           // T-34: stretched-link row — the overlay Link opens the chat, the

@@ -175,6 +175,18 @@ body {
     rgb(var(--surface-1, var(--surface)));
 }
 
+/* T-58: the room uses one continuous command surface across every desktop
+   column. A restrained brand tint gives the left edge hierarchy; the border
+   and short shadow separate chrome from work without a heavy floating slab. */
+.app-command-bar {
+  background:
+    radial-gradient(620px 130px at 6% 0%, rgb(var(--accent) / 0.09), transparent 68%),
+    rgb(var(--surface-1, var(--surface)));
+  box-shadow:
+    0 1px 0 rgb(var(--border) / 0.35),
+    0 12px 28px -28px rgb(0 0 0 / 0.48);
+}
+
 /* T-46: shared single-run entry motions for transient system surfaces.
    150ms ease-out per the charter; nothing loops; reduced motion disables. */
 @keyframes surface-rise {

@@ -1,16 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom';
 
-// T-05 desktop workspace rail (64px), Slack IA: brand mark up top, then
-// Home and New-room. Desktop-only — mobile gets the full-width chat
-// list on Home instead.
+// T-05 desktop workspace rail (64px). T-58 moves the brand into the one
+// app-wide command bar, so this rail now begins beneath it and only owns
+// workspace navigation.
 
 export function WorkspaceRail() {
   const navigate = useNavigate();
   return (
-    <nav className="hidden h-full w-16 flex-shrink-0 flex-col items-center gap-3 border-r border-border-faint bg-surface-sunken py-3 lg:flex">
-      <Link to="/" aria-label="WakiChat home" className="transition hover:opacity-85">
-        <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-10 w-10" />
-      </Link>
+    <nav className="hidden h-full w-16 flex-shrink-0 flex-col items-center gap-2 border-r border-border-faint bg-surface-sunken py-3 lg:flex" aria-label="Workspace navigation">
       <Link
         to="/"
         aria-label="All rooms"

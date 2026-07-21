@@ -4,6 +4,7 @@ import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
+import { CommandSearch } from '../components/CommandSearch.js';
 import { Inspector, type InspectorTab } from '../components/Inspector.js';
 import { RecoverHostButton } from '../components/RecoverHostButton.js';
 import { RenameRoomControl } from '../components/RenameRoomControl.js';
@@ -225,6 +226,17 @@ export function Room() {
   };
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const openSearch = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener('keydown', openSearch);
+    return () => document.removeEventListener('keydown', openSearch);
+  }, []);
   // T-68: the SERVER's listen-loop verdict (T-66 `health`). The web no longer
   // classifies presence itself — two definitions of "dead" is the bug class that
   // let presence lie in the first place.
@@ -1459,8 +1471,20 @@ export function Room() {
       : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
       : renderOutputs();
 
+  const headerAgents = activeRoom.participants
+    .filter(participant => participant.client === 'cc')
+    .map(participant => ({
+      name: participant.name,
+      color: participant.color,
+      initials: participant.initials,
+      harness: participant.harness,
+      state: healthById.get(healthKey(participant.name, participant.client))?.state
+        ?? ((participant.listenUntil ?? 0) > now ? 'listening' as const : 'online' as const),
+    }));
+  const headerAgentStaleCount = headerAgents.filter(agent => agent.state === 'stale' || agent.state === 'disconnected').length;
+
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken pt-[52px] sm:pt-14">
       <WorkspaceRail />
       <RoomListPane activeCode={code} selfName={me.name} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
@@ -1471,6 +1495,12 @@ export function Room() {
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}
           onToggleInspector={() => setInspectorOpen(v => !v)}
+          onSearch={() => setSearchOpen(true)}
+          onOpenRoom={() => selectTab('room')}
+          onEndRoom={handleEndMeeting}
+          canEndRoom={!ended && activeRoom.createdBy === self.name}
+          agents={headerAgents}
+          agentStaleCount={headerAgentStaleCount}
           mentionNav={selfMentionIds.length > 0 ? (
             // T-18 rev2 + T-42 (UX: "@↑ 29 @↓ is cryptic"): the counter now
             // SAYS what it counts — "3 mentions" / "1/3 mentions" — and the
@@ -1540,7 +1570,7 @@ export function Room() {
             shortcut, but the tabs are the primary navigation everywhere. */}
         {/* T-42: proper tablist semantics + icon-and-label tabs; selecting a
             tab rewrites ?panel= so every panel is a durable address. */}
-        <div role="tablist" aria-label="Room sections" className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-faint px-3">
+        <div role="tablist" aria-label="Room sections" className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-faint bg-surface px-3 sm:px-5">
           {MAIN_TABS.map(t => (
             <button
               key={t.key}
@@ -2061,6 +2091,25 @@ export function Room() {
           On desktop the same panels are peers of the chat inside <main>, so the
           Inspector's desktop column is gone (T-64). */}
       <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
+      <CommandSearch
+        open={searchOpen}
+        room={activeRoom}
+        onClose={() => setSearchOpen(false)}
+        onTask={taskId => {
+          selectTab('project');
+          if (taskId) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('panel', 'project');
+            params.set('task', taskId);
+            window.history.replaceState(null, '', `${window.location.pathname}?${params}`);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
+        }}
+        onMessage={messageId => {
+          selectTab('chat');
+          window.setTimeout(() => document.getElementById(`msg-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+        }}
+      />
       {openQuestionId && (
         <QuestionArtifactSheet
           code={code}
