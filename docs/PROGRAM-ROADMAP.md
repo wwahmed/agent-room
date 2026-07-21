@@ -39,24 +39,27 @@ Host approves roadmap
         v
 1. Release Safety & Quality Governance
         |
-        +-------------------+
-        v                   v
-2. Identity & People     3. Room Operating System (spec may start earlier)
-        |                   |
-        +---------+---------+
-                  v
-         4. Phone Reliability
-                  |
-                  v
-         5. Desktop Workspace
-                  |
-                  v
-       6. Data Truth & Scale
+        v
+2. Identity & People
+        |
+        +----------------------+
+        v                      v
+3. Architecture V2         4. Phone Reliability
+   (spec starts now)           (physical QA required)
+        |
+        v
+6. Performance & Data Truth
+        |
+        v
+5. Desktop Workspace
 ```
 
 Program 6 may prepare read-only analysis earlier, but no product change bypasses
-Program 1. Programs 4 and 5 are sequential release candidates even if their
-design work overlaps.
+Entry Gates 1–2 or the approved V2 data contract. Because Claude currently
+fills five proposed builder roles, implementation is strictly serial despite
+the conceptual branch after Gate 2. Program 4 phone validation and Programs
+3/5/6 design work may overlap only as non-mutating analysis; there remains one
+release candidate total.
 
 ## Entry Gate 1 — Release Safety & Quality Governance
 
@@ -122,33 +125,40 @@ Exit:
 Host checkpoints: approve protocol and dry-run; approve proposed migration rows;
 approve cleanup only after rollback is demonstrated.
 
-## Program 3 — Room Operating System & Owner Artifacts
+## Design Gate 3 — Collaboration Architecture V2, RoomOS & Owner Artifacts
 
-**Priority:** P1 specification now, implementation after Program 2 identity
-primitives  
-**Outcome:** rooms are durable operating environments, not chats plus a flat
-task list.  
+**Priority:** P0 architecture specification now, additive implementation after
+Entry Gate 2 identity primitives
+
+**Outcome:** rooms are durable, typed collaboration environments—not chats plus
+a flat task list—and existing V1 rooms continue working throughout migration.
 **Proposed designer / reviewer / verifier:** RoomSystemsDesigner
 (UX-Adversary) / Master UX Lead / ProductSystemsAdvisor (to be admitted only
 after the identity dry-run). Implementation builder is assigned at the approved
 design boundary, never inferred from an old display-name owner.  
-**Absorbs:** T-05, T-19, T-29, T-37, T-43, T-94.
+**Absorbs:** T-05, T-19, T-29, T-37, T-43, T-94, plus the T-97 V2 architecture
+epic created from the upstream review.
 
 Entry: T-94 north star approved; canonical participant and permission model
-available; owner privacy model reviewed.
+available; owner privacy model reviewed; named ProductSystemsAdvisor admitted
+as the third seat before implementation starts.
 
 Boundary: T-94 owns reusable semantics, schemas, templates, and rituals; T-92
 owns enforcement in roster, server, MCP/web join, mentions, tasks, and People.
 Neither may redefine the other's identity model.
 
-Smallest safe first slice: versioned Room Brief plus Owner Interview/Survey
-artifacts, building on the existing Questions primitive. Read-only dashboard
-first; no autonomous planning mutations.
+Smallest safe first slice: schemas and a read-only V2 projection beside V1—no
+room mutation. Versioned Room Brief plus Owner Interview/Survey artifacts build
+on the existing Questions primitive; no autonomous planning mutations.
 
 Exit:
 
 - room charter, success measures, role roster, working agreements, WIP policy;
+- explicit distinction between room type, versioned template, enabled modules,
+  and lifecycle state; types are composable presets, not hard-coded schemas;
 - program/epic/task hierarchy with priority/dependency/supersession semantics;
+- project hierarchy supports Goal → Theme → Epic → Task without requiring every
+  room to instantiate every level;
 - decision, risk, research, critique, QA, release, incident, handoff, and
   retrospective artifacts with permissions/history/export/retention;
 - private owner answers and explicit publishable summaries;
@@ -158,6 +168,8 @@ Exit:
   and bookkeeping never produce scoreboard/status spam;
 - migration of this room proves the system handles tonight's fragmentation,
   paper approvals, identity ambiguity, fixture pollution, and missed reviews.
+- V1/V2 dual-read compatibility, idempotent per-room migration plan, explicit
+  type/template migration, reversible cutover, and old-client contract tests.
 
 Host checkpoint: approve the information architecture, example interview, and
 example room dashboard before implementation.
@@ -193,7 +205,9 @@ not the routine tester, though host confirmation remains welcome.
 
 ## Program 5 — Desktop Workspace & Navigation
 
-**Priority:** P1 after Programs 1–2; follows the phone release candidate  
+**Priority:** P1 after Gates 1–3 and Program 6's performance/data contract;
+follows the phone release candidate
+
 **Outcome:** desktop behaves like a calm, continuous, resizable workspace—not a
 web page that remounts, wastes space, and exposes test debris.  
 **Proposed builder / reviewer / verifier:** DesktopExperienceBuilder (Claude) /
@@ -201,9 +215,9 @@ Master UX Lead / ProductSystemsAdvisor, with UX-Adversary auditing the receipt.
 **Absorbs:** T-11, T-24, T-30, T-38, T-39, T-45, T-46, T-53, T-60, T-64,
 T-65, T-67, T-68, T-71, T-81, T-88, T-90.
 
-Entry: immutable staging and identity-aware People model exist; north-star
-full-frame designs approved at compact desktop 981/1024 plus 1280/1440/2032
-before implementation.
+Entry: immutable staging and identity-aware People model exist; V2 shell/data
+contract and Program 6 budgets approved; north-star full-frame designs approved
+at compact desktop 981/1024 plus 1280/1440/2032 before implementation.
 
 Smallest safe first slice: T-90 shell persistence. Remove the keyed room
 remount only after `useRoom` has code-keyed cancellation/reinitialization and a
@@ -228,20 +242,26 @@ Exit:
 Host checkpoint: approve full-frame north-star designs and a working shell-only
 slice before the visual rebuild continues.
 
-## Program 6 — Data Truth, Findability & Scale
+## Program 6 — Performance, Data Truth, Findability & Scale
 
-**Priority:** P2; read-only analysis may start earlier, product changes last  
+**Priority:** P1 architecture/performance foundation before Program 5; read-only
+profiling may start during the freeze
+
 **Outcome:** users can find the right room and trust counts, activity, sorting,
-history boundaries, and account controls without refreshing.  
+history boundaries, and account controls without refreshing, while long rooms
+stay fast and memory-bounded.
 **Proposed builder / reviewer / verifier:** DataTruthBuilder (Claude) / Master
 UX Lead / RoomSystemsVerifier (UX-Adversary).  
 **Absorbs:** T-15, T-23, T-26, T-27, T-75.
 
-Entry: Program 1 complete; Home/rail information architecture from Programs 3
-and 5 is stable; T-26/T-27 disposition reconciled with completed T-78.
+Entry: Entry Gates 1–2 complete; Design Gate 3 defines V2 query boundaries;
+Home/rail information architecture is approved; T-26/T-27 disposition is
+reconciled with completed T-78.
 
-Smallest safe first slice: instrument current count/activity staleness and room
-list load behavior without changing UI; publish a data-flow and cache contract.
+Smallest safe first slice: instrument current room bootstrap, tab payloads,
+count/activity staleness, retained DOM nodes, heap growth across room switches,
+and room-list load behavior without changing UI; publish measured budgets and a
+data-flow/cache/eviction contract.
 
 Exit:
 
@@ -250,9 +270,23 @@ Exit:
   same predicate as the visible list—never “Active 19” beside four real rooms
   and “15 test rooms hidden”;
 - bounded, virtualized, searchable 100+ room list with stable grouping/sorting;
+- room bootstrap returns bounded summaries/cursors rather than whole domains;
+  tabs, artifact bodies, attachment bodies, People history, and Project trees
+  load on demand with cancellable keyset pagination;
+- message/feed virtualization retains scroll-anchor measurements while evicting
+  off-window DOM and heavy entities; room switches abort stale requests and
+  evict previous-room payloads under an explicit LRU/TTL budget;
+- metadata/thumbnail-first attachments and artifacts; idle prefetch is bounded,
+  cancellable, and measured rather than unconditional;
+- performance budgets cover bootstrap bytes/time, room-switch latency, maximum
+  rendered nodes, network duplication, and heap growth across 20 switches;
 - explicit all-caught-up/history-boundary semantics;
 - one canonical account/sort surface, not duplicate T-26/T-27 variants;
 - slow/error/offline behavior and accessible keyboard navigation verified.
+
+Host checkpoint: approve measured performance budgets and the V2 query/cache
+contract before implementation; approve final truth/performance evidence before
+Program 5 desktop work begins.
 
 ## Awaiting-review truth sweep
 
@@ -288,6 +322,8 @@ show a genuine throughput bottleneck rather than a quality/rework bottleneck.
 3. Approve the two specialist roles after identity protocol dry-run.
 4. Approve each program's first slice before it starts.
 5. Explicitly unfreeze implementation; silence is not authorization.
+6. Approve V2 additive architecture and migration boundaries before any V2
+   write path is built.
 
 ## Collaborative record
 
