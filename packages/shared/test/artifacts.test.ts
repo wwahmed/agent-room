@@ -75,3 +75,23 @@ describe('extractArtifacts code-region skipping (design lead matrix)', () => {
     expect(extractArtifacts([msg('```\n[TODO] sample\n```\n[RESULT] Real one.')])).toHaveLength(1);
   });
 });
+
+describe('extractArtifacts multiline continuation (review finding: dropped details)', () => {
+  const msg = (text: string) => ({ id: 9, type: 'msg', name: 'A', initials: 'A', color: '#000', role: '', client: 'cc', text, time: 9 }) as unknown as Message;
+  it("captures a decision's continuation lines including lists", () => {
+    const a = extractArtifacts([msg('[DECISION] Audit accepted. Priority is now locked:\n1) fix typography\n2) ship the gate')]);
+    expect(a).toHaveLength(1);
+    expect(a[0]!.text).toBe('Audit accepted. Priority is now locked:\n1) fix typography\n2) ship the gate');
+  });
+  it('a following marker line ends the block', () => {
+    const a = extractArtifacts([msg('[DECISION] First.\ncontinuation\n[RESULT] Second.')]);
+    expect(a).toHaveLength(2);
+    expect(a[0]!.text).toBe('First.\ncontinuation');
+    expect(a[1]!.text).toBe('Second.');
+  });
+  it('a quoted line or fence ends the block without swallowing it', () => {
+    const a = extractArtifacts([msg('[DECISION] Real.\n> [TODO] quoted reply\nleftover prose')]);
+    expect(a).toHaveLength(1);
+    expect(a[0]!.text).toBe('Real.');
+  });
+});

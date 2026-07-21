@@ -150,3 +150,53 @@ describe('T-71 durable index — review failure modes', () => {
     expect(artifactBackfillKey(code)).toContain(code);
   });
 });
+
+describe('T-71 durable index — lock correctness (rev15 review)', () => {
+  const code = 'dur-fix-three';
+
+  async function seedLegacy(client: UpstashClient) {
+    await createRoom(client, { code, topic: 'Lock fixture', createdBy: 'GateA' });
+    await joinRoom(client, code, { name: 'GateA', role: '', color: '#000', initials: 'GA', client: 'cc', joinedAt: 1, lastSeenAt: 1 });
+    await appendMessage(client, code, msg(1, '[DECISION] Legacy work to recover.'));
+    await client.command(['DEL', artifactsKey(code)]); // pre-index world
+  }
+
+  it('a failure between lock and write does NOT suppress recovery: retry succeeds', async () => {
+    const client = listMemoryClient();
+    await seedLegacy(client);
+    const failing: UpstashClient = {
+      command: (c: readonly (string | number)[]) => {
+        if (String(c[0]).toUpperCase() === 'LRANGE' && String(c[1]).startsWith('room-msgs:')) {
+          throw new Error('boom mid-merge');
+        }
+        return client.command(c as never);
+      },
+      pipeline: (cs: readonly (readonly (string | number)[])[]) => client.pipeline(cs as never),
+    } as UpstashClient;
+    await expect(backfillRoomArtifacts(failing, code)).rejects.toThrow('boom');
+    // done key must NOT be set; retry with a healthy client recovers.
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBeNull();
+    await backfillRoomArtifacts(client, code);
+    expect(await listRoomArtifacts(client, code)).toHaveLength(1);
+  });
+
+  it('two OVERLAPPING first reads cannot duplicate the stored list', async () => {
+    const client = listMemoryClient();
+    await seedLegacy(client);
+    let release: () => void = () => {};
+    const gate = new Promise<void>(r => { release = r; });
+    const slow: UpstashClient = {
+      command: async (c: readonly (string | number)[]) => {
+        if (String(c[0]).toUpperCase() === 'LRANGE' && String(c[1]).startsWith('room-msgs:')) await gate;
+        return client.command(c as never);
+      },
+      pipeline: async (cs: readonly (readonly (string | number)[])[]) => client.pipeline(cs as never),
+    } as UpstashClient;
+    const a = backfillRoomArtifacts(slow, code);
+    const b = backfillRoomArtifacts(slow, code); // lock NX fails -> returns
+    release();
+    await Promise.all([a, b]);
+    // The RAW stored list — not a deduped read — has exactly one entry.
+    expect(await client.command(['LLEN', artifactsKey(code)])).toBe(1);
+  });
+});

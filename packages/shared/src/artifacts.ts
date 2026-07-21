@@ -18,28 +18,47 @@ export function extractArtifacts(messages: Message[]): RoomArtifact[] {
 
   for (const message of messages) {
     if (message.type !== 'msg') continue;
+    // A marker opens a BLOCK that captures its continuation lines (including
+    // lists) until the next marker, a fence, a quoted line, or end of message
+    // — a real Decision's details are part of the decision (review finding:
+    // 'Audit accepted. Priority is now locked:' stored with nothing after
+    // the colon).
     let inFence = false;
     let indexInMessage = 0;
+    let current: { marker: string; parts: string[] } | null = null;
+    const flush = () => {
+      if (!current) return;
+      const blockText = current.parts.join('\n').trim();
+      if (blockText) {
+        artifacts.push({
+          // Stable PER-MESSAGE id: identical whether this message is
+          // extracted alone (store time) or in a batch (backfill) —
+          // merge-by-id depends on this.
+          id: `${message.id}-${indexInMessage++}`,
+          kind: KIND_BY_MARKER[current.marker] ?? 'status',
+          text: blockText,
+          sourceMessageId: message.id,
+          author: message.name,
+          time: message.time,
+        });
+      }
+      current = null;
+    };
     for (const line of (message.text ?? '').split('\n')) {
-      if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
+      if (/^\s*(```|~~~)/.test(line)) { flush(); inFence = !inFence; continue; }
       if (inFence) continue;
       const match = line.match(MARKER_LINE);
-      if (!match) continue;
-      const marker = match[1]?.toUpperCase();
-      const text = match[2]?.trim();
-      if (!marker || !text) continue;
-      artifacts.push({
-        // Stable PER-MESSAGE id: identical whether this message is extracted
-        // alone (store time) or in a batch (backfill) — merge-by-id depends
-        // on this.
-        id: `${message.id}-${indexInMessage++}`,
-        kind: KIND_BY_MARKER[marker] ?? 'status',
-        text,
-        sourceMessageId: message.id,
-        author: message.name,
-        time: message.time,
-      });
+      if (match) {
+        flush();
+        current = { marker: (match[1] ?? '').toUpperCase(), parts: [match[2] ?? ''] };
+        continue;
+      }
+      if (current) {
+        if (/^ {0,3}>/.test(line)) { flush(); continue; }
+        current.parts.push(line);
+      }
     }
+    flush();
   }
 
   return artifacts;

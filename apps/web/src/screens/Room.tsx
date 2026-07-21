@@ -41,6 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, railSectionCount, type ArtifactFetchState } from '../lib/outputsState.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
@@ -232,12 +233,14 @@ export function Room() {
   // T-71 durable produced work: Outputs and the rail read the room-wide
   // server index, NEVER the paged transcript window (review-found
   // regression: old Decisions vanished as pagination advanced).
-  const [serverArtifacts, setServerArtifacts] = useState<RoomArtifact[] | null>(null);
-  const [artifactsError, setArtifactsError] = useState(false);
+  const [artifactState, setArtifactState] = useState<ArtifactFetchState | null>(null);
+  const [artifactsErrorRoom, setArtifactsErrorRoom] = useState<string | null>(null);
   const [artifactsNonce, setArtifactsNonce] = useState(0);
-  // Room change resets the index state — the previous room's produced work
-  // must never flash on the next room's page.
-  useEffect(() => { setServerArtifacts(null); setArtifactsError(false); }, [code]);
+  // Stale data is unrenderable BY CONSTRUCTION: a fetch result only counts
+  // for the room it was fetched for (rev15 review — a reset effect still
+  // permitted one stale paint).
+  const serverArtifacts = artifactsForRoom(artifactState, code);
+  const artifactsError = artifactsErrorRoom === code;
   // Sweep 2 (T-46): Outputs artifact list can expand past the newest 8.
   const [showAllArtifacts, setShowAllArtifacts] = useState(false);
   // T-71: Outputs filter chips — deliverables/artifacts by kind.
@@ -300,8 +303,8 @@ export function Room() {
         .then(b => { if (!cancelled) setTaskPulse(b.tasks); })
         .catch(() => { if (!cancelled) setTaskPulse(null); });
       getRoomArtifacts(createClient(), code)
-        .then(r => { if (!cancelled) { setServerArtifacts(r.artifacts); setArtifactsError(false); } })
-        .catch(() => { if (!cancelled) setArtifactsError(true); });
+        .then(r => { if (!cancelled) { setArtifactState({ room: code, artifacts: r.artifacts }); setArtifactsErrorRoom(null); } })
+        .catch(() => { if (!cancelled) setArtifactsErrorRoom(code); });
     };
     pull();
     const id = window.setInterval(pull, 60_000);
@@ -793,7 +796,7 @@ export function Room() {
     }
     // T-71: a freshly arrived marker-bearing message refreshes the durable
     // index promptly instead of waiting out the minute poll.
-    if (appendedTail.some(m => /^ {0,3}\[(DECISION|TODO|STATUS|RESULT)\]/im.test(m.text ?? ''))) {
+    if (hasLineMarker(appendedTail.map(m => m.text))) {
       setArtifactsNonce(n => n + 1);
     }
     prevLenRef.current = len;
@@ -2347,7 +2350,7 @@ export function Room() {
         {/* Collapse rule (pixel review 3): the rail must EARN its 300px —
             fewer than two populated preview sections and it folds away
             (header presence already covers agents alone). */}
-        {[headerAgents.length > 0, (taskPulse?.length ?? 0) > 0, producedWork.length > 0].filter(Boolean).length >= 2 && (
+        {railSectionCount(headerAgents.length, taskPulse?.length ?? 0, serverArtifacts) >= 2 && (
         <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
           <section aria-label="Active agents">
             <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
@@ -2470,7 +2473,7 @@ export function Room() {
       { key: 'result', label: 'Results' },
     ];
     const filtered = outputsFilter === 'all' ? producedWork : producedWork.filter(a => a.kind === outputsFilter);
-    if (serverArtifacts == null && !artifactsError) {
+    if (outputsViewState(serverArtifacts, artifactsError) === 'loading') {
       // Initial load: never flash a false zero while the index is in flight.
       return (
         <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] text-ink-soft sm:text-[14px]">
@@ -2479,7 +2482,7 @@ export function Room() {
         </div>
       );
     }
-    if (artifactsError && serverArtifacts == null) {
+    if (outputsViewState(serverArtifacts, artifactsError) === 'error') {
       // Never convert a fetch failure into a false empty state.
       return (
         <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
@@ -2515,7 +2518,15 @@ export function Room() {
         {filtered.length ? (
           <div className="space-y-2">
             {(showAllArtifacts ? filtered.slice().reverse() : filtered.slice(-8).reverse()).map(artifact => (
-              <ArtifactCard key={artifact.id} artifact={artifact} now={now} />
+              <ArtifactCard
+                key={artifact.id}
+                artifact={artifact}
+                now={now}
+                onOpenSource={messageId => {
+                  selectTab('chat');
+                  window.setTimeout(() => document.getElementById(`msg-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+                }}
+              />
             ))}
             {filtered.length > 8 && (
               <button
@@ -2604,7 +2615,7 @@ function outputKindLabel(kind: ArtifactKind): string {
   return kind === 'todo' ? 'Action' : artifactLabel(kind);
 }
 
-function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number }) {
+function ArtifactCard({ artifact, now, onOpenSource }: { artifact: RoomArtifact; now?: number; onOpenSource?: (messageId: number) => void }) {
   const { title, summary } = artifactParts(artifact.text);
   return (
     <div className="rounded-xl border border-border-faint bg-surface-softer p-3.5">
@@ -2619,6 +2630,17 @@ function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number 
         <div className="text-ink-soft">
           <ClampedNoteBody text={summary} expandLabel="Show the full output" dataRole="artifact-body" />
         </div>
+      )}
+      {/* Provenance beats vague export (design lead): every work object
+          links back to its source message. */}
+      {onOpenSource && (
+        <button
+          type="button"
+          onClick={() => onOpenSource(artifact.sourceMessageId)}
+          className="msg-disclosure -mb-1.5 -ml-2 mt-0.5 flex h-11 items-center px-2 text-ink-soft transition hover:text-accent"
+        >
+          View in chat
+        </button>
       )}
     </div>
   );

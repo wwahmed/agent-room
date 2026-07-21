@@ -27,18 +27,32 @@ export async function listRoomArtifacts(client: UpstashClient, code: string): Pr
   return out;
 }
 
-/** MERGE retained transcript history into the index by stable artifact id.
- *  Runs at most once per room (SETNX lock) but is harmless when repeated:
- *  only artifacts whose ids are absent from the index are appended, so a
- *  post-deploy artifact arriving before first read can never hide older
- *  Decisions, and concurrent first reads cannot double-seed. */
+function backfillLockKey(code: string): string { return `room-artifacts-backfill-lock:${code}`; }
+const BACKFILL_LOCK_SECONDS = 30;
+
+/** MERGE retained transcript history into the index by stable artifact id —
+ *  only ids absent from the index are appended, so a post-deploy artifact
+ *  can never hide older Decisions and retries are loss-free.
+ *
+ *  Locking (review finding: a done-marker written BEFORE the merge would
+ *  suppress recovery for the room TTL if the worker died mid-merge): a
+ *  SHORT-LIVED lock guards the merge, and the durable done key is written
+ *  only AFTER a successful merge. On failure the lock is released (or
+ *  expires in seconds), so the next read retries. */
 export async function backfillRoomArtifacts(client: UpstashClient, code: string): Promise<void> {
-  const locked = await client.command<string | null>(['SET', artifactBackfillKey(code), '1', 'NX', 'EX', ROOM_TTL_SECONDS]);
-  if (locked === null) return; // another caller holds/completed the backfill
-  const existing = new Set((await listRoomArtifacts(client, code)).map(a => a.id));
-  const total = (await getMessageTotalCount(client, code)) ?? 0;
-  const from = Math.max(0, total - MAX_MESSAGES_PER_ROOM);
-  const messages = await listMessages(client, code, from);
-  const missing = extractArtifacts(messages).filter(a => !existing.has(a.id));
-  if (missing.length) await client.pipeline(artifactAppendCommands(code, missing));
+  const done = await client.command<string | null>(['GET', artifactBackfillKey(code)]);
+  if (done) return;
+  const locked = await client.command<string | null>(['SET', backfillLockKey(code), '1', 'NX', 'EX', BACKFILL_LOCK_SECONDS]);
+  if (locked === null) return; // a concurrent caller is merging right now
+  try {
+    const existing = new Set((await listRoomArtifacts(client, code)).map(a => a.id));
+    const total = (await getMessageTotalCount(client, code)) ?? 0;
+    const from = Math.max(0, total - MAX_MESSAGES_PER_ROOM);
+    const messages = await listMessages(client, code, from);
+    const missing = extractArtifacts(messages).filter(a => !existing.has(a.id));
+    if (missing.length) await client.pipeline(artifactAppendCommands(code, missing));
+    await client.command(['SET', artifactBackfillKey(code), '1', 'EX', ROOM_TTL_SECONDS]);
+  } finally {
+    await client.command(['DEL', backfillLockKey(code)]);
+  }
 }
