@@ -19,6 +19,13 @@
           root.style.colorScheme = theme;
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute('content', theme === 'light' ? '#EBEDF1' : '#0B0F16');
+          /* T-26/T-27 + T-73: stamp the reading scale pre-paint too, so a
+             stored Large/Compact choice never flashes at the default size. */
+          var scale = localStorage.getItem('wakichat:reading-scale');
+          root.setAttribute(
+            'data-reading-scale',
+            scale === 'large' || scale === 'compact' ? scale : 'comfortable'
+          );
         } catch (e) { /* leave the dark defaults in place */ }
       })();
     </script>

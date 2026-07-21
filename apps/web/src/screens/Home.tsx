@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isValidCode } from '@agent-room/shared';
 import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAmI } from '../lib/identity.js';
-import { initialsFor, colorForName } from '../lib/colors.js';
+import { AccountMenu } from '../components/AccountMenu.js';
 import { RoomBadges } from '../components/RoomBadges.js';
 import { RoomIdentitySlot } from '../components/RoomIdentitySlot.js';
 import { splitRooms } from '../lib/roomSections.js';
+import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, sortRooms, type RoomSort } from '../lib/roomSort.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -41,6 +42,16 @@ export function Home() {
   // T-40: Active is the default view; Ended renders only when selected.
   const [view, setView] = useState<'active' | 'ended'>('active');
   const [showTestRooms, setShowTestRooms] = useState(false);
+  // T-26/T-27: sort applies at render over the MERGED pages, so the chosen
+  // order survives paging by construction. Latest activity is the default.
+  const [roomSort, setRoomSort] = useState<RoomSort>(() => {
+    try { return resolveRoomSort(localStorage.getItem(ROOM_SORT_STORAGE_KEY)); } catch { return resolveRoomSort(null); }
+  });
+  function changeRoomSort(value: string) {
+    if (!isRoomSort(value)) return;
+    setRoomSort(value);
+    try { localStorage.setItem(ROOM_SORT_STORAGE_KEY, value); } catch { /* session-only */ }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -96,10 +107,11 @@ export function Home() {
   }
 
   // T-40: Active/Ended sections with auto-test rooms collapsed out of the way.
+  // T-26/T-27: every section renders through the same selected sort.
   const sections = splitRooms(rooms);
-  const activeRooms = sections.active;
-  const endedRooms = sections.ended;
-  const testRooms = view === 'active' ? sections.activeTest : sections.endedTest;
+  const activeRooms = sortRooms(sections.active, roomSort);
+  const endedRooms = sortRooms(sections.ended, roomSort);
+  const testRooms = sortRooms(view === 'active' ? sections.activeTest : sections.endedTest, roomSort);
   // T-40 R2: a segment whose rows are ALL collapsed must say so explicitly —
   // "Ended 6" showing an empty list reads as broken, not filtered.
   const realRowCount = view === 'active' ? activeRooms.length : endedRooms.length;
@@ -116,23 +128,9 @@ export function Home() {
             <span className="text-lg font-bold tracking-tight">WakiChat</span>
           </div>
           {identity ? (
-            <div className="flex items-center gap-2">
-              <div className="flex min-h-11 items-center gap-2 rounded-full border border-border-faint bg-surface-softer py-1 pl-1.5 pr-3">
-                <span
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ backgroundColor: colorForName(identity.name) }}
-                >
-                  {initialsFor(identity.name)}
-                </span>
-                <span className="text-sm font-semibold">{identity.name}</span>
-              </div>
-              <a
-                href="/cdn-cgi/access/logout"
-                className="flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-ink-soft transition hover:text-ink"
-              >
-                Log out
-              </a>
-            </div>
+            /* T-26/T-27: the avatar IS the account surface — identity, theme,
+               reading scale, and Log out live in its menu, not loose chrome. */
+            <AccountMenu name={identity.name} email={identity.email} />
           ) : checked ? (
             <a
               href="/login"
@@ -218,22 +216,36 @@ export function Home() {
         {/* T-40: Active/Ended segmented control with counts. Ended is lazy —
             its cards only render when the segment is selected. */}
         {identity && !roomsLoading && rooms.length > 0 && (
-          <div role="tablist" aria-label="Room lists" className="mt-5 flex rounded-xl bg-surface-softer p-1">
-            {([['active', 'Active', activeRooms.length + sections.activeTest.length], ['ended', 'Ended', endedRooms.length + sections.endedTest.length]] as const).map(([key, label, count]) => (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={view === key}
-                onClick={() => { setView(key); setShowTestRooms(false); }}
-                // Type-floor gate finding: role=tab reads 16px on phones.
-                className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[16px] font-semibold transition sm:text-sm ${
-                  view === key ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
-                }`}
-              >
-                {label}
-                <span className="tabular-nums text-ink-faint">{count}</span>
-              </button>
-            ))}
+          <div className="mt-5 flex items-center gap-2">
+            <div role="tablist" aria-label="Room lists" className="flex flex-1 rounded-xl bg-surface-softer p-1">
+              {([['active', 'Active', activeRooms.length + sections.activeTest.length], ['ended', 'Ended', endedRooms.length + sections.endedTest.length]] as const).map(([key, label, count]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={view === key}
+                  onClick={() => { setView(key); setShowTestRooms(false); }}
+                  // Type-floor gate finding: role=tab reads 16px on phones.
+                  className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[16px] font-semibold transition sm:text-sm ${
+                    view === key ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
+                  }`}
+                >
+                  {label}
+                  <span className="tabular-nums text-ink-faint">{count}</span>
+                </button>
+              ))}
+            </div>
+            {/* T-26/T-27: order control beside the segments — a native select
+                keeps it one 44px target on phones. */}
+            <select
+              value={roomSort}
+              onChange={e => changeRoomSort(e.target.value)}
+              aria-label="Sort rooms"
+              className="min-h-11 flex-shrink-0 rounded-xl border border-border-faint bg-surface-softer px-2.5 text-[16px] font-semibold text-ink-soft outline-none transition focus:border-accent sm:text-sm"
+            >
+              {ROOM_SORTS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
         )}
 

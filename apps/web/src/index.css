@@ -183,6 +183,15 @@ body {
     .msg-composer { font-size: 20px; }
     .room-tab-label { font-size: 17px; }
   }
+  /* T-26/T-27 + T-73: phone reading scale. Comfortable is the unmarked
+     default above; Large and Compact adjust only the reading roles, only at
+     phone widths, and Compact never sinks below the humane 15px note floor. */
+  @media (max-width: 639px) {
+    :root[data-reading-scale='large'] .msg-prose { font-size: 22px; }
+    :root[data-reading-scale='large'] .msg-note { font-size: 19px; }
+    :root[data-reading-scale='compact'] .msg-prose { font-size: 17px; }
+    :root[data-reading-scale='compact'] .msg-note { font-size: 15px; }
+  }
 
   .ui-control {
     min-height: 44px;

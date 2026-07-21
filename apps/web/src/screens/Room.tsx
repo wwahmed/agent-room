@@ -2000,6 +2000,7 @@ export function Room() {
           onOpenRoom={() => selectTab('room')}
           onEndRoom={handleEndMeeting}
           canEndRoom={!ended && activeRoom.createdBy === self.name}
+          selfName={self.name}
           agents={headerAgents}
           agentStaleCount={headerAgentStaleCount}
           mentionNav={selfMentionIds.length > 0 ? (

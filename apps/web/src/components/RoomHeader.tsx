@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Room } from '@agent-room/shared';
 import type { AgentFace } from '../lib/facepile.js';
 import { AgentFacepile } from './AgentFacepile.js';
-import { ThemeToggle } from './ThemeToggle.js';
+import { AccountMenu } from './AccountMenu.js';
 
 // T-58 north star: one 56px app-wide command bar with three jobs.
 // Left says WHERE, center says FIND, right says WHO / WHAT NOW.
@@ -20,6 +20,8 @@ interface Props {
   onOpenRoom: () => void;
   onEndRoom: () => void;
   canEndRoom: boolean;
+  /** T-26/T-27: the signed-in person, for the account menu avatar. */
+  selfName: string;
   agents: AgentFace[];
   agentStaleCount: number;
   mentionNav?: React.ReactNode;
@@ -45,6 +47,7 @@ export function RoomHeader({
   onOpenRoom,
   onEndRoom,
   canEndRoom,
+  selfName,
   agents,
   agentStaleCount,
   mentionNav,
@@ -217,8 +220,9 @@ export function RoomHeader({
               </svg>
             </button>
             {menuOpen && (
+              /* T-26/T-27: room-scoped actions ONLY — personal preferences
+                 (theme, reading scale, Log out) live in the account menu. */
               <div role="menu" aria-label="Room actions" className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-2xl">
-                <ThemeToggle showLabel className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink" />
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenRoom(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink">
                   <span className="flex w-5 justify-center" aria-hidden="true">⚙</span>
                   Room settings & rename
@@ -227,18 +231,26 @@ export function RoomHeader({
                   <span className="flex w-5 justify-center" aria-hidden="true">↗</span>
                   Copy invite link
                 </button>
+                <div className="my-1 h-px bg-border-faint" />
+                <Link
+                  to="/"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink"
+                >
+                  <span className="flex w-5 justify-center" aria-hidden="true">←</span>
+                  Leave room
+                </Link>
                 {canEndRoom && (
-                  <>
-                    <div className="my-1 h-px bg-border-faint" />
-                    <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEndRoom(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-red-400 transition hover:bg-red-500/10">
-                      <span className="flex w-5 justify-center" aria-hidden="true">×</span>
-                      End room
-                    </button>
-                  </>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEndRoom(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-red-400 transition hover:bg-red-500/10">
+                    <span className="flex w-5 justify-center" aria-hidden="true">×</span>
+                    End room
+                  </button>
                 )}
               </div>
             )}
           </div>
+          <AccountMenu name={selfName} onOpenSettings={onOpenRoom} />
           <button
             type="button"
             onClick={onToggleInspector}
