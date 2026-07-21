@@ -1023,6 +1023,30 @@ export function Room() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mentionSeeking, selfMentionIds, hasOlder, loadingOlder]);
 
+  // T-82: hook topology must remain stable through bootstrap/error/join
+  // transitions. Derive the pinning state defensively before every early
+  // return, then run the restoring effect unconditionally. Keeping this hook
+  // below the guards makes loading -> loaded render one additional hook and
+  // crashes production with React invariant #310.
+  const preGuardIsHost = Boolean(room && self && room.createdBy === self.name);
+  const preGuardParticipant = room && self
+    ? room.participants.find(p => p.name === self.name && p.client === 'web')
+    : undefined;
+  const preGuardCanSpeak = Boolean(
+    room && self && (preGuardIsHost || preGuardParticipant?.canSpeak !== false),
+  );
+  const chromePinned = Boolean(
+    !room || !self || text.trim() || composerFocused || replyingTo || attachments.length > 0 ||
+    attachmentJobs.length > 0 || attachmentMenuOpen || dictationDraft || ended || !preGuardCanSpeak,
+  );
+  useEffect(() => {
+    chromePinnedRef.current = chromePinned;
+    if (chromePinned && chromeVisRef.current.hidden) {
+      chromeVisRef.current = { ...chromeVisRef.current, hidden: false, accum: 0 };
+      setChromeHidden(false);
+    }
+  }, [chromePinned]);
+
   // T-07: `error` is only ever set when the room has NOT loaded (mid-session
   // blips set `degraded` instead), so this branch is the bootstrap-failure
   // state: actionable copy + retry, not a raw exception filling the screen.
@@ -1066,20 +1090,6 @@ export function Room() {
   const myParticipant = room.participants.find(p => p.name === me.name && p.client === 'web');
   const myCanSpeak = isHost || myParticipant?.canSpeak !== false;
 
-  // T-82 pinning matrix: chrome may never hide while any of these exist. The
-  // ref feeds the rAF scroll sampler; the effect force-restores immediately
-  // when a pinned state appears mid-immersion (e.g. keyboard focus).
-  const chromePinned = Boolean(
-    text.trim() || composerFocused || replyingTo || attachments.length > 0 ||
-    attachmentJobs.length > 0 || attachmentMenuOpen || dictationDraft || ended || !myCanSpeak,
-  );
-  useEffect(() => {
-    chromePinnedRef.current = chromePinned;
-    if (chromePinned && chromeVisRef.current.hidden) {
-      chromeVisRef.current = { ...chromeVisRef.current, hidden: false, accum: 0 };
-      setChromeHidden(false);
-    }
-  }, [chromePinned]);
   const mutedCount = room.participants.filter(p => p.canSpeak === false).length;
   const replyMode = activeRoom.replyMode ?? 'open';
   const replyModeConfig = activeRoom.modeConfig;
