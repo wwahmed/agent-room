@@ -4,7 +4,8 @@ import { relativeTime } from '../lib/relativeTime.js';
 import { RoomBadges } from './RoomBadges.js';
 import { RoomIdentitySlot } from './RoomIdentitySlot.js';
 
-// T-05 desktop room list (280px column between the rail and the chat).
+// T-05 desktop room list between the rail and the chat. T-55 makes it
+// responsive rather than pinning a large desktop monitor to a cramped 280px.
 // Authenticated users get their active rooms with one-tap switching;
 // anonymous visitors (or fetch failures) collapse the pane entirely so
 // the chat gets the width back. Data comes from the same authenticated
@@ -51,11 +52,11 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
   if (!rooms || rooms.length === 0) return null;
 
   return (
-    <aside className="hidden h-full w-[280px] flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex">
-      <div className="flex h-[60px] flex-shrink-0 items-center border-b border-border-faint px-4">
-        <span className="text-[16px] font-semibold">Rooms</span>
+    <aside className="hidden h-full w-[320px] flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex 2xl:w-[400px]" data-room-list-width="responsive">
+      <div className="flex h-[60px] flex-shrink-0 items-center border-b border-border-faint px-5">
+        <span className="text-[15px] font-medium">Rooms</span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {rooms.map(r => {
           const active = r.code === activeCode;
           // T-34: stretched-link row — the overlay Link opens the chat, the
@@ -63,7 +64,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
           return (
             <div
               key={r.code}
-              className={`relative flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
+              className={`relative flex min-h-14 items-center gap-3 rounded-lg px-3 py-3 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
             >
               <Link
                 to={`/r/${r.code}`}
@@ -82,7 +83,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
+                  <div className={`min-w-0 flex-1 truncate text-[14px] font-medium leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
                   {/* T-62 badge refined by T-18/T-20 — attention signals only.
                       The active room never shows unread — it is being read. */}
                   <RoomBadges

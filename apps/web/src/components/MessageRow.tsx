@@ -226,12 +226,12 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
       <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-5'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
-        <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-2xl rounded-br-md border border-accent-tint-border bg-accent-tint px-4 py-2.5 text-ink shadow-card sm:max-w-[70%] [overflow-wrap:anywhere]">
+        <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {/* T-30 rev3 per UX: the SHOUTING was the measure, not the glyphs —
               cap the line length at ~68ch and keep 15-16px type. */}
           {body.trim() && (
-            <div className="text-[15px] font-normal leading-[1.65]">
+            <div className="text-[14px] font-[350] leading-[1.7] [&_strong]:font-medium">
               <CollapsibleMessageBody text={body} selfName={selfName} />
             </div>
           )}
@@ -248,7 +248,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // giant saturated card behind every agent report. The incoming surface is
   // deliberately near-neutral so long work updates read like a calm Slack/
   // Teams transcript instead of a stack of alerts.
-  const bubble = { backgroundColor: `${message.color}08`, borderColor: `${message.color}1f` };
+  const bubble = { backgroundColor: 'transparent', borderColor: `${message.color}14` };
   const agentSender = message.client === 'cc';
   // T-56 (host: "wasting space at top", "empty margin on the right"): incoming
   // bubbles are capped-width and left-aligned (pr-* leaves a right margin for
@@ -259,14 +259,14 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-xl border sm:max-w-[min(36rem,82%)] [overflow-wrap:anywhere]';
   // Calm transcript type: stable 15px, explicitly normal weight, and enough
   // leading to separate dense technical prose without enlarging it.
-  const bodyText = 'text-[15px] font-normal leading-[1.65]';
+  const bodyText = 'text-[14px] font-[350] leading-[1.7] [&_strong]:font-medium';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.
     return (
       <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-2`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
-        <div className={`${bubbleShape} px-3.5 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
+        <div className={`${bubbleShape} px-3 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -287,13 +287,13 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           <SenderAvatar message={message} sizeClass="h-7 w-7" textClass="text-[12px]" />
         </div>
         <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
-          <span className="text-[13px] font-semibold" style={{ color: message.color }}>{message.name}</span>
+          <span className="text-[13px] font-medium" style={{ color: message.color }}>{message.name}</span>
           {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
           <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
           <MessageMenu message={message} onReply={onReply} />
         </div>
-        <div className={`px-3.5 pb-2 pt-0.5 ${bodyText}`}>
+        <div className={`px-3 pb-2 pt-0.5 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}

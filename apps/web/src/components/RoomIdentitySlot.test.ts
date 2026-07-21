@@ -12,5 +12,8 @@ describe('room-list identity placement', () => {
     expect(desktopPane).toContain('<RoomIdentitySlot');
     expect(desktopPane).not.toContain('<AgentFacepile');
     expect(desktopPane).not.toContain('ml-auto');
+    expect(desktopPane).toContain('data-room-list-width="responsive"');
+    expect(desktopPane).toContain('w-[320px]');
+    expect(desktopPane).toContain('2xl:w-[400px]');
   });
 });
