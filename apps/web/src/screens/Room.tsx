@@ -41,7 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
@@ -320,9 +320,16 @@ export function Room() {
     seekGenRef.current += 1;
     seekAttemptsRef.current = 0;
     setSourceSeekId(null);
-    const artifactId = seekArtifactIdRef.current ?? `${sourceMessageId}-0`;
-    const { terminalToast } = seekExitRecovery(exit, artifactId, sourceMessageId);
-    const recovery = seekFailureReducer(null, { type: 'exit', exit, artifactId, sourceMessageId });
+    const artifactId = seekArtifactIdRef.current;
+    if (!artifactId && exit !== 'give-up-trimmed') {
+      // Invariant breach (a recoverable jump always starts from a card):
+      // fail SAFELY with an honest toast, never a fabricated card id.
+      void import('../components/Toast.js').then(({ showToast }) =>
+        showToast('Couldn\u2019t reach the source message. Try again from Outputs.', 'error'));
+      return;
+    }
+    const { terminalToast } = seekExitRecovery(exit, artifactId ?? '', sourceMessageId);
+    const recovery = artifactId ? seekFailureReducer(null, { type: 'exit', exit, artifactId, sourceMessageId }) : null;
     setSeekFailure(recovery);
     if (recovery) selectTab('outputs');
     if (terminalToast) {
@@ -403,9 +410,16 @@ export function Room() {
   // live recovery card exists in the Outputs render, and clearing the
   // failure (retry / success / room change) invalidates it — no stale
   // window in which the wrong card can be focused.
+  const focusHandledRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!seekFailure || mainTab !== 'outputs') return;
-    focusRecoveryCard(seekFailure.artifactId, document);
+    // VA-0041 latch: focus ONCE per failure identity, on the first render
+    // where the card exists — later polls/filter/pagination churn must not
+    // yank the reader back. A new failure focuses once; clearing resets.
+    const mounted = seekFailure != null && mainTab === 'outputs'
+      && document.querySelector(`[data-artifact-card="${seekFailure.artifactId.replace(/"/g, '')}"]`) != null;
+    const next = nextFocusAction(focusHandledRef.current, seekFailure, mounted);
+    if (next.focus && seekFailure) focusRecoveryCard(seekFailure.artifactId, document);
+    focusHandledRef.current = next.handled;
   }, [seekFailure, mainTab, serverArtifacts, outputsFilter, showAllArtifacts]);
   const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {

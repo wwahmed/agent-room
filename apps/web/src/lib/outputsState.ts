@@ -125,3 +125,18 @@ export function focusRecoveryCard(artifactId: string, root: CardRoot): boolean {
   card.focus();
   return true;
 }
+
+/** VA-0041: focus fires ONCE per failure identity, on the first render
+ *  where the card exists. Dependency churn (polls, filters, pagination)
+ *  after a successful focus does nothing; a NEW failure identity may focus
+ *  once again; clearing the failure resets the latch. */
+export function nextFocusAction(
+  handled: string | null,
+  failure: { artifactId: string } | null,
+  cardMounted: boolean,
+): { focus: boolean; handled: string | null } {
+  if (!failure) return { focus: false, handled: null };
+  if (handled === failure.artifactId) return { focus: false, handled };
+  if (!cardMounted) return { focus: false, handled };
+  return { focus: true, handled: failure.artifactId };
+}

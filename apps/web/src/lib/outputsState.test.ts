@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, focusRecoveryCard, isCurrentSeek, isFailedCard, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -110,5 +110,24 @@ describe('focusRecoveryCard (exact-card focus, no stale fallback)', () => {
   it('a missing card is a no-op, never a substitute focus', () => {
     const root = { querySelector: () => null };
     expect(focusRecoveryCard('9-0', root)).toBe(false);
+  });
+});
+
+describe('nextFocusAction (VA-0041: once-per-failure focus latch)', () => {
+  const failure = { artifactId: '9-0' };
+  it('first render with the card mounted focuses once and latches', () => {
+    expect(nextFocusAction(null, failure, true)).toEqual({ focus: true, handled: '9-0' });
+  });
+  it('subsequent churn (polls, filters, pagination) does nothing', () => {
+    expect(nextFocusAction('9-0', failure, true)).toEqual({ focus: false, handled: '9-0' });
+  });
+  it('waits without latching while the card is not yet mounted', () => {
+    expect(nextFocusAction(null, failure, false)).toEqual({ focus: false, handled: null });
+  });
+  it('a NEW failure identity focuses once again', () => {
+    expect(nextFocusAction('9-0', { artifactId: '4-1' }, true)).toEqual({ focus: true, handled: '4-1' });
+  });
+  it('clearing the failure resets the latch', () => {
+    expect(nextFocusAction('9-0', null, false)).toEqual({ focus: false, handled: null });
   });
 });
