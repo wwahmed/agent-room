@@ -16,7 +16,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { AgentAvatar } from '../components/AgentAvatar.js';
-import { participantKindLabel } from '../lib/agentBrand.js';
+import { brandForSender, participantKindLabel } from '../lib/agentBrand.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
@@ -1571,11 +1571,10 @@ export function Room() {
         <div className={`min-h-0 flex-1 flex-col ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
 
             <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto py-4 relative">
-              {/* T-48: the conversation canvas uses the desktop pane instead
-                  of stopping at the old 860px rail. MessageRow still caps prose
-                  at 68ch, so added canvas width improves alignment and gives
-                  images/artifacts room without creating unreadably long text. */}
-              <div className="mx-auto w-full max-w-[1120px]">
+              {/* T-48: center a generous conversation rail on wide desktops.
+                  MessageRow caps prose at 80ch while images/artifacts can use
+                  the extra canvas without creating edge-to-edge text. */}
+              <div className="mx-auto w-full max-w-[1280px]">
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
               {hasOlder && (
@@ -1624,6 +1623,7 @@ export function Room() {
                       onReply={startReply}
                       onJumpToQuote={jumpToMessage}
                       selfName={self.name}
+                      senderBrand={brandForSender(m, activeRoom.participants)}
                     />
                   )}
                   </Fragment>
@@ -1771,7 +1771,7 @@ export function Room() {
                   </div>
                 )}
                 {/* T-48: composer aligns to the wider conversation canvas. */}
-                <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-2">
+                <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-2">
                 {isHost && mutedCount > 0 && (
                   <div className="text-[12px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
                     <span>🔇</span>

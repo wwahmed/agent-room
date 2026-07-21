@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { BRAND_LOGOS, InitialsChip } from './AgentAvatar.js';
+import { brandFor } from '../lib/agentBrand.js';
 import {
   facepileLabel,
   facepileSeverity,
@@ -111,18 +113,33 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
         className={`relative z-10 -m-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-xl p-1.5 transition hover:bg-surface-softer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint ${compact ? 'min-h-9 min-w-9' : ''}`}
       >
         <span className="relative flex items-center">
-          {visible.map((agent, i) => (
-            <span
-              key={`${agent.name}-${i}`}
-              className={`${size} ${i > 0 ? overlap : ''} text-fixed flex items-center justify-center rounded-full font-bold text-white ring-2 ring-surface ${
-                isStaleState(agent.state) ? 'opacity-45 grayscale' : ''
-              }`}
-              style={{ backgroundColor: agent.color, zIndex: visible.length + 1 - i }}
-              aria-hidden="true"
-            >
-              {agent.initials}
-            </span>
-          ))}
+          {visible.map((agent, i) => {
+            // T-47: at 28px a known provider face uses the real app mark as
+            // the base with the colored initials chip overlaid; below 28px
+            // (compact) it inverts to monogram-only. Unknown providers keep
+            // the monogram fallback at every size.
+            const brand = !compact && agent.harness ? brandFor({ client: 'cc', harness: agent.harness }) : null;
+            const logo = brand && (brand.mark === 'claude' || brand.mark === 'codex')
+              ? BRAND_LOGOS[brand.mark as 'claude' | 'codex']
+              : null;
+            return (
+              <span
+                key={`${agent.name}-${i}`}
+                className={`${size} ${i > 0 ? overlap : ''} text-fixed relative flex items-center justify-center rounded-full font-bold text-white ring-2 ring-surface ${
+                  isStaleState(agent.state) ? 'opacity-45 grayscale' : ''
+                }`}
+                style={{ backgroundColor: agent.color, zIndex: visible.length + 1 - i }}
+                aria-hidden="true"
+              >
+                {logo ? (
+                  <>
+                    <img src={logo} alt="" className="h-full w-full select-none rounded-full object-cover" />
+                    <InitialsChip initials={agent.initials} color={agent.color} />
+                  </>
+                ) : agent.initials}
+              </span>
+            );
+          })}
           {overflow > 0 && (
             <span
               className={`${size} ${visible.length > 0 ? overlap : ''} text-fixed flex items-center justify-center rounded-full bg-surface-softer font-bold text-ink-soft ring-2 ring-surface`}

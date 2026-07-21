@@ -9,6 +9,8 @@ export interface AgentFace {
   name: string;
   color: string;
   initials: string;
+  /** T-47: harness metadata for the provider badge (28px faces only). */
+  harness?: string;
   state: AgentPresence;
 }
 

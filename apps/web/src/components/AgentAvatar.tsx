@@ -1,33 +1,68 @@
 import { Avatar } from './Avatar.js';
-import { brandFor } from '../lib/agentBrand.js';
+import { brandFor, type AgentBrand } from '../lib/agentBrand.js';
 
-// T-44/T-47: an Avatar with the provider mark riding its corner. The base
-// circle stays the participant's color + initials (per-participant identity);
-// the small badge carries the harness brand (provider identity). Humans get
-// the plain Avatar — never a brand mark. Marks are abstract 8px glyphs, no
-// text, so nothing here can fall below the avatar type floor.
+// T-47 avatar system (host direction 04:14 + T-44 DoD): known providers use
+// their real app marks as the avatar BASE, with the participant's colored
+// initials chip overlaid bottom-right so multiple same-provider agents stay
+// distinguishable. Unknown agents keep the deliberate generic fallback (their
+// colored monogram + a small abstract bot badge); humans are always the plain
+// colored monogram, never brand-marked. Below 28px there is no room for a
+// legible overlay, so small sizes invert to monogram-only.
+//
+// Chip initials render at 9px — the floor for avatar-internal text (T-47);
+// text-fixed opts them out of the T-61 prose floor, same as Avatar itself.
 
-const MARKS = {
-  claude: (
-    // four-point spark, Anthropic coral
-    <svg viewBox="0 0 16 16" width="8" height="8" fill="#D97757" aria-hidden="true">
-      <path d="M8 1c.9 3.4 2.6 5.1 6 6-3.4.9-5.1 2.6-6 6-.9-3.4-2.6-5.1-6-6 3.4-.9 5.1-2.6 6-6Z" />
-    </svg>
-  ),
-  codex: (
-    // hex knot
-    <svg viewBox="0 0 16 16" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-      <path d="M8 1.8 13.4 5v6L8 14.2 2.6 11V5L8 1.8Z" />
-    </svg>
-  ),
-  generic: (
-    // simple bot dot-pair
-    <svg viewBox="0 0 16 16" width="8" height="8" fill="currentColor" aria-hidden="true">
-      <rect x="2" y="5" width="12" height="8" rx="2.5" />
-      <path d="M8 2v3" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  ),
-} as const;
+export const BRAND_LOGOS: Record<'claude' | 'codex', string> = {
+  claude: '/brand/agents/claude.png',
+  codex: '/brand/agents/codex.png',
+};
+
+const GENERIC_MARK = (
+  <svg viewBox="0 0 16 16" width="8" height="8" fill="currentColor" aria-hidden="true">
+    <rect x="2" y="5" width="12" height="8" rx="2.5" />
+    <path d="M8 2v3" stroke="currentColor" strokeWidth="1.8" />
+  </svg>
+);
+
+/** Colored initials chip overlaid on a logo base. */
+export function InitialsChip({ initials, color }: { initials: string; color: string }) {
+  return (
+    <span
+      className="text-fixed absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[9px] font-bold text-white ring-2 ring-surface"
+      style={{ backgroundColor: color }}
+      aria-hidden="true"
+    >
+      {initials}
+    </span>
+  );
+}
+
+/** Abstract bot badge for agents whose provider is unknown. */
+export function GenericAgentBadge() {
+  return (
+    <span
+      className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface text-ink-soft ring-1 ring-border-faint"
+      aria-hidden="true"
+    >
+      {GENERIC_MARK}
+    </span>
+  );
+}
+
+/** Logo-base avatar with the initials chip; sizeClass sizes the square. */
+export function BrandedLogoAvatar({ brand, initials, color, sizeClass }: { brand: AgentBrand; initials: string; color: string; sizeClass: string }) {
+  return (
+    <span className={`relative inline-flex ${sizeClass} flex-shrink-0`} title={brand.label}>
+      <img
+        src={BRAND_LOGOS[brand.mark as 'claude' | 'codex']}
+        alt=""
+        className={`${sizeClass} select-none rounded-lg object-cover`}
+        aria-hidden="true"
+      />
+      <InitialsChip initials={initials} color={color} />
+    </span>
+  );
+}
 
 interface Props {
   participant: { name: string; initials: string; color: string; client: string; harness?: string };
@@ -37,15 +72,16 @@ interface Props {
 export function AgentAvatar({ participant, size = 'md' }: Props) {
   const brand = brandFor(participant);
   if (!brand) return <Avatar initials={participant.initials} color={participant.color} size={size} />;
+  if (brand.mark === 'claude' || brand.mark === 'codex') {
+    const sizeClass = size === 'lg' ? 'h-8 w-8' : size === 'md' ? 'h-6 w-6' : 'h-5 w-5';
+    // Below 28px the overlay is illegible: invert to monogram-only.
+    if (size !== 'lg') return <Avatar initials={participant.initials} color={participant.color} size={size} />;
+    return <BrandedLogoAvatar brand={brand} initials={participant.initials} color={participant.color} sizeClass={sizeClass} />;
+  }
   return (
     <span className="relative inline-flex flex-shrink-0" title={brand.label}>
       <Avatar initials={participant.initials} color={participant.color} size={size} />
-      <span
-        className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface text-ink-soft ring-1 ring-border-faint"
-        aria-hidden="true"
-      >
-        {MARKS[brand.mark]}
-      </span>
+      <GenericAgentBadge />
     </span>
   );
 }

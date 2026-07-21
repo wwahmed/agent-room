@@ -20,7 +20,7 @@ export interface RoomSummary {
   /** T-34 (UX spec v2): per-agent identity + health for the facepile, capped,
    *  plus the stale count so severity can be worded ("1 of 2 needs attention"). */
   agentStaleCount: number;
-  agents: Array<{ name: string; color: string; initials: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
+  agents: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
 }
 
 /** Facepile payload cap — 3 visible faces + the "+N" overflow chip's worth. */
@@ -84,6 +84,8 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
         name: typeof p.name === 'string' ? p.name : '',
         color: typeof p.color === 'string' ? p.color : '#8b8fa3',
         initials: typeof p.initials === 'string' && p.initials ? p.initials : (p.name?.[0] ?? '?').toUpperCase(),
+        // T-47: provider metadata for the facepile brand badges.
+        ...(typeof p.harness === 'string' && p.harness ? { harness: p.harness } : {}),
         state: agentStates[i]!,
       }))
       .sort((a, b) => Number(a.state === 'stale' || a.state === 'disconnected') - Number(b.state === 'stale' || b.state === 'disconnected'))

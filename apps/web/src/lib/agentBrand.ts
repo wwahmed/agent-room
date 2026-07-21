@@ -26,3 +26,21 @@ export function brandFor(p: { client: string; harness?: string }): AgentBrand | 
 export function participantKindLabel(p: { client: string; harness?: string }): string {
   return brandFor(p)?.label ?? 'web session';
 }
+
+/** T-47: brand for a message SENDER. Harness metadata (from the live
+ *  participant row) outranks everything; when the row is gone or predates
+ *  the harness field, an EXACT normalized display name ('claude', 'codex',
+ *  optionally with a '(N)' suffix) is the sanctioned fallback — never a
+ *  substring, so "Claude Smith" stays unbranded generic. Humans (web) null. */
+export function brandForSender(
+  sender: { client: string; name: string },
+  participants: Array<{ name: string; client: string; harness?: string }> = [],
+): AgentBrand | null {
+  if (sender.client !== 'cc') return null;
+  const row = participants.find(p => p.name === sender.name && p.client === 'cc');
+  if (row?.harness) return brandFor(row);
+  const base = sender.name.trim().toLowerCase().replace(/\s*\(\d+\)$/, '');
+  if (base === 'claude') return { mark: 'claude', label: 'Claude Code' };
+  if (base === 'codex') return { mark: 'codex', label: 'Codex' };
+  return { mark: 'generic', label: 'Agent' };
+}

@@ -27,7 +27,7 @@ export interface RoomSummary {
   /** T-34: per-agent faces (healthy-first, capped server-side) + stale count
    *  so the facepile can word severity, not just color it. */
   agentStaleCount?: number;
-  agents?: Array<{ name: string; color: string; initials: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
+  agents?: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
 }
 
 export interface RoomPage {

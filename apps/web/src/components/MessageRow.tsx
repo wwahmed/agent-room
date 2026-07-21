@@ -5,6 +5,8 @@ import { messageTime } from '../lib/relativeTime.js';
 import { isStatusPing } from '../lib/unread.js';
 import { MessageMenu } from './MessageMenu.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
+import { BrandedLogoAvatar, GenericAgentBadge } from './AgentAvatar.js';
+import type { AgentBrand } from '../lib/agentBrand.js';
 
 // T-05 editorial message rows. Sender identity is the primary visual
 // anchor (host feedback: "I am having a very hard time distinguishing
@@ -37,34 +39,24 @@ export function isSameGroup(prev: Message | undefined, m: Message): boolean {
   );
 }
 
-// Host direction (04:14): the well-known agents use their real public
-// app marks (fetched from claude.ai / Wikimedia Commons at his request);
-// everyone else keeps the initials block until per-user avatars land.
-const AGENT_LOGOS: Record<string, string> = {
-  claude: '/brand/agents/claude.png',
-  codex: '/brand/agents/codex.png',
-};
-
-function SenderAvatar({ message, sizeClass = 'h-9 w-9', textClass = 'text-[12px]' }: { message: Message; sizeClass?: string; textClass?: string }) {
+// T-47: ONE avatar system (host direction 04:14 kept). Known providers show
+// their real app mark as the BASE with the participant's colored initials
+// chip overlaid — so two Claudes stay distinguishable, which the old
+// whole-logo swap lost. Unknown agents keep the colored monogram + bot badge;
+// humans stay the plain monogram.
+function SenderAvatar({ message, brand, sizeClass = 'h-9 w-9', textClass = 'text-[12px]' }: { message: Message; brand?: AgentBrand | null; sizeClass?: string; textClass?: string }) {
   const agent = message.client === 'cc';
-  const logo = agent ? AGENT_LOGOS[String(message.name ?? '').trim().toLowerCase()] : undefined;
-  if (logo) {
-    return (
-      <img
-        src={logo}
-        alt=""
-        className={`${sizeClass} flex-shrink-0 select-none rounded-md`}
-        aria-hidden="true"
-      />
-    );
+  if (brand && (brand.mark === 'claude' || brand.mark === 'codex')) {
+    return <BrandedLogoAvatar brand={brand} initials={message.initials} color={message.color} sizeClass={sizeClass} />;
   }
   return (
     <div
-      className={`flex ${sizeClass} flex-shrink-0 select-none items-center justify-center ${textClass} font-bold text-white ${agent ? 'rounded-md' : 'rounded-full'}`}
+      className={`relative flex ${sizeClass} flex-shrink-0 select-none items-center justify-center ${textClass} font-bold text-white ${agent ? 'rounded-md' : 'rounded-full'}`}
       style={{ backgroundColor: message.color }}
       aria-hidden="true"
     >
       {message.initials}
+      {brand && <GenericAgentBadge />}
     </div>
   );
 }
@@ -82,6 +74,9 @@ interface Props {
   onJumpToQuote?: (id: number) => void;
   /** T-12: the VIEWER's display name, for the you-were-mentioned highlight. */
   selfName?: string;
+  /** T-47: provider brand for the sender (resolved by Room from participant
+   *  harness metadata, name fallback), rendered as the avatar base/badge. */
+  senderBrand?: AgentBrand | null;
 }
 
 // Exact clock for the hover/title tooltip — precise time behind the relative label.
@@ -183,7 +178,7 @@ function SwipeReplyIndicator({ progress }: { progress: number }) {
   );
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, selfName }: Props) {
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, selfName, senderBrand }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
 
@@ -228,8 +223,9 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {/* T-30 rev3 per UX: the SHOUTING was the measure, not the glyphs —
-              cap the line length at ~68ch and keep 15-16px type. */}
+          {/* T-30/T-48: keep 15px type and a deliberate readable measure;
+              80ch uses large desktop canvases without turning prose into an
+              edge-to-edge scan. */}
           {body.trim() && (
             <div className="text-[15px] font-normal leading-[1.6] [&_strong]:font-semibold">
               <CollapsibleMessageBody text={body} selfName={selfName} />
@@ -244,11 +240,9 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
 
   const ambiguous = ambiguousNames?.has(message.name);
 
-  // T-41 host correction: identity color belongs to the avatar/name, not a
-  // giant saturated card behind every agent report. The incoming surface is
-  // deliberately near-neutral so long work updates read like a calm Slack/
-  // Teams transcript instead of a stack of alerts.
-  const bubble = { backgroundColor: 'transparent' };
+  // T-41 host correction: peers are cards too, but restrained neutral ones.
+  // Identity color stays on the avatar/name instead of saturating the whole
+  // report and competing with unread/action accents.
   const agentSender = message.client === 'cc';
   // T-56 (host: "wasting space at top", "empty margin on the right"): incoming
   // bubbles are capped-width and left-aligned (pr-* leaves a right margin for
@@ -256,7 +250,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // corner, name + time sit on ONE line (no divider, no wrap), role hidden on
   // mobile.
   const rowClass = 'group relative pl-5 pr-12 sm:pl-6 sm:pr-20';
-  const bubbleShape = 'relative z-10 inline-block max-w-full break-words sm:max-w-[68ch] [overflow-wrap:anywhere]';
+  const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-xl border border-border-faint bg-surface-softer sm:max-w-[80ch] [overflow-wrap:anywhere]';
   // T-41 acceptance sheet: stay on the deliberate token scale. Perceived
   // shouting is solved by flat peer rows and hierarchy, not off-scale thin
   // glyphs that become harder to read on a dark canvas.
@@ -267,7 +261,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     return (
       <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-2`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
-        <div className={`${bubbleShape} px-3 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
+        <div className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -280,21 +274,21 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   return (
     <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-6`}>
       <SwipeReplyIndicator progress={swipe.progress} />
-      <div className={bubbleShape} style={{ ...bubble, ...swipe.style }}>
+      <div className={bubbleShape} style={swipe.style}>
         {/* T-58 (host: "others on the left", "can barely read the name"): the
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
             top corner, and is legible-sized. */}
         <div className={`absolute -top-1 -left-2 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-lg' : 'rounded-full'}`}>
-          <SenderAvatar message={message} sizeClass="h-7 w-7" textClass="text-[12px]" />
+          <SenderAvatar message={message} brand={senderBrand} sizeClass="h-7 w-7" textClass="text-[12px]" />
         </div>
         <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
-          <span className="text-[13px] font-semibold" style={{ color: message.color }}>{message.name}</span>
+          <span className="text-[13px] font-semibold" style={{ color: message.color }}>{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
           {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
           <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
           <MessageMenu message={message} onReply={onReply} />
         </div>
-        <div className={`px-3 pb-2 pt-0.5 ${bodyText}`}>
+        <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
