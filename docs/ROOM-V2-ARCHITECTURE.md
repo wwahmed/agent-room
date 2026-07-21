@@ -9,9 +9,12 @@ Upstream reference: `ebin198351-akl/agent-room` at
 ## Decision summary
 
 V2 should be an additive collaboration architecture, not a parallel product or
-a big-bang schema rewrite. Existing rooms and MCP clients continue to operate
-through V1. V2 data lives beside V1, is projected and compared before cutover,
-and becomes authoritative one room at a time through a reversible pointer.
+a big-bang schema rewrite. Existing V1 rooms continue to work until an explicit
+cutover. For active build rooms, the primary migration is a controlled pause,
+continuity-capsule export, import into a new V2 room, and agent resume drill—not
+full transcript rehydration. The sealed V1 room remains a read-only archive for
+a defined retention window. Full content shadow-read/backward compatibility is
+optional later archival work, not a V2 entry requirement.
 
 A room type is a small, versioned preset of capability modules and invariants.
 A template is a versioned seed for roles, artifacts, rituals, and defaults
@@ -86,14 +89,19 @@ overwrites owner-edited content.
 ### Modules
 
 Modules are capabilities, not page names: `chat`, `people`, `work`, `artifacts`,
-`questions`, `research`, `review`, `incident`, `release`, `reports`. A client
-renders only enabled modules and may combine them into tabs at narrow widths.
-Module data remains addressable even when its UI is not currently enabled.
+`questions`, `research`, `review`, `incident`, `release`, `reports`, and
+`governance`. Governance owns classified automation, quiet mode, requirements
+intake, and cross-room health events; it is not a stream of chat status posts. A
+client renders only enabled modules and may combine them into tabs at narrow
+widths. Module data remains addressable even when its UI is not currently
+enabled.
 
 ### Lifecycle
 
-Lifecycle is orthogonal to type: `draft`, `active`, `paused`, `ended`,
-`archived`. Migration state is separate: `v1`, `shadow`, `v2`, `rollback`.
+Lifecycle is orthogonal to type: `draft`, `active`, `pausing`, `paused`,
+`resuming`, `ended`, `archived`, plus an explicit `permanent` retention policy
+for owner-operated workspaces. Migration state is separate: `v1`,
+`exporting`, `preview`, `cutover`, `v2`, `rollback`.
 
 Core invariants:
 
@@ -167,13 +175,19 @@ interface ArtifactEnvelope<T = unknown> {
 }
 ```
 
+`reviewerId` and `verifierId` may be absent for non-task planning nodes, but a
+room charter may require the builder/reviewer/verifier trio as a type/template
+invariant for every evidence-gated task. The schema's optional fields do not
+weaken that policy.
+
 `WorkNode` permits Goal → Theme → Epic → Task, but does not require all levels.
 A small room may attach a task directly to a goal. A mature project may use the
 full hierarchy. The system validates against cycles and unreasonable depth.
 
-Initial artifact types:
+The registry supports the following artifact families, but each first template
+installs only the subset it needs rather than exposing a 24-type menu at launch:
 
-- charter, brief, decision, finding, learning, research-source;
+- charter, requirements, brief, decision, finding, learning, research-source;
 - owner-interview, private-survey, publishable-summary;
 - risk, debt, review-subject, review-finding, verdict;
 - release-candidate, gate-receipt, walkthrough-receipt, approval;
@@ -271,25 +285,46 @@ Project knowledge outlives room TTL. A room may contribute approved artifacts,
 decisions, findings, and work to one project through explicit promotion. Raw
 chat remains bounded and does not silently become durable project truth.
 
-## Compatibility and migration
+## Build-phase continuity migration
 
-1. **Baseline:** record V1 behavior, payloads, performance, and all room codes.
-2. **Sidecar:** create V2 metadata/projections only for isolated fixture rooms;
-   V1 remains authoritative.
-3. **Shadow read:** project a selected existing room into V2 read models and
-   publish a semantic diff; no UI cutover.
-4. **Owner preview:** show proposed type, template, modules, roster mapping,
-   work hierarchy, artifacts, unresolved identities, and data-retention impact.
-5. **Explicit migration:** run an idempotent per-room plan with checkpoints and
-   content hashes. Ambiguous identities or unsupported data block cutover.
-6. **Pointer cutover:** atomically select the V2 read model for that room while
-   retaining V1 and the previous pointer for rollback.
-7. **Compatibility adapter:** old MCP clients continue core lifecycle, chat,
-   tasks, and export through V1-shaped responses backed by stable V2 IDs.
-8. **Observe:** compare counts, transcript order, task states, artifacts,
-   latency, and memory; rollback on mismatch.
-9. **New-room default:** only after representative migrations pass may new rooms
-   default to V2. Existing rooms remain opt-in until a retirement decision.
+The critical migration object is a hashed `ContinuityCapsule`, containing only:
+
+- the complete task tree with state, priority, dependencies, evidence,
+  rejection/verdict history, owner IDs, reviewer IDs, and verifier IDs;
+- active stable roster identities, roles/providers, assignments, and lineage;
+- current Charter/Goals & Requirements and Project Plan revisions;
+- decisions, risks, artifacts, attachments, and source messages explicitly
+  referenced by open work, evidence, or either quality ledger;
+- a generated handoff naming in-flight work, blockers, and the safe checkpoint.
+
+Raw chat, transient status chatter, notifications, obsolete drafts, and
+presence history do not enter the V2 critical path. Evidence referenced by open
+work or a quality ledger must be promoted into the capsule or a durable archive
+before any V1 retention TTL can fire; dangling message IDs block cutover.
+
+The primary cutover ritual is:
+
+1. **Plan:** publish `migration_plan` with target type/template and exact scope.
+2. **Pause:** announce a freeze-at timestamp; each active agent finishes its
+   atomic action and records `pause_ack` with task and next step.
+3. **Seal/export:** stop V1 task mutation and create `continuity_export` with
+   content hashes and counts.
+4. **Preview:** run an idempotent `continuity_import_preview` in a new V2 room;
+   report task-state, dependency, evidence, identity, assignment, and
+   requirement mismatches.
+5. **Approve/import:** host and lead approve the preview; unsupported or
+   ambiguous rows block import rather than being guessed.
+6. **Rejoin/resume:** active agents reclaim stable identities, confirm role and
+   assignments via `resume_ack`, and state the next action for every in-progress
+   task. No orphan owner/verifier, lost evidence, or duplicate agent may remain.
+7. **Observe:** V1 stays sealed/read-only. On mismatch, discard the V2 import
+   and reopen V1; on success, retain/export V1 according to policy.
+
+Representative fixtures may still use sidecar/shadow projections to prove the
+new schema. A full V1 transcript adapter or in-place authority pointer is a
+separate optional archival program. New clients negotiate capabilities; old
+clients may continue using V1 rooms but are not promised transparent access to
+every V2 module.
 
 Room type migration uses the same process. Moving `collaboration` to `project`
 may add Work and promote selected decisions/findings. Moving
@@ -298,8 +333,9 @@ private answers remain private. No target type deletes source artifacts.
 
 ## Failure and rollback rules
 
-- Migration is blocked on ambiguous identity, missing source versions,
-  unsupported artifact visibility, or a non-idempotent diff.
+- Migration is blocked on ambiguous identity, missing source versions, a
+  dangling cited evidence reference, unsupported artifact visibility, a
+  non-idempotent diff, or any agent/task that cannot resume unambiguously.
 - Dual writing is avoided unless an explicit invariant and reconciliation job
   exist; silent best-effort dual writes are forbidden.
 - Projection lag is visible in UI and telemetry; stale derived counts never
@@ -309,6 +345,23 @@ private answers remain private. No target type deletes source artifacts.
   gate fixtures.
 - Every migration produces an exportable manifest and dry-run report.
 
+## Permanent WakiChat Control Room
+
+The first permanent V2 Project room uses a versioned operations template; it is
+not a sixth room type and must not be instantiated in V1. T-96 identity dry-run
+is a hard prerequisite. Waqas is the immutable owner. A dedicated
+`OpsCustodian (<Provider>)` joins through negotiated stable identity; presence
+grants neither it nor reviewers host authority.
+
+Its surfaces are Portfolio Health, Agent Operations, Requirements Inbox,
+Quality & Releases, Maintenance, and Decisions & Reports. It consumes quiet,
+typed, policy-filtered cross-room events—not complete private transcripts—and
+distills evidence-backed candidate requirements for host approval. It never
+builds features or silently reassigns work, removes agents, deploys, promotes,
+or mutates canonical requirements. Approved work is routed to the affected
+working room with normal builder/reviewer/verifier separation. Private room
+content stays private unless an explicit policy exports a bounded health signal.
+
 ## Architecture decisions still required
 
 1. Exact durable store for V2 project/artifact payloads and event retention.
@@ -316,7 +369,8 @@ private answers remain private. No target type deletes source artifacts.
 3. Whether a room may attach to more than one project (recommendation: one
    primary project in V2; cross-project links remain artifact references).
 4. Host/owner authority for type migration and private artifact publication.
-5. Minimal old-client compatibility window and capability negotiation shape.
+5. Old-client capability negotiation and the optional archival compatibility
+   window; neither blocks continuity-capsule migration.
 6. Which template set ships first (recommendation: blank collaboration,
    product project, code review, incident, owner interview).
 

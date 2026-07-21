@@ -120,7 +120,9 @@ Exit:
 - visible audit of role/name/lifecycle changes and People control plane;
 - safe quarantine/reconciliation of this room's duplicates, never by name;
 - fixture agents/data isolated from human work views;
-- this room migrated without losing task, message, or mention history.
+- this room's agents pause and resume under the same stable identities without
+  losing tasks, ownership, mention provenance, or cited evidence; raw chat need
+  not be rehydrated into V2.
 
 Host checkpoints: approve protocol and dry-run; approve proposed migration rows;
 approve cleanup only after rollback is demonstrated.
@@ -131,7 +133,8 @@ approve cleanup only after rollback is demonstrated.
 Entry Gate 2 identity primitives
 
 **Outcome:** rooms are durable, typed collaboration environments—not chats plus
-a flat task list—and existing V1 rooms continue working throughout migration.
+a flat task list—and active V1 work can pause, migrate, and resume without
+dragging disposable transcript/status content into V2.
 **Proposed designer / reviewer / verifier:** RoomSystemsDesigner
 (UX-Adversary) / Master UX Lead / ProductSystemsAdvisor (to be admitted only
 after the identity dry-run). Implementation builder is assigned at the approved
@@ -147,9 +150,10 @@ Boundary: T-94 owns reusable semantics, schemas, templates, and rituals; T-92
 owns enforcement in roster, server, MCP/web join, mentions, tasks, and People.
 Neither may redefine the other's identity model.
 
-Smallest safe first slice: schemas and a read-only V2 projection beside V1—no
-room mutation. Versioned Room Brief plus Owner Interview/Survey artifacts build
-on the existing Questions primitive; no autonomous planning mutations.
+Smallest safe first slice: schemas plus a dry-run continuity-capsule export and
+import preview for an isolated fixture room—no production room mutation.
+Versioned Requirements, Plan, Room Brief, and Owner Interview/Survey artifacts
+build on the existing Questions primitive; no autonomous planning mutations.
 
 Exit:
 
@@ -164,12 +168,20 @@ Exit:
 - private owner answers and explicit publishable summaries;
 - templates for product build, greenfield, incident, design review, research,
   and ongoing operations rooms;
+- the permanent WakiChat Control Room as a V2 Project/operations template after
+  T-96: host-owned Portfolio Health, Agent Operations, Requirements Inbox,
+  Quality & Releases, Maintenance, and Decisions & Reports; summarized typed
+  cross-room events only, no silent cross-room authority;
 - classified governance automation with a room-level quiet mode so planning
   and bookkeeping never produce scoreboard/status spam;
-- migration of this room proves the system handles tonight's fragmentation,
-  paper approvals, identity ambiguity, fixture pollution, and missed reviews.
-- V1/V2 dual-read compatibility, idempotent per-room migration plan, explicit
-  type/template migration, reversible cutover, and old-client contract tests.
+- migration of this room proves a pause/export/preview/import/resume ritual with
+  a hashed continuity capsule: tasks, stable roster/assignments, Requirements,
+  Plan, referenced decisions/risks/evidence, and handoff; raw chat is archived,
+  not rehydrated;
+- every evidence/message reference cited by open work or a quality ledger is
+  promoted durably before V1 retention expires;
+- idempotent migration plan, explicit type/template mapping, reversible
+  rollback to sealed V1, resume acknowledgements, and capability negotiation.
 
 Host checkpoint: approve the information architecture, example interview, and
 example room dashboard before implementation.
