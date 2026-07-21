@@ -76,9 +76,13 @@ interface Props {
   /** T-71 rail rule: ONE board source. When the parent owns the poll it
    *  passes the tasks here and this panel's own poll stands down. */
   board?: BoardTask[] | null;
+  /** True when the shared board fetch failed for this room: the panel must
+   *  render a real error with Retry, never a false empty. */
+  boardError?: boolean;
+  onRetryBoard?: () => void;
 }
 
-export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Props) {
+export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardError, onRetryBoard }: Props) {
   const location = useLocation();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
@@ -114,7 +118,9 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
   }, [room.code, room.projectId, board !== undefined]);
 
   useEffect(() => {
-    if (board !== undefined) setTasks(board ?? []);
+    // null propagates: a failed shared fetch must render the ERROR state,
+    // never coerce into an empty board (false zero).
+    if (board !== undefined) setTasks(board);
   }, [board]);
 
   useEffect(() => {
@@ -155,7 +161,14 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
       assignee: 'all',
     });
     setCompletedLimit(Math.max(COMPLETED_PAGE_SIZE, tasks.length));
-    window.setTimeout(() => document.getElementById(`task-${taskId}`)?.focus(), 50);
+    window.setTimeout(() => {
+      const el = document.getElementById(`task-${taskId}`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center' });
+      el.focus();
+      el.classList.add('reply-flash');
+      window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
+    }, 50);
   }, [location.search, room.code, tasks]);
 
   const project = projects.find(p => p.id === room.projectId);
@@ -199,11 +212,11 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
 
   if (!room.projectId) {
     return (
-      <div className="p-4">
-        <div className="mb-2 text-xs font-semibold uppercase text-ink-faint">Project</div>
-        <p className="mb-3 text-sm leading-relaxed text-ink-soft lg:text-xs">
-          This room is not attached to a project yet. Attaching one gives its
-          task board a durable Markdown ledger in the project repository.
+      <div className="rounded-xl border border-dashed border-border bg-transparent p-4">
+        <p className="text-[16px] font-semibold text-ink">No project attached</p>
+        <p className="mb-3 mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+          Attaching a project gives this room's task board a durable ledger in
+          the project repository.
         </p>
         {isHost ? (
           <>
@@ -230,48 +243,25 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
             {error && <div className="mt-2 text-sm text-red-400 lg:text-xs">{error}</div>}
           </>
         ) : (
-          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft lg:text-xs">
-            Only the host can attach a project.
+          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[15px] text-ink-soft sm:text-[14px]">
+            Attaching is a host control. Ask the host to pick a project.
           </div>
         )}
       </div>
     );
   }
 
+  const evidenceLine = (t: BoardTask): string | null => {
+    if (t.state === 'done') return t.verifiedBy ? `Verified by ${t.verifiedBy}` : 'Verified';
+    if (t.state === 'awaiting_review') return t.verifier ? `Submitted, awaiting ${t.verifier}` : 'Submitted, awaiting review';
+    if (t.state === 'rejected') return t.verifier ? `Rejected by ${t.verifier}: needs another pass` : 'Rejected: needs another pass';
+    return null;
+  };
+
   return (
-    <div className="p-4">
-      <div className="mb-1 text-xs font-semibold uppercase text-ink-faint">Project</div>
-      <div className="mb-3">
-        <div className="text-sm font-semibold">{project?.name ?? room.projectId}</div>
-        <div className="text-xs text-ink-faint">id: {room.projectId} · tasks sync to the repo ledger on every board change</div>
-      </div>
-
-      {project && project.docs.length > 0 && (
-        <div className="mb-4">
-          <div className="mb-1.5 text-xs font-semibold uppercase text-ink-faint">Documents</div>
-          <div className="flex flex-wrap gap-1.5">
-            {project.docs.map(role => (
-              <button
-                key={role}
-                onClick={() => setDocRole(prev => prev === role ? null : role)}
-                className={`min-h-11 rounded-lg border px-2.5 text-sm font-semibold transition lg:min-h-9 lg:text-xs ${docRole === role ? 'border-accent bg-accent-tint text-accent' : 'border-border bg-surface-softer text-ink-muted hover:text-ink'}`}
-              >
-                {role}
-              </button>
-            ))}
-          </div>
-          {docRole && doc && (
-            <div className="mt-2 rounded-lg border border-border-faint bg-surface-sunken p-3">
-              <div className="mb-1.5 text-xs text-ink-faint">{doc.rel}{doc.truncated ? ' · truncated preview' : ''} · read-only</div>
-              <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-muted">{doc.content || '(empty)'}</pre>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Tasks</div>
-      </div>
+    <div>
+      {/* The BOARD is the primary work surface (design lead): switch, then
+          filters, then rows. Project metadata and docs sit below, quiet. */}
       <div className="mb-3 grid grid-cols-2 rounded-xl border border-border bg-surface-sunken p-1" role="tablist" aria-label="Task views">
         {(['pending', 'completed'] as const).map(segment => (
           <button
@@ -281,10 +271,10 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
             aria-selected={preferences.segment === segment}
             aria-controls="project-task-list"
             onClick={() => { updateTaskPreferences({ segment }); setCompletedLimit(COMPLETED_PAGE_SIZE); }}
-            className={`min-h-11 rounded-lg px-3 text-[13px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${preferences.segment === segment ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft hover:text-ink'}`}
+            className={`min-h-11 rounded-lg px-3 text-[15px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-[14px] ${preferences.segment === segment ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft hover:text-ink'}`}
           >
             {segment === 'pending' ? 'Pending' : 'Completed'}
-            <span className={`ml-2 rounded-full px-2 py-0.5 text-[12px] ${preferences.segment === segment ? 'bg-accent-tint text-accent' : 'bg-surface-softer text-ink-faint'}`}>
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-[13px] ${preferences.segment === segment ? 'bg-accent-tint text-accent' : 'bg-surface-softer text-ink-faint'}`}>
               {counts[segment]}
             </span>
           </button>
@@ -296,7 +286,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
             value={preferences.status}
             onChange={event => updateTaskPreferences({ status: event.target.value as TaskPreferences['status'] })}
             aria-label="Filter pending tasks by status"
-            className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-accent"
+            className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
           >
             <option value="all">All pending stages</option>
             {PENDING_TASK_STATES.map(state => <option key={state} value={state}>{STATE_LABEL[state]}</option>)}
@@ -306,7 +296,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
           value={preferences.assignee}
           onChange={event => updateTaskPreferences({ assignee: event.target.value })}
           aria-label="Filter by assignee"
-          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-accent"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
         >
           <option value="all">All assignees</option>
           {assignees.map(a => <option key={a} value={a}>{a}</option>)}
@@ -314,39 +304,102 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Prop
       </div>
 
       <div id="project-task-list" role="tabpanel" className="space-y-2" aria-live="polite">
-        {tasks === null && (
-          // T-30: an intentional loading state, not a bare tiny string.
-          <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-lg border border-border-faint bg-surface-softer px-3 py-2.5 text-sm text-ink-soft">
+        {tasks === null && !boardError && (
+          <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-lg border border-border-faint bg-surface-softer px-3 py-2.5 text-[15px] text-ink-soft sm:text-[14px]">
             <span className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
             Loading the task board…
           </div>
         )}
-        {tasks !== null && matchingTasks.length === 0 && (
-          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft">
-            {preferences.segment === 'pending' ? 'No pending tasks match these filters.' : 'No completed tasks match this filter.'}
+        {tasks === null && boardError && (
+          <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
+            <p className="text-[15px] font-semibold text-red-400 sm:text-[14px]">Couldn't load the task board</p>
+            <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">The board didn't respond, so tasks can't be shown right now.</p>
+            {onRetryBoard && (
+              <button
+                type="button"
+                onClick={onRetryBoard}
+                className="mt-3 flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+        {tasks !== null && tasks.length === 0 && (
+          <div className="rounded-xl border border-dashed border-border bg-transparent p-4">
+            <p className="text-[16px] font-semibold text-ink-soft">No tasks yet</p>
+            <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">Work created in this room will appear here as agents claim, build, and submit it.</p>
+          </div>
+        )}
+        {tasks !== null && tasks.length > 0 && matchingTasks.length === 0 && (
+          <div className="rounded-lg border border-border-faint bg-surface-softer p-4">
+            <p className="text-[15px] text-ink-soft sm:text-[14px]">
+              {preferences.segment === 'pending' ? 'No pending tasks match these filters.' : 'No completed tasks match this filter.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => updateTaskPreferences({ status: 'all', assignee: 'all' })}
+              className="mt-2 flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+            >
+              Clear filters
+            </button>
           </div>
         )}
         {visible.map(t => (
-          <div id={`task-${t.id}`} key={t.id} tabIndex={-1} className="rounded-lg border border-border-faint bg-surface-softer p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <div id={`task-${t.id}`} key={t.id} tabIndex={-1} className="rounded-xl border border-border-faint bg-surface-softer p-3.5 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
-              <span className="font-mono text-xs font-bold text-ink">{t.id}</span>
-              <span className={`rounded border px-1.5 py-px text-[12px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
+              <span className="font-mono text-[14px] font-bold text-ink">{t.id}</span>
+              <span className={`rounded border px-1.5 py-px text-[13px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
             </div>
-            <div className="text-sm font-semibold leading-snug lg:text-xs">{t.title}</div>
-            <div className="mt-1 text-xs text-ink-faint">
-              {t.owner ? `owner ${t.owner}` : 'unowned'}{t.verifier ? ` · verifier ${t.verifier}` : ''}
+            <div className="text-[16px] font-semibold leading-snug text-ink">{t.title}</div>
+            <div className="mt-1 text-[15px] text-ink-soft sm:text-[14px]">
+              {t.owner ? t.owner : 'Unowned'}
+              {t.verifier ? ` \u2192 ${t.verifier}` : ''}
             </div>
-            {t.note && <div className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink-soft">{t.note}</div>}
+            {evidenceLine(t) && (
+              <div className="mt-0.5 text-[15px] font-medium sm:text-[14px]">
+                <span className={t.state === 'rejected' ? 'text-red-400' : t.state === 'done' ? 'text-emerald-400' : 'text-amber-400'}>{evidenceLine(t)}</span>
+              </div>
+            )}
+            {t.note && <div className="mt-1.5 line-clamp-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">{t.note}</div>}
           </div>
         ))}
         {preferences.segment === 'completed' && visible.length < matchingTasks.length && (
           <button
             type="button"
             onClick={() => setCompletedLimit(limit => limit + COMPLETED_PAGE_SIZE)}
-            className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-ink-soft hover:bg-surface-softer hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-[14px] font-semibold text-ink-soft hover:bg-surface-softer hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Load {Math.min(COMPLETED_PAGE_SIZE, matchingTasks.length - visible.length)} more completed tasks
           </button>
+        )}
+      </div>
+
+      {/* Quiet, secondary: project identity + read-only docs. */}
+      <div className="mt-6 border-t border-border-faint pt-4">
+        <h3 className="mb-1 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">About this project</h3>
+        <div className="text-[15px] font-semibold text-ink sm:text-[14px]">{project?.name ?? room.projectId}</div>
+        <div className="text-[14px] text-ink-faint">Tasks sync to the repo ledger on every board change.</div>
+        {project && project.docs.length > 0 && (
+          <div className="mt-3">
+            <div className="flex flex-wrap gap-1.5">
+              {project.docs.map(role => (
+                <button
+                  key={role}
+                  onClick={() => setDocRole(prev => prev === role ? null : role)}
+                  className={`min-h-11 rounded-lg border px-2.5 text-[14px] font-semibold transition ${docRole === role ? 'border-accent bg-accent-tint text-accent' : 'border-border bg-surface-softer text-ink-soft hover:text-ink'}`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+            {docRole && doc && (
+              <div className="mt-2 rounded-lg border border-border-faint bg-surface-sunken p-3">
+                <div className="mb-1.5 text-[13px] text-ink-faint">{doc.rel}{doc.truncated ? ' (truncated preview)' : ''}, read-only</div>
+                <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink-muted">{doc.content || '(empty)'}</pre>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

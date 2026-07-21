@@ -231,6 +231,7 @@ export function Room() {
   // T-71: light task pulse for the desktop contextual rail (60s cadence —
   // the rail is a summary, ProjectPanel owns the live board).
   const [taskPulse, setTaskPulse] = useState<BoardTask[] | null>(null);
+  const [boardErrorRoom, setBoardErrorRoom] = useState<string | null>(null);
   // T-71 durable produced work: Outputs and the rail read the room-wide
   // server index, NEVER the paged transcript window (review-found
   // regression: old Decisions vanished as pagination advanced).
@@ -384,8 +385,8 @@ export function Room() {
     let cancelled = false;
     const pull = () => {
       getTaskBoard(createClient(), code)
-        .then(b => { if (!cancelled) setTaskPulse(b.tasks); })
-        .catch(() => { if (!cancelled) setTaskPulse(null); });
+        .then(b => { if (!cancelled) { setTaskPulse(b.tasks); setBoardErrorRoom(null); } })
+        .catch(() => { if (!cancelled) { setTaskPulse(null); setBoardErrorRoom(code); } });
       getRoomArtifacts(createClient(), code)
         .then(r => {
           if (cancelled) return;
@@ -1782,8 +1783,33 @@ export function Room() {
         {peoplePanel}
       </PageScaffold>
     ) : tab === 'project' ? (
-      <PageScaffold title="Project" purpose="The evidence-gated task board: claimed, built, submitted, verified.">
-        <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} board={taskPulse} onAttached={() => { void refreshRoom(); }} />
+      <PageScaffold
+        title="Project"
+        purpose="The evidence-gated task board: claimed, built, submitted, verified."
+        summary={activeRoom.projectId && taskPulse && taskPulse.length > 0 ? (() => {
+          const done = taskPulse.filter(t => t.state === 'done').length;
+          const review = taskPulse.filter(t => t.state === 'awaiting_review').length;
+          const pending = taskPulse.length - done - review;
+          return (
+            <>
+              <SummaryChip tone="quiet">{pending} pending</SummaryChip>
+              {review > 0 && <SummaryChip tone="warn">{review} awaiting review</SummaryChip>}
+              {/* Done means VERIFIER-CONFIRMED only — the board's done state
+                  is only reachable through room_task_verify. */}
+              <SummaryChip tone="ok">{done} verified done</SummaryChip>
+            </>
+          );
+        })() : undefined}
+      >
+        <ProjectPanel
+          room={activeRoom}
+          isHost={isHost}
+          selfName={me.name}
+          board={taskPulse}
+          boardError={boardErrorRoom === code}
+          onRetryBoard={() => setArtifactsNonce(n => n + 1)}
+          onAttached={() => { void refreshRoom(); }}
+        />
       </PageScaffold>
     ) : tab === 'room' ? (
       <PageScaffold

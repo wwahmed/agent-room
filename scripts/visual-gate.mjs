@@ -54,6 +54,8 @@ const STATES = [
   { name: 'home', path: '/', ready: async p => p.waitForTimeout(2400) },
   { name: 'chat', path: `/r/${ROOM}`, ready: async p => { await p.waitForSelector('textarea', { timeout: 15000 }); await p.waitForTimeout(2400); } },
   { name: 'people', path: `/r/${ROOM}?panel=people`, ready: async p => p.waitForTimeout(2400) },
+  // T-71: the Project board is a first-class gated state.
+  { name: 'project', path: `/r/${ROOM}?panel=project`, ready: async p => p.waitForTimeout(2400) },
   { name: 'outputs', path: `/r/${ROOM}?panel=outputs`, ready: async p => p.waitForTimeout(2400) },
   {
     // T-63 acceptance: the state nobody photographed — the composer WITH
