@@ -47,7 +47,9 @@ describe('T-74 mobile reading contract', () => {
   const room = readFileSync(new URL('../screens/Room.tsx', import.meta.url), 'utf8');
 
   it('pins the readable phone roles and the real typed composer path', () => {
-    expect(css).toContain('.msg-prose { font-size: 20px; line-height: 1.55; }');
+    // T-73 calibration (design lead + host): Comfortable prose is 19px —
+    // the 20px emergency floor overshot by one step. Floors file matches.
+    expect(css).toContain('.msg-prose { font-size: 19px; line-height: 1.55; }');
     expect(css).toContain('.msg-author { font-size: 18px; font-weight: 700; }');
     expect(css).toContain('.msg-meta { font-size: 15px; }');
     expect(css).toContain('.msg-composer { font-size: 20px; }');

@@ -109,7 +109,10 @@ body {
   }
   .msg-prose strong { font-weight: 600; color: rgb(var(--ink)); }
   @media (max-width: 639px) {
-    .msg-prose { font-size: 20px; line-height: 1.55; }
+    /* T-73 calibration (design lead + host): the 20px emergency floor fixed
+       "too small" but overshot by one step; Comfortable is 19px. The gate
+       floor in scripts/type-floors.json is 19 to match. */
+    .msg-prose { font-size: 19px; line-height: 1.55; }
   }
   /* Identity is text, not decoration. Sender color lives in the avatar. */
   .msg-author {
@@ -183,14 +186,20 @@ body {
     .msg-composer { font-size: 20px; }
     .room-tab-label { font-size: 17px; }
   }
-  /* T-26/T-27 + T-73: phone reading scale. Comfortable is the unmarked
-     default above; Large and Compact adjust only the reading roles, only at
-     phone widths, and Compact never sinks below the humane 15px note floor. */
+  /* T-73: phone reading scale. Comfortable is the unmarked 19px default
+     above; Large is 21 with author/meta/composer scaled proportionally;
+     Compact (17) is explicit opt-in only and never sinks below the humane
+     15px note floor. Applies to semantic reading roles only, never zoom. */
   @media (max-width: 639px) {
-    :root[data-reading-scale='large'] .msg-prose { font-size: 22px; }
+    :root[data-reading-scale='large'] .msg-prose { font-size: 21px; }
     :root[data-reading-scale='large'] .msg-note { font-size: 19px; }
+    :root[data-reading-scale='large'] .msg-author { font-size: 19px; }
+    :root[data-reading-scale='large'] .msg-meta { font-size: 16px; }
+    :root[data-reading-scale='large'] .msg-composer { font-size: 21px; }
     :root[data-reading-scale='compact'] .msg-prose { font-size: 17px; }
     :root[data-reading-scale='compact'] .msg-note { font-size: 15px; }
+    :root[data-reading-scale='compact'] .msg-author { font-size: 17px; }
+    :root[data-reading-scale='compact'] .msg-meta { font-size: 14px; }
   }
 
   .ui-control {
