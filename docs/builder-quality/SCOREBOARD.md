@@ -8,15 +8,17 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 8
-overall standing: UNSCORED (no confirmed evidence)
+confirmed rows: 1 across 1 submissions (window: last 1 submissions) · pending unscored: 8
+overall standing: 75/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
   visual-interaction-quality (w25): UNSCORED (no confirmed evidence)
   verification-discipline (w20): UNSCORED (no confirmed evidence)
-  dod-compliance (w15): UNSCORED (no confirmed evidence)
+  dod-compliance (w15): 75/100 (n=1)
   regression-containment (w10): UNSCORED (no confirmed evidence)
   candor-recovery (w5): UNSCORED (no confirmed evidence)
+relapse watch:
+  ~ incomplete-evidence-submission [BQ-0046]: watching 0/3 relevant submissions
 manual factual review flagged: BQ-0030, BQ-0035
 pending adjudication (not scored):
   ? [defect/critical] conditional-hook @T-83: Placed the T-82 pinning effect below early returns and deployed, crashing every Room with React error 310 on cold load
