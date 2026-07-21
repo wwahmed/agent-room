@@ -10,10 +10,16 @@ verifier-audit ledger (`docs/verifier-audit/`) to everyone who ships.
 - `../../scripts/validate-builder-ledger.mjs`: mechanical validation of schema,
   evidence-ref formats and existence, correction semantics, and append-only
   history against the committed baseline. Run before every commit.
-- `../../scripts/builder-standing.mjs`: the computed standing view. Prints
-  per-agent aggregates, recurring mistake classes, trend inputs, and sample
-  size. Standing is derived from rows on demand and is never stored, so a
-  total cannot be edited or gamed.
+- `../../scripts/builder-standing.mjs`: the computed standing view. Only
+  adjudicator-confirmed rows score; zero confirmed rows prints UNSCORED,
+  never a default number. Output per agent: overall standing over a rolling
+  ten-row window, trend versus prior rows, six category subscores, a
+  next-three relapse watch per confirmed defect, recurring-class flags, and
+  the pending queue. `--brief` emits a one-line room-ready summary; posting
+  it after each ledger commit is the update hook. Standing is derived on
+  demand and never stored, so a total cannot be edited or gamed. A row's
+  subject can never be its adjudicator; rows about the Master Lead are
+  adjudicated by the host.
 
 ## Rules
 
@@ -38,9 +44,12 @@ verifier-audit ledger (`docs/verifier-audit/`) to everyone who ships.
 | `id` | `BQ-NNNN` | Stable, unique, strictly increasing. |
 | `recordedAt` | epoch ms | When the row was appended. |
 | `recordedBy` | string | Author of the row. |
-| `agent` | string | Who the row is about. |
+| `agent` | string | Display name of who the row is about. |
+| `agentId` | kebab-case | Stable actor id; scoring keys on this, never the display name. |
 | `kind` | enum | `defect`, `recovery`, `credit`, `correction`. |
+| `effectiveKind` | enum | On corrections only: the kind the replacement scores as. |
 | `class` | kebab-case | Mistake or credit class (taxonomy below). |
+| `category` | enum | One of the six scoring categories: functional-correctness, visual-interaction-quality, verification-discipline, dod-compliance, regression-containment, candor-recovery. |
 | `severity` | enum | Required for defects: `minor` .. `critical`. |
 | `summary` | string | One-sentence statement of the event. |
 | `evidenceRefs` | array | `{type, ref}` per T-69 formats. Non-empty. |

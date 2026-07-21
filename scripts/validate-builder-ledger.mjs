@@ -28,6 +28,10 @@ for (let i = 0; i < args.length; i++) {
 if (!ledgerPath) ledgerPath = join(root, CANONICAL_REL);
 
 const KINDS = new Set(["defect", "recovery", "credit", "correction"]);
+const CATEGORIES = new Set([
+  "functional-correctness", "visual-interaction-quality", "verification-discipline",
+  "dod-compliance", "regression-containment", "candor-recovery",
+]);
 const SEVERITIES = new Set(["minor", "moderate", "serious", "critical"]);
 const ADJ = new Set(["pending", "confirmed", "rejected"]);
 const FORBIDDEN = ["score", "tally", "standing", "total", "points"];
@@ -75,6 +79,17 @@ const lines = raw.split("\n").filter((l) => l.trim().length > 0);
 const seen = new Map();
 let prevIdNum = 0;
 
+// Superseded rows are frozen history: structural rules still apply, but the
+// requirements added after they were committed (agentId, category,
+// adjudicator independence) bind ACTIVE rows only.
+const supersededIds = new Set();
+for (const text of lines) {
+  try {
+    const e = JSON.parse(text);
+    if (e && e.kind === "correction" && typeof e.supersedes === "string") supersededIds.add(e.supersedes);
+  } catch { /* reported in the main pass */ }
+}
+
 lines.forEach((text, i) => {
   const n = i + 1;
   let e;
@@ -95,11 +110,24 @@ lines.forEach((text, i) => {
   if (!Number.isInteger(e.recordedAt) || e.recordedAt <= 0) fail(n, "recordedAt must be epoch ms");
   if (typeof e.recordedBy !== "string" || !e.recordedBy) fail(n, "recordedBy required");
   if (typeof e.agent !== "string" || !e.agent.trim()) fail(n, "agent required (who the row is about)");
+  const isActive = !supersededIds.has(e.id);
+  if (isActive && (typeof e.agentId !== "string" || !CLASS_RE.test(e.agentId))) {
+    fail(n, "agentId required: a stable kebab-case actor id, never a mutable display name");
+  }
   if (!KINDS.has(e.kind)) fail(n, `kind must be one of ${[...KINDS].join("/")}`);
+  if (isActive && (typeof e.category !== "string" || !CATEGORIES.has(e.category))) {
+    fail(n, `category must be one of ${[...CATEGORIES].join("/")}`);
+  }
 
   if (e.kind === "correction") {
     if (typeof e.supersedes !== "string" || !seen.has(e.supersedes) || e.supersedes === e.id) {
       fail(n, "correction must supersede an earlier existing id");
+    }
+    if (!["defect", "recovery", "credit"].includes(e.effectiveKind)) {
+      fail(n, "correction requires effectiveKind (defect|recovery|credit) so the replacement still scores");
+    }
+    if (e.effectiveKind === "defect" && !SEVERITIES.has(e.severity)) {
+      fail(n, "correction with effectiveKind defect requires severity");
     }
   } else if (e.supersedes != null) {
     fail(n, `kind '${e.kind}' must have supersedes: null`);
@@ -124,8 +152,13 @@ lines.forEach((text, i) => {
       typeof a.adjudicator !== "string" || !a.adjudicator ||
       (a.ref !== null && typeof a.ref !== "string")) {
     fail(n, "adjudication must be {status: pending|confirmed|rejected, adjudicator, ref: string|null}");
-  } else if (a.status !== "pending" && a.ref === null) {
-    fail(n, `adjudication.status '${a.status}' requires an on-record ruling ref`);
+  } else {
+    if (a.status !== "pending" && a.ref === null) {
+      fail(n, `adjudication.status '${a.status}' requires an on-record ruling ref`);
+    }
+    if (isActive && (a.adjudicator === e.agent || (typeof e.agentId === "string" && a.adjudicator === e.agentId))) {
+      fail(n, "adjudicator must be independent: a row's subject cannot adjudicate itself");
+    }
   }
   if (e.notes != null && typeof e.notes !== "string") fail(n, "notes must be a string or null");
 });
