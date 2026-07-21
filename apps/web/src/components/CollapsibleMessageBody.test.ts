@@ -7,5 +7,6 @@ describe('message prose measure', () => {
   it('caps the markdown container rather than relying on parsed child blocks', () => {
     expect(source).toContain('data-message-prose-measure="80ch"');
     expect(source).toContain('className="w-full max-w-[80ch]"');
+    expect(source).toContain('ui-focus-ring ml-auto mt-2 block min-h-11');
   });
 });

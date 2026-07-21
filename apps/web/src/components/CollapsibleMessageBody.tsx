@@ -47,7 +47,7 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
           type="button"
           aria-expanded={expanded}
           onClick={() => setExpanded(value => !value)}
-          className="ui-focus-ring mt-2 min-h-11 rounded-control border border-border-subtle bg-surface-1 px-3 text-meta font-semibold text-ink-soft transition-colors duration-micro ease-product hover:border-border-strong hover:text-ink"
+          className="ui-focus-ring ml-auto mt-2 block min-h-11 rounded-control border border-border-subtle bg-surface-1 px-3 text-meta font-semibold text-ink-soft transition-colors duration-micro ease-product hover:border-border-strong hover:text-ink"
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>
