@@ -154,7 +154,6 @@ export function RoomHeader({
             type="button"
             onClick={onShare}
             aria-label="Copy invite link"
-            title="Copy invite link"
             className="header-glass-control hidden h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink sm:flex"
           >
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

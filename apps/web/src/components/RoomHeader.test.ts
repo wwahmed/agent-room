@@ -21,6 +21,7 @@ describe('room command bar composition', () => {
     expect(header).toContain('header-room-presence');
     expect(header).toContain('header-search-field');
     expect(header).toContain('header-glass-control');
+    expect(header).not.toContain('title="Copy invite link"');
     expect(header).toContain('More room actions');
     expect(rail).not.toContain('wakichat-icon-192.png');
     expect(pane).not.toContain('h-[60px]');
