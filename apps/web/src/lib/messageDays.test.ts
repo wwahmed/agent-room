@@ -26,4 +26,10 @@ describe('message day dividers', () => {
     expect(messageDayLabel(new Date(2026, 6, 19, 9).getTime(), now)).toBe('Yesterday');
     expect(messageDayLabel(new Date(2025, 11, 1).getTime(), now)).toContain('2025');
   });
+
+  it('ignores malformed legacy timestamps instead of crashing the feed', () => {
+    expect(messageDayKey(Number.NaN)).toBeNull();
+    expect(startsMessageDay(undefined, message(4, Number.NaN))).toBe(false);
+    expect(messageDayLabel(Number.NaN, now)).toBe('Date unavailable');
+  });
 });
