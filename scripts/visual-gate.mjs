@@ -91,9 +91,12 @@ async function ensureFixtureRoom() {
   const created = await post({ action: 'create', topic: 'Visual gate fixture (auto test room, safe to ignore)', createdBy: 'GateHost' });
   const code = created.room.code;
   const joiner = name => ({ name, role: 'fixture', color: name === 'GateA' ? '#5B6AFF' : '#8B5CF6', initials: name.slice(4, 6).toUpperCase() || 'GX', client: 'cc', harness: name === 'GateA' ? 'claude-code' : 'codex', joinedAt: 1, lastSeenAt: 1 });
-  await post({ action: 'join', code, participant: joiner('GateA') });
-  await post({ action: 'join', code, participant: joiner('GateB') });
-  const msg = (name, text, id, kind) => post({ action: 'send', code, kind, message: { id, type: 'msg', name, initials: name.slice(4, 6).toUpperCase(), color: name === 'GateA' ? '#5B6AFF' : '#8B5CF6', role: 'fixture', text, client: 'cc', time: id } });
+  const keys = {};
+  for (const n of ['GateA', 'GateB']) {
+    const joined = await post({ action: 'join', code, participant: joiner(n), wantMemberKey: true });
+    keys[n] = joined.memberKey;
+  }
+  const msg = (name, text, id, kind) => post({ action: 'send', code, kind, memberKey: keys[name], message: { id, type: 'msg', name, initials: name.slice(4, 6).toUpperCase(), color: name === 'GateA' ? '#5B6AFF' : '#8B5CF6', role: 'fixture', text, client: 'cc', time: id } });
   let id = 1_700_000_000_000;
   const longReport = ['Long fixture report for the dense state.']
     .concat(Array.from({ length: 20 }, (_, i) => `Line ${i + 1}: deterministic content that never changes between gate runs.`))
