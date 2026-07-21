@@ -11,9 +11,11 @@ import { AttachmentSheet } from './AttachmentSheet.js';
 
 function Harness({ log }: { log: string[] }) {
   const [open, setOpen] = useState(false);
+  const [, setTick] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <>
+      <button onClick={() => setTick(t => t + 1)} aria-label="rerender">tick</button>
       <button ref={triggerRef} onClick={() => setOpen(v => !v)} aria-label="Add photos or files">clip</button>
       <AttachmentSheet
         open={open}
@@ -84,6 +86,22 @@ describe('AttachmentSheet dismissal state machine', () => {
     expect(sheet()).toBeNull();
     expect(a.log).toEqual(['close']);
     expect(document.activeElement).toBe(a.trigger);
+  });
+
+  it('parent re-renders while open do NOT re-arm the lifecycle (no history churn)', () => {
+    // Room re-renders continuously from polling and recreates onClose every
+    // time; the effect must depend only on `open`, else each render pops and
+    // re-pushes the Back entry and re-steals focus.
+    mount();
+    const depth = window.history.length;
+    const tick = document.querySelector<HTMLButtonElement>('[aria-label="rerender"]')!;
+    fireEvent.click(tick);
+    fireEvent.click(tick);
+    fireEvent.click(tick);
+    expect(sheet()).not.toBeNull();
+    expect(window.history.length).toBe(depth); // no push/back churn
+    fireEvent.popState(window); // Back still closes through the ref'd callback
+    expect(sheet()).toBeNull();
   });
 
   it('repeated open/close yields exactly one surface and no duplicated listener effects', () => {

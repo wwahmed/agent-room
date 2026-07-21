@@ -27,6 +27,14 @@ export function AttachmentSheet({ open, onClose, onPickImages, onPickFiles, retu
   // Distinguishes "closed by Back" (history already popped) from every other
   // close (our pushed entry must be consumed so Back stays predictable).
   const poppedRef = useRef(false);
+  // Room re-renders continuously (polling) and recreates its callbacks, so
+  // the lifecycle effect must depend ONLY on `open` — with onClose in its
+  // deps it re-armed every render, churning push/back history pairs and
+  // re-stealing focus the whole time the sheet was up.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const returnFocusRefRef = useRef(returnFocusRef);
+  returnFocusRefRef.current = returnFocusRef;
 
   useEffect(() => {
     if (!open) return;
@@ -37,12 +45,12 @@ export function AttachmentSheet({ open, onClose, onPickImages, onPickFiles, retu
     // it can prove is its own.
     const nonce = ++openNonce;
     try { window.history.pushState({ [BACK_STATE]: nonce }, ''); } catch { /* sandboxed */ }
-    const onPop = () => { poppedRef.current = true; onClose(); };
+    const onPop = () => { poppedRef.current = true; onCloseRef.current(); };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     const onPointer = (event: MouseEvent) => {
-      if (!panelRef.current?.contains(event.target as Node)) onClose();
+      if (!panelRef.current?.contains(event.target as Node)) onCloseRef.current();
     };
     window.addEventListener('popstate', onPop);
     document.addEventListener('keydown', onKey);
@@ -57,9 +65,9 @@ export function AttachmentSheet({ open, onClose, onPickImages, onPickFiles, retu
           if ((window.history.state as Record<string, unknown> | null)?.[BACK_STATE] === nonce) window.history.back();
         } catch { /* sandboxed */ }
       }
-      returnFocusRef.current?.focus();
+      returnFocusRefRef.current.current?.focus();
     };
-  }, [open, onClose, returnFocusRef]);
+  }, [open]);
 
   if (!open) return null;
 
