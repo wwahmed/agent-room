@@ -24,8 +24,8 @@ import { brandForSender, participantKindLabel } from '../lib/agentBrand.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
-import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type BoardTask, type TurnState } from '../lib/api.js';
+import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type BoardTask, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -229,6 +229,12 @@ export function Room() {
   // T-71: light task pulse for the desktop contextual rail (60s cadence —
   // the rail is a summary, ProjectPanel owns the live board).
   const [taskPulse, setTaskPulse] = useState<BoardTask[] | null>(null);
+  // T-71 durable produced work: Outputs and the rail read the room-wide
+  // server index, NEVER the paged transcript window (review-found
+  // regression: old Decisions vanished as pagination advanced).
+  const [serverArtifacts, setServerArtifacts] = useState<RoomArtifact[] | null>(null);
+  const [artifactsError, setArtifactsError] = useState(false);
+  const [artifactsNonce, setArtifactsNonce] = useState(0);
   // Sweep 2 (T-46): Outputs artifact list can expand past the newest 8.
   const [showAllArtifacts, setShowAllArtifacts] = useState(false);
   // T-71: Outputs filter chips — deliverables/artifacts by kind.
@@ -287,11 +293,14 @@ export function Room() {
       getTaskBoard(createClient(), code)
         .then(b => { if (!cancelled) setTaskPulse(b.tasks); })
         .catch(() => { if (!cancelled) setTaskPulse(null); });
+      getRoomArtifacts(createClient(), code)
+        .then(r => { if (!cancelled) { setServerArtifacts(r.artifacts); setArtifactsError(false); } })
+        .catch(() => { if (!cancelled) setArtifactsError(true); });
     };
     pull();
     const id = window.setInterval(pull, 60_000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [code]);
+  }, [code, artifactsNonce]);
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -657,7 +666,7 @@ export function Room() {
   }
 
   const [reportBusy, setReportBusy] = useState(false);
-  const artifacts = extractArtifacts(messages);
+  const artifacts = serverArtifacts ?? [];
   // T-71 content-model ruling: STATUS is process exhaust, not produced work
   // — it lives in Chat (as Activity Notes), never on the Outputs page.
   const producedWork = artifacts.filter(a => a.kind !== 'status');
@@ -2450,6 +2459,22 @@ export function Room() {
       { key: 'result', label: 'Results' },
     ];
     const filtered = outputsFilter === 'all' ? producedWork : producedWork.filter(a => a.kind === outputsFilter);
+    if (artifactsError && serverArtifacts == null) {
+      // Never convert a fetch failure into a false empty state.
+      return (
+        <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
+          <p className="text-[15px] font-semibold text-red-400 sm:text-[14px]">Couldn't load produced work</p>
+          <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">The room's output index didn't respond. Your work is safe on the server.</p>
+          <button
+            type="button"
+            onClick={() => setArtifactsNonce(n => n + 1)}
+            className="mt-3 flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
     return (
       <div>
         <div role="group" aria-label="Filter outputs" className="mb-4 flex flex-wrap gap-1.5">

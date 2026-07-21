@@ -1,5 +1,6 @@
 import type { Message, MessageMetadata, MessageReplyRef, RoleInTurn, InvocationType } from '@agent-room/shared';
-import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS, extractArtifacts } from '@agent-room/shared';
+import { artifactAppendCommands } from './artifactIndex.js';
 import type { UpstashClient } from './client.js';
 import { findSpeaker, MutedError, NotYourTurnError, getRoom } from './rooms.js';
 import type { TurnSpokenEntry } from './turnState.js';
@@ -288,10 +289,14 @@ async function rpushMessage(client: UpstashClient, code: string, message: Messag
   // (attachment-only sends, or a dropped arg), and a stored message with no
   // `text` field crashes every reader that calls .trim() on it.
   const normalized: Message = { ...message, text: message.text ?? '' };
+  // T-71: produced-work artifacts persist in their own never-trimmed index,
+  // written in the SAME pipeline so the index cannot drift from the list.
+  const artifactCmds = artifactAppendCommands(code, extractArtifacts([normalized]));
   await client.pipeline([
     ['RPUSH', msgsKey(code), JSON.stringify(normalized)],
     ['INCR', msgCountKey(code)],
     ['LTRIM', msgsKey(code), -MAX_MESSAGES_PER_ROOM, -1],
+    ...artifactCmds,
     ['EXPIRE', msgsKey(code), ROOM_TTL_SECONDS],
     ['EXPIRE', msgCountKey(code), ROOM_TTL_SECONDS],
   ]);

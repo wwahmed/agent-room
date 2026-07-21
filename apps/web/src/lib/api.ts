@@ -620,6 +620,14 @@ export async function readProjectDoc(
   return (await res.json()) as { role: string; rel: string; content: string; truncated: boolean };
 }
 
+// T-71: the durable produced-work index — room-wide, independent of the
+// loaded transcript window.
+export async function getRoomArtifacts(_client: ApiClient, code: string): Promise<{ artifacts: import('@agent-room/shared').RoomArtifact[] }> {
+  const res = await fetch(`/api/artifacts?room=${encodeURIComponent(code)}`);
+  if (!res.ok) throw new Error(`artifacts fetch failed (${res.status})`);
+  return await res.json() as { artifacts: import('@agent-room/shared').RoomArtifact[] };
+}
+
 export async function getTaskBoard(_client: ApiClient, code: string): Promise<{ tasks: BoardTask[] }> {
   return (await call<{ board: { tasks: BoardTask[] } }>({ action: 'taskBoard', code })).board;
 }

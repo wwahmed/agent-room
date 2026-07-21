@@ -68,7 +68,7 @@ import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments } from './messageAttachments.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
-import {
+import { backfillRoomArtifacts, listRoomArtifacts,
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
   casRoom,
@@ -1576,6 +1576,23 @@ const server = createServer(async (req, res) => {
       }
       hits.sort((a, b) => b.score - a.score);
       return sendJson(res, 200, { query: q, hits });
+    }
+
+    // ---------- T-71: durable produced-work index (never window-dependent) ----------
+    if (path === '/api/artifacts' && req.method === 'GET') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const roomParam = url.searchParams.get('room');
+      const roomCode = roomParam ? canonicalizeCode(roomParam) : null;
+      if (!roomCode) return sendJson(res, 400, { error: 'BadRequest', message: 'room is required.' });
+      try {
+        await backfillRoomArtifacts(client, roomCode);
+        const artifacts = await listRoomArtifacts(client, roomCode);
+        return sendJson(res, 200, { artifacts });
+      } catch (e) {
+        const err = e as Error;
+        return sendJson(res, statusForError(err), { error: err.name, message: err.message });
+      }
     }
 
     // ---------- T-18: project registry (ids + doc roles only, never paths) ----------
