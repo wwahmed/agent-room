@@ -26,6 +26,8 @@ describe('room command bar composition', () => {
     expect(header).toContain('aria-label="Back to rooms"');
     expect(header).toContain('h-11 w-11');
     expect(header).toContain('md:hidden');
+    expect(header).toContain('hidden h-11 w-[min(320px,28vw)]');
+    expect(header).toContain('group min-h-11 min-w-0');
   });
 
   it('opens a real keyboard-accessible search instead of a decorative field', () => {

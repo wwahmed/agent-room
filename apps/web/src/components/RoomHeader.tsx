@@ -79,14 +79,14 @@ export function RoomHeader({
           <Link
             to="/"
             aria-label="WakiChat home"
-            className="mr-3 hidden h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg shadow-[0_4px_16px_rgb(var(--accent)/0.24)] transition hover:opacity-85 sm:flex"
+            className="mr-1 hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition hover:bg-surface-softer sm:flex"
           >
-            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-7 w-7" />
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-7 w-7 rounded-lg shadow-[0_4px_16px_rgb(var(--accent)/0.24)]" />
           </Link>
           <button
             type="button"
             onClick={onOpenRoom}
-            className="group min-w-0 rounded-lg px-1.5 py-1 text-left transition hover:bg-surface-softer sm:flex sm:items-center sm:gap-2"
+            className="group min-h-11 min-w-0 rounded-xl px-1.5 py-1 text-left transition hover:bg-surface-softer sm:flex sm:items-center sm:gap-2"
             aria-label={`Open room settings for ${room.topic}`}
           >
             <span className="block max-w-[42vw] truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-ink sm:max-w-[220px] lg:max-w-[240px] xl:max-w-[300px]">
@@ -106,13 +106,15 @@ export function RoomHeader({
           type="button"
           onClick={onSearch}
           aria-label="Search rooms, messages, and tasks"
-          className="absolute left-1/2 hidden h-8 w-[min(320px,28vw)] -translate-x-1/2 items-center rounded-[9px] border border-border-faint bg-surface-sunken/70 px-3 text-[13px] text-ink-faint shadow-inner transition hover:border-border hover:text-ink-soft md:flex"
+          className="group absolute left-1/2 hidden h-11 w-[min(320px,28vw)] -translate-x-1/2 items-center text-[13px] text-ink-faint transition hover:text-ink-soft md:flex"
         >
-          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
-          </svg>
-          <span className="ml-2 truncate">Search rooms, messages, tasks…</span>
-          <kbd className="ml-auto rounded-md border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">⌘K</kbd>
+          <span className="flex h-8 w-full items-center rounded-[9px] border border-border-faint bg-surface-sunken/70 px-3 shadow-inner transition group-hover:border-border">
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
+            </svg>
+            <span className="ml-2 truncate">Search rooms, messages, tasks…</span>
+            <kbd className="ml-auto rounded-md border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">⌘K</kbd>
+          </span>
         </button>
 
         <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
