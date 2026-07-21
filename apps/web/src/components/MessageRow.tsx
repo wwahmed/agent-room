@@ -47,7 +47,7 @@ const AGENT_LOGOS: Record<string, string> = {
 
 function SenderAvatar({ message, sizeClass = 'h-9 w-9', textClass = 'text-[12px]' }: { message: Message; sizeClass?: string; textClass?: string }) {
   const agent = message.client === 'cc';
-  const logo = agent ? AGENT_LOGOS[message.name.trim().toLowerCase()] : undefined;
+  const logo = agent ? AGENT_LOGOS[String(message.name ?? '').trim().toLowerCase()] : undefined;
   if (logo) {
     return (
       <img

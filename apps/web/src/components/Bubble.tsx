@@ -4,6 +4,7 @@ import type { Message, MessageAttachment } from '@agent-room/shared';
 import { normalizeEscapedWhitespace } from '@agent-room/shared';
 import { MENTION_SOURCE, isSelfMention } from '../lib/mentions.js';
 import { ImageLightbox } from './ImageLightbox.js';
+import { partitionAttachments } from '../lib/attachments.js';
 
 interface Props {
   message: Message;
@@ -88,15 +89,21 @@ export function systemEventLabel(message: Message): string {
 export function AttachmentList({ attachments }: { attachments: MessageAttachment[] }) {
   const [preview, setPreview] = useState<MessageAttachment | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
+  const { renderable, unavailableCount } = partitionAttachments(attachments);
 
   return (
     <>
       <div className="mt-2 space-y-2">
-        {attachments.map(attachment => (
+        {renderable.map(attachment => (
           attachment.type === 'image'
             ? <ImageAttachment key={attachment.id} attachment={attachment} onOpen={() => setPreview(attachment)} />
             : <FileAttachment key={attachment.id} attachment={attachment} />
         ))}
+        {unavailableCount > 0 && (
+          <div role="status" className="rounded-lg border border-border-faint bg-surface-softer px-3 py-2 text-[12px] text-ink-soft">
+            {unavailableCount === 1 ? 'Attachment unavailable — its upload did not finish.' : `${unavailableCount} attachments unavailable — their uploads did not finish.`}
+          </div>
+        )}
       </div>
       {preview && <ImageLightbox attachment={preview} onClose={closePreview} />}
     </>
