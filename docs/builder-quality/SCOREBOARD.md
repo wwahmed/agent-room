@@ -8,7 +8,7 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 1 across 1 submissions (window: last 1 submissions) · pending unscored: 8
+confirmed rows: 1 across 1 submissions (window: last 1 submissions) · pending unscored: 9
 overall standing: 75/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
@@ -19,7 +19,7 @@ trend vs prior submissions: insufficient history for trend
   candor-recovery (w5): UNSCORED (no confirmed evidence)
 relapse watch:
   ~ incomplete-evidence-submission [BQ-0046]: watching 0/3 relevant submissions
-manual factual review flagged: BQ-0030, BQ-0035
+manual factual review flagged: BQ-0030, BQ-0035, BQ-0047
 pending adjudication (not scored):
   ? [defect/critical] conditional-hook @T-83: Placed the T-82 pinning effect below early returns and deployed, crashing every Room with React error 310 on cold load
   ? [defect/serious] deploy-before-inspect @conduct: Multiple bundles shipped before frames or gate results were examined, including an unannounced intermediate build and the crashing shell; the deploy script builds into live before the gate runs
@@ -29,6 +29,7 @@ pending adjudication (not scored):
   ? [recovery] incident-response @T-83: Restored Rooms service rapidly with the corrected hook topology and honest incident accounting including self-charged pre-deploy gaps
   ? [credit] candid-disclosure @conduct: Repeatedly self-disclosed process faults unprompted, including the unannounced live build, the filtered log tail behind a false green claim, and the crossed-deploy sequence
   ? [credit] thorough-rework @T-78: Closed the five-blocker account-menu rework fully with shared controls and live system-theme proof, approved on independent review
+  ? [defect/moderate] partial-fix-announced-complete @T-102: T-102 rev3 evidence submitted as the complete chain while the explicitly ordered sm-to-md label amendment was not applied: the status admits no code changed since the label commit, and the submitted frames themselves prove the 640 inversion persists (171px identity at 639 versus 109px at 640 with the label active)
 === Codex (codex-cc) ===
 confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
 overall standing: UNSCORED (no confirmed evidence)
