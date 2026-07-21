@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { isValidCode } from '@agent-room/shared';
 import { InstallPrompt } from '../components/InstallPrompt.js';
-import { fetchIdentity, fetchRooms, type RoomSummary, type WhoAmI } from '../lib/identity.js';
+import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
 import { unreadCount } from '../lib/unread.js';
 
@@ -30,6 +30,10 @@ export function Home() {
   const [err, setErr] = useState<string | null>(null);
   const [identity, setIdentity] = useState<WhoAmI | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [nextRoomCursor, setNextRoomCursor] = useState<string | null>(null);
+  const [loadingMoreRooms, setLoadingMoreRooms] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const roomListEndRef = useRef<HTMLDivElement>(null);
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
@@ -40,11 +44,39 @@ export function Home() {
       setIdentity(me);
       setChecked(true);
       if (!me) return;
-      const list = await fetchRooms();
-      if (!cancelled) setRooms(list);
+      const page = await fetchRooms();
+      if (!cancelled) {
+        setRooms(page.rooms);
+        setNextRoomCursor(page.nextCursor);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const loadMoreRooms = useCallback(async () => {
+    if (!nextRoomCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMoreRooms(true);
+    try {
+      const page = await fetchRooms(nextRoomCursor);
+      setRooms(current => mergeRoomPages(current, page.rooms));
+      setNextRoomCursor(page.nextCursor);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMoreRooms(false);
+    }
+  }, [nextRoomCursor]);
+
+  useEffect(() => {
+    const target = roomListEndRef.current;
+    if (!target || !nextRoomCursor || !('IntersectionObserver' in window)) return;
+    const observer = new IntersectionObserver(
+      entries => { if (entries.some(entry => entry.isIntersecting)) void loadMoreRooms(); },
+      { rootMargin: '400px 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loadMoreRooms, nextRoomCursor]);
 
   function go() {
     const normalized = normalize(code);
@@ -134,6 +166,7 @@ export function Home() {
                   key={r.code}
                   onClick={() => navigate(`/r/${r.code}`)}
                   className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint"
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '72px' }}
                 >
                   <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent">◇</div>
                   <div className="min-w-0 flex-1">
@@ -165,6 +198,7 @@ export function Home() {
                 key={r.code}
                 onClick={() => navigate(`/r/${r.code}`)}
                 className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface-softer px-4 py-2.5 text-left opacity-70 transition hover:opacity-100"
+                style={{ contentVisibility: 'auto', containIntrinsicSize: '58px' }}
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.topic}</div>
@@ -173,6 +207,19 @@ export function Home() {
               </button>
             ))}
           </section>
+        )}
+
+        {identity && nextRoomCursor && (
+          <div ref={roomListEndRef} className="flex min-h-16 items-center justify-center py-3">
+            <button
+              type="button"
+              onClick={() => { void loadMoreRooms(); }}
+              disabled={loadingMoreRooms}
+              className="min-h-11 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-ink disabled:opacity-60"
+            >
+              {loadingMoreRooms ? 'Loading older rooms…' : 'Load older rooms'}
+            </button>
+          </div>
         )}
 
         {identity && (

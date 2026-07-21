@@ -814,9 +814,16 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       );
       if (kind === 'status') {
         // Status updates append without touching the turn machinery.
+        // T-20: stamp the persisted message so every reader can classify it —
+        // the web renders these as quiet status rows and keeps them out of
+        // unread counts. Historical unstamped pings stay ordinary messages.
+        const statusMessage: Message = {
+          ...message,
+          metadata: { ...(message as { metadata?: Record<string, unknown> }).metadata, kind: 'status' },
+        } as Message;
         await getRoom(client, code);
-        await appendSystemMessage(client, code, message);
-        return { result: { appended: true, metadata: (message as { metadata?: unknown }).metadata ?? {} } };
+        await appendSystemMessage(client, code, statusMessage);
+        return { result: { appended: true, metadata: statusMessage.metadata ?? {} } };
       }
       return { result: await appendMessage(client, code, message) };
     }
@@ -1399,61 +1406,13 @@ const server = createServer(async (req, res) => {
     if (path === '/api/rooms' && req.method === 'GET') {
       const roomsCaller = await resolveCaller(req);
       if (roomsCaller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
-      const keys: string[] = [];
-      let scanCursor = '0';
-      do {
-        // T-47: match ALL room keys, not just the 9-char legacy shape — word
-        // codes (door-cat-hall) are variable length and would otherwise be
-        // invisible in the room list. `room:*` matches only room records: the
-        // message/task/count keys use a `room-` (hyphen) prefix, and any
-        // non-room JSON is skipped by the parse below.
-        const [next, batch] = (await redis.scan(scanCursor, 'MATCH', 'room:*', 'COUNT', 200)) as [string, string[]];
-        scanCursor = next;
-        keys.push(...batch);
-      } while (scanCursor !== '0');
-      const rooms: Array<Record<string, unknown>> = [];
-      for (const key of keys) {
-        const raw = await redis.get(key);
-        if (!raw) continue;
-        try {
-          const r = JSON.parse(raw) as {
-            code: string; topic: string; status: string; createdBy: string; createdAt: number;
-            participants?: Array<unknown>;
-          };
-          // Guard: only real room records, whose stored code matches their key.
-          // Keeps the widened `room:*` scan from ever surfacing a stray key.
-          if (!r || typeof r.code !== 'string' || `room:${r.code}` !== key) continue;
-          // T-35: cheap per-room activity — last message's `time` (tail of the
-          // room-msgs list) and the maintained count key. Empty/unreadable
-          // rooms fall back to createdAt so a brand-new room still sorts sanely.
-          let lastMsgTime: number | undefined;
-          try {
-            const lastRaw = await redis.lindex(`room-msgs:${r.code}`, -1);
-            if (lastRaw) lastMsgTime = Number((JSON.parse(lastRaw) as { time?: number }).time);
-          } catch {
-            /* no messages / unparseable tail → fall back to createdAt */
-          }
-          const lastActivityAt = roomActivityAt(Number(r.createdAt), lastMsgTime);
-          const cntRaw = await redis.get(`room-msg-count:${r.code}`);
-          const messageCount = Number.isFinite(Number(cntRaw)) ? Number(cntRaw) : 0;
-          rooms.push({
-            code: r.code,
-            topic: r.topic,
-            status: r.status,
-            createdBy: r.createdBy,
-            createdAt: r.createdAt,
-            participants: (r.participants || []).length,
-            lastActivityAt,
-            messageCount,
-          });
-        } catch {
-          // skip unparseable rooms
-        }
-      }
-      // Recent-activity-first (Waqas: "surface recent rooms"). Stable tiebreak
-      // on createdAt keeps ordering deterministic when activity ties.
-      rooms.sort((a, b) => Number(b.lastActivityAt) - Number(a.lastActivityAt) || Number(b.createdAt) - Number(a.createdAt));
-      return sendJson(res, 200, { rooms });
+      await ensureRoomActivityIndex();
+      const page = await listIndexedRoomPage(
+        roomListStore,
+        roomListCursor(url.searchParams.get('cursor')),
+        roomListLimit(url.searchParams.get('limit')),
+      );
+      return sendJson(res, 200, page);
     }
 
     // ---------- T-18: project registry (ids + doc roles only, never paths) ----------

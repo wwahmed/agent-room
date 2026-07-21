@@ -28,7 +28,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
     let cancelled = false;
     async function pull() {
       try {
-        const res = await fetch('/api/rooms', { credentials: 'same-origin' });
+        const res = await fetch('/api/rooms?limit=40', { credentials: 'same-origin' });
         if (!res.ok) { if (!cancelled) setRooms(null); return; }
         const body = (await res.json()) as { rooms?: RoomSummary[] };
         if (!cancelled) setRooms(body.rooms ?? []);

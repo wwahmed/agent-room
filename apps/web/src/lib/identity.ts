@@ -23,6 +23,12 @@ export interface RoomSummary {
   messageCount?: number;
 }
 
+export interface RoomPage {
+  rooms: RoomSummary[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 const LAST_ROLE_KEY = 'agentroom:lastRole';
 
 export async function fetchIdentity(): Promise<WhoAmI | null> {
@@ -36,14 +42,32 @@ export async function fetchIdentity(): Promise<WhoAmI | null> {
   }
 }
 
-export async function fetchRooms(): Promise<RoomSummary[]> {
+export function roomsUrl(cursor?: string | null, limit = 30): string {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  return `/api/rooms?${params.toString()}`;
+}
+
+export function mergeRoomPages(current: RoomSummary[], incoming: RoomSummary[]): RoomSummary[] {
+  const byCode = new Map(current.map(room => [room.code, room]));
+  for (const room of incoming) byCode.set(room.code, room);
+  return [...byCode.values()].sort((a, b) =>
+    Number(b.lastActivityAt ?? b.createdAt) - Number(a.lastActivityAt ?? a.createdAt)
+      || b.createdAt - a.createdAt);
+}
+
+export async function fetchRooms(cursor?: string | null, limit = 30): Promise<RoomPage> {
   try {
-    const resp = await fetch('/api/rooms', { cache: 'no-store' });
-    if (!resp.ok) return [];
-    const body = (await resp.json()) as { rooms: RoomSummary[] };
-    return body.rooms ?? [];
+    const resp = await fetch(roomsUrl(cursor, limit), { cache: 'no-store' });
+    if (!resp.ok) return { rooms: [], nextCursor: null, hasMore: false };
+    const body = (await resp.json()) as Partial<RoomPage>;
+    return {
+      rooms: body.rooms ?? [],
+      nextCursor: typeof body.nextCursor === 'string' ? body.nextCursor : null,
+      hasMore: body.hasMore === true,
+    };
   } catch {
-    return [];
+    return { rooms: [], nextCursor: null, hasMore: false };
   }
 }
 
