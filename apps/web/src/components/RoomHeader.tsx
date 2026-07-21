@@ -196,14 +196,18 @@ export function RoomHeader({
               </span>
             </div>
           )}
+          {/* T-102 HOTFIX (host-critical): the old box-with-exit-arrow glyph
+              read as a DOOR. Sharing uses the universal share icon (tray +
+              up arrow) and is visible at EVERY width, not desktop-only. */}
           <button
             type="button"
             onClick={onShare}
-            aria-label="Copy invite link"
-            className="header-glass-control hidden h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink sm:flex"
+            aria-label="Share room invite link"
+            className="header-glass-control flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink"
           >
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M10.5 2.5h3v3M13.5 2.5 8.2 7.8" /><path d="M12.5 8.5v4a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h4" />
+              <path d="M8 10V1.8M4.9 4.7 8 1.6l3.1 3.1" />
+              <path d="M3 7.5v5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-5" />
             </svg>
           </button>
           <div ref={menuRef} className="relative">
@@ -228,8 +232,13 @@ export function RoomHeader({
                   Room settings & rename
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onShare(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink sm:hidden">
-                  <span className="flex w-5 justify-center" aria-hidden="true">↗</span>
-                  Copy invite link
+                  <span className="flex w-5 justify-center" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 10V1.8M4.9 4.7 8 1.6l3.1 3.1" />
+                      <path d="M3 7.5v5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-5" />
+                    </svg>
+                  </span>
+                  Share invite link
                 </button>
                 <div className="my-1 h-px bg-border-faint" />
                 {/* Truthful label (design lead): this NAVIGATES; it does not
