@@ -1587,13 +1587,15 @@ export function Room() {
               role="tab"
               aria-selected={mainTab === t.key}
               onClick={() => selectTab(t.key)}
-              className={`-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-3 text-[14px] font-semibold transition ${
+              // Gate finding (the Waqas screenshot): five tabs must FIT 390px
+              // — icons yield below sm and padding tightens so no tab clips.
+              className={`-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-2 text-[14px] font-semibold transition sm:px-3 ${
                 mainTab === t.key
                   ? 'border-accent text-accent'
                   : 'border-transparent text-ink-soft hover:text-ink'
               }`}
             >
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="hidden sm:block">
                 {t.icon}
               </svg>
               {t.label}

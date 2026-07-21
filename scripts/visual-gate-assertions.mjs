@@ -99,10 +99,14 @@ export function ruleFloatingVsComposer(m) {
  *  No magic ratio (rev3 review): the deterministic signal is a control the
  *  user cannot see at all without discovering that scrolling exists. */
 export function ruleScrollReach(m) {
-  return (m.scrollContainers ?? [])
-    .filter(c => (c.hiddenControls ?? 0) > 0)
-    .slice(0, 3)
-    .map(c => `scroll container fully hides ${c.hiddenControls} interactive control(s) at rest ("${c.label}")`);
+  const out = [];
+  for (const c of (m.scrollContainers ?? [])) {
+    if ((c.hiddenControls ?? 0) > 0) out.push(`scroll container fully hides ${c.hiddenControls} interactive control(s) at rest ("${c.label}")`);
+    // rev4 (review finding): partial clipping is a finding too — a control
+    // showing less than 75% of its width at rest reads as broken, not scrollable.
+    if ((c.partiallyHiddenControls ?? 0) > 0) out.push(`scroll container partially clips ${c.partiallyHiddenControls} interactive control(s) at rest ("${c.label}")`);
+  }
+  return out.slice(0, 4);
 }
 
 const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach];

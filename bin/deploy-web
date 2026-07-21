@@ -24,8 +24,10 @@ echo "OK: deployed bundle index-$HASH.js and server is serving it."
 # baseline (exit 3). Review .visual-gate/diff, then promote deliberately with
 # `npm run visual-gate:baseline`. After a human has reviewed, re-run with
 # VISUAL_GATE_ACK=1 to acknowledge and pass.
-npm run visual-gate --silent
-GATE_EXIT=$?
+# set -eu is active above: capture the exit WITHOUT letting -e kill the
+# script before the case (rev3 review finding — the case was unreachable).
+GATE_EXIT=0
+npm run visual-gate --silent || GATE_EXIT=$?
 case "$GATE_EXIT" in
   0) : ;;
   2|3)

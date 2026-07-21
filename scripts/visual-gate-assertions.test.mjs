@@ -90,3 +90,10 @@ describe('ruleScrollReach (rev3: hidden controls, no magic ratio)', () => {
     expect(ruleScrollReach({ scrollContainers: [{ label: 'tabs', hiddenControls: 0 }] })).toEqual([]);
   });
 });
+
+describe('ruleScrollReach partial clipping (rev4)', () => {
+  it('BROKEN: a control mostly clipped by its container edge fails', () => {
+    const fails = ruleScrollReach({ scrollContainers: [{ label: 'tabs', hiddenControls: 0, partiallyHiddenControls: 1 }] });
+    expect(fails[0]).toContain('partially clips 1 interactive control');
+  });
+});

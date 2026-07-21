@@ -26,7 +26,7 @@ import { frameVerdict, gateSummary, enumerateFrames } from './visual-gate-report
 import { evaluateAssertions } from './visual-gate-assertions.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const WORK = join(ROOT, '.visual-gate');
+const WORK = process.env.VISUAL_GATE_WORK ?? join(ROOT, '.visual-gate');
 const BASELINE = join(WORK, 'baseline');
 const CURRENT = join(WORK, 'current');
 const DIFF = join(WORK, 'diff');
@@ -105,6 +105,12 @@ async function ensureFixtureRoom() {
   for (let i = 0; i < 6; i++) await msg(i % 2 ? 'GateA' : 'GateB', `Rapid fixture message ${i + 1}.`, id++);
   await msg('GateB', '@GateA a deterministic mention for the highlight state.', id++);
   await msg('GateA', 'status ping fixture', id++, 'status');
+  // rev4 (review finding): the VIEWER's own message, so the self-bubble
+  // anatomy renders in fixture frames. Sent as ClaudeUI with the gate's key.
+  if (memberKey) {
+    await post({ action: 'join', code, participant: { name: 'ClaudeUI', role: '', color: '#5B6AFF', initials: 'CU', client: 'web', joinedAt: 1, lastSeenAt: 1 }, wantMemberKey: false, memberKey }).catch(() => {});
+    await post({ action: 'send', code, memberKey, message: { id: id++, type: 'msg', name: 'ClaudeUI', initials: 'CU', color: '#5B6AFF', role: '', text: 'Deterministic self-authored fixture message from the viewer.', client: 'web', time: id } }).catch(e => console.error('self fixture message failed:', e.message));
+  }
   writeFileSync(FIXTURE_FILE, code);
   return code;
 }
@@ -193,11 +199,18 @@ for (const vp of VIEWPORTS) {
             .slice(0, 8)
             .map(el => {
               const cr = el.getBoundingClientRect();
-              const hiddenControls = [...el.querySelectorAll(INTERACTIVE)].filter(c => {
+              let hiddenControls = 0;
+              let partiallyHiddenControls = 0;
+              for (const c of el.querySelectorAll(INTERACTIVE)) {
                 const r = c.getBoundingClientRect();
-                return r.width > 1 && (r.left >= cr.right - 1 || r.right <= cr.left + 1);
-              }).length;
-              return { label: (el.getAttribute('aria-label') || el.className || '').toString().slice(0, 30), clientWidth: el.clientWidth, scrollWidth: el.scrollWidth, hiddenControls };
+                if (r.width <= 1) continue;
+                if (r.left >= cr.right - 1 || r.right <= cr.left + 1) hiddenControls += 1;
+                else {
+                  const visible = Math.min(r.right, cr.right) - Math.max(r.left, cr.left);
+                  if (visible < r.width * 0.75) partiallyHiddenControls += 1;
+                }
+              }
+              return { label: (el.getAttribute('aria-label') || el.className || '').toString().slice(0, 30), clientWidth: el.clientWidth, scrollWidth: el.scrollWidth, hiddenControls, partiallyHiddenControls };
             });
           return {
             viewportW: innerWidth,
@@ -261,10 +274,17 @@ if (summary.exitCode === 5) console.log('capture incomplete — do NOT trust thi
 writeFileSync(join(WORK, 'last-report.txt'), summary.text);
 
 if (updateBaseline) {
+  // rev4 (review finding): promotion must never green a broken run. An
+  // incomplete capture refuses to promote at all; geometry failures allow the
+  // pixel baseline to advance but the exit code still carries the defect.
+  if (summary.incomplete) {
+    console.error('REFUSED: capture incomplete — will not promote a partial baseline');
+    process.exit(5);
+  }
   for (const name of readdirSync(CURRENT).filter(f => f.endsWith('.png'))) {
     copyFileSync(join(CURRENT, name), join(BASELINE, name));
   }
   console.log('baseline updated');
-  process.exit(0);
+  process.exit(summary.geometryFailures.length > 0 ? 4 : 0);
 }
 process.exit(summary.exitCode);
