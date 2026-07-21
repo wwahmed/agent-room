@@ -147,13 +147,20 @@ become the noise it measures. Rules:
 
 ## Room types
 
-A room type is a versioned RoomOS template, not a fork of the product: it
-names the tabs shown, the artifact set installed, the roster roles
-expected, the rituals scheduled, and the report the owner receives.
-Initial types, deliberately few: build (this room), collaboration or
-working session, review or audit, research or interview, operations.
-Upstream agent-room lists room templates as future work and implements
-none, so type semantics are ours to define here.
+A room type is a versioned preset of capability modules and invariants,
+not a fork of the product: it names the modules enabled, the artifact set
+installed, the roster roles expected, the rituals scheduled, and the
+report the owner receives. The canonical initial set is defined once,
+here, and implemented by the V2 architecture
+(docs/ROOM-V2-ARCHITECTURE.md): collaboration, project, review,
+incident, interview-research. Everything else (code review, bug fix,
+strategy, product build, operations) is a template inside one of these
+types; a template is promoted to a type only when it needs different
+invariants or lifecycle rules. Upstream agent-room lists room templates
+as future work and implements none, so type semantics are ours to define
+here. This list supersedes this spec's earlier draft set (build,
+operations) after the T-101 reconciliation: build is the product-project
+template of type project, and operations is a template of collaboration.
 
 Type migration is template re-application plus explicit data mapping:
 artifacts present in both types carry over untouched, artifacts only in
@@ -163,11 +170,17 @@ announced in the room.
 
 ## Hierarchy naming (host language)
 
-The owner thinks in goals. The canonical hierarchy is Goal, then Epic,
-then Task, three levels and no more; Program is the internal name for a
-Goal's delivery arc and Theme is a label on Epics, not a fourth level.
-Every level carries the same three-role and evidence rules. Structure
-serves collaboration; anything deeper is ceremony and is out.
+The owner thinks in goals. The canonical hierarchy is Goal, then Theme,
+then Epic, then Task, with intermediate levels OPTIONAL: a small room may
+hang a task directly on a goal, and nothing may force empty levels into
+existence (this supersedes this spec's earlier theme-as-label draft after
+the T-101 reconciliation; one representation only, the optional WorkNode
+kind). Program is the internal name for a Goal's delivery arc. Every
+level carries the same evidence rules, and tasks are the only
+evidence-gated leaf; the builder, reviewer, verifier trio binds at the
+task level and must be three distinct roster IDs wherever the room's
+charter declares that policy. Structure serves collaboration; anything
+deeper is ceremony and is out.
 
 ## V2 coexistence and migration mechanics
 
