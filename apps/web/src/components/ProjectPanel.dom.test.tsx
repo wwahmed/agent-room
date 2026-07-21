@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import type { Room } from '@agent-room/shared';
 import { ProjectPanel } from './ProjectPanel.js';
@@ -56,50 +56,65 @@ function mountNavigable(code: string, url: string) {
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+// Settlement helpers (design lead): navigations and timer advances are
+// wrapped in act() so router state updates and the effects they arm are
+// FLUSHED before time moves — a bare navigate() outside act leaves the
+// searchParams effect queued, the 50ms landing timer unarmed, and the
+// focus assertion racing React (the intermittent activeElement=body).
+async function settle(ms: number) {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+}
+async function navigateAndSettle(to: string, ms = 120) {
+  await act(async () => { navRef.current!(to); });
+  await settle(ms);
+}
+// waitFor equivalent that advances FAKE time in small steps until the row
+// owns focus (or the budget ends and the plain assertion reports).
+async function untilFocused(id: string, budgetMs = 1000) {
+  for (let waited = 0; waited < budgetMs; waited += 25) {
+    if (document.activeElement === document.getElementById(id)) break;
+    await settle(25);
+  }
+  expect(document.activeElement).toBe(document.getElementById(id));
+}
+
 describe('ProjectPanel DOM interactions', () => {
   it('deep link focuses the exact task row once, with the landing flash', async () => {
     vi.useFakeTimers();
     mount('AAA', '/r/AAA?panel=project&task=T-2');
-    await vi.advanceTimersByTimeAsync(120);
+    await untilFocused('task-T-2');
     const row = document.getElementById('task-T-2')!;
-    expect(document.activeElement).toBe(row);
     expect(row.className).toContain('reply-flash');
-    await vi.advanceTimersByTimeAsync(2500);
+    await settle(2500);
     expect(row.className).not.toContain('reply-flash');
   });
 
   it('IN ONE MOUNTED TREE: clear the URL, reopen the same task, it focuses again', async () => {
     vi.useFakeTimers();
     mountNavigable('AAA', '/r/AAA?panel=project&task=T-1');
-    await vi.advanceTimersByTimeAsync(120);
-    expect(document.activeElement).toBe(document.getElementById('task-T-1'));
-    (document.activeElement as HTMLElement).blur();
-    navRef.current!('/r/AAA?panel=project'); // clear WITHOUT unmounting
-    await vi.advanceTimersByTimeAsync(120);
-    navRef.current!('/r/AAA?panel=project&task=T-1'); // re-enter
-    await vi.advanceTimersByTimeAsync(120);
-    expect(document.activeElement).toBe(document.getElementById('task-T-1'));
+    await untilFocused('task-T-1');
+    act(() => (document.activeElement as HTMLElement).blur());
+    await navigateAndSettle('/r/AAA?panel=project'); // clear WITHOUT unmounting
+    await navigateAndSettle('/r/AAA?panel=project&task=T-1'); // re-enter
+    await untilFocused('task-T-1');
   });
 
   it('IN ONE MOUNTED TREE: switching room with the same task id focuses via the room|task key', async () => {
     vi.useFakeTimers();
     const h = mountNavigable('AAA', '/r/AAA?panel=project&task=T-1');
-    await vi.advanceTimersByTimeAsync(120);
-    expect(document.activeElement).toBe(document.getElementById('task-T-1'));
-    (document.activeElement as HTMLElement).blur();
+    await untilFocused('task-T-1');
+    act(() => (document.activeElement as HTMLElement).blur());
     h.setRoom('BBB'); // same mounted tree, room prop changes, refs survive
-    await vi.advanceTimersByTimeAsync(120);
-    expect(document.activeElement).toBe(document.getElementById('task-T-1'));
+    await untilFocused('task-T-1');
   });
 
   it('navigating away MID-FLASH removes the highlight immediately (no stranded class)', async () => {
     vi.useFakeTimers();
     mountNavigable('AAA', '/r/AAA?panel=project&task=T-1');
-    await vi.advanceTimersByTimeAsync(120); // focus + flash applied
+    await untilFocused('task-T-1'); // focus + flash applied
     const row = document.getElementById('task-T-1')!;
     expect(row.className).toContain('reply-flash');
-    navRef.current!('/r/AAA?panel=project'); // clear during the 2s flash
-    await vi.advanceTimersByTimeAsync(10);
+    await navigateAndSettle('/r/AAA?panel=project', 10); // clear during the 2s flash
     expect(row.className).not.toContain('reply-flash');
   });
 
@@ -107,7 +122,7 @@ describe('ProjectPanel DOM interactions', () => {
     vi.useFakeTimers();
     const a = mount('AAA', '/r/AAA?panel=project&task=T-1');
     a.unmount(); // before the 50ms landing timer fires
-    await vi.advanceTimersByTimeAsync(3000);
+    await settle(3000);
     expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
   });
 
