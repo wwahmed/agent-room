@@ -392,3 +392,48 @@ describe('T-32 shared-anchor live-session guard', () => {
     expect(again.participants.filter((p) => p.name.startsWith('CS-Agent'))).toHaveLength(1);
   });
 });
+
+// T-32 rev2: Codex's live production repro (bank-tea-code) proved siblings
+// also share the MEMBER-KEY store through the launcher proxy — the key branch
+// displaced the live row even after the anchor branch was guarded. Pin the
+// exact production path: same anchor AND same presented member key.
+describe('T-32 rev2: shared member-key store must not displace a live sibling', () => {
+  let client: UpstashClient;
+  let code: string;
+
+  beforeEach(async () => {
+    client = memoryClient();
+    const room = await createRoom(client, { code: 'ABC-DEF-GHJ', topic: 't', createdBy: 'Waqas' });
+    code = room.code;
+  });
+
+  it('a live sibling presenting the FIRST session\'s key lands as its own row', async () => {
+    const now = Date.now();
+    const first = await joinRoom(client, code, { ...agent('T32-Agent-A'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-proxy-anchor',
+    });
+    // The proxy hands session B the same key store AND the same anchor.
+    const second = await joinRoom(client, code, { ...agent('T32-Agent-B'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-proxy-anchor',
+      reclaimMemberKey: first.memberKey,
+    });
+    const names = second.participants.map((p) => p.name);
+    expect(names).toContain('T32-Agent-A'); // A survives
+    expect(names).toContain('T32-Agent-B'); // B is its own row
+    expect(second.participants).toHaveLength(2);
+  });
+
+  it('a STALE row is still reclaimable by its member key under a new name', async () => {
+    const first = await joinRoom(client, code, { ...agent('T32-Agent-A'), lastSeenAt: 1 }, {
+      issueMemberKey: true,
+    });
+    const back = await joinRoom(client, code, { ...agent('T32-Agent-A-Restarted'), lastSeenAt: Date.now() }, {
+      issueMemberKey: true,
+      reclaimMemberKey: first.memberKey,
+    });
+    expect(back.participant.name).toBe('T32-Agent-A-Restarted');
+    expect(back.participants).toHaveLength(1);
+  });
+});

@@ -273,22 +273,28 @@ function findReclaimRow(current: Room, anchors: ReclaimAnchors): Participant | u
   // anchor only when the row has the same name (a true re-join) or has gone
   // quiet long enough to plausibly be the lost session this mechanism exists
   // to bring home.
+  // T-32: is this row a LIVE session under a different name than the joiner?
+  // Shared launcher configs give sibling sessions the same anchor AND the same
+  // member-key store (Codex's fixed-file proxy), so BOTH identity branches can
+  // otherwise rename a living participant out of the room. Reclaiming a live
+  // different-name row is displacement, not recovery, whichever anchor matched.
+  const isLiveSibling = (row: Participant): boolean => {
+    const sameName = anchors.joinerName !== undefined && row.name === anchors.joinerName;
+    if (sameName) return false;
+    const now = anchors.now ?? Date.now();
+    const listening = Number(row.listenUntil || 0) > now;
+    const heardRecently = now - Number(row.lastSeenAt || 0) <= ANCHOR_RECLAIM_LIVE_MS;
+    return listening || heardRecently;
+  };
   if (anchors.agentIdHash) {
     const byAgent = current.participants.find(p => p.agentIdHash === anchors.agentIdHash);
-    if (byAgent) {
-      const sameName = anchors.joinerName !== undefined && byAgent.name === anchors.joinerName;
-      const now = anchors.now ?? Date.now();
-      const listening = Number(byAgent.listenUntil || 0) > now;
-      const heardRecently = now - Number(byAgent.lastSeenAt || 0) <= ANCHOR_RECLAIM_LIVE_MS;
-      const live = listening || heardRecently;
-      if (sameName || !live) return byAgent;
-      // Live row, different name: a sibling session owns it. Fall through to
-      // the remaining anchors so this join lands as its own identity.
-    }
+    if (byAgent && !isLiveSibling(byAgent)) return byAgent;
+    // Live row, different name: a sibling session owns it. Fall through so
+    // this join lands as its own identity.
   }
   if (anchors.reclaimMemberKeyHash) {
     const byKey = current.participants.find(p => p.memberKeyHash === anchors.reclaimMemberKeyHash);
-    if (byKey) return byKey;
+    if (byKey && !isLiveSibling(byKey)) return byKey;
   }
   if (anchors.authIdHash) {
     const byAuth = current.participants.find(p => p.authIdHash === anchors.authIdHash);
