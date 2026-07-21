@@ -2745,7 +2745,7 @@ function ArtifactCard({ artifact, now, failed, onOpenSource }: { artifact: RoomA
           relabeled retry — recovery lives ON the originating card. */}
       {failed && (
         <div role="alert" className="mt-2 rounded-lg border border-red-400/30 bg-red-500/5 px-3 py-2 text-[15px] leading-relaxed text-red-400 sm:text-[14px]">
-          The jump to this source failed — history couldn't be loaded.
+          The jump to this source failed. History couldn't be loaded.
         </div>
       )}
       {/* Provenance beats vague export (design lead): every work object
