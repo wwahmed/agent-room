@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -354,9 +355,28 @@ test('the atomic lock is exclusive; dead-pid and recycled-pid locks are reclaime
   writeFileSync(join(lockDir, 'holder.json'), JSON.stringify({ pid: process.pid, start: 'Thu Jan  1 00:00:00 1970', cmd: 'gate', at: 'x' }));
   acquireLock(repo.root, 'promote')();
   assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /pid-reused/);
-  // A crashed creator (lock dir without holder.json) is treated as stale.
+  // A lock dir with NO holder record fails closed while young (a live
+  // creator may be descheduled inside its write window)...
   mkdirSync(lockDir);
+  assert.throws(() => acquireLock(repo.root, 'stage'), /failing closed/);
+  // ...and is reclaimable only past the anti-robbery age bound.
+  const old = new Date(Date.now() - 120000);
+  utimesSync(lockDir, old, old);
   acquireLock(repo.root, 'stage')();
+  assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /over-age missing holder record/);
+});
+
+test('a holder robbed while descheduled never deletes the robber\'s lock', () => {
+  const repo = makeRepo();
+  const lockDir = join(paths(repo.root).releases, '.lock');
+  const release = acquireLock(repo.root, 'promote');
+  // Simulate a reclaim happening while the original holder was descheduled:
+  // the lock now carries a different owner token.
+  writeFileSync(join(lockDir, 'holder.json'), JSON.stringify({ pid: 424242, start: 'x', token: 'someone-else', cmd: 'stage', at: 'y' }));
+  release(); // must NOT remove the new owner's lock
+  assert.ok(existsSync(lockDir), 'the robber\'s lock survived the stale release()');
+  assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /lock release skipped: reclaimed by pid 424242/);
+  rmSync(lockDir, { recursive: true, force: true });
 });
 
 test('a walkthrough receipt must digest-match the release, and there is no skip', async () => {

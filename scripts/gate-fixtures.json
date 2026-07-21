@@ -1,0 +1,8602 @@
+{
+ "comment": "T-95 slice 2: frozen deterministic gate dataset, captured read-only from the seeded fixture room (girl-arm-dove) with authoritative server shapes. The gate serves ONLY this data via route stubs; no fixture ever touches a real server or store.",
+ "roomCode": "girl-arm-dove",
+ "room": {
+  "room": {
+   "code": "girl-arm-dove",
+   "topic": "Visual gate fixture (auto test room, safe to ignore)",
+   "createdAt": 1784626360258,
+   "createdBy": "GateHost",
+   "status": "active",
+   "version": 454,
+   "participants": [
+    {
+     "name": "GateA",
+     "role": "fixture",
+     "color": "#5B6AFF",
+     "initials": "A",
+     "client": "cc",
+     "harness": "claude-code",
+     "joinedAt": 1,
+     "lastSeenAt": 1,
+     "canSpeak": true
+    },
+    {
+     "name": "GateB",
+     "role": "fixture",
+     "color": "#8B5CF6",
+     "initials": "B",
+     "client": "cc",
+     "harness": "codex",
+     "joinedAt": 1,
+     "lastSeenAt": 1,
+     "canSpeak": true
+    },
+    {
+     "name": "ClaudeUI",
+     "role": "",
+     "color": "#EC4899",
+     "initials": "CU",
+     "client": "web",
+     "joinedAt": 1,
+     "lastSeenAt": 1,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas",
+     "role": "host",
+     "color": "#F59E0B",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626374056,
+     "lastSeenAt": 1784626374056,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (2)",
+     "role": "host",
+     "color": "#10B981",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626391449,
+     "lastSeenAt": 1784626391449,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (3)",
+     "role": "host",
+     "color": "#F43F5E",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626409310,
+     "lastSeenAt": 1784626409310,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (4)",
+     "role": "host",
+     "color": "#0EA5E9",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626426877,
+     "lastSeenAt": 1784626426877,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (5)",
+     "role": "host",
+     "color": "#D946EF",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626444379,
+     "lastSeenAt": 1784626444379,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (6)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626462032,
+     "lastSeenAt": 1784626462032,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (7)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626479662,
+     "lastSeenAt": 1784626479662,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (8)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626497351,
+     "lastSeenAt": 1784626497351,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (9)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626515145,
+     "lastSeenAt": 1784626515145,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (10)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626533032,
+     "lastSeenAt": 1784626533032,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (11)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626635608,
+     "lastSeenAt": 1784626635608,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (12)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626653260,
+     "lastSeenAt": 1784626653260,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (13)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626670899,
+     "lastSeenAt": 1784626670899,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (14)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626688556,
+     "lastSeenAt": 1784626688556,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (15)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626706268,
+     "lastSeenAt": 1784626706268,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (16)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626723983,
+     "lastSeenAt": 1784626723983,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (17)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626741794,
+     "lastSeenAt": 1784626741794,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (18)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626759688,
+     "lastSeenAt": 1784626759688,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (19)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626777676,
+     "lastSeenAt": 1784626777676,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (20)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626796118,
+     "lastSeenAt": 1784626796118,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (21)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626895567,
+     "lastSeenAt": 1784626895567,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (22)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626913025,
+     "lastSeenAt": 1784626913025,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (23)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626930454,
+     "lastSeenAt": 1784626930454,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (24)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626947904,
+     "lastSeenAt": 1784626947904,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (25)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626965384,
+     "lastSeenAt": 1784626965384,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (26)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784626982884,
+     "lastSeenAt": 1784626982884,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (27)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627000505,
+     "lastSeenAt": 1784627000505,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (28)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627018201,
+     "lastSeenAt": 1784627018201,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (29)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627036224,
+     "lastSeenAt": 1784627036224,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (30)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627054258,
+     "lastSeenAt": 1784627054258,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (31)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627252688,
+     "lastSeenAt": 1784627252688,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (32)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627270628,
+     "lastSeenAt": 1784627270628,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (33)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627288742,
+     "lastSeenAt": 1784627288742,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (34)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627306702,
+     "lastSeenAt": 1784627306702,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (35)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627324700,
+     "lastSeenAt": 1784627324700,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (36)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627343384,
+     "lastSeenAt": 1784627343384,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (37)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627361272,
+     "lastSeenAt": 1784627361272,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (38)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627379313,
+     "lastSeenAt": 1784627379313,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (39)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627397251,
+     "lastSeenAt": 1784627397251,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (40)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627415207,
+     "lastSeenAt": 1784627415207,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (41)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627816004,
+     "lastSeenAt": 1784627816004,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (42)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627833670,
+     "lastSeenAt": 1784627833670,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (43)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627851362,
+     "lastSeenAt": 1784627851362,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (44)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627869021,
+     "lastSeenAt": 1784627869021,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (45)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627886744,
+     "lastSeenAt": 1784627886744,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (46)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627904495,
+     "lastSeenAt": 1784627904495,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (47)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627922286,
+     "lastSeenAt": 1784627922286,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (48)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627960047,
+     "lastSeenAt": 1784627960047,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (49)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627979031,
+     "lastSeenAt": 1784627979031,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (50)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784627997893,
+     "lastSeenAt": 1784627997893,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (51)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628269453,
+     "lastSeenAt": 1784628269453,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (52)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628287769,
+     "lastSeenAt": 1784628287769,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (53)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628305641,
+     "lastSeenAt": 1784628305641,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (54)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628323442,
+     "lastSeenAt": 1784628323442,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (55)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628363013,
+     "lastSeenAt": 1784628363014,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (56)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628381703,
+     "lastSeenAt": 1784628381703,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (57)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628400260,
+     "lastSeenAt": 1784628400260,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (58)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628419048,
+     "lastSeenAt": 1784628419048,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (59)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628438000,
+     "lastSeenAt": 1784628438000,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (60)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628456888,
+     "lastSeenAt": 1784628456888,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (61)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628529224,
+     "lastSeenAt": 1784628529224,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (62)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628547629,
+     "lastSeenAt": 1784628547629,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (63)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628565847,
+     "lastSeenAt": 1784628565847,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (64)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628584064,
+     "lastSeenAt": 1784628584064,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (65)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628602242,
+     "lastSeenAt": 1784628602242,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (66)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628620986,
+     "lastSeenAt": 1784628620986,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (67)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628639463,
+     "lastSeenAt": 1784628639463,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (68)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628659160,
+     "lastSeenAt": 1784628659160,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (69)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628678251,
+     "lastSeenAt": 1784628678251,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (70)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628697161,
+     "lastSeenAt": 1784628697161,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (71)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784628991230,
+     "lastSeenAt": 1784628991230,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (72)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629010692,
+     "lastSeenAt": 1784629010692,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (73)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629029954,
+     "lastSeenAt": 1784629029954,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (74)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629049003,
+     "lastSeenAt": 1784629049003,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (75)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629068288,
+     "lastSeenAt": 1784629068288,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (76)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629088111,
+     "lastSeenAt": 1784629088111,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (77)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629108267,
+     "lastSeenAt": 1784629108267,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (78)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629128514,
+     "lastSeenAt": 1784629128514,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (79)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629148630,
+     "lastSeenAt": 1784629148630,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (80)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629169169,
+     "lastSeenAt": 1784629169169,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (81)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629317635,
+     "lastSeenAt": 1784629317635,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (82)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629335381,
+     "lastSeenAt": 1784629335381,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (83)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629353068,
+     "lastSeenAt": 1784629353068,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (84)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629370795,
+     "lastSeenAt": 1784629370795,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (85)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629388512,
+     "lastSeenAt": 1784629388512,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (86)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629409873,
+     "lastSeenAt": 1784629409873,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (87)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629430379,
+     "lastSeenAt": 1784629430379,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (88)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629449143,
+     "lastSeenAt": 1784629449143,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (89)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629467176,
+     "lastSeenAt": 1784629467176,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (90)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629485448,
+     "lastSeenAt": 1784629485448,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (91)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629795688,
+     "lastSeenAt": 1784629795688,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (92)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629813398,
+     "lastSeenAt": 1784629813398,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (93)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629831100,
+     "lastSeenAt": 1784629831100,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (94)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629848800,
+     "lastSeenAt": 1784629848800,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (95)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629866617,
+     "lastSeenAt": 1784629866617,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (96)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629884458,
+     "lastSeenAt": 1784629884458,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (97)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629902368,
+     "lastSeenAt": 1784629902368,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (98)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629920269,
+     "lastSeenAt": 1784629920269,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (99)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629938327,
+     "lastSeenAt": 1784629938327,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (100)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784629956416,
+     "lastSeenAt": 1784629956416,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (101)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630124496,
+     "lastSeenAt": 1784630124496,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (102)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630142227,
+     "lastSeenAt": 1784630142227,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (103)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630159937,
+     "lastSeenAt": 1784630159937,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (104)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630177647,
+     "lastSeenAt": 1784630177647,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (105)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630195346,
+     "lastSeenAt": 1784630195346,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (106)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630213115,
+     "lastSeenAt": 1784630213115,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (107)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630230947,
+     "lastSeenAt": 1784630230947,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (108)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630248878,
+     "lastSeenAt": 1784630248878,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (109)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630266911,
+     "lastSeenAt": 1784630266911,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (110)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630284947,
+     "lastSeenAt": 1784630284947,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (111)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630492482,
+     "lastSeenAt": 1784630492482,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (112)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630510303,
+     "lastSeenAt": 1784630510303,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (113)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630528154,
+     "lastSeenAt": 1784630528154,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (114)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630545986,
+     "lastSeenAt": 1784630545986,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (115)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630564006,
+     "lastSeenAt": 1784630564006,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (116)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630581594,
+     "lastSeenAt": 1784630581594,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (117)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630599326,
+     "lastSeenAt": 1784630599326,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (118)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630617192,
+     "lastSeenAt": 1784630617192,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (119)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630634980,
+     "lastSeenAt": 1784630634980,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (120)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630652826,
+     "lastSeenAt": 1784630652826,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (121)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630756511,
+     "lastSeenAt": 1784630756511,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (122)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630773972,
+     "lastSeenAt": 1784630773972,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (123)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630791704,
+     "lastSeenAt": 1784630791704,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (124)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630809602,
+     "lastSeenAt": 1784630809602,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (125)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630827613,
+     "lastSeenAt": 1784630827613,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (126)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630845682,
+     "lastSeenAt": 1784630845682,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (127)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630863952,
+     "lastSeenAt": 1784630863952,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (128)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630882178,
+     "lastSeenAt": 1784630882178,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (129)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630900924,
+     "lastSeenAt": 1784630900924,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (130)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784630919393,
+     "lastSeenAt": 1784630919393,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (131)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631101776,
+     "lastSeenAt": 1784631101776,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (132)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631119680,
+     "lastSeenAt": 1784631119680,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (133)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631137341,
+     "lastSeenAt": 1784631137341,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (134)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631155038,
+     "lastSeenAt": 1784631155038,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (135)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631172757,
+     "lastSeenAt": 1784631172757,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (136)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631190558,
+     "lastSeenAt": 1784631190558,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (137)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631208441,
+     "lastSeenAt": 1784631208441,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (138)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631226435,
+     "lastSeenAt": 1784631226435,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (139)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631244277,
+     "lastSeenAt": 1784631244277,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (140)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631262121,
+     "lastSeenAt": 1784631262121,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (141)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631577421,
+     "lastSeenAt": 1784631577421,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (142)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631595130,
+     "lastSeenAt": 1784631595130,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (143)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631612778,
+     "lastSeenAt": 1784631612778,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (144)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631630372,
+     "lastSeenAt": 1784631630372,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (145)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631647886,
+     "lastSeenAt": 1784631647886,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (146)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631665446,
+     "lastSeenAt": 1784631665446,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (147)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631683191,
+     "lastSeenAt": 1784631683191,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (148)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631701134,
+     "lastSeenAt": 1784631701134,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (149)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631719323,
+     "lastSeenAt": 1784631719323,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (150)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631737669,
+     "lastSeenAt": 1784631737669,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (151)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631954194,
+     "lastSeenAt": 1784631954194,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (152)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631972036,
+     "lastSeenAt": 1784631972036,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (153)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784631989917,
+     "lastSeenAt": 1784631989917,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (154)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632007760,
+     "lastSeenAt": 1784632007760,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (155)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632025596,
+     "lastSeenAt": 1784632025596,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (156)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632043532,
+     "lastSeenAt": 1784632043532,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (157)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632062169,
+     "lastSeenAt": 1784632062169,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (158)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632080516,
+     "lastSeenAt": 1784632080516,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (159)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632098982,
+     "lastSeenAt": 1784632098982,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (160)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632117674,
+     "lastSeenAt": 1784632117674,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (161)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632310290,
+     "lastSeenAt": 1784632310290,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (162)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632327949,
+     "lastSeenAt": 1784632327949,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (163)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632345632,
+     "lastSeenAt": 1784632345632,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (164)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632363275,
+     "lastSeenAt": 1784632363275,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (165)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632380974,
+     "lastSeenAt": 1784632380974,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (166)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632398645,
+     "lastSeenAt": 1784632398645,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (167)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632416332,
+     "lastSeenAt": 1784632416332,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (168)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632434039,
+     "lastSeenAt": 1784632434039,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (169)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632451863,
+     "lastSeenAt": 1784632451863,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (170)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632471183,
+     "lastSeenAt": 1784632471183,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (171)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632611412,
+     "lastSeenAt": 1784632611412,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (172)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632629552,
+     "lastSeenAt": 1784632629552,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (173)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632647620,
+     "lastSeenAt": 1784632647620,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (174)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632666104,
+     "lastSeenAt": 1784632666104,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (175)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632683859,
+     "lastSeenAt": 1784632683859,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (176)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632701594,
+     "lastSeenAt": 1784632701594,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (177)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632719522,
+     "lastSeenAt": 1784632719522,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (178)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632737511,
+     "lastSeenAt": 1784632737511,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (179)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632755860,
+     "lastSeenAt": 1784632755860,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (180)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632774213,
+     "lastSeenAt": 1784632774213,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (181)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632972704,
+     "lastSeenAt": 1784632972704,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (182)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784632990430,
+     "lastSeenAt": 1784632990430,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (183)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633008046,
+     "lastSeenAt": 1784633008046,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (184)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633025715,
+     "lastSeenAt": 1784633025715,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (185)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633043470,
+     "lastSeenAt": 1784633043470,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (186)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633061244,
+     "lastSeenAt": 1784633061244,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (187)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633079181,
+     "lastSeenAt": 1784633079181,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (188)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633097627,
+     "lastSeenAt": 1784633097627,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (189)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633115913,
+     "lastSeenAt": 1784633115913,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (190)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633134264,
+     "lastSeenAt": 1784633134264,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (191)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633290325,
+     "lastSeenAt": 1784633290325,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (192)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633308789,
+     "lastSeenAt": 1784633308789,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (193)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633327022,
+     "lastSeenAt": 1784633327022,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (194)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633345559,
+     "lastSeenAt": 1784633345559,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (195)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633363829,
+     "lastSeenAt": 1784633363829,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (196)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633382010,
+     "lastSeenAt": 1784633382010,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (197)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633400380,
+     "lastSeenAt": 1784633400380,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (198)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633418911,
+     "lastSeenAt": 1784633418911,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (199)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633437573,
+     "lastSeenAt": 1784633437573,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (200)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633457460,
+     "lastSeenAt": 1784633457460,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (201)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633604553,
+     "lastSeenAt": 1784633604553,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (202)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633628594,
+     "lastSeenAt": 1784633628594,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (203)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633646726,
+     "lastSeenAt": 1784633646726,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (204)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633664630,
+     "lastSeenAt": 1784633664630,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (205)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633682810,
+     "lastSeenAt": 1784633682810,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (206)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633701726,
+     "lastSeenAt": 1784633701726,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (207)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633720462,
+     "lastSeenAt": 1784633720462,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (208)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633739497,
+     "lastSeenAt": 1784633739497,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (209)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633759608,
+     "lastSeenAt": 1784633759608,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (210)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633778691,
+     "lastSeenAt": 1784633778691,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (211)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633907360,
+     "lastSeenAt": 1784633907360,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (212)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633925404,
+     "lastSeenAt": 1784633925404,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (213)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633943457,
+     "lastSeenAt": 1784633943457,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (214)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633961804,
+     "lastSeenAt": 1784633961804,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (215)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633979660,
+     "lastSeenAt": 1784633979660,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (216)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784633997373,
+     "lastSeenAt": 1784633997373,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (217)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634015305,
+     "lastSeenAt": 1784634015305,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (218)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634034132,
+     "lastSeenAt": 1784634034132,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (219)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634054806,
+     "lastSeenAt": 1784634054806,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (220)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634074108,
+     "lastSeenAt": 1784634074108,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (221)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634281644,
+     "lastSeenAt": 1784634281644,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (222)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634299716,
+     "lastSeenAt": 1784634299716,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (223)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634317970,
+     "lastSeenAt": 1784634317970,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (224)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634337165,
+     "lastSeenAt": 1784634337165,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (225)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634356093,
+     "lastSeenAt": 1784634356093,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (226)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634374234,
+     "lastSeenAt": 1784634374234,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (227)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634416400,
+     "lastSeenAt": 1784634416400,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (228)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634441548,
+     "lastSeenAt": 1784634441548,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (229)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634460728,
+     "lastSeenAt": 1784634460728,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (230)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634479656,
+     "lastSeenAt": 1784634479656,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (231)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634538929,
+     "lastSeenAt": 1784634538929,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (232)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634560123,
+     "lastSeenAt": 1784634560123,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (233)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634581003,
+     "lastSeenAt": 1784634581003,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (234)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634601734,
+     "lastSeenAt": 1784634601734,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (235)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634622886,
+     "lastSeenAt": 1784634622886,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (236)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634643653,
+     "lastSeenAt": 1784634643653,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (237)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634664747,
+     "lastSeenAt": 1784634664747,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (238)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634685906,
+     "lastSeenAt": 1784634685906,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (239)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634707539,
+     "lastSeenAt": 1784634707539,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (240)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634729307,
+     "lastSeenAt": 1784634729307,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (241)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634932043,
+     "lastSeenAt": 1784634932043,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (242)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634953400,
+     "lastSeenAt": 1784634953400,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (243)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634974213,
+     "lastSeenAt": 1784634974213,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (244)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784634995024,
+     "lastSeenAt": 1784634995024,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (245)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635016902,
+     "lastSeenAt": 1784635016902,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (246)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635038348,
+     "lastSeenAt": 1784635038348,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (247)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635059742,
+     "lastSeenAt": 1784635059742,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (248)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635081745,
+     "lastSeenAt": 1784635081745,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (249)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635103053,
+     "lastSeenAt": 1784635103053,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (250)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635124333,
+     "lastSeenAt": 1784635124333,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (251)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635455436,
+     "lastSeenAt": 1784635455436,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (252)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635475643,
+     "lastSeenAt": 1784635475643,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (253)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635495841,
+     "lastSeenAt": 1784635495841,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (254)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635516316,
+     "lastSeenAt": 1784635516316,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (255)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635536883,
+     "lastSeenAt": 1784635536883,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (256)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635557443,
+     "lastSeenAt": 1784635557443,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (257)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635578002,
+     "lastSeenAt": 1784635578002,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (258)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635598505,
+     "lastSeenAt": 1784635598505,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (259)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635619104,
+     "lastSeenAt": 1784635619104,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (260)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635639740,
+     "lastSeenAt": 1784635639740,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (261)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635895727,
+     "lastSeenAt": 1784635895727,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (262)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635916268,
+     "lastSeenAt": 1784635916268,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (263)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635938079,
+     "lastSeenAt": 1784635938079,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (264)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635958450,
+     "lastSeenAt": 1784635958450,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (265)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635978852,
+     "lastSeenAt": 1784635978852,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (266)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784635999329,
+     "lastSeenAt": 1784635999329,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (267)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636019989,
+     "lastSeenAt": 1784636019989,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (268)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636040673,
+     "lastSeenAt": 1784636040673,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (269)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636061205,
+     "lastSeenAt": 1784636061205,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (270)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636093190,
+     "lastSeenAt": 1784636093190,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (271)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636322656,
+     "lastSeenAt": 1784636322656,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (272)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636342885,
+     "lastSeenAt": 1784636342885,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (273)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636363216,
+     "lastSeenAt": 1784636363216,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (274)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636384552,
+     "lastSeenAt": 1784636384552,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (275)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636405092,
+     "lastSeenAt": 1784636405092,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (276)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636425689,
+     "lastSeenAt": 1784636425689,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (277)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636446656,
+     "lastSeenAt": 1784636446656,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (278)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636467740,
+     "lastSeenAt": 1784636467740,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (279)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636488885,
+     "lastSeenAt": 1784636488885,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (280)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784636510435,
+     "lastSeenAt": 1784636510435,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (281)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637814777,
+     "lastSeenAt": 1784637814777,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (282)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637834928,
+     "lastSeenAt": 1784637834928,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (283)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637856857,
+     "lastSeenAt": 1784637856857,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (284)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637876952,
+     "lastSeenAt": 1784637876952,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (285)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637897217,
+     "lastSeenAt": 1784637897217,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (286)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637917493,
+     "lastSeenAt": 1784637917493,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (287)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637938157,
+     "lastSeenAt": 1784637938157,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (288)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637958452,
+     "lastSeenAt": 1784637958452,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (289)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637978988,
+     "lastSeenAt": 1784637978988,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (290)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784637999655,
+     "lastSeenAt": 1784637999655,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (291)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638036958,
+     "lastSeenAt": 1784638036958,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (292)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638057128,
+     "lastSeenAt": 1784638057128,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (293)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638077419,
+     "lastSeenAt": 1784638077419,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (294)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638097545,
+     "lastSeenAt": 1784638097545,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (295)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638117840,
+     "lastSeenAt": 1784638117840,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (296)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638138243,
+     "lastSeenAt": 1784638138243,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (297)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638158617,
+     "lastSeenAt": 1784638158617,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (298)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638179038,
+     "lastSeenAt": 1784638179038,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (299)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638199532,
+     "lastSeenAt": 1784638199532,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (300)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638220102,
+     "lastSeenAt": 1784638220102,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (301)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638365846,
+     "lastSeenAt": 1784638365846,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (302)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638385987,
+     "lastSeenAt": 1784638385987,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (303)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638406076,
+     "lastSeenAt": 1784638406076,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (304)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638426185,
+     "lastSeenAt": 1784638426185,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (305)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638446389,
+     "lastSeenAt": 1784638446389,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (306)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638466587,
+     "lastSeenAt": 1784638466587,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (307)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638486959,
+     "lastSeenAt": 1784638486959,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (308)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638507362,
+     "lastSeenAt": 1784638507362,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (309)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638527847,
+     "lastSeenAt": 1784638527847,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (310)",
+     "role": "Facilitator",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638538082,
+     "lastSeenAt": 1784638538082,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (311)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638548481,
+     "lastSeenAt": 1784638548481,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (312)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638867609,
+     "lastSeenAt": 1784638867609,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (313)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638890861,
+     "lastSeenAt": 1784638890861,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (314)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638910946,
+     "lastSeenAt": 1784638910947,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (315)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638932489,
+     "lastSeenAt": 1784638932489,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (316)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638952869,
+     "lastSeenAt": 1784638952869,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (317)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638973042,
+     "lastSeenAt": 1784638973042,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (318)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784638993449,
+     "lastSeenAt": 1784638993449,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (319)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639013989,
+     "lastSeenAt": 1784639013989,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (320)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639034584,
+     "lastSeenAt": 1784639034584,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (321)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639055171,
+     "lastSeenAt": 1784639055171,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (322)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639235195,
+     "lastSeenAt": 1784639235195,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (323)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639255322,
+     "lastSeenAt": 1784639255322,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (324)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639275492,
+     "lastSeenAt": 1784639275492,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (325)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639295608,
+     "lastSeenAt": 1784639295608,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (326)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639315868,
+     "lastSeenAt": 1784639315868,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (327)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639336084,
+     "lastSeenAt": 1784639336084,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (328)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639356500,
+     "lastSeenAt": 1784639356500,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (329)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639376978,
+     "lastSeenAt": 1784639376978,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (330)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639397506,
+     "lastSeenAt": 1784639397506,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (331)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639418054,
+     "lastSeenAt": 1784639418054,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (332)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784639981203,
+     "lastSeenAt": 1784639981203,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (333)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640001571,
+     "lastSeenAt": 1784640001571,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (334)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640021936,
+     "lastSeenAt": 1784640021936,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (335)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640042560,
+     "lastSeenAt": 1784640042560,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (336)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640062873,
+     "lastSeenAt": 1784640062873,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (337)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640083268,
+     "lastSeenAt": 1784640083268,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (338)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640103774,
+     "lastSeenAt": 1784640103774,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (339)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640124193,
+     "lastSeenAt": 1784640124193,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (340)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640144703,
+     "lastSeenAt": 1784640144703,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (341)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640165476,
+     "lastSeenAt": 1784640165476,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (342)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640566806,
+     "lastSeenAt": 1784640566806,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (343)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640587674,
+     "lastSeenAt": 1784640587674,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (344)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640608115,
+     "lastSeenAt": 1784640608116,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (345)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640628870,
+     "lastSeenAt": 1784640628870,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (346)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640652558,
+     "lastSeenAt": 1784640652558,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (347)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640672991,
+     "lastSeenAt": 1784640672991,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (348)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640693483,
+     "lastSeenAt": 1784640693483,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (349)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640713893,
+     "lastSeenAt": 1784640713893,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (350)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640734433,
+     "lastSeenAt": 1784640734433,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (351)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784640755011,
+     "lastSeenAt": 1784640755011,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (352)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641018673,
+     "lastSeenAt": 1784641018673,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (353)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641041161,
+     "lastSeenAt": 1784641041161,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (354)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641061488,
+     "lastSeenAt": 1784641061488,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (355)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641081984,
+     "lastSeenAt": 1784641081984,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (356)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641102709,
+     "lastSeenAt": 1784641102709,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (357)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641123393,
+     "lastSeenAt": 1784641123393,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (358)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641144090,
+     "lastSeenAt": 1784641144090,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (359)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641164794,
+     "lastSeenAt": 1784641164794,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (360)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641185775,
+     "lastSeenAt": 1784641185775,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (361)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641207940,
+     "lastSeenAt": 1784641207940,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (362)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641423798,
+     "lastSeenAt": 1784641423798,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (363)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641444287,
+     "lastSeenAt": 1784641444287,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (364)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641464343,
+     "lastSeenAt": 1784641464343,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (365)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641484473,
+     "lastSeenAt": 1784641484473,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (366)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641504887,
+     "lastSeenAt": 1784641504887,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (367)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641525064,
+     "lastSeenAt": 1784641525064,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (368)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641546763,
+     "lastSeenAt": 1784641546763,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (369)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641568361,
+     "lastSeenAt": 1784641568361,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (370)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641588927,
+     "lastSeenAt": 1784641588927,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (371)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641609454,
+     "lastSeenAt": 1784641609454,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (372)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641763267,
+     "lastSeenAt": 1784641763267,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (373)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641783525,
+     "lastSeenAt": 1784641783525,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (374)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641803708,
+     "lastSeenAt": 1784641803708,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (375)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641823879,
+     "lastSeenAt": 1784641823879,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (376)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641844095,
+     "lastSeenAt": 1784641844095,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (377)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641864343,
+     "lastSeenAt": 1784641864343,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (378)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641884840,
+     "lastSeenAt": 1784641884840,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (379)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641905532,
+     "lastSeenAt": 1784641905532,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (380)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641926231,
+     "lastSeenAt": 1784641926231,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (381)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784641946823,
+     "lastSeenAt": 1784641946823,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (382)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642194375,
+     "lastSeenAt": 1784642194375,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (383)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642214639,
+     "lastSeenAt": 1784642214639,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (384)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642234926,
+     "lastSeenAt": 1784642234926,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (385)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642255151,
+     "lastSeenAt": 1784642255151,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (386)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642275535,
+     "lastSeenAt": 1784642275535,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (387)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642295902,
+     "lastSeenAt": 1784642295902,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (388)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642316346,
+     "lastSeenAt": 1784642316346,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (389)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642337110,
+     "lastSeenAt": 1784642337110,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (390)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642357807,
+     "lastSeenAt": 1784642357807,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (391)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784642378665,
+     "lastSeenAt": 1784642378665,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (392)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643245315,
+     "lastSeenAt": 1784643245315,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (393)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643331902,
+     "lastSeenAt": 1784643331902,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (394)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643418487,
+     "lastSeenAt": 1784643418487,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (395)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643503706,
+     "lastSeenAt": 1784643503706,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (396)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643591220,
+     "lastSeenAt": 1784643591220,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (397)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643679587,
+     "lastSeenAt": 1784643679587,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (398)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643816852,
+     "lastSeenAt": 1784643816852,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (399)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643830920,
+     "lastSeenAt": 1784643830920,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (400)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643839813,
+     "lastSeenAt": 1784643839813,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (401)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643853233,
+     "lastSeenAt": 1784643853233,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (402)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643861817,
+     "lastSeenAt": 1784643861817,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (403)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643875522,
+     "lastSeenAt": 1784643875522,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (404)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643884317,
+     "lastSeenAt": 1784643884317,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (405)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643898736,
+     "lastSeenAt": 1784643898736,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (406)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643922236,
+     "lastSeenAt": 1784643922236,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (407)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643945683,
+     "lastSeenAt": 1784643945683,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (408)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643969820,
+     "lastSeenAt": 1784643969820,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (409)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784643993051,
+     "lastSeenAt": 1784643993051,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (410)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644016820,
+     "lastSeenAt": 1784644016820,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (411)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644040625,
+     "lastSeenAt": 1784644040625,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (412)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644052311,
+     "lastSeenAt": 1784644052311,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (413)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644076843,
+     "lastSeenAt": 1784644076843,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (414)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644100318,
+     "lastSeenAt": 1784644100318,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (415)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644129051,
+     "lastSeenAt": 1784644129051,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (416)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644151147,
+     "lastSeenAt": 1784644151147,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (417)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644171933,
+     "lastSeenAt": 1784644171933,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (418)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644194381,
+     "lastSeenAt": 1784644194381,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (419)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644215751,
+     "lastSeenAt": 1784644215751,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (420)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644237791,
+     "lastSeenAt": 1784644237791,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (421)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644259163,
+     "lastSeenAt": 1784644259163,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (422)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644789448,
+     "lastSeenAt": 1784644789448,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (423)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644811083,
+     "lastSeenAt": 1784644811083,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (424)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644861730,
+     "lastSeenAt": 1784644861730,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (425)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644888856,
+     "lastSeenAt": 1784644888856,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (426)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644924726,
+     "lastSeenAt": 1784644924726,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (427)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644952673,
+     "lastSeenAt": 1784644952673,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (428)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784644980221,
+     "lastSeenAt": 1784644980221,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (429)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784645008063,
+     "lastSeenAt": 1784645008063,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (430)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784645043081,
+     "lastSeenAt": 1784645043081,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (431)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784645084737,
+     "lastSeenAt": 1784645084737,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (432)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646123910,
+     "lastSeenAt": 1784646123910,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (433)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646153585,
+     "lastSeenAt": 1784646153585,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (434)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646182798,
+     "lastSeenAt": 1784646182798,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (435)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646215226,
+     "lastSeenAt": 1784646215226,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (436)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646246443,
+     "lastSeenAt": 1784646246443,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (437)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646277779,
+     "lastSeenAt": 1784646277779,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (438)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646309495,
+     "lastSeenAt": 1784646309495,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (439)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646356695,
+     "lastSeenAt": 1784646356695,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (440)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646403532,
+     "lastSeenAt": 1784646403532,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (441)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784646460163,
+     "lastSeenAt": 1784646460163,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (442)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647660605,
+     "lastSeenAt": 1784647660605,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (443)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647683726,
+     "lastSeenAt": 1784647683726,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (444)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647735762,
+     "lastSeenAt": 1784647735762,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (445)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647787712,
+     "lastSeenAt": 1784647787712,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (446)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647809945,
+     "lastSeenAt": 1784647809945,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (447)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647830894,
+     "lastSeenAt": 1784647830894,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (448)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647851375,
+     "lastSeenAt": 1784647851375,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (449)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647871869,
+     "lastSeenAt": 1784647871869,
+     "canSpeak": true
+    },
+    {
+     "name": "Waqas (450)",
+     "role": "host",
+     "color": "#EC4899",
+     "initials": "WA",
+     "client": "web",
+     "joinedAt": 1784647900328,
+     "lastSeenAt": 1784647900328,
+     "canSpeak": true
+    }
+   ],
+   "replyMode": "open"
+  }
+ },
+ "messages": {
+  "messages": [
+   {
+    "id": 1700000000000,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "Long fixture report for the dense state.\nLine 1: deterministic content that never changes between gate runs.\nLine 2: deterministic content that never changes between gate runs.\nLine 3: deterministic content that never changes between gate runs.\nLine 4: deterministic content that never changes between gate runs.\nLine 5: deterministic content that never changes between gate runs.\nLine 6: deterministic content that never changes between gate runs.\nLine 7: deterministic content that never changes between gate runs.\nLine 8: deterministic content that never changes between gate runs.\nLine 9: deterministic content that never changes between gate runs.\nLine 10: deterministic content that never changes between gate runs.\nLine 11: deterministic content that never changes between gate runs.\nLine 12: deterministic content that never changes between gate runs.\nLine 13: deterministic content that never changes between gate runs.\nLine 14: deterministic content that never changes between gate runs.\nLine 15: deterministic content that never changes between gate runs.\nLine 16: deterministic content that never changes between gate runs.\nLine 17: deterministic content that never changes between gate runs.\nLine 18: deterministic content that never changes between gate runs.\nLine 19: deterministic content that never changes between gate runs.\nLine 20: deterministic content that never changes between gate runs.",
+    "client": "cc",
+    "time": 1700000000000,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000001,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "Rapid fixture message 1.",
+    "client": "cc",
+    "time": 1700000000001,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000002,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "Rapid fixture message 2.",
+    "client": "cc",
+    "time": 1700000000002,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000003,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "Rapid fixture message 3.",
+    "client": "cc",
+    "time": 1700000000003,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000004,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "Rapid fixture message 4.",
+    "client": "cc",
+    "time": 1700000000004,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000005,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "Rapid fixture message 5.",
+    "client": "cc",
+    "time": 1700000000005,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000006,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "Rapid fixture message 6.",
+    "client": "cc",
+    "time": 1700000000006,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000007,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "@GateA a deterministic mention for the highlight state.",
+    "client": "cc",
+    "time": 1700000000007,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000008,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "[DECISION] Ship the two-row Activity Note as the deterministic status object for all fixture runs.",
+    "client": "cc",
+    "time": 1700000000008,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000009,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "[RESULT] Fixture room seeded: 21-line report, six rapid messages, a mention, a status run, and produced work objects.",
+    "client": "cc",
+    "time": 1700000000009,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000010,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "[TODO] Verify the populated Outputs hierarchy shows Decision, Action, and Result cards with derived titles.",
+    "client": "cc",
+    "time": 1700000000010,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000011,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "[DECISION] Adopt the reading-endpoint disclosure as the single grammar for every clamped surface. The product shipped two disclosure dialects during the redesign and the reviewers ruled that exactly one grammar must win, so this deliberately long decision body exists to make the populated Outputs frame photograph the derived-title split, the three-line clamp, and the Show more endpoint on a real work object every single gate run.",
+    "client": "cc",
+    "time": 1700000000011,
+    "metadata": {
+     "modeAtSend": "open",
+     "roleAtSend": "open",
+     "invocationType": "normal_turn"
+    }
+   },
+   {
+    "id": 1700000000012,
+    "type": "msg",
+    "name": "GateB",
+    "initials": "B",
+    "color": "#8B5CF6",
+    "role": "fixture",
+    "text": "deploy sha a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6",
+    "client": "cc",
+    "time": 1700000000012,
+    "metadata": {
+     "kind": "status"
+    }
+   },
+   {
+    "id": 1700000000013,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "status ping fixture",
+    "client": "cc",
+    "time": 1700000000013,
+    "metadata": {
+     "kind": "status"
+    }
+   },
+   {
+    "id": 1700000000014,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "status run fixture, older member",
+    "client": "cc",
+    "time": 1700000000014,
+    "metadata": {
+     "kind": "status"
+    }
+   },
+   {
+    "id": 1700000000015,
+    "type": "msg",
+    "name": "GateA",
+    "initials": "A",
+    "color": "#5B6AFF",
+    "role": "fixture",
+    "text": "Deterministic heartbeat: the build finished green and the deploy step is proceeding to verification now. Full report: the bundle hash matched the source tree, the visual gate ran every frame of the matrix, and no geometry findings remain outstanding on this deploy candidate.",
+    "client": "cc",
+    "time": 1700000000015,
+    "metadata": {
+     "kind": "status"
+    }
+   }
+  ]
+ },
+ "messageCount": {
+  "total": 16
+ },
+ "health": {
+  "health": [
+   {
+    "name": "GateA",
+    "client": "cc",
+    "role": "fixture",
+    "state": "disconnected",
+    "lastSeenAgoMs": 1784660428379,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "GateB",
+    "client": "cc",
+    "role": "fixture",
+    "state": "disconnected",
+    "lastSeenAgoMs": 1784660428379,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "ClaudeUI",
+    "client": "web",
+    "role": "",
+    "state": "disconnected",
+    "lastSeenAgoMs": 1784660428379,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 34054324,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (2)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 34036931,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (3)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 34019070,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (4)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 34001503,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (5)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33984001,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (6)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33966348,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (7)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33948718,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (8)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33931029,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (9)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33913235,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (10)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33895348,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (11)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33792772,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (12)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33775120,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (13)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33757481,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (14)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33739824,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (15)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33722112,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (16)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33704397,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (17)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33686586,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (18)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33668692,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (19)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33650704,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (20)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33632262,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (21)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33532813,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (22)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33515355,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (23)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33497926,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (24)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33480476,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (25)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33462996,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (26)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33445496,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (27)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33427875,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (28)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33410179,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (29)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33392156,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (30)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33374122,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (31)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33175692,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (32)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33157752,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (33)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33139638,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (34)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33121678,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (35)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33103680,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (36)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33084996,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (37)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33067108,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (38)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33049067,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (39)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33031129,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (40)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 33013173,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (41)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32612376,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (42)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32594710,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (43)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32577018,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (44)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32559359,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (45)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32541636,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (46)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32523885,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (47)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32506094,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (48)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32468333,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (49)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32449349,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (50)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32430487,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (51)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32158927,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (52)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32140611,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (53)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32122739,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (54)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32104938,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (55)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32065366,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (56)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32046677,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (57)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32028120,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (58)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 32009332,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (59)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31990380,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (60)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31971492,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (61)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31899156,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (62)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31880751,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (63)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31862533,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (64)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31844316,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (65)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31826138,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (66)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31807394,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (67)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31788917,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (68)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31769220,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (69)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31750129,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (70)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31731219,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (71)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31437150,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (72)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31417688,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (73)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31398426,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (74)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31379377,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (75)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31360092,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (76)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31340269,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (77)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31320113,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (78)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31299866,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (79)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31279750,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (80)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31259211,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (81)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31110745,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (82)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31092999,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (83)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31075312,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (84)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31057585,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (85)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31039868,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (86)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 31018507,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (87)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30998001,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (88)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30979237,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (89)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30961204,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (90)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30942932,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (91)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30632692,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (92)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30614982,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (93)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30597280,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (94)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30579580,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (95)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30561763,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (96)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30543922,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (97)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30526012,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (98)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30508111,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (99)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30490053,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (100)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30471964,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (101)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30303884,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (102)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30286153,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (103)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30268443,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (104)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30250733,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (105)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30233034,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (106)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30215265,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (107)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30197433,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (108)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30179502,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (109)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30161469,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (110)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 30143433,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (111)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29935898,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (112)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29918077,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (113)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29900226,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (114)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29882394,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (115)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29864374,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (116)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29846786,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (117)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29829054,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (118)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29811188,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (119)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29793400,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (120)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29775554,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (121)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29671869,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (122)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29654408,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (123)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29636676,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (124)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29618778,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (125)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29600767,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (126)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29582698,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (127)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29564428,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (128)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29546202,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (129)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29527456,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (130)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29508987,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (131)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29326604,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (132)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29308700,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (133)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29291039,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (134)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29273342,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (135)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29255623,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (136)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29237822,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (137)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29219939,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (138)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29201945,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (139)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29184103,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (140)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 29166259,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (141)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28850959,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (142)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28833250,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (143)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28815602,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (144)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28798008,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (145)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28780494,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (146)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28762934,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (147)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28745189,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (148)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28727246,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (149)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28709057,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (150)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28690711,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (151)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28474186,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (152)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28456344,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (153)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28438463,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (154)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28420620,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (155)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28402784,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (156)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28384848,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (157)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28366211,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (158)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28347864,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (159)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28329398,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (160)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28310706,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (161)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28118090,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (162)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28100431,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (163)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28082748,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (164)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28065105,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (165)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28047406,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (166)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28029735,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (167)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 28012048,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (168)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27994341,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (169)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27976517,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (170)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27957197,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (171)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27816968,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (172)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27798828,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (173)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27780760,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (174)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27762276,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (175)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27744521,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (176)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27726786,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (177)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27708858,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (178)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27690869,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (179)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27672520,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (180)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27654167,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (181)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27455676,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (182)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27437950,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (183)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27420334,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (184)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27402665,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (185)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27384910,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (186)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27367136,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (187)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27349199,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (188)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27330753,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (189)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27312467,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (190)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27294116,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (191)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27138055,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (192)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27119591,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (193)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27101358,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (194)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27082821,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (195)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27064551,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (196)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27046370,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (197)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27028000,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (198)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 27009469,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (199)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26990807,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (200)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26970920,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (201)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26823827,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (202)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26799786,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (203)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26781654,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (204)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26763750,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (205)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26745570,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (206)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26726654,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (207)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26707918,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (208)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26688883,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (209)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26668772,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (210)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26649689,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (211)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26521020,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (212)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26502976,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (213)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26484923,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (214)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26466576,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (215)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26448720,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (216)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26431007,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (217)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26413075,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (218)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26394248,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (219)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26373574,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (220)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26354272,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (221)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26146736,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (222)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26128664,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (223)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26110410,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (224)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26091215,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (225)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26072287,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (226)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26054146,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (227)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 26011980,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (228)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25986832,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (229)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25967652,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (230)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25948724,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (231)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25889451,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (232)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25868257,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (233)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25847377,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (234)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25826646,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (235)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25805494,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (236)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25784727,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (237)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25763633,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (238)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25742474,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (239)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25720841,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (240)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25699073,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (241)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25496337,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (242)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25474980,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (243)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25454167,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (244)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25433356,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (245)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25411478,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (246)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25390032,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (247)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25368638,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (248)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25346635,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (249)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25325327,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (250)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 25304047,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (251)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24972944,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (252)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24952737,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (253)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24932539,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (254)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24912064,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (255)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24891497,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (256)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24870937,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (257)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24850378,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (258)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24829875,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (259)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24809276,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (260)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24788640,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (261)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24532653,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (262)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24512112,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (263)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24490301,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (264)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24469930,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (265)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24449528,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (266)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24429051,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (267)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24408391,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (268)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24387707,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (269)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24367175,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (270)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24335190,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (271)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24105724,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (272)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24085495,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (273)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24065164,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (274)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24043828,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (275)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24023288,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (276)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 24002691,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (277)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 23981724,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (278)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 23960640,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (279)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 23939495,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (280)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 23917945,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (281)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22613603,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (282)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22593452,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (283)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22571523,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (284)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22551428,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (285)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22531163,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (286)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22510887,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (287)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22490223,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (288)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22469928,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (289)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22449392,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (290)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22428725,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (291)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22391422,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (292)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22371252,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (293)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22350961,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (294)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22330835,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (295)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22310540,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (296)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22290137,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (297)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22269763,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (298)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22249342,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (299)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22228848,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (300)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22208278,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (301)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22062534,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (302)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22042393,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (303)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22022304,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (304)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 22002195,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (305)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21981991,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (306)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21961793,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (307)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21941421,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (308)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21921018,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (309)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21900533,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (310)",
+    "client": "web",
+    "role": "Facilitator",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21890298,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (311)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21879899,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (312)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21560771,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (313)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21537519,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (314)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21517433,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (315)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21495891,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (316)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21475511,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (317)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21455338,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (318)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21434931,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (319)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21414391,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (320)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21393796,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (321)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21373209,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (322)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21193185,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (323)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21173058,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (324)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21152888,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (325)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21132772,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (326)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21112512,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (327)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21092296,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (328)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21071880,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (329)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21051402,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (330)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21030874,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (331)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 21010326,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (332)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20447177,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (333)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20426809,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (334)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20406444,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (335)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20385820,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (336)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20365507,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (337)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20345112,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (338)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20324606,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (339)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20304187,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (340)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20283677,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (341)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 20262904,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (342)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19861574,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (343)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19840706,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (344)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19820264,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (345)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19799510,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (346)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19775822,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (347)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19755389,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (348)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19734897,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (349)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19714487,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (350)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19693947,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (351)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19673369,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (352)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19409707,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (353)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19387219,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (354)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19366892,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (355)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19346396,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (356)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19325671,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (357)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19304987,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (358)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19284290,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (359)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19263586,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (360)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19242605,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (361)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19220440,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (362)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 19004582,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (363)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18984093,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (364)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18964037,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (365)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18943907,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (366)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18923493,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (367)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18903316,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (368)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18881617,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (369)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18860019,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (370)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18839453,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (371)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18818926,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (372)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18665113,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (373)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18644855,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (374)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18624672,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (375)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18604501,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (376)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18584285,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (377)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18564037,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (378)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18543540,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (379)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18522848,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (380)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18502149,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (381)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18481557,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (382)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18234005,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (383)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18213741,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (384)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18193454,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (385)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18173229,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (386)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18152845,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (387)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18132478,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (388)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18112034,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (389)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18091270,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (390)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18070573,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (391)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 18049715,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (392)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 17183065,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (393)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 17096478,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (394)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 17009893,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (395)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16924674,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (396)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16837160,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (397)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16748793,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (398)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16611528,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (399)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16597460,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (400)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16588567,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (401)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16575147,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (402)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16566563,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (403)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16552858,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (404)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16544063,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (405)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16529644,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (406)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16506144,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (407)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16482697,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (408)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16458560,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (409)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16435329,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (410)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16411560,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (411)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16387755,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (412)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16376069,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (413)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16351537,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (414)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16328062,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (415)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16299329,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (416)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16277233,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (417)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16256447,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (418)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16233999,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (419)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16212629,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (420)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16190589,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (421)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 16169217,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (422)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15638932,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (423)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15617297,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (424)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15566650,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (425)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15539524,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (426)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15503654,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (427)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15475707,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (428)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15448159,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (429)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15420317,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (430)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15385299,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (431)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 15343643,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (432)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14304470,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (433)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14274795,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (434)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14245582,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (435)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14213154,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (436)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14181937,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (437)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14150601,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (438)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14118885,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (439)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14071685,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (440)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 14024848,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (441)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 13968217,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (442)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12767775,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (443)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12744654,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (444)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12692618,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (445)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12640668,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (446)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12618435,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (447)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12597486,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (448)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12577005,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (449)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12556511,
+    "listenRemainingMs": 0
+   },
+   {
+    "name": "Waqas (450)",
+    "client": "web",
+    "role": "host",
+    "state": "disconnected",
+    "lastSeenAgoMs": 12528052,
+    "listenRemainingMs": 0
+   }
+  ]
+ },
+ "taskBoard": {
+  "board": {
+   "tasks": []
+  }
+ },
+ "turnState": {
+  "turnState": null
+ },
+ "artifacts": {
+  "artifacts": [
+   {
+    "id": "1700000000008-0",
+    "kind": "decision",
+    "text": "Ship the two-row Activity Note as the deterministic status object for all fixture runs.",
+    "sourceMessageId": 1700000000008,
+    "author": "GateB",
+    "time": 1700000000008
+   },
+   {
+    "id": "1700000000009-0",
+    "kind": "result",
+    "text": "Fixture room seeded: 21-line report, six rapid messages, a mention, a status run, and produced work objects.",
+    "sourceMessageId": 1700000000009,
+    "author": "GateA",
+    "time": 1700000000009
+   },
+   {
+    "id": "1700000000010-0",
+    "kind": "todo",
+    "text": "Verify the populated Outputs hierarchy shows Decision, Action, and Result cards with derived titles.",
+    "sourceMessageId": 1700000000010,
+    "author": "GateB",
+    "time": 1700000000010
+   },
+   {
+    "id": "1700000000011-0",
+    "kind": "decision",
+    "text": "Adopt the reading-endpoint disclosure as the single grammar for every clamped surface. The product shipped two disclosure dialects during the redesign and the reviewers ruled that exactly one grammar must win, so this deliberately long decision body exists to make the populated Outputs frame photograph the derived-title split, the three-line clamp, and the Show more endpoint on a real work object every single gate run.",
+    "sourceMessageId": 1700000000011,
+    "author": "GateA",
+    "time": 1700000000011
+   }
+  ],
+  "backfillPending": false
+ },
+ "rooms": {
+  "rooms": [
+   {
+    "code": "girl-arm-dove",
+    "topic": "Visual gate fixture (auto test room, safe to ignore)",
+    "status": "active",
+    "createdBy": "GateHost",
+    "createdAt": 1700000000000,
+    "participants": 453,
+    "lastActivityAt": 1700000000014,
+    "messageCount": 16,
+    "agentCount": 2,
+    "agentsAllHealthy": false,
+    "agentStaleCount": 1,
+    "agents": [
+     {
+      "name": "GateA",
+      "color": "#5B6AFF",
+      "initials": "EA",
+      "harness": "claude-code",
+      "state": "listening"
+     },
+     {
+      "name": "GateB",
+      "color": "#8B5CF6",
+      "initials": "EB",
+      "harness": "codex",
+      "state": "stale"
+     }
+    ]
+   },
+   {
+    "code": "fix-two-hum",
+    "topic": "Deterministic room with unread work",
+    "status": "active",
+    "createdBy": "Waqas",
+    "createdAt": 1700000000000,
+    "participants": 4,
+    "lastActivityAt": 1700000900000,
+    "messageCount": 128,
+    "agentCount": 3,
+    "agentsAllHealthy": true,
+    "agentStaleCount": 0,
+    "agents": [
+     {
+      "name": "Alpha",
+      "color": "#0EA5E9",
+      "initials": "AL",
+      "harness": "claude-code",
+      "state": "listening"
+     },
+     {
+      "name": "Beta",
+      "color": "#8B5CF6",
+      "initials": "BE",
+      "harness": "codex",
+      "state": "listening"
+     },
+     {
+      "name": "Gamma",
+      "color": "#F59E0B",
+      "initials": "GA",
+      "harness": "gemini-cli",
+      "state": "online"
+     }
+    ]
+   },
+   {
+    "code": "fix-thr-owl",
+    "topic": "Long-running program room where every agent went quiet hours ago",
+    "status": "active",
+    "createdBy": "Waqas",
+    "createdAt": 1700000000000,
+    "participants": 3,
+    "lastActivityAt": 1700000300000,
+    "messageCount": 54,
+    "agentCount": 2,
+    "agentsAllHealthy": false,
+    "agentStaleCount": 2,
+    "agents": [
+     {
+      "name": "Delta",
+      "color": "#EC4899",
+      "initials": "DE",
+      "harness": "codex",
+      "state": "stale"
+     },
+     {
+      "name": "Epsi",
+      "color": "#5B6AFF",
+      "initials": "EP",
+      "harness": "claude-code",
+      "state": "stale"
+     }
+    ]
+   },
+   {
+    "code": "fix-fou-elk",
+    "topic": "Quiet archived planning room",
+    "status": "ended",
+    "createdBy": "GateHost",
+    "createdAt": 1700000000000,
+    "participants": 1,
+    "lastActivityAt": 1700000100000,
+    "messageCount": 9,
+    "agentCount": 0,
+    "agentsAllHealthy": true,
+    "agentStaleCount": 0,
+    "agents": []
+   }
+  ],
+  "nextCursor": null,
+  "hasMore": false
+ },
+ "search": {
+  "query": "",
+  "hits": []
+ },
+ "me": {
+  "identity": {
+   "email": "gate@local",
+   "name": "Waqas",
+   "role": "host"
+  }
+ }
+}

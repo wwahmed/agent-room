@@ -141,6 +141,11 @@ const processStart = pid => {
   return r.status === 0 ? r.stdout.trim() : null; // null = no such process
 };
 
+// A missing holder record is reclaimable only past an age far beyond any
+// scheduling or write jitter - a live creator descheduled between its mkdir
+// and its holder write must never be robbed by a fast contender.
+export const STALE_HOLDER_GRACE_MS = 30_000;
+
 export function acquireLock(root, cmd = 'pipeline') {
   const p = paths(root);
   mkdirSync(p.releases, { recursive: true });
@@ -149,29 +154,53 @@ export function acquireLock(root, cmd = 'pipeline') {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       mkdirSync(lockDir); // atomic: exactly one creator
-      writeFileSync(metaFile, `${JSON.stringify({ pid: process.pid, start: processStart(process.pid), cmd, at: nowIso() }, null, 2)}\n`);
-      return () => rmSync(lockDir, { recursive: true, force: true });
+      // Test hook (fail/slow only): simulate a creator descheduled before
+      // its holder write, for the robbery stress drill.
+      if (process.env.RP_TEST_HOLDER_DELAY_MS) spawnSync('sleep', [String(Number(process.env.RP_TEST_HOLDER_DELAY_MS) / 1000)]);
+      const token = randomBytes(8).toString('hex');
+      writeFileSync(metaFile, `${JSON.stringify({ pid: process.pid, start: processStart(process.pid), token, cmd, at: nowIso() }, null, 2)}\n`);
+      return () => {
+        // Ownership check before release: if we were reclaimed while
+        // descheduled, the lock now belongs to someone else - deleting it
+        // would rob THEM. Never release another process's lock.
+        try {
+          const now = JSON.parse(readFileSync(metaFile, 'utf8'));
+          if (now.token !== token) {
+            writeFileSync(p.releaseLog, `${readFileSafe(p.releaseLog)}${nowIso()} lock release skipped: reclaimed by pid ${now.pid} while we ran (cmd ${cmd})\n`);
+            return;
+          }
+        } catch {
+          return; // lock already gone
+        }
+        rmSync(lockDir, { recursive: true, force: true });
+      };
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
-      const readHolder = () => {
-        try {
-          return JSON.parse(readFileSync(metaFile, 'utf8'));
-        } catch {
-          return null;
-        }
-      };
-      let held = readHolder();
-      if (!held) {
-        // A LIVE creator sits between mkdir and its holder write for a few
-        // milliseconds - grace-wait and re-read before calling it crashed,
-        // or a concurrent acquirer could rob a healthy holder.
-        spawnSync('sleep', ['0.15']);
-        held = readHolder();
+      let held = null;
+      try {
+        held = JSON.parse(readFileSync(metaFile, 'utf8'));
+      } catch {
+        held = null;
       }
-      const liveStart = held ? processStart(held.pid) : null;
-      const holderAlive = held && liveStart !== null && liveStart === held.start;
-      if (holderAlive) throw new Error(`another pipeline run holds the lock (pid ${held.pid}, cmd ${held.cmd}, since ${held.at})`);
-      // Stale (dead pid, or a recycled pid with a different start time).
+      if (!held) {
+        // No holder record: either a creator inside its write window or a
+        // crash between mkdir and write. Age decides, with a bound far
+        // beyond jitter - young locks FAIL CLOSED.
+        let age = 0;
+        try {
+          age = Date.now() - statSync(lockDir).mtimeMs;
+        } catch {
+          continue; // lock vanished under us; retry
+        }
+        if (age < STALE_HOLDER_GRACE_MS) {
+          throw new Error(`another pipeline run holds the lock (holder record pending, lock age ${Math.round(age)}ms - failing closed)`);
+        }
+      } else {
+        const liveStart = processStart(held.pid);
+        const holderAlive = liveStart !== null && liveStart === held.start;
+        if (holderAlive) throw new Error(`another pipeline run holds the lock (pid ${held.pid}, cmd ${held.cmd}, since ${held.at})`);
+      }
+      // Stale (dead pid, recycled pid, or over-age missing record).
       // Serialize the reclaim: rename is atomic, only one process wins.
       const tomb = join(p.releases, `.lock-reclaimed-${process.pid}-${attempt}`);
       try {
@@ -182,7 +211,7 @@ export function acquireLock(root, cmd = 'pipeline') {
       rmSync(tomb, { recursive: true, force: true });
       writeFileSync(
         p.releaseLog,
-        `${readFileSafe(p.releaseLog)}${nowIso()} stale-lock reclaimed (pid ${held?.pid ?? 'unknown'} ${held ? (liveStart === null ? 'dead' : 'pid-reused') : 'no-holder-record'}, cmd ${held?.cmd ?? '?'})\n`,
+        `${readFileSafe(p.releaseLog)}${nowIso()} stale-lock reclaimed (pid ${held?.pid ?? 'unknown'} ${held ? (processStart(held.pid) === null ? 'dead' : 'pid-reused') : 'over-age missing holder record'}, cmd ${held?.cmd ?? '?'})\n`,
       );
     }
   }
@@ -277,7 +306,12 @@ export async function stage(root, opts = {}) {
     if (add.status !== 0) throw new Error(`could not create build worktree: ${add.stderr}`);
     try {
       if (existsSync(join(root, 'node_modules')) && !existsSync(join(wt, 'node_modules'))) {
-        symlinkSync(join(root, 'node_modules'), join(wt, 'node_modules'));
+        // APFS clonefile copy, not a symlink: tsc rejects types resolved
+        // through a link outside the project (TS2742), and a private copy
+        // also means the build cannot mutate the shared dependency tree.
+        // (npm ci from the commit's lockfile remains the hermetic end state.)
+        const clone = spawnSync('cp', ['-cR', join(root, 'node_modules'), join(wt, 'node_modules')]);
+        if (clone.status !== 0) throw new Error('could not clone node_modules into the build worktree');
       }
       if (process.env.RP_CRASH_POINT === 'mid-build') process.exit(137); // test hook: only ever makes runs FAIL
       const build = spawnSync('npm', ['-w', 'apps/web', 'run', 'build', '--', '--outDir', dist, '--emptyOutDir'], {
@@ -285,6 +319,18 @@ export async function stage(root, opts = {}) {
         stdio: 'inherit',
       });
       if (build.status !== 0) throw new Error(`build failed (exit ${build.status})`);
+      // Source-manifest proof: the checkout the build consumed is exactly
+      // the target commit's tree (same tree hash) and holds no local edits.
+      // Recorded into the staged phase so the claim is auditable, and any
+      // divergence refuses the stage outright.
+      const gitAt = args => spawnSync('git', args, { cwd: wt, encoding: 'utf8' }).stdout.trim();
+      const builtTree = gitAt(['rev-parse', 'HEAD^{tree}']);
+      const targetTree = spawnSync('git', ['rev-parse', `${git.fullSha}^{tree}`], { cwd: root, encoding: 'utf8' }).stdout.trim();
+      const wtDirty = gitAt(['status', '--porcelain']);
+      if (builtTree !== targetTree || wtDirty) {
+        throw new Error(`build worktree diverged from commit ${git.fullSha} (tree ${builtTree} vs ${targetTree}, dirty: ${wtDirty || 'no'}) - refusing to stage`);
+      }
+      opts.sourceProof = { builtTree, targetTree, worktreeClean: true };
     } finally {
       spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: root });
     }
@@ -306,7 +352,7 @@ export async function stage(root, opts = {}) {
   };
   writeFileSync(join(dir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
   readOnlyTree(dist);
-  writePhase(dir, 'staged', { channel, bundle, artifactSha256: meta.artifactSha256 });
+  writePhase(dir, 'staged', { channel, bundle, artifactSha256: meta.artifactSha256, sourceProof: opts.sourceProof ?? null });
   return { dir, meta, reused: false };
 }
 
@@ -578,29 +624,46 @@ export const pointerTarget = linkPath => {
 // release's content-hashed assets (retained asset union, additive only).
 // The immutable dist/ is untouched - the artifact digest covers it alone;
 // serve/ is derived, rebuildable, and recorded with its own digest.
-export function buildServeDir(dir, previousTarget) {
+// The union covers EVERY retained release on disk, not just the previous
+// one: a tab can stay open across N promotions, and its content-hashed
+// assets (JS, CSS, fonts, images, dynamic chunks - everything vite emits
+// under assets/) must stay fetchable as long as the referencing release
+// exists. Hashed filenames make collisions identical-content by definition.
+export function buildServeDir(dir, _previousTarget, root) {
   const serve = join(dir, 'serve');
   rmSync(serve, { recursive: true, force: true });
   cpSync(join(dir, 'dist'), serve, { recursive: true });
-  const walkAssets = base => {
-    const assets = join(base, 'assets');
-    return existsSync(assets) ? readdirSync(assets) : [];
-  };
+  mkdirSync(join(serve, 'assets'), { recursive: true });
   let retained = 0;
-  if (previousTarget) {
-    const prevBase = existsSync(join(previousTarget, 'serve')) ? join(previousTarget, 'serve') : join(previousTarget, 'dist');
-    mkdirSync(join(serve, 'assets'), { recursive: true });
-    for (const name of walkAssets(prevBase)) {
-      const dest = join(serve, 'assets', name);
-      if (!existsSync(dest)) {
-        linkSync(join(prevBase, 'assets', name), dest);
-        retained++;
+  const unionFrom = [];
+  const releasesRoot = root ? paths(root).releases : dirname(dir);
+  if (existsSync(releasesRoot)) {
+    for (const name of readdirSync(releasesRoot).sort()) {
+      const other = join(releasesRoot, name);
+      if (other === dir || name.startsWith('.') || name === 'current' || name === 'previous') continue;
+      let assets;
+      try {
+        if (!statSync(other).isDirectory()) continue;
+        assets = join(other, 'dist', 'assets');
+        if (!existsSync(assets)) continue;
+      } catch {
+        continue;
       }
+      let took = 0;
+      for (const file of readdirSync(assets)) {
+        const dest = join(serve, 'assets', file);
+        if (!existsSync(dest)) {
+          linkSync(join(assets, file), dest);
+          retained++;
+          took++;
+        }
+      }
+      if (took) unionFrom.push({ release: name, assets: took });
     }
   }
   writeFileSync(
     join(dir, 'serve-manifest.json'),
-    `${JSON.stringify({ serveSha256: hashDirectory(serve), retainedAssets: retained, unionFrom: previousTarget ?? null, builtAt: nowIso() }, null, 2)}\n`,
+    `${JSON.stringify({ serveSha256: hashDirectory(serve), retainedAssets: retained, unionFrom, builtAt: nowIso() }, null, 2)}\n`,
   );
   return serve;
 }
@@ -658,7 +721,7 @@ export async function promote(root, fullSha, opts = {}) {
   const legacy = importLegacyDist(root);
   const previousTarget = pointerTarget(p.current) ?? legacy?.liveDir ?? null;
   mkdirSync(p.releases, { recursive: true });
-  const serve = buildServeDir(dir, previousTarget);
+  const serve = buildServeDir(dir, null, root);
   if (previousTarget) atomicPointSymlink(p.previous, previousTarget);
   atomicPointSymlink(p.current, dir);
   atomicPointSymlink(p.liveLink, serve);
@@ -677,7 +740,7 @@ export async function promote(root, fullSha, opts = {}) {
     }
     if (!healthy || !serving) {
       if (previousTarget) {
-        atomicPointSymlink(p.liveLink, buildServeDir(previousTarget, dir));
+        atomicPointSymlink(p.liveLink, buildServeDir(previousTarget, null, root));
         atomicPointSymlink(p.current, previousTarget);
       } else {
         // First-ever promote with nothing to fall back to: restore the
@@ -716,7 +779,7 @@ export async function rollback(root, { liveUrl, by = 'unknown' } = {}) {
   if (!to) throw new Error('no previous release pointer - nothing to roll back to');
   // Union from the release being left, so in-flight pages loaded from it
   // can still resolve their hashed assets after the flip.
-  atomicPointSymlink(p.liveLink, buildServeDir(to, from));
+  atomicPointSymlink(p.liveLink, buildServeDir(to, null, root));
   atomicPointSymlink(p.current, to);
   if (from) atomicPointSymlink(p.previous, from);
   if (liveUrl) {
@@ -779,7 +842,7 @@ export async function reconcile(root, { liveUrl } = {}) {
   }
   const previous = pointerTarget(p.previous);
   if (previous) {
-    atomicPointSymlink(p.liveLink, buildServeDir(previous, dir));
+    atomicPointSymlink(p.liveLink, buildServeDir(previous, null, root));
     atomicPointSymlink(p.current, previous);
     // The failed release is not a valid rollback target, and the true
     // previous-previous is unknown: drop the pointer rather than leave a

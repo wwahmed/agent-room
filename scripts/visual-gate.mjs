@@ -13,8 +13,12 @@
 // messages arrive; the gate's contract is "someone looked", not "no pixels
 // moved".
 //
-// Identity: the gate reuses the ClaudeUI web identity. Put the member key in
-// .visual-gate/memberkey.txt (gitignored) or set VISUAL_GATE_KEY_FILE.
+// T-95 slice 2 (fixture tenancy): the gate no longer touches ANY backing
+// state. Every state renders from the frozen dataset in gate-fixtures.json,
+// served through fail-closed route stubs (gate-stubs.mjs) - a fixture that
+// attempts a mutating or unstubbed request records a tenancy violation and
+// the run refuses with CAPTURE-INCOMPLETE. No fixture room is created, no
+// member key is used, no live room is photographed.
 
 import { chromium } from 'playwright-core';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readdirSync, rmSync } from 'fs';
@@ -24,6 +28,7 @@ import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import { frameVerdict, gateSummary, enumerateFrames } from './visual-gate-report.mjs';
 import { evaluateAssertions } from './visual-gate-assertions.mjs';
+import { DATASET, installGateStubs } from './gate-stubs.mjs';
 
 const TYPE_FLOORS = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'type-floors.json'), 'utf8'));
 
@@ -33,8 +38,10 @@ const BASELINE = join(WORK, 'baseline');
 const CURRENT = join(WORK, 'current');
 const DIFF = join(WORK, 'diff');
 const BASE = process.env.VISUAL_GATE_BASE ?? 'http://127.0.0.1:8210';
-const ROOM = process.env.VISUAL_GATE_ROOM ?? 'twig-ant-stem';
-const KEY_FILE = process.env.VISUAL_GATE_KEY_FILE ?? join(WORK, 'memberkey.txt');
+// Every state renders the deterministic dataset room - including the ones
+// that used to photograph the live work room (they varied run to run, and
+// reading real state was itself the tenancy hole this slice closes).
+const ROOM = DATASET.roomCode;
 const EXE = process.env.VISUAL_GATE_CHROME
   ?? `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
 
@@ -92,83 +99,18 @@ const STATES = [
 // T-63: geometry findings accumulate across every frame.
 const geometryFailures = [];
 
-// T-63 rev2: a deterministic dense transcript. The gate owns a fixture room
-// (auto-test named so Home collapses it) seeded ONCE with fixed content —
-// a >15-line report, rapid short messages from two senders, a status ping,
-// and a mention — so 'fixture' frames are stable pixels AND a dense state.
-const FIXTURE_FILE = join(WORK, 'fixture-room.txt');
-async function ensureFixtureRoom() {
-  const post = async payload => {
-    const r = await fetch(`${BASE}/api/room`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-    const b = await r.json();
-    if (!r.ok) throw new Error(`${payload.action}: ${JSON.stringify(b).slice(0, 120)}`);
-    return b;
-  };
-  if (existsSync(FIXTURE_FILE)) {
-    const code = readFileSync(FIXTURE_FILE, 'utf8').trim();
-    try { await post({ action: 'get', code }); return code; } catch { /* expired: reseed */ }
-  }
-  const created = await post({ action: 'create', topic: 'Visual gate fixture (auto test room, safe to ignore)', createdBy: 'GateHost' });
-  const code = created.room.code;
-  const joiner = name => ({ name, role: 'fixture', color: name === 'GateA' ? '#5B6AFF' : '#8B5CF6', initials: name.slice(4, 6).toUpperCase() || 'GX', client: 'cc', harness: name === 'GateA' ? 'claude-code' : 'codex', joinedAt: 1, lastSeenAt: 1 });
-  const keys = {};
-  for (const n of ['GateA', 'GateB']) {
-    const joined = await post({ action: 'join', code, participant: joiner(n), wantMemberKey: true });
-    keys[n] = joined.memberKey;
-  }
-  const msg = (name, text, id, kind) => post({ action: 'send', code, kind, memberKey: keys[name], message: { id, type: 'msg', name, initials: name.slice(4, 6).toUpperCase(), color: name === 'GateA' ? '#5B6AFF' : '#8B5CF6', role: 'fixture', text, client: 'cc', time: id } });
-  let id = 1_700_000_000_000;
-  const longReport = ['Long fixture report for the dense state.']
-    .concat(Array.from({ length: 20 }, (_, i) => `Line ${i + 1}: deterministic content that never changes between gate runs.`))
-    .join('\n');
-  await msg('GateA', longReport, id++);
-  for (let i = 0; i < 6; i++) await msg(i % 2 ? 'GateA' : 'GateB', `Rapid fixture message ${i + 1}.`, id++);
-  await msg('GateB', '@GateA a deterministic mention for the highlight state.', id++);
-  // T-71: produced work so the Outputs page photographs POPULATED state.
-  await msg('GateB', '[DECISION] Ship the two-row Activity Note as the deterministic status object for all fixture runs.', id++);
-  await msg('GateA', '[RESULT] Fixture room seeded: 21-line report, six rapid messages, a mention, a status run, and produced work objects.', id++);
-  await msg('GateB', '[TODO] Verify the populated Outputs hierarchy shows Decision, Action, and Result cards with derived titles.', id++);
-  // The artifact extractor captures one line per marker, so the clamp hard
-  // case is a LONG single-line decision: sentence title + a summary long
-  // enough to clamp at 390 with the endpoint disclosure visible.
-  await msg('GateA', '[DECISION] Adopt the reading-endpoint disclosure as the single grammar for every clamped surface. The product shipped two disclosure dialects during the redesign and the reviewers ruled that exactly one grammar must win, so this deliberately long decision body exists to make the populated Outputs frame photograph the derived-title split, the three-line clamp, and the Show more endpoint on a real work object every single gate run.', id++);
-  // T-72: a same-sender heartbeat RUN, so the collapsed "3 updates" Activity
-  // Note is photographed and measured every run. Review finding: the NEWEST
-  // member (the one the note displays) must be the LONG body — the ribbon
-  // regression's exact trigger — so the gate measures the hard state, clamped
-  // with Show more, not a harmless two-word fixture.
-  // Very-long-token case (T-72 DoD): an unbroken 96-char token from a second
-  // sender renders as its OWN visible note — it must wrap inside the column,
-  // never widen it (ruleOverflow + ruleStatusNoteWidth watch this frame).
-  await msg('GateB', `deploy sha ${'a1b2c3d4e5f6'.repeat(8)}`, id++, 'status');
-  await msg('GateA', 'status ping fixture', id++, 'status');
-  await msg('GateA', 'status run fixture, older member', id++, 'status');
-  await msg('GateA', 'Deterministic heartbeat: the build finished green and the deploy step is proceeding to verification now. Full report: the bundle hash matched the source tree, the visual gate ran every frame of the matrix, and no geometry findings remain outstanding on this deploy candidate.', id++, 'status');
-  // rev4 (review finding): the VIEWER's own message, so the self-bubble
-  // anatomy renders in fixture frames. Sent as ClaudeUI with the gate's key.
-  if (memberKey) {
-    await post({ action: 'join', code, participant: { name: 'ClaudeUI', role: '', color: '#5B6AFF', initials: 'CU', client: 'web', joinedAt: 1, lastSeenAt: 1 }, wantMemberKey: false, memberKey }).catch(() => {});
-    await post({ action: 'send', code, memberKey, message: { id: id++, type: 'msg', name: 'ClaudeUI', initials: 'CU', color: '#5B6AFF', role: '', text: 'Deterministic self-authored fixture message from the viewer.', client: 'web', time: id } }).catch(e => console.error('self fixture message failed:', e.message));
-  }
-  writeFileSync(FIXTURE_FILE, code);
-  return code;
-}
-// rev3 (review finding): the fixture is REQUIRED. A failed seed no longer
-// shrinks the matrix — its frames simply fail capture and the STATIC expected
-// count reports CAPTURE-INCOMPLETE at exit 5.
-// The viewer identity key must exist BEFORE the seeder runs — the seeder
-// reads it for the self-authored fixture message, and a TDZ read here silently
-// killed every fixture frame on the reseed path.
-const memberKey = existsSync(KEY_FILE) ? readFileSync(KEY_FILE, 'utf8').trim() : '';
-let FIXTURE_ROOM = null;
-try {
-  FIXTURE_ROOM = await ensureFixtureRoom();
-} catch (e) {
-  console.error(`fixture room failed (frames will fail, run will be INCOMPLETE): ${e.message}`);
-}
+// T-63 rev2 -> T-95 slice 2: the dense deterministic transcript now lives in
+// gate-fixtures.json (captured once, read-only, from the original seeded
+// room with authoritative server shapes). ensureFixtureRoom and its live
+// API writes are gone; the fixture room code never needs to exist
+// server-side because no request ever reaches a server.
+const FIXTURE_ROOM = DATASET.roomCode;
+// Fail-closed tenancy: every escaped or mutating request lands here and
+// forces exit 5 at the end of the run.
+const gateViolations = [];
 STATES.push({
   name: 'fixture',
-  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}` : '/r/NON-EXI-STENT',
+  path: `/r/${FIXTURE_ROOM}`,
   // Readiness is REQUIRED: the seeded dense content must actually be there.
   ready: async p => {
     await p.waitForSelector('textarea', { timeout: 15000 });
@@ -193,7 +135,7 @@ STATES.push({
 // gone was a false negative.
 STATES.push({
   name: 'fixture-up',
-  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}` : '/r/NON-EXI-STENT',
+  path: `/r/${FIXTURE_ROOM}`,
   ready: async p => {
     await p.waitForSelector('textarea', { timeout: 15000 });
     await p.getByText('Rapid fixture message 6').first().waitFor({ timeout: 8000 });
@@ -212,7 +154,7 @@ STATES.push({
 // the inert ?gateFixture hook (headless has no microphone).
 STATES.push({
   name: 'composer-attach',
-  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}` : '/r/NON-EXI-STENT',
+  path: `/r/${FIXTURE_ROOM}`,
   ready: async p => {
     await p.waitForSelector('textarea', { timeout: 15000 });
     await p.waitForTimeout(1200);
@@ -233,7 +175,7 @@ STATES.push({
 });
 STATES.push({
   name: 'voice-draft',
-  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}?gateFixture=voice-draft` : '/r/NON-EXI-STENT',
+  path: `/r/${FIXTURE_ROOM}?gateFixture=voice-draft`,
   ready: async p => {
     await p.waitForSelector('textarea', { timeout: 15000 });
     // Readiness: the voice-draft banner is REQUIRED — this is the state
@@ -257,14 +199,10 @@ for (const vp of VIEWPORTS) {
   for (const theme of THEMES) {
     const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, colorScheme: theme });
     const page = await ctx.newPage();
-    await page.route('**/api/me', r => r.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({ identity: { email: 'gate@local', name: 'Waqas', role: 'host' } }),
-    }));
-    await page.addInitScript(([room, key]) => {
+    await installGateStubs(page, { violations: gateViolations });
+    await page.addInitScript(room => {
       sessionStorage.setItem(`room:${room}:self`, JSON.stringify({ name: 'ClaudeUI', role: '' }));
-      if (key) sessionStorage.setItem(`room:${room}:memberKey`, key);
-    }, [ROOM, memberKey]);
+    }, ROOM);
     for (const state of STATES) {
       const name = `${state.name}-${vp.tag}-${theme}.png`;
       try {
@@ -473,6 +411,12 @@ for (const name of readdirSync(CURRENT).filter(f => f.endsWith('.png'))) {
 }
 
 const summary = gateSummary(verdicts, geometryFailures, { expected: EXPECTED.length, captured: capturedFrames });
+if (gateViolations.length) {
+  summary.incomplete = true;
+  summary.exitCode = 5;
+  const lines = [...new Set(gateViolations)].map(v => `  TENANCY VIOLATION: ${v}`);
+  summary.text += `\nfixture tenancy BROKEN (${gateViolations.length} escaped request${gateViolations.length === 1 ? '' : 's'}):\n${lines.join('\n')}`;
+}
 console.log(summary.text);
 if (summary.exitCode === 2) console.log('review .visual-gate/diff, then promote deliberately: npm run visual-gate:baseline');
 if (summary.exitCode === 3) console.log('no baseline for the NEW frames — create it deliberately: npm run visual-gate:baseline');
