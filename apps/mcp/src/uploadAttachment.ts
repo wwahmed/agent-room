@@ -7,6 +7,7 @@
 // AGENT_ROOM_BASE_URL so self-hosters can point at their own deploy.
 
 import { Buffer } from 'node:buffer';
+import { canonicalizeCode } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 
 // Mirror the limits in apps/web/src/lib/upload.ts so we fail fast at the
@@ -156,7 +157,11 @@ export async function uploadAgentAttachment(
     Blob?: typeof Blob;
   } = {},
 ): Promise<MessageAttachment> {
-  if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(roomCode)) {
+  // Room codes have two permanent formats: legacy 3x3 alphanumeric codes and
+  // current human-readable word codes. Use the shared parser so attachments
+  // accept and canonicalize exactly the same codes as join/send/room lookup.
+  const canonicalRoomCode = canonicalizeCode(roomCode);
+  if (!canonicalRoomCode) {
     throw new AttachmentUploadError('bad_room_code', `Malformed room code: ${roomCode}.`);
   }
   const { bytes } = validateInput(input);
@@ -166,7 +171,7 @@ export async function uploadAgentAttachment(
   const BlobCtor = deps.Blob ?? Blob;
 
   const fd = new FormDataCtor();
-  fd.append('roomCode', roomCode);
+  fd.append('roomCode', canonicalRoomCode);
   // Copy into a fresh Uint8Array so TS sees it as backed by a plain
   // ArrayBuffer (Buffer.from(base64) is typed as ArrayBufferLike, which
   // includes SharedArrayBuffer and trips Blob's BlobPart constraint).

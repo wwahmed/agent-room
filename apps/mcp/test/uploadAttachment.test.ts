@@ -10,6 +10,7 @@ import {
 } from '../src/uploadAttachment.js';
 
 const ROOM = 'ABC-DEF-GHJ';
+const WORD_ROOM = 'rose-elk-wood';
 
 function makeOkFetch(returned: Record<string, unknown>) {
   return vi.fn(async (_url: string, init?: RequestInit) => ({
@@ -85,6 +86,39 @@ describe('uploadAgentAttachment', () => {
         'not-a-code',
       ),
     ).rejects.toMatchObject({ code: 'bad_room_code' });
+  });
+
+  it('accepts and uploads to a canonical word-code room', async () => {
+    const sample = {
+      id: 'att-word',
+      type: 'file',
+      url: '/blobs/rose-elk-wood/att-word.md',
+      name: 'test.md',
+      size: 4,
+      mime: 'text/markdown',
+      uploadedAt: 1,
+    };
+    const fetchMock = makeOkFetch(sample);
+
+    await expect(uploadAgentAttachment(
+      { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('test').toString('base64') },
+      WORD_ROOM,
+      { fetch: fetchMock },
+    )).resolves.toEqual(sample);
+
+    const init = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
+    expect((init.body as FormData).get('roomCode')).toBe(WORD_ROOM);
+  });
+
+  it('canonicalizes word-code casing before upload', async () => {
+    const fetchMock = makeOkFetch({ id: 'att-1', url: '/blobs/rose-elk-wood/att-1.md' });
+    await uploadAgentAttachment(
+      { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('test').toString('base64') },
+      'ROSE-ELK-WOOD',
+      { fetch: fetchMock },
+    );
+    const init = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
+    expect((init.body as FormData).get('roomCode')).toBe(WORD_ROOM);
   });
 
   it('strips data: URL prefix from content_base64', async () => {
@@ -171,6 +205,23 @@ describe('uploadAgentAttachments (batch)', () => {
     await expect(
       uploadAgentAttachments(tooMany, ROOM),
     ).rejects.toMatchObject({ code: 'too_many' });
+  });
+
+  it('uploads multiple attachments to a word-code room', async () => {
+    const fetchMock = makeOkFetch({ id: 'att-batch', url: '/blobs/rose-elk-wood/att-batch' });
+    const attachments = [
+      { name: 'notes.md', mime: 'text/markdown', content_base64: Buffer.from('# Notes').toString('base64') },
+      { name: 'data.json', mime: 'application/json', content_base64: Buffer.from('{"ok":true}').toString('base64') },
+    ];
+
+    const uploaded = await uploadAgentAttachments(attachments, WORD_ROOM, { fetch: fetchMock });
+
+    expect(uploaded).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls) {
+      const init = call[1] as RequestInit;
+      expect((init.body as FormData).get('roomCode')).toBe(WORD_ROOM);
+    }
   });
 
   it('surface ALLOWED_ATTACHMENT_MIMES contains the formats Robin asked for (pdf, image, html, excel, csv)', () => {
