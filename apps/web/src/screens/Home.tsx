@@ -5,7 +5,7 @@ import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
 import { RoomBadges } from '../components/RoomBadges.js';
-import { AgentFacepile } from '../components/AgentFacepile.js';
+import { RoomIdentitySlot } from '../components/RoomIdentitySlot.js';
 import { splitRooms } from '../lib/roomSections.js';
 
 function normalize(raw: string): string {
@@ -258,20 +258,14 @@ export function Home() {
                     aria-label={`Open ${r.topic}`}
                     className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint"
                   />
-                  {/* R1 (T-34 rev2): fixed 64px identity column — every title
-                      starts at the same x no matter what the slot contains. */}
-                  <div className="flex w-16 flex-shrink-0 items-center">
-                    {agentCount > 0 ? (
-                      <AgentFacepile
-                        code={r.code}
-                        agentCount={agentCount}
-                        agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? agentCount : 0)}
-                        agents={r.agents ?? []}
-                      />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-tint text-accent" aria-hidden="true">◇</div>
-                    )}
-                  </div>
+                  {/* T-55: the same left identity slot is used by the in-room
+                      desktop list, preventing cross-surface side drift. */}
+                  <RoomIdentitySlot
+                    code={r.code}
+                    agentCount={agentCount}
+                    agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? agentCount : 0)}
+                    agents={r.agents ?? []}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold">{r.topic}</div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-soft">

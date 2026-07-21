@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { relativeTime } from '../lib/relativeTime.js';
 import { RoomBadges } from './RoomBadges.js';
-import { AgentFacepile } from './AgentFacepile.js';
+import { RoomIdentitySlot } from './RoomIdentitySlot.js';
 
 // T-05 desktop room list (280px column between the rail and the chat).
 // Authenticated users get their active rooms with one-tap switching;
@@ -63,49 +63,46 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
           return (
             <div
               key={r.code}
-              className={`relative block min-h-11 rounded-lg px-3 py-2 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
+              className={`relative flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
             >
               <Link
                 to={`/r/${r.code}`}
                 aria-label={`Open ${r.topic}`}
                 className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint"
               />
-              <div className="flex items-baseline gap-2">
-                <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
-                {/* T-62 badge refined by T-18/T-20 — attention signals only.
-                    The active room never shows unread — it is being read. */}
-                <RoomBadges
-                  code={r.code}
-                  messageCount={r.messageCount}
-                  selfName={selfName}
-                  active={active}
-                  compact
-                />
-                {r.lastActivityAt != null && (
-                  <span className="flex-shrink-0 text-[12px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
-                    {relativeTime(r.lastActivityAt)}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 text-[12px] text-ink-faint">
-                <span className="truncate">
+              {/* T-55: match Home/mobile — identity is always the first,
+                  left-side column; details never push it to the row's end. */}
+              <RoomIdentitySlot
+                code={r.code}
+                agentCount={r.status !== 'ended' ? (r.agentCount ?? 0) : 0}
+                agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? (r.agentCount ?? 0) : 0)}
+                agents={r.agents ?? []}
+                compact
+                showFallback={r.status !== 'ended'}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
+                  {/* T-62 badge refined by T-18/T-20 — attention signals only.
+                      The active room never shows unread — it is being read. */}
+                  <RoomBadges
+                    code={r.code}
+                    messageCount={r.messageCount}
+                    selfName={selfName}
+                    active={active}
+                    compact
+                  />
+                  {r.lastActivityAt != null && (
+                    <span className="flex-shrink-0 text-[12px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
+                      {relativeTime(r.lastActivityAt)}
+                    </span>
+                  )}
+                </div>
+                <div className="truncate text-[12px] text-ink-faint">
                   {r.participants} here
                   {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
                   {r.status === 'ended' ? ' · ended' : ''}
-                </span>
-                {/* UX taste pass: presence is for LIVE rooms only — an ended
-                    room gets no facepile, no badge, nothing to alarm about. */}
-                {r.status !== 'ended' && (r.agentCount ?? 0) > 0 && (
-                  <span className="ml-auto">
-                    <AgentFacepile
-                      code={r.code}
-                      agentCount={r.agentCount ?? 0}
-                      agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? (r.agentCount ?? 0) : 0)}
-                      agents={r.agents ?? []}
-                      compact
-                    />
-                  </span>
-                )}
+                </div>
               </div>
             </div>
           );
