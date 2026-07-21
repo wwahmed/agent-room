@@ -121,7 +121,7 @@ export function Report() {
               // Stable anchor IDs so the Decision Board's "Jump to transcript →"
               // links land on the exact message that produced each artifact.
               <article id={`msg-${m.id}`} key={m.id} className="border-l-2 border-border pl-3 scroll-mt-24">
-                <div className="text-[11px] text-ink-soft mb-1">
+                <div className="text-[12px] text-ink-soft mb-1">
                   <span className="font-semibold text-ink">{m.name}</span>
                   {m.role && <span> · {m.role}</span>}
                   <span> · {new Date(m.time).toLocaleString()}</span>
@@ -165,7 +165,7 @@ function CreateYourOwnCTA({ report }: { report: RoomReport }) {
     <section className="bg-gradient-to-br from-accent/5 via-white to-white border border-accent-tint-border rounded-xl p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] uppercase tracking-widest font-semibold text-accent-deep mb-1">
+          <div className="text-[12px] uppercase tracking-widest font-semibold text-accent-deep mb-1">
             Want to run your own session like this?
           </div>
           <p className="text-sm text-ink leading-relaxed">
@@ -195,7 +195,7 @@ function ReportFooter({ report }: { report: RoomReport }) {
 
   return (
     <section className="bg-surface border border-border rounded-xl p-6 text-center">
-      <div className="text-[11px] uppercase tracking-widest font-semibold text-ink-faint mb-2">Exported report · expires in {hoursLeft}h</div>
+      <div className="text-[12px] uppercase tracking-widest font-semibold text-ink-faint mb-2">Exported report · expires in {hoursLeft}h</div>
       <p className="text-base font-semibold text-ink mb-1">
         Made with <a href="https://www.agent-room.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Agent Room</a>
       </p>
@@ -289,17 +289,17 @@ function DecisionBoard({
     <section className="bg-surface border border-border rounded-xl p-5">
       <div className="flex items-baseline justify-between gap-4 mb-4">
         <h2 className="text-lg font-semibold">Outcome Board</h2>
-        <span className="text-[11px] text-ink-faint">
+        <span className="text-[12px] text-ink-faint">
           Decisions, action items, and status — backed by evidence from the transcript.
         </span>
       </div>
       {visible.length === 0 ? (
         <p className="text-sm text-ink-soft">
           No decisions, action items, status, or results were captured for this room. Tag messages with{' '}
-          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[DECISION]</code>,{' '}
-          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[TODO]</code>,{' '}
-          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[STATUS]</code>, or{' '}
-          <code className="text-[11px] bg-surface-softer px-1 py-0.5 rounded">[RESULT]</code> to populate this board.
+          <code className="text-[12px] bg-surface-softer px-1 py-0.5 rounded">[DECISION]</code>,{' '}
+          <code className="text-[12px] bg-surface-softer px-1 py-0.5 rounded">[TODO]</code>,{' '}
+          <code className="text-[12px] bg-surface-softer px-1 py-0.5 rounded">[STATUS]</code>, or{' '}
+          <code className="text-[12px] bg-surface-softer px-1 py-0.5 rounded">[RESULT]</code> to populate this board.
         </p>
       ) : (
         <div className="grid md:grid-cols-3 gap-4">
@@ -314,7 +314,7 @@ function DecisionBoard({
                   </span>
                 </h3>
                 {isEmpty ? (
-                  <p className="text-[11px] text-ink-faint leading-relaxed">{col.fallbackHint}</p>
+                  <p className="text-[12px] text-ink-faint leading-relaxed">{col.fallbackHint}</p>
                 ) : col.cards.length > 0 ? (
                   <ul className="space-y-2">
                     {col.cards.map(card => (
@@ -373,7 +373,7 @@ function ArtifactCard({
   return (
     <li className="border border-border-faint bg-surface-softer rounded-lg p-3 flex flex-col gap-2">
       <div className="text-sm leading-relaxed text-ink">{artifact.text}</div>
-      <div className="text-[11px] text-ink-soft">
+      <div className="text-[12px] text-ink-soft">
         <span className="font-semibold">{artifact.author}</span>
         <span> · {new Date(artifact.time).toLocaleString()}</span>
       </div>
@@ -385,7 +385,7 @@ function ArtifactCard({
       {sourceMessage && (
         <a
           href={anchor}
-          className="text-[11px] font-semibold text-accent hover:underline self-start"
+          className="text-[12px] font-semibold text-accent hover:underline self-start"
         >
           Jump to transcript →
         </a>

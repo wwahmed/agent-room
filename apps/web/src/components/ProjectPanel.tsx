@@ -223,7 +223,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
           <div key={t.id} className="rounded-lg border border-border-faint bg-surface-softer p-3">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-xs font-bold text-ink">{t.id}</span>
-              <span className={`rounded border px-1.5 py-px text-[11px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
+              <span className={`rounded border px-1.5 py-px text-[12px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
             </div>
             <div className="text-sm font-semibold leading-snug lg:text-xs">{t.title}</div>
             <div className="mt-1 text-xs text-ink-faint">

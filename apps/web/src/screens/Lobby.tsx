@@ -106,15 +106,15 @@ export function Lobby() {
       <p className="text-xs text-ink-soft mt-1 mb-5">Anyone with the code can join.</p>
 
       <div className="bg-surface-soft border border-border rounded-xl p-5 text-center mb-4 relative">
-        <div className="text-[9px] uppercase tracking-widest font-semibold text-ink-faint mb-1.5">Meeting code</div>
+        <div className="text-[12px] uppercase tracking-widest font-semibold text-ink-faint mb-1.5">Meeting code</div>
         <div className="font-mono text-2xl font-bold tracking-[0.06em]">{code}</div>
         <button onClick={() => copyText(code, 'Meeting code copied')}
           className="absolute top-2.5 right-2.5 bg-surface border border-border w-7 h-7 rounded-md text-ink-soft text-xs">⎘</button>
       </div>
 
-      <div className="bg-surface-softer border border-dashed border-border rounded-lg p-3 text-[10px] text-ink-soft leading-relaxed mb-4 relative whitespace-pre-line">
+      <div className="bg-surface-softer border border-dashed border-border rounded-lg p-3 text-[12px] text-ink-soft leading-relaxed mb-4 relative whitespace-pre-line">
         <button onClick={() => copyText(inviteText, 'Invite copied')}
-          className="absolute top-2 right-2 bg-surface border border-border px-2 py-0.5 rounded text-[9px] font-semibold text-ink-muted">⎘ Copy</button>
+          className="absolute top-2 right-2 bg-surface border border-border px-2 py-0.5 rounded text-[12px] font-semibold text-ink-muted">⎘ Copy</button>
         {inviteText}
       </div>
 
@@ -125,18 +125,18 @@ export function Lobby() {
 
       {template && template.suggestedRoleIds.length > 0 && (
         <div className="mb-6 rounded-lg border border-accent-tint-border bg-accent-tint/40 p-3">
-          <div className="text-[10px] font-semibold text-accent-deep mb-2 uppercase tracking-wider flex items-center gap-1.5">
+          <div className="text-[12px] font-semibold text-accent-deep mb-2 uppercase tracking-wider flex items-center gap-1.5">
             <span>{template.emoji}</span>
             <span>{template.label} · suggested roles to invite</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {template.suggestedRoleIds.map(rid => (
-              <span key={rid} className="text-[10px] font-semibold text-accent bg-surface border border-accent-tint-border px-2 py-0.5 rounded">
+              <span key={rid} className="text-[12px] font-semibold text-accent bg-surface border border-accent-tint-border px-2 py-0.5 rounded">
                 {roleLabelFor(rid)}
               </span>
             ))}
           </div>
-          <div className="text-[10px] text-ink-soft mt-2 leading-relaxed">
+          <div className="text-[12px] text-ink-soft mt-2 leading-relaxed">
             Share the code with someone (or an agent) and ask them to join in one of these roles.
           </div>
         </div>
@@ -145,14 +145,14 @@ export function Lobby() {
       <div className="mb-6">
         <div className="flex items-center gap-1.5 mb-2">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-          <span className="text-[10px] font-semibold text-ink-muted">Participants · {room.participants.length} here</span>
+          <span className="text-[12px] font-semibold text-ink-muted">Participants · {room.participants.length} here</span>
         </div>
         <div className="flex flex-col gap-1.5">
           {room.participants.map(p => (
             <div key={p.name} className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-soft rounded-md text-xs">
               <Avatar initials={p.initials} color={p.color} size="md" />
               <span className="font-semibold">{p.name}</span>
-              {p.role && <span className="text-[9px] text-ink-faint">· {p.role}</span>}
+              {p.role && <span className="text-[12px] text-ink-faint">· {p.role}</span>}
             </div>
           ))}
         </div>

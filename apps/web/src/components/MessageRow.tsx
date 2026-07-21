@@ -44,7 +44,7 @@ const AGENT_LOGOS: Record<string, string> = {
   codex: '/brand/agents/codex.png',
 };
 
-function SenderAvatar({ message, sizeClass = 'h-9 w-9', textClass = 'text-[11px]' }: { message: Message; sizeClass?: string; textClass?: string }) {
+function SenderAvatar({ message, sizeClass = 'h-9 w-9', textClass = 'text-[12px]' }: { message: Message; sizeClass?: string; textClass?: string }) {
   const agent = message.client === 'cc';
   const logo = agent ? AGENT_LOGOS[message.name.trim().toLowerCase()] : undefined;
   if (logo) {
@@ -100,7 +100,7 @@ function ReplyQuote({ reply, onJump, onDark }: { reply: NonNullable<Message['rep
         onDark ? 'border-white/60 bg-white/10 hover:bg-white/20' : 'border-accent/60 bg-black/10 hover:bg-black/20'
       }`}
     >
-      <span className={`text-[11px] font-semibold ${onDark ? 'text-white/90' : 'text-accent-deep'}`}>{reply.name}</span>
+      <span className={`text-[12px] font-semibold ${onDark ? 'text-white/90' : 'text-accent-deep'}`}>{reply.name}</span>
       <span className={`line-clamp-2 text-[12px] leading-snug [overflow-wrap:anywhere] ${onDark ? 'text-white/70' : 'text-ink-faint'}`}>{reply.text || '…'}</span>
     </button>
   );
@@ -189,7 +189,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   if (message.type === 'sys') {
     return (
       <div className="flex justify-center px-4 py-0.5">
-        <div className="max-w-[90%] rounded-md bg-surface-softer px-2.5 py-1 text-center text-[11px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
+        <div className="max-w-[90%] rounded-md bg-surface-softer px-2.5 py-1 text-center text-[12px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
           {systemEventLabel(message)}
         </div>
       </div>
@@ -203,10 +203,13 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   if (isStatusPing(message)) {
     return (
       <div id={`msg-${message.id}`} className="flex justify-center px-4 py-0.5" title={exactTime(message.time)}>
-        <div className="flex max-w-[90%] items-baseline gap-1.5 rounded-md border border-border-faint bg-surface-softer px-2.5 py-1 text-[11px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
-          <span className="rounded bg-black/10 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider" aria-label="Status update">status</span>
-          <span className="font-semibold" style={{ color: message.color }}>{message.name}</span>
-          <span>{message.text}</span>
+        {/* T-30 fix: the tag and name are flex-shrink-0/nowrap — without that,
+            long ping text squeezed them into letter-per-line columns
+            ("ST/AT/US") on wide desktop views. 12px floor per the UX spec. */}
+        <div className="flex max-w-[90%] items-baseline gap-1.5 rounded-md border border-border-faint bg-surface-softer px-2.5 py-1 text-[12px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
+          <span className="flex-shrink-0 whitespace-nowrap rounded bg-black/10 px-1 py-0.5 text-[12px] font-bold text-ink-soft" aria-label="Status update">Status</span>
+          <span className="flex-shrink-0 whitespace-nowrap font-semibold" style={{ color: message.color }}>{message.name}</span>
+          <span className="min-w-0">{message.text}</span>
         </div>
       </div>
     );
@@ -221,13 +224,16 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} onDark />}
+          {/* T-30 (host: desktop text "SHOUTING"): 16px is a phone reading
+              size; desktop settles at 14px, Slack-adjacent, above the 12px
+              floor. */}
           {body.trim() && (
-            <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
+            <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75] lg:text-[14px]">
               <MessageText text={body} selfName={selfName} />
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
-          <div className="mt-0.5 text-right text-[10px] leading-none text-white/60" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
+          <div className="mt-0.5 text-right text-[12px] leading-none text-white/60" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
         </div>
       </div>
     );
@@ -249,7 +255,9 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // mobile.
   const rowClass = 'group relative pl-4 pr-10 sm:pr-16';
   const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-2xl border sm:max-w-[86%] [overflow-wrap:anywhere]';
-  const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
+  // T-30: 16px mobile, 15px tablet, 14px desktop (host: bigger desktop type
+  // read as shouting). All comfortably above the UX-mandated 12px floor.
+  const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6] lg:text-[14px]';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.
@@ -274,13 +282,13 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
             top corner, and is legible-sized. */}
         <div className={`absolute -top-1 -left-2 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-lg' : 'rounded-full'}`}>
-          <SenderAvatar message={message} sizeClass="h-8 w-8" textClass="text-[11px]" />
+          <SenderAvatar message={message} sizeClass="h-8 w-8" textClass="text-[12px]" />
         </div>
         <div className="flex items-center gap-x-2 pl-11 pr-3 pt-2">
           <span className="text-[15px] font-bold" style={{ color: message.color }}>{message.name}</span>
-          {ambiguous && <span className="text-[11px] text-ink-faint">{message.client}</span>}
-          {message.role && <span className="hidden truncate text-[11px] text-ink-faint sm:inline">{message.role}</span>}
-          <span className="text-[11px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
+          {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
+          {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
+          <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
           <MessageMenu message={message} onReply={onReply} />
         </div>
         <div className={`px-3.5 pb-2 pt-0.5 ${bodyText}`}>

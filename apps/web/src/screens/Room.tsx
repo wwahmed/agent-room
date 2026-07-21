@@ -1113,7 +1113,7 @@ export function Room() {
               <div className="mt-3 rounded-lg border border-border-faint bg-surface-softer p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold uppercase text-ink-faint">Reply mode</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft">
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[12px] font-semibold text-ink-soft">
                     {modeLabel(replyMode)}
                   </span>
                 </div>
@@ -1231,8 +1231,8 @@ export function Room() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1 truncate text-sm font-semibold lg:text-xs">
                           {p.name}
-                          {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[11px] font-semibold text-accent">host</span>}
-                          {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[11px] font-semibold text-amber-300">muted</span>}
+                          {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[12px] font-semibold text-accent">host</span>}
+                          {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[12px] font-semibold text-amber-300">muted</span>}
                         </div>
                         <div className="truncate text-xs text-ink-soft">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
@@ -1243,7 +1243,7 @@ export function Room() {
                             recently — they stay distinct, because collapsing them is
                             what let presence lie. */}
                         {presence && (
-                          <div className={`mt-0.5 flex items-center gap-1 text-[11px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
+                          <div className={`mt-0.5 flex items-center gap-1 text-[12px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${STATE_TONE_PRESENCE[presence.state].dot}`} />
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
@@ -1286,7 +1286,7 @@ export function Room() {
                               title={`Ask ${p.name}`}
                               aria-label={`Ask ${p.name}`}
                               disabled={modeBusy}
-                              className="flex h-7 min-w-7 items-center justify-center rounded-md border border-accent-tint-border bg-accent-tint px-1.5 text-[10px] font-semibold text-accent transition hover:bg-accent-tint-border disabled:opacity-60"
+                              className="flex h-7 min-w-7 items-center justify-center rounded-md border border-accent-tint-border bg-accent-tint px-1.5 text-[12px] font-semibold text-accent transition hover:bg-accent-tint-border disabled:opacity-60"
                             >
                               Ask
                             </button>
@@ -1296,7 +1296,7 @@ export function Room() {
                               onClick={() => handleToggleMute({ name: p.name, client: p.client, canSpeak: p.canSpeak })}
                               title={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
                               aria-label={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
-                              className={`flex h-7 w-7 items-center justify-center rounded-md border text-[11px] transition ${isMuted
+                              className={`flex h-7 w-7 items-center justify-center rounded-md border text-[12px] transition ${isMuted
                                 ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
                                 : 'border-border-faint bg-surface text-ink-soft hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-300'}`}
                             >
@@ -1431,7 +1431,7 @@ export function Room() {
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
               {hasOlder && (
-                <div className="flex items-center justify-center gap-2 py-2 text-[11px] font-semibold text-ink-faint" aria-live="polite">
+                <div className="flex items-center justify-center gap-2 py-2 text-[12px] font-semibold text-ink-faint" aria-live="polite">
                   {loadingOlder && <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />}
                   {loadingOlder ? 'Loading earlier messages…' : 'Scroll up for earlier messages'}
                 </div>
@@ -1537,7 +1537,7 @@ export function Room() {
                             ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400/40 border-t-amber-500" aria-hidden="true" />
                             : <span aria-hidden="true">↑</span>}
                         </button>
-                        <span className="px-0.5 text-[11px] font-bold tabular-nums text-amber-500">
+                        <span className="px-0.5 text-[12px] font-bold tabular-nums text-amber-500">
                           @ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
                         </span>
                         <button
@@ -1628,7 +1628,7 @@ export function Room() {
                 {/* T-21: composer aligns to the same reading measure as the feed. */}
                 <div className="mx-auto flex w-full max-w-[860px] flex-col gap-2">
                 {isHost && mutedCount > 0 && (
-                  <div className="text-[11px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
+                  <div className="text-[12px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
                     <span>🔇</span>
                     <span>{mutedCount} {mutedCount === 1 ? 'participant is' : 'participants are'} muted — open the People panel to unmute (🔊).</span>
                   </div>
@@ -1636,7 +1636,7 @@ export function Room() {
                 {replyingTo && (
                   <div className="flex items-center gap-2 rounded-lg border-l-2 border-accent bg-surface-softer px-3 py-1.5">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold text-accent-deep">Replying to {replyingTo.name}</div>
+                      <div className="text-[12px] font-semibold text-accent-deep">Replying to {replyingTo.name}</div>
                       <div className="truncate text-[12px] text-ink-faint">{replyingTo.text || '…'}</div>
                     </div>
                     <button
@@ -1667,7 +1667,7 @@ export function Room() {
                     these now appear only while the draft is empty and vanish the
                     moment you type, giving the space back to the conversation. */}
                 {!text.trim() && (
-                  <div className="hidden lg:flex flex-wrap items-center gap-2 text-[10px]">
+                  <div className="hidden lg:flex flex-wrap items-center gap-2 text-[12px]">
                     <button
                       type="button"
                       onClick={() => fillPrompt('minutes')}
@@ -1709,16 +1709,16 @@ export function Room() {
                           onMouseDown={e => { e.preventDefault(); pickMention(name); }}
                           className={`flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold transition ${active ? 'bg-accent-tint text-accent' : 'text-ink hover:bg-surface-softer'}`}
                         >
-                          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: colorForName(name) }}>{initialsFor(name)}</span>
+                          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white" style={{ backgroundColor: colorForName(name) }}>{initialsFor(name)}</span>
                           <span className="truncate">{name}</span>
-                          <span className="ml-auto flex-shrink-0 text-[11px] font-normal text-ink-faint">@{mentionToken(name)}</span>
+                          <span className="ml-auto flex-shrink-0 text-[12px] font-normal text-ink-faint">@{mentionToken(name)}</span>
                         </button>
                       );
                     })}
                   </div>
                 )}
                 {dictationDraft && text.trim() && (
-                  <div className="mx-1 mt-1 flex items-center gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-[11px]">
+                  <div className="mx-1 mt-1 flex items-center gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-[12px]">
                     <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft — editable. Type to revise, then Send.</span>
                     <button
                       type="button"
@@ -1945,12 +1945,12 @@ function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {
   return (
     <div className="rounded-lg border border-border-faint bg-surface-softer p-3">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className={`text-[9px] font-semibold uppercase ${artifactTone(artifact.kind)}`}>
+        <span className={`text-[12px] font-semibold uppercase ${artifactTone(artifact.kind)}`}>
           {artifactLabel(artifact.kind)}
         </span>
-        <span className="text-[9px] text-ink-faint">{artifact.author}</span>
+        <span className="text-[12px] text-ink-faint">{artifact.author}</span>
       </div>
-      <p className="text-[11px] leading-relaxed text-ink">{artifact.text}</p>
+      <p className="text-[12px] leading-relaxed text-ink">{artifact.text}</p>
     </div>
   );
 }
@@ -1962,8 +1962,8 @@ function PendingAttachment({ attachment, onRemove }: { attachment: MessageAttach
         <img src={attachment.url} alt="" className="h-8 w-8 rounded object-cover" />
       )}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[11px] font-semibold text-ink">{attachment.name}</div>
-        <div className="text-[10px] text-ink-soft">{formatBytes(attachment.size)}</div>
+        <div className="truncate text-[12px] font-semibold text-ink">{attachment.name}</div>
+        <div className="text-[12px] text-ink-soft">{formatBytes(attachment.size)}</div>
       </div>
       <button
         onClick={onRemove}

@@ -17,8 +17,8 @@ export function ToastHost() {
   }, [msg]);
   if (!msg) return null;
   return (
-    <div className="fixed bottom-5 right-5 bg-ink text-white text-[10px] font-medium px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
-      <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[9px] flex items-center justify-center font-bold">✓</div>
+    <div className="fixed bottom-5 right-5 bg-ink text-white text-[12px] font-medium px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+      <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[12px] flex items-center justify-center font-bold">✓</div>
       {msg}
     </div>
   );

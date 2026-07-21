@@ -120,19 +120,19 @@ export function Join() {
             <div className="w-7 h-7 rounded-md bg-accent-tint text-accent flex items-center justify-center text-sm">◇</div>
             <div>
               <div className="text-xs font-semibold">{room.topic}</div>
-              <div className="text-[9px] text-ink-soft">Hosted by {room.createdBy} · {room.participants.length} here</div>
+              <div className="text-[12px] text-ink-soft">Hosted by {room.createdBy} · {room.participants.length} here</div>
             </div>
           </div>
 
           <AgentJoinQuickstart roomCode={room.code} />
 
           <label className="block mb-3">
-            <span className="text-[11px] font-semibold text-ink-muted block mb-1">Your name</span>
+            <span className="text-[12px] font-semibold text-ink-muted block mb-1">Your name</span>
             <input value={name} onChange={e => setName(e.target.value)}
               className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
           </label>
           <label className="block mb-5">
-            <span className="text-[11px] font-semibold text-ink-muted block mb-1">Your role <span className="text-ink-faint font-medium">optional</span></span>
+            <span className="text-[12px] font-semibold text-ink-muted block mb-1">Your role <span className="text-ink-faint font-medium">optional</span></span>
             <select
               value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
               onChange={e => setRole(e.target.value)}

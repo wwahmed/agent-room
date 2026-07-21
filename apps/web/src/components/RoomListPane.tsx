@@ -72,7 +72,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                   compact
                 />
                 {r.lastActivityAt != null && (
-                  <span className="flex-shrink-0 text-[11px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
+                  <span className="flex-shrink-0 text-[12px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
                     {relativeTime(r.lastActivityAt)}
                   </span>
                 )}

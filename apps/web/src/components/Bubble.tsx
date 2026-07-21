@@ -102,7 +102,7 @@ function ImageAttachment({ attachment }: { attachment: MessageAttachment }) {
       <a href={attachment.url} target="_blank" rel="noreferrer" className="block">
         <img src={attachment.url} alt={attachment.name} className="max-h-64 w-full object-contain" />
       </a>
-      <div className="flex items-center justify-between gap-2 border-t border-black/10 px-2 py-1.5 text-[10px]">
+      <div className="flex items-center justify-between gap-2 border-t border-black/10 px-2 py-1.5 text-[12px]">
         <div className="min-w-0">
           <div className="truncate font-semibold">{attachment.name}</div>
           <div className="opacity-60">{formatBytes(attachment.size)} · {fileTypeLabel(attachment)}</div>
@@ -115,8 +115,8 @@ function ImageAttachment({ attachment }: { attachment: MessageAttachment }) {
 
 function FileAttachment({ attachment }: { attachment: MessageAttachment }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-[11px]">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface/70 font-bold text-[10px] text-ink-muted">
+    <div className="flex items-center gap-3 rounded-lg border border-black/10 bg-black/5 px-3 py-2 text-[12px]">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface/70 font-bold text-[12px] text-ink-muted">
         {fileTypeLabel(attachment)}
       </div>
       <div className="min-w-0 flex-1">
@@ -190,7 +190,7 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
       {blocks.map((block, index) => {
         if (block.type === 'code') {
           return (
-            <pre key={index} className="overflow-x-auto rounded-lg bg-ink text-white/90 px-3 py-2 text-[11px] leading-relaxed">
+            <pre key={index} className="overflow-x-auto rounded-lg bg-ink text-white/90 px-3 py-2 text-[12px] leading-relaxed">
               <code>{block.lines.join('\n')}</code>
             </pre>
           );
@@ -364,7 +364,7 @@ function renderInline(text: string, selfName?: string): ReactNode[] {
       nodes.push(
         <span
           key={nodes.length}
-          className={`inline-flex items-center rounded-md px-1.5 py-0.5 mr-1 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${tone}`}
+          className={`inline-flex items-center rounded-md px-1.5 py-0.5 mr-1 text-[12px] font-bold uppercase tracking-wider ring-1 ring-inset ${tone}`}
         >
           {kind}
         </span>,

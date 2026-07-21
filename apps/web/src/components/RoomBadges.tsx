@@ -37,7 +37,7 @@ export function AgentHealthChip({ agentCount = 0, agentsAllHealthy = true }: { a
     <span
       title={label}
       aria-label={label}
-      className={`pointer-events-none ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide ${
+      className={`pointer-events-none ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[12px] font-semibold uppercase tracking-wide ${
         agentsAllHealthy ? 'text-emerald-600/80' : 'text-red-500'
       }`}
     >

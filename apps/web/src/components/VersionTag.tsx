@@ -25,7 +25,7 @@ export function VersionTag({ className }: { className?: string }) {
   const short = bundle.length > 12 ? bundle.slice(0, 12) : bundle;
   return (
     <span
-      className={className ?? 'font-mono text-[10px] tabular-nums text-ink-faint'}
+      className={className ?? 'font-mono text-[12px] tabular-nums text-ink-faint'}
       title={`Build ${bundle}`}
     >
       build {short}

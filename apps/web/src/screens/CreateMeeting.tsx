@@ -132,7 +132,7 @@ export function CreateMeeting() {
                 </optgroup>
               )}
             </select>
-            <span className="mt-1 block text-[11px] text-ink-faint">
+            <span className="mt-1 block text-[12px] text-ink-faint">
               The room's task board lives durably in this project's repo.
             </span>
           </label>
@@ -145,7 +145,7 @@ export function CreateMeeting() {
             placeholder={template?.topicSeed || 'What are we working on?'}
             className={fieldClass} />
           {template && template.id !== 'blank' && (
-            <span className="mt-1 block text-[11px] text-ink-faint">
+            <span className="mt-1 block text-[12px] text-ink-faint">
               The example stays placeholder text—type the specific name you want people to see.
             </span>
           )}
@@ -175,7 +175,7 @@ export function CreateMeeting() {
             })}
           </div>
           {template && template.id !== 'blank' && (
-            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">{template.description}</p>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-ink-faint">{template.description}</p>
           )}
         </div>
 
@@ -190,7 +190,7 @@ export function CreateMeeting() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">Creating as {name}</div>
-              <div className="text-[11px] text-ink-faint">{role || 'no role set'} · from your Google sign-in</div>
+              <div className="text-[12px] text-ink-faint">{role || 'no role set'} · from your Google sign-in</div>
             </div>
             <button type="button" onClick={() => setEditIdentity(true)} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-accent transition hover:bg-accent-tint">
               Edit

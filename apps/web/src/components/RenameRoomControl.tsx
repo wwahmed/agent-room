@@ -38,7 +38,7 @@ export function RenameRoomControl({ room, isHost, onRenamed }: Props) {
       <button
         type="button"
         onClick={() => { setTopic(room.topic); setError(null); setEditing(true); }}
-        className="mt-1 min-h-9 rounded-md px-2 text-[11px] font-semibold text-accent transition hover:bg-accent-tint"
+        className="mt-1 min-h-9 rounded-md px-2 text-[12px] font-semibold text-accent transition hover:bg-accent-tint"
       >
         Edit room name
       </button>
@@ -57,7 +57,7 @@ export function RenameRoomControl({ room, isHost, onRenamed }: Props) {
           className="h-10 w-full rounded-lg border border-border bg-surface px-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
         />
       </label>
-      {error && <div role="alert" className="text-[11px] font-semibold text-red-300">{error}</div>}
+      {error && <div role="alert" className="text-[12px] font-semibold text-red-300">{error}</div>}
       <div className="flex gap-2">
         <button disabled={busy || Boolean(roomTopicIssue(topic))} className="min-h-9 rounded-lg bg-accent px-3 text-xs font-semibold text-white disabled:opacity-50">
           {busy ? 'Saving…' : 'Save'}
