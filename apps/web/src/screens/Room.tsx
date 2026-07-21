@@ -1454,8 +1454,11 @@ export function Room() {
                       <path d="m3.5 10 4.5-5 4.5 5" />
                     </svg>
                   </button>
+                  {/* Narrow screens shorten to "@ N" so the room title keeps
+                      its floor; the full wording returns at sm+. */}
                   <span className={`whitespace-nowrap text-[12px] font-semibold tabular-nums ${tone}`} aria-hidden="true">
-                    @ {counter}
+                    <span className="sm:hidden">@ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}</span>
+                    <span className="hidden sm:inline">@ {counter}</span>
                   </span>
                   <button
                     type="button"

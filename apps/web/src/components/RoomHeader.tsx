@@ -44,7 +44,9 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
       </Link>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <div className="truncate text-[17px] font-semibold leading-tight">{room.topic}</div>
+          {/* T-42: the title keeps a readable floor even when the mention nav
+              is present — it must never truncate to zero width. */}
+          <div className="min-w-[72px] truncate text-[17px] font-semibold leading-tight">{room.topic}</div>
           {mentionNav}
         </div>
         <div className={`truncate text-[12px] leading-tight ${ended ? 'font-semibold text-red-400' : 'text-ink-faint'}`}>{presence}</div>
