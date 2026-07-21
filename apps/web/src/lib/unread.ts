@@ -92,12 +92,14 @@ export function isSelfAuthored(
 
 /** Find the first loaded, unread message that was not authored by this user. */
 /** T-20: heartbeat/"on it" pings the server stamped via the status send path.
- *  Operational noise: rendered quietly, never counted as unread. */
-export function isStatusPing(message: { metadata?: { kind?: string } | Record<string, unknown> }): boolean {
-  return (message.metadata as { kind?: string } | undefined)?.kind === 'status';
+ *  Operational noise: rendered quietly, never counted as unread. `metadata` is
+ *  typed loose on purpose — the shared MessageMetadata interface has no index
+ *  signature and this helper must accept it as-is. */
+export function isStatusPing(message: { metadata?: unknown }): boolean {
+  return (message.metadata as { kind?: unknown } | undefined)?.kind === 'status';
 }
 
-export function firstUnreadMessageIndex<T extends { name?: string; client?: string; type?: string; metadata?: Record<string, unknown> }>(
+export function firstUnreadMessageIndex<T extends { name?: string; client?: string; type?: string; metadata?: unknown }>(
   messages: T[],
   messageTotal: number,
   readCount: number,
