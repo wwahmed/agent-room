@@ -64,6 +64,7 @@ import { redactRoomPayload } from './redact.js';
 import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
+import { validateMessageAttachments } from './messageAttachments.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
 import {
@@ -841,6 +842,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         payload.memberKey as string | undefined,
         caller,
       );
+      validateMessageAttachments(message);
       if (kind === 'status') {
         // Status updates append without touching the turn machinery.
         // T-20: stamp the persisted message so every reader can classify it —
