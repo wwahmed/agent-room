@@ -119,6 +119,22 @@ per object class. Fixture tenancy is mandatory: test rooms and agents are
 tagged, TTLed, excluded from normal rails and counts, and cleaned by the
 mechanism that created them. Production data never doubles as gate data.
 
+### 13. Governance automation and quiet mode
+Automation that observes the room (scoreboard watchers, sweep reminders,
+health monitors) must classify events before reacting, and must never
+become the noise it measures. Rules:
+- Event classes: build-submission, verification ruling, incident intake,
+  planning transition, administrative bookkeeping. Automation declares
+  which classes it reacts to; planning and administrative transitions are
+  never post-worthy by default.
+- Quiet mode is a room state (set by host or lead, announced once). While
+  quiet, automation keeps observing and recording but posts nothing;
+  buffered events are summarized in one digest when quiet lifts.
+- Rate discipline: at most one automated post per trigger window, always
+  labeled as automated, always carrying its trigger.
+- A freeze order stops automated posting immediately; the stop and the
+  order that caused it are logged in the automation's own log.
+
 ## Adoption model
 
 A room adopts RoomOS by pinning a charter, enabling the roster protocol,
