@@ -6,6 +6,11 @@ export interface Participant {
   color: string;         // hex
   initials: string;      // 2 uppercase letters
   client: ClientKind;
+  // T-44/T-47: which agent harness runs this participant ('claude-code',
+  // 'codex', 'cursor', ...), stamped by the MCP at join from its own detected
+  // environment — NEVER derived from the display name. Display-only metadata:
+  // absent on humans, web rows, and rows joined before this field existed.
+  harness?: string;
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally

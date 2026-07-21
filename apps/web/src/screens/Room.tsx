@@ -15,6 +15,8 @@ import { QuestionArtifactSheet } from '../components/QuestionArtifactSheet.js';
 import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
+import { AgentAvatar } from '../components/AgentAvatar.js';
+import { brandFor } from '../lib/agentBrand.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
@@ -75,12 +77,27 @@ const MAIN_TABS: Array<{ key: MainTab; label: string; icon: React.ReactNode }> =
   { key: 'room', label: 'Room', icon: <><circle cx="8" cy="8" r="6" /><path d="M8 5.25v.1M8 7.5V11" /></> },
 ];
 
+// T-44: People shares the facepile's presence vocabulary — green = healthy
+// (solid dot while a listen loop is armed, ring when merely heard recently),
+// amber/red TRIANGLES for stale/disconnected, exactly the shapes the room
+// cards use. Color + shape + row dimming + the worded label, never color
+// alone. Labels keep the T-68 listening/online distinction.
 const STATE_TONE_PRESENCE = {
-  listening: { text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  online: { text: 'text-blue-700', dot: 'bg-blue-500' },
-  stale: { text: 'text-amber-700', dot: 'bg-amber-500' },
-  disconnected: { text: 'text-ink-faint', dot: 'bg-slate-400' },
+  listening: { text: 'text-success', glyph: 'dot' },
+  online: { text: 'text-success', glyph: 'ring' },
+  stale: { text: 'text-warning', glyph: 'triangle' },
+  disconnected: { text: 'text-danger', glyph: 'triangle' },
 } as const;
+
+function presenceGlyph(glyph: 'dot' | 'ring' | 'triangle') {
+  if (glyph === 'dot') return <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />;
+  if (glyph === 'ring') return <span className="h-2 w-2 rounded-full border-[1.5px] border-current" aria-hidden="true" />;
+  return (
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="currentColor" aria-hidden="true">
+      <path d="M8 1.8 15.2 14H.8L8 1.8Z" />
+    </svg>
+  );
+}
 
 const TEXTAREA_MIN_HEIGHT = 44;
 const TEXTAREA_MAX_HEIGHT = 180;
@@ -1275,12 +1292,26 @@ export function Room() {
                     : presence?.state === 'disconnected'
                       ? 'opacity-50'
                       : '';
+                  // T-44: full identity + state for assistive tech in ONE
+                  // accessible name — avatar color and glyphs are decoration.
+                  const brand = brandFor(p);
+                  const kindLabel = brand ? brand.label : 'human';
+                  const rowLabel = [
+                    p.name,
+                    kindLabel,
+                    p.role || null,
+                    p.name === room.createdBy ? 'host' : null,
+                    isMuted ? 'muted' : null,
+                    presence ? presence.label : null,
+                  ].filter(Boolean).join(', ');
                   return (
                     <div
                       key={`${p.name}-${p.client}`}
-                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 transition ${rowFade} ${isMuted ? 'border-amber-400/40 bg-amber-500/10' : 'border-border-faint bg-surface-softer'}`}
+                      role="group"
+                      aria-label={rowLabel}
+                      className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition ${rowFade} ${isMuted ? 'border-amber-400/40 bg-amber-500/10' : 'border-border-faint bg-surface-softer'}`}
                     >
-                      <Avatar initials={p.initials} color={p.color} size="sm" />
+                      <AgentAvatar participant={p} size="lg" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1 truncate text-sm font-semibold lg:text-xs">
                           {p.name}
@@ -1288,7 +1319,7 @@ export function Room() {
                           {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[12px] font-semibold text-amber-300">muted</span>}
                         </div>
                         <div className="truncate text-xs text-ink-soft">
-                          {[p.role, p.client].filter(Boolean).join(' · ')}
+                          {[p.role, kindLabel].filter(Boolean).join(' · ')}
                         </div>
                         {/* T-68: the state is the SERVER's verdict (T-66), not a
                             second classification computed here. `listening` proves a
@@ -1297,7 +1328,7 @@ export function Room() {
                             what let presence lie. */}
                         {presence && (
                           <div className={`mt-0.5 flex items-center gap-1 text-[12px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${STATE_TONE_PRESENCE[presence.state].dot}`} />
+                            {presenceGlyph(STATE_TONE_PRESENCE[presence.state].glyph)}
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
                             {presence.state !== 'listening' && h && (
@@ -1332,14 +1363,17 @@ export function Room() {
                         the viewer is actually the host.
                       */}
                       {(canAsk || canMuteToggle || canKick) && (
-                        <div className="flex items-center gap-1">
+                        // T-44: 36px touch targets (28px only at lg pointer
+                        // sizes), and the destructive Remove is separated from
+                        // the routine controls so it cannot be fat-fingered.
+                        <div className="flex items-center gap-1.5">
                           {canAsk && (
                             <button
                               onClick={() => { void handleAskAgent(p); }}
                               title={`Ask ${p.name}`}
                               aria-label={`Ask ${p.name}`}
                               disabled={modeBusy}
-                              className="flex h-7 min-w-7 items-center justify-center rounded-md border border-accent-tint-border bg-accent-tint px-1.5 text-[12px] font-semibold text-accent transition hover:bg-accent-tint-border disabled:opacity-60"
+                              className="flex h-9 min-w-9 items-center justify-center rounded-md border border-accent-tint-border bg-accent-tint px-1.5 text-[12px] font-semibold text-accent transition hover:bg-accent-tint-border disabled:opacity-60 lg:h-7 lg:min-w-7"
                             >
                               Ask
                             </button>
@@ -1349,7 +1383,7 @@ export function Room() {
                               onClick={() => handleToggleMute({ name: p.name, client: p.client, canSpeak: p.canSpeak })}
                               title={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
                               aria-label={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
-                              className={`flex h-7 w-7 items-center justify-center rounded-md border text-[12px] transition ${isMuted
+                              className={`flex h-9 w-9 items-center justify-center rounded-md border text-[12px] transition lg:h-7 lg:w-7 ${isMuted
                                 ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
                                 : 'border-border-faint bg-surface text-ink-soft hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-300'}`}
                             >
@@ -1370,9 +1404,9 @@ export function Room() {
                           {canKick && (
                             <button
                               onClick={() => handleKick({ name: p.name, client: p.client })}
-                              title={`Remove ${p.name}`}
-                              aria-label={`Remove ${p.name}`}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
+                              title={`Remove ${p.name} (asks to confirm)`}
+                              aria-label={`Remove ${p.name} from the room`}
+                              className="ml-1.5 flex h-9 w-9 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300 lg:h-7 lg:w-7"
                             >
                               <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
                                 <path d="m4 4 8 8M12 4l-8 8" />

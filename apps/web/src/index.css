@@ -69,7 +69,9 @@
     --accent-deep: 58 68 184;
     --success: 4 120 87;
     --success-tint: 220 252 231;
-    --warning: 161 98 7;
+    /* T-44: amber-800, not amber-700 — 161/98/7 measured 4.28:1 on the light
+       row surface (#edeff3), under the 4.5:1 small-text bar. 146/64/14 is 6.16. */
+    --warning: 146 64 14;
     --warning-tint: 254 243 199;
     --danger: 185 28 28;
     --danger-tint: 254 226 226;

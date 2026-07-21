@@ -717,6 +717,8 @@ export function registerTools(server: Server) {
         color: colorForName(a.name),
         initials: initialsFor(a.name),
         client: 'cc',
+        // T-44/T-47: brand metadata from the DETECTED harness, never the name.
+        harness: harness.kind,
         joinedAt: Date.now(),
         lastSeenAt: Date.now(),
       };
@@ -776,6 +778,8 @@ export function registerTools(server: Server) {
         color: colorForName(a.name),
         initials: initialsFor(a.name),
         client: 'cc',
+        // T-44/T-47: brand metadata from the DETECTED harness, never the name.
+        harness: harness.kind,
         joinedAt: Date.now(),
         lastSeenAt: Date.now(),
       };
