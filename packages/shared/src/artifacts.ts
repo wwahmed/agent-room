@@ -19,6 +19,7 @@ export function extractArtifacts(messages: Message[]): RoomArtifact[] {
   for (const message of messages) {
     if (message.type !== 'msg') continue;
     let inFence = false;
+    let indexInMessage = 0;
     for (const line of (message.text ?? '').split('\n')) {
       if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
       if (inFence) continue;
@@ -28,7 +29,10 @@ export function extractArtifacts(messages: Message[]): RoomArtifact[] {
       const text = match[2]?.trim();
       if (!marker || !text) continue;
       artifacts.push({
-        id: `${message.id}-${artifacts.length}`,
+        // Stable PER-MESSAGE id: identical whether this message is extracted
+        // alone (store time) or in a batch (backfill) — merge-by-id depends
+        // on this.
+        id: `${message.id}-${indexInMessage++}`,
         kind: KIND_BY_MARKER[marker] ?? 'status',
         text,
         sourceMessageId: message.id,
