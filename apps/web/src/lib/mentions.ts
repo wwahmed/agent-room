@@ -24,6 +24,17 @@ export function isSelfMention(token: string, selfName: string | undefined | null
   return firstWord === target;
 }
 
+/** T-18: does this message text mention the given user anywhere? */
+export function textMentionsSelf(text: string, selfName: string | undefined | null): boolean {
+  if (!text || !selfName) return false;
+  const re = new RegExp(`(^|[^A-Za-z0-9])(${MENTION_SOURCE})`, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (isSelfMention(m[2] ?? '', selfName)) return true;
+  }
+  return false;
+}
+
 // ---------- T-09: composer autocomplete ----------
 
 /** The single-word token the mention grammar inserts for a display name:

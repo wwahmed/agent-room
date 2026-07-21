@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, useEffect, useLayoutEffect, useCallback, type ClipboardEvent, type DragEvent } from 'react';
+import { Fragment, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ClipboardEvent, type DragEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
@@ -13,7 +13,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken } from '../lib/mentions.js';
+import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
@@ -127,6 +127,11 @@ export function Room() {
   // T-09: active @mention query in the composer — where the token starts, what
   // has been typed so far, and which candidate is keyboard-highlighted.
   const [mention, setMention] = useState<{ start: number; query: string; index: number } | null>(null);
+  // T-18: prev/next navigation through messages that mention the signed-in
+  // user. Cursor is a message ID (stable across older-page prepends, unlike a
+  // position); seekingOlder drives the paged-out-history search.
+  const [mentionCursorId, setMentionCursorId] = useState<number | null>(null);
+  const [mentionSeeking, setMentionSeeking] = useState(false);
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
   const dictationBaseRef = useRef<string | null>(null);
@@ -576,6 +581,40 @@ export function Room() {
     prevLastIdRef.current = len > 0 ? messages[len - 1]!.id : null;
   }, [messages]);
 
+  // --- T-18: mentions of the signed-in user among loaded messages (IDs are
+  // stable across older-page prepends, unlike positions). Hook lives ABOVE the
+  // early returns; gotoMention below the guards drives it. ---
+  const selfMentionIds = useMemo(
+    () => messages
+      .filter(m => m.type !== 'sys' && m.name !== self?.name && textMentionsSelf(m.text ?? '', self?.name))
+      .map(m => m.id),
+    [messages, self?.name],
+  );
+
+  // Continues a backward mention-seek across older pages: each prepend re-runs
+  // this; jump as soon as an earlier mention exists, keep paging while there is
+  // history left, and give up quietly when it is exhausted or trimmed.
+  useEffect(() => {
+    if (!mentionSeeking) return;
+    const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
+    const target = pos > 0 ? selfMentionIds[pos - 1] : (pos === -1 ? selfMentionIds[selfMentionIds.length - 1] : undefined);
+    if (target != null) {
+      setMentionSeeking(false);
+      setMentionCursorId(target);
+      const el = document.getElementById(`msg-${target}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('reply-flash');
+        window.setTimeout(() => el.classList.remove('reply-flash'), 1200);
+      }
+    } else if (!hasOlder) {
+      setMentionSeeking(false);
+    } else if (!loadingOlder) {
+      void loadOlder();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentionSeeking, selfMentionIds, hasOlder, loadingOlder]);
+
   // T-07: `error` is only ever set when the room has NOT loaded (mid-session
   // blips set `degraded` instead), so this branch is the bootstrap-failure
   // state: actionable copy + retry, not a raw exception filling the screen.
@@ -811,6 +850,27 @@ export function Room() {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.classList.add('reply-flash');
     window.setTimeout(() => el.classList.remove('reply-flash'), 1200);
+  }
+
+  function gotoMention(dir: -1 | 1) {
+    const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
+    // No cursor yet: both directions start at the LATEST mention (what you
+    // most likely came to find), then prev walks backward from there.
+    const target = pos === -1
+      ? selfMentionIds[selfMentionIds.length - 1]
+      : selfMentionIds[pos + dir];
+    if (target != null) {
+      setMentionCursorId(target);
+      jumpToMessage(target);
+      return;
+    }
+    if (dir === -1 && hasOlder) {
+      // Earlier mentions may live in paged-out history: keep loading older
+      // pages until one appears or history is exhausted (effect above the
+      // early returns continues the seek on every prepend).
+      setMentionSeeking(true);
+      void loadOlder();
+    }
   }
 
   async function send() {
@@ -1357,18 +1417,56 @@ export function Room() {
                   when there's something new. The old pill only appeared if messages
                   arrived while he was away, so reading back through history left
                   him to scroll all the way down by hand. */}
-              {(unseenCount > 0 || !atBottom) && (
-                <button
-                  type="button"
-                  onClick={scrollToBottom}
-                  aria-label={unseenCount > 0 ? `Jump to ${unseenCount} new messages` : 'Jump to latest messages'}
-                  className="sticky bottom-4 z-20 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
-                >
-                  <span aria-hidden="true">↓</span>
-                  {unseenCount > 0
-                    ? `${unseenCount} new message${unseenCount === 1 ? '' : 's'}`
-                    : 'Latest'}
-                </button>
+              {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
+                <div className="sticky bottom-4 z-20 flex w-full items-center justify-center gap-2">
+                  {(unseenCount > 0 || !atBottom) && (
+                    <button
+                      type="button"
+                      onClick={scrollToBottom}
+                      aria-label={unseenCount > 0 ? `Jump to ${unseenCount} new messages` : 'Jump to latest messages'}
+                      className="flex w-fit items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
+                    >
+                      <span aria-hidden="true">↓</span>
+                      {unseenCount > 0
+                        ? `${unseenCount} new message${unseenCount === 1 ? '' : 's'}`
+                        : 'Latest'}
+                    </button>
+                  )}
+                  {/* T-18: step through messages that mention YOU. Amber to
+                      match the in-bubble self-mention highlight. */}
+                  {selfMentionIds.length > 0 && (() => {
+                    const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
+                    return (
+                      <div role="group" aria-label="Mentions of you" className="flex items-center gap-0.5 rounded-full border border-amber-400/50 bg-surface px-1.5 py-1 shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => gotoMention(-1)}
+                          disabled={mentionSeeking}
+                          aria-label="Previous mention of you"
+                          title="Previous mention of you"
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 disabled:opacity-50"
+                        >
+                          {mentionSeeking
+                            ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400/40 border-t-amber-500" aria-hidden="true" />
+                            : <span aria-hidden="true">↑</span>}
+                        </button>
+                        <span className="px-0.5 text-[11px] font-bold tabular-nums text-amber-500">
+                          @ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => gotoMention(1)}
+                          disabled={mentionSeeking}
+                          aria-label="Next mention of you"
+                          title="Next mention of you"
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 disabled:opacity-50"
+                        >
+                          <span aria-hidden="true">↓</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </div>
 

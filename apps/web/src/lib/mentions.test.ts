@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MENTION_SOURCE, filterMentionCandidates, insertMention, isSelfMention, mentionQueryAt, mentionToken } from './mentions.js';
+import { MENTION_SOURCE, filterMentionCandidates, insertMention, isSelfMention, mentionQueryAt, mentionToken, textMentionsSelf } from './mentions.js';
 
 describe('MENTION_SOURCE', () => {
   const re = () => new RegExp(MENTION_SOURCE, 'g');
@@ -35,6 +35,27 @@ describe('isSelfMention', () => {
   it('handles missing self name', () => {
     expect(isSelfMention('@Waqas', undefined)).toBe(false);
     expect(isSelfMention('@Waqas', '')).toBe(false);
+  });
+});
+
+// T-18: whole-message self-mention scan.
+describe('textMentionsSelf', () => {
+  it('finds a mention anywhere in the text', () => {
+    expect(textMentionsSelf('as discussed, @Waqas please retest', 'Waqas')).toBe(true);
+  });
+
+  it('matches suffixed display names by first word', () => {
+    expect(textMentionsSelf('@Claude take T-18', 'Claude (2)')).toBe(true);
+  });
+
+  it('ignores other names and email domains', () => {
+    expect(textMentionsSelf('@Codex owns it', 'Waqas')).toBe(false);
+    expect(textMentionsSelf('mail waqas@example.com', 'example')).toBe(false);
+  });
+
+  it('handles empty inputs', () => {
+    expect(textMentionsSelf('', 'Waqas')).toBe(false);
+    expect(textMentionsSelf('@Waqas', '')).toBe(false);
   });
 });
 
