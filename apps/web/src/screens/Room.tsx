@@ -300,6 +300,8 @@ export function Room() {
   // trimmed the source, say so honestly instead of doing nothing.
   const [sourceSeekId, setSourceSeekId] = useState<number | null>(null);
   const seekAttemptsRef = useRef(0);
+  const codeRef = useRef(code);
+  codeRef.current = code;
   // Room change must not spill an interrupted seek's paging state into the
   // next room (rev18 review).
   useEffect(() => { setSourceSeekId(null); seekAttemptsRef.current = 0; }, [code]);
@@ -321,7 +323,10 @@ export function Room() {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         // Flash AFTER the scroll lands, not during it — a long seek's smooth
         // scroll outlives a flash fired at departure (assessor finding).
+        let flashed = false; // exactly once: scrollend OR the fallback (VA-0033)
         const flash = () => {
+          if (flashed) return;
+          flashed = true;
           el.classList.add('reply-flash');
           window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
         };
@@ -342,16 +347,21 @@ export function Room() {
           : 'Couldn\u2019t load enough history to reach the source message. Try again.', 'error'));
     } else if (action === 'load-more') {
       seekAttemptsRef.current += 1;
+      const target = sourceSeekId;
+      const seekCode = code;
       void loadOlder().then(result => {
+        if (result !== -1) return;
         // A FAILED page (-1, distinct from an empty one) stops the seek on
-        // the spot with the honest toast — no blind network retries; the
-        // user retries from the card (rev18 review).
-        if (result === -1) {
-          setSourceSeekId(null);
+        // the spot — but only the STILL-CURRENT seek in the STILL-CURRENT
+        // room (VA-0032: a stale resolution after a room switch or a
+        // superseding seek must not toast or null the wrong context).
+        setSourceSeekId(current => {
+          if (current !== target || codeRef.current !== seekCode) return current;
           seekAttemptsRef.current = 0;
           void import('../components/Toast.js').then(({ showToast }) =>
-            showToast('Couldn\u2019t load older history to reach the source. Tap View in chat to retry.', 'error'));
-        }
+            showToast('Couldn\u2019t load older history to reach the source message. You can retry from the Outputs page.', 'error'));
+          return null;
+        });
       });
     } // 'wait': a page is already in flight
     // eslint-disable-next-line react-hooks/exhaustive-deps
