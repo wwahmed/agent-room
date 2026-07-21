@@ -8,14 +8,27 @@ superseded by this document and retained only as provenance.
 ## Files
 
 - `ledger.jsonl`: one JSON entry per line, append-only.
-- `../../scripts/validate-verifier-ledger.mjs`: mechanical schema and
-  append-only validation. Run: `node scripts/validate-verifier-ledger.mjs`.
+- `../../scripts/validate-verifier-ledger.mjs`: mechanical validation of
+  schema, evidence-ref formats and existence, remediation proof, correction
+  semantics, and append-only history against the committed baseline.
+  Run: `node scripts/validate-verifier-ledger.mjs`.
+- `../../scripts/validate-verifier-ledger.test.mjs`: test harness running the
+  validator against the real ledger, the committed fixtures below, and
+  simulated history rewrite/deletion. Run before every ledger commit.
+- `fixtures/`: committed positive and negative fixtures. Each `invalid-*`
+  file must fail validation with its specific error; `valid-minimal.jsonl`
+  must pass.
 
 ## Rules
 
-1. Append-only. A wrong or stale entry is corrected by appending a new entry
-   with `supersedes` pointing at the old id. History is never rewritten;
-   `git log --follow docs/verifier-audit/ledger.jsonl` is the proof.
+1. Append-only, mechanically enforced. A wrong or stale entry is corrected by
+   appending a `correction` entry with `supersedes` pointing at the old id.
+   The validator diffs the working file against `HEAD:` and fails if any
+   committed line was edited or deleted; only corrections may supersede, and
+   every correction must supersede an earlier entry. Superseded rows are
+   frozen history: structural rules still apply to them, but provenance rules
+   are enforced on active rows only, since a superseded row's recorded flaw is
+   exactly why its correction exists.
 2. No published score. The ledger records rows; only the adjudicator
    (currently Codex UX Reviewer, Master Lead) rules on totals or standing.
    The validator rejects any entry carrying score or tally fields.
@@ -23,9 +36,13 @@ superseded by this document and retained only as provenance.
    `confirmed` by the adjudicator with a reference. Open notes are not fixed
    catches: `remediation.status` stays `open` until the remediation task is
    verified done.
-4. Every entry carries stable evidence references: room message ids, board
-   task ids with verdict timestamps, commits, blob/attachment ids, or repo
-   file paths. Claims without a reference do not go in the ledger.
+4. Every entry carries stable evidence references, validated by format per
+   type (`T-NN` tasks, 13-digit room message ids, commit SHAs, room/hash
+   attachment keys, repo-relative file paths with optional `:line`) and by
+   existence where locally provable (file paths on disk, commits via
+   `git cat-file`). A `remediated` status additionally requires a closing
+   commit or room_message ruling ref; task or file assertions alone are not
+   provenance. Claims without a valid reference do not go in the ledger.
 5. Recurrence is only asserted with instrumentation behind it (a gate
    assertion or fixture). Otherwise `remediation.status` stays at
    `open`/`remediated` and no recurrence claim is made.
