@@ -26,7 +26,9 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
     : `${room.participants.length} here${listeningCount > 0 ? ` · ${listeningCount} listening` : ''}`;
 
   return (
-    <header className="flex h-[60px] flex-shrink-0 items-center border-b border-border-faint bg-surface px-1.5 sm:px-3">
+    // T-46: same quiet brand wash as Home so the chrome reads as one family,
+    // tastefully separate from the transcript. No glow here — no brand tile.
+    <header className="header-brand-wash flex h-[60px] flex-shrink-0 items-center border-b border-border-subtle px-1.5 sm:px-3">
       {/* T-21: header content shares the feed's reading measure. T-46 (Waqas:
           "top bar and buttons are microscopic"): taller bar, larger title,
           bigger icon controls. */}

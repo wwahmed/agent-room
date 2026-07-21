@@ -163,7 +163,17 @@ body {
   .facepile-degrade { animation: none; }
 }
 
-/* T-46: shared single-run entry motions for transient system surfaces.
+/* T-46 (UX header spec): the sanctioned brand wash — surface-1 base with a
+   radial accent gradient at 7% alpha rising from the top-left behind the
+   brand mark, fully transparent by the header's midpoint. Alpha over surface
+   adapts to both themes; nothing else in the header changes color. */
+.header-brand-wash {
+  background:
+    radial-gradient(560px 130px at 0% 0%, rgb(var(--accent) / 0.07), transparent 50%),
+    rgb(var(--surface-1, var(--surface)));
+}
+
+/* T-46: shared single-run entry motions for transient system surfaces. */
    150ms ease-out per the charter; nothing loops; reduced motion disables. */
 @keyframes surface-rise {
   from { transform: translateY(8px); opacity: 0; }

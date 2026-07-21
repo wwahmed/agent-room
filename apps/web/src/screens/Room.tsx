@@ -456,7 +456,7 @@ export function Room() {
       sessionStorage.removeItem(`room:${code}:self`);
       (async () => {
         const { showToast } = await import('../components/Toast.js');
-        showToast('You were removed from the meeting by the host');
+        showToast('You were removed from the meeting by the host', 'error');
       })();
       navigate(`/j/${code}`, { replace: true });
     }
@@ -538,7 +538,7 @@ export function Room() {
       await refreshRoom();
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Mute toggle failed: ${e.message}` : 'Mute toggle failed');
+      showToast(e instanceof Error ? `Mute toggle failed: ${e.message}` : 'Mute toggle failed', 'error');
     }
   }
 
@@ -555,7 +555,7 @@ export function Room() {
       await refreshRoom();
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Kick failed: ${e.message}` : 'Kick failed');
+      showToast(e instanceof Error ? `Kick failed: ${e.message}` : 'Kick failed', 'error');
     }
   }
 
@@ -595,7 +595,7 @@ export function Room() {
       navigate(`/r/${code}/report`);
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Export failed: ${e.message}` : 'Export failed');
+      showToast(e instanceof Error ? `Export failed: ${e.message}` : 'Export failed', 'error');
     } finally {
       setReportBusy(false);
     }
@@ -834,7 +834,7 @@ export function Room() {
       showToast(`Reply mode set to ${modeLabel(mode)}.`);
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Mode change failed: ${e.message}` : 'Mode change failed');
+      showToast(e instanceof Error ? `Mode change failed: ${e.message}` : 'Mode change failed', 'error');
     } finally {
       setModeBusy(false);
     }
@@ -908,7 +908,7 @@ export function Room() {
       await refreshTurnAndMessages();
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Ask failed: ${e.message}` : 'Ask failed');
+      showToast(e instanceof Error ? `Ask failed: ${e.message}` : 'Ask failed', 'error');
     } finally {
       setModeBusy(false);
     }
@@ -934,7 +934,7 @@ export function Room() {
       await refreshTurnAndMessages();
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Skip failed: ${e.message}` : 'Skip failed');
+      showToast(e instanceof Error ? `Skip failed: ${e.message}` : 'Skip failed', 'error');
     } finally {
       setModeBusy(false);
     }
@@ -1019,7 +1019,7 @@ export function Room() {
     } catch (e) {
       unmarkSelfMessageSeen(code, me.name);
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Send failed: ${e.message}` : 'Send failed');
+      showToast(e instanceof Error ? `Send failed: ${e.message}` : 'Send failed', 'error');
       setText(body); // restore draft
       setAttachments(attachments);
     } finally {

@@ -107,11 +107,12 @@ export function Home() {
 
   return (
     <div className="min-h-screen bg-surface-sunken text-ink">
-      {/* Brand header with account state */}
-      <header className="border-b border-border-faint bg-surface">
+      {/* Brand header with account state. T-46: the sanctioned brand wash —
+          quiet radial accent behind the mark, glow on the TILE only. */}
+      <header className="header-brand-wash border-b border-border-subtle">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-8 w-8" />
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-8 w-8 rounded-lg shadow-[0_0_12px_rgb(var(--accent)/0.35)]" />
             <span className="text-lg font-bold tracking-tight">WakiChat</span>
           </div>
           {identity ? (

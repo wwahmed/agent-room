@@ -45,7 +45,7 @@ export function MessageMenu({ message, align = 'right', onReply }: { message: Me
         document.body.removeChild(ta);
         showToast('Copied');
       } catch {
-        showToast('Copy failed');
+        showToast('Copy failed', 'error');
       }
     }
   }

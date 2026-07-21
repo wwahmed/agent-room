@@ -5,6 +5,6 @@ export async function copyText(text: string, successMsg: string): Promise<void> 
     await navigator.clipboard.writeText(text);
     showToast(successMsg);
   } catch {
-    showToast('Failed to copy');
+    showToast('Failed to copy', 'error');
   }
 }

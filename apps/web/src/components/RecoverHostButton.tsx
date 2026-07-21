@@ -20,7 +20,7 @@ export function RecoverHostButton({ code }: { code: string }) {
       showToast(migrated > 0 ? `Host access recovered ✓ (${migrated} updated)` : 'Host access recovered ✓');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Recovery failed';
-      showToast(`Host recovery failed: ${msg}`);
+      showToast(`Host recovery failed: ${msg}`, 'error');
     } finally {
       setState('idle');
     }
