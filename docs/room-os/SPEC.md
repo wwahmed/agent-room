@@ -135,6 +135,51 @@ become the noise it measures. Rules:
 - A freeze order stops automated posting immediately; the stop and the
   order that caused it are logged in the automation's own log.
 
+## Room types
+
+A room type is a versioned RoomOS template, not a fork of the product: it
+names the tabs shown, the artifact set installed, the roster roles
+expected, the rituals scheduled, and the report the owner receives.
+Initial types, deliberately few: build (this room), collaboration or
+working session, review or audit, research or interview, operations.
+Upstream agent-room lists room templates as future work and implements
+none, so type semantics are ours to define here.
+
+Type migration is template re-application plus explicit data mapping:
+artifacts present in both types carry over untouched, artifacts only in
+the target type are installed empty, and artifacts absent from the target
+type are archived, never deleted. Migration is per-room, idempotent, and
+announced in the room.
+
+## Hierarchy naming (host language)
+
+The owner thinks in goals. The canonical hierarchy is Goal, then Epic,
+then Task, three levels and no more; Program is the internal name for a
+Goal's delivery arc and Theme is a label on Epics, not a fourth level.
+Every level carries the same three-role and evidence rules. Structure
+serves collaboration; anything deeper is ceremony and is out.
+
+## V2 coexistence and migration mechanics
+
+RoomOS lands beside what exists, never on top of it:
+- New versioned storage keys and objects next to legacy ones; readers
+  understand both shapes for as long as legacy rooms exist.
+- Migration is an explicit, idempotent, per-room step with a completion
+  marker, following the pattern already proven by the room-artifacts-v2
+  index; no big-bang rewrite, and existing rooms keep working untouched.
+- A legacy room that never migrates stays fully functional as type
+  "legacy"; migration is an offer, not an event that happens to you.
+
+## Performance discipline
+
+Slowness is a defect class, not a mood. Rooms load lazily by default:
+messages page in on scroll (both directions, with eviction of far
+offscreen content), room lists virtualize past a threshold, artifacts and
+panels fetch on first open, and caches state their eviction rule. Release
+gates carry performance budgets (initial room-open time, scroll memory
+ceiling) alongside geometry assertions, so a regression in load behavior
+blocks promotion the same way an overlapping control does.
+
 ## Adoption model
 
 A room adopts RoomOS by pinning a charter, enabling the roster protocol,
