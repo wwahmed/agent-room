@@ -1,13 +1,8 @@
 #!/bin/sh
-# T-86: atomic rollback to the previous live web bundle (the dist the last
-# promotion displaced). One level deep by design — history lives in git.
+# T-95: atomic rollback - flip the live pointer to the previous release and
+# verify health. Running it twice rolls forward again (the pointer pair
+# swaps), so a drill is safe. History stays in releases/release-log.txt.
 set -eu
 cd "$(dirname "$0")/.."
-LIVE_DIST="apps/web/dist"
-[ -d "$LIVE_DIST.prev" ] || { echo "ERROR: no $LIVE_DIST.prev to roll back to"; exit 1; }
-mv "$LIVE_DIST" "$LIVE_DIST.rolledback" 2>/dev/null || true
-mv "$LIVE_DIST.prev" "$LIVE_DIST"
-curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "WARNING: live server unhealthy after rollback"; exit 1; }
-HASH=$(ls $LIVE_DIST/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js//')
-echo "$(date -u +%FT%TZ) rolled back to index-$HASH.js" >> .visual-gate/hotfix-log.txt
-echo "OK: rolled back; live serves index-$HASH.js (displaced bundle kept at dist.rolledback)"
+export PATH="$HOME/.local/node/bin:$PATH"
+DEPLOY_BY="${DEPLOY_BY:-$(git config user.name)}" node scripts/release-pipeline.mjs rollback

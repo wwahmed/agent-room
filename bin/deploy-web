@@ -1,105 +1,80 @@
 #!/bin/sh
-# T-86: STAGE -> GATE -> APPROVE -> PROMOTE. The previous script built INTO
-# the live dist and only then ran the gate, so every verdict arrived after
-# users already had the bundle — the root of every deploy-then-inspect
-# incident on 2026-07-21. The candidate now builds into an isolated staging
-# dist, is served on a private staging port for the gate AND for reviewer
-# eyes, and reaches live only via an atomic swap after (a) the full visual
-# gate is green against STAGING and (b) a second-person approval artifact
-# names this exact git SHA. A red gate leaves live untouched, always.
+# T-95: resumable release pipeline. STAGE -> GATE -> APPROVE -> WALKTHROUGH
+# -> PROMOTE, with every phase recorded on disk under releases/<full-sha>/
+# so an interrupted run continues where it stopped. Each build is an
+# immutable, read-only, content-hashed artifact; live serving is a symlink
+# flip; rollback is bin/rollback-web. scripts/release-pipeline.mjs holds the
+# state machine (tested by scripts/release-pipeline.test.mjs).
 #
 # Channels:
-#   normal : bin/deploy-web            (requires green gate + approval file)
+#   normal : bin/deploy-web
+#            Requires ALL of: green (or acked-pixel) visual gate against the
+#            staging preview; a "RELEASE-APPROVE <full-sha>" room message
+#            from a non-builder; a validated walkthrough receipt
+#            (WALKTHROUGH_RECEIPT=path) or an explicit recorded skip
+#            (WALKTHROUGH_SKIP_REASON="...").
 #   hotfix : DEPLOY_HOTFIX=1 DEPLOY_REASON="..." bin/deploy-web
-#            Host-declared critical/urgent ONLY. Smallest repair or rollback,
-#            no feature work. Logged; leaves a pending marker that only a
-#            subsequent fully-green normal deploy clears.
+#            Host-declared critical ONLY. Logged; leaves hotfix debt that
+#            only a subsequent fully-green normal deploy clears.
 #
-# Rollback: bin/rollback-web (restores the previous live dist atomically).
+# The staging preview keeps running between invocations (pid recorded in the
+# release dir) so reviewers can look at it for as long as the ruling takes.
 set -eu
 cd "$(dirname "$0")/.."
-if [ ! -f .env ]; then
-  echo "ERROR: .env missing (needs KV_TOKEN)"; exit 1
-fi
+[ -f .env ] || { echo "ERROR: .env missing (needs KV_TOKEN)"; exit 1; }
 set -a; . ./.env; set +a
 export PATH="$HOME/.local/node/bin:$PATH"
 
-SHA=$(git rev-parse --short HEAD)
-STAGING_DIST="apps/web/dist-staging"
-LIVE_DIST="apps/web/dist"
+PIPELINE="node scripts/release-pipeline.mjs"
+SHA=$(git rev-parse HEAD)
 STAGING_PORT="${STAGING_PORT:-8220}"
-mkdir -p .visual-gate/approvals
+export DEPLOY_BY="${DEPLOY_BY:-$(git config user.name)}"
 
-# Hotfix debt check: a prior hotfix must be cleared by a green normal deploy.
-if [ "${DEPLOY_HOTFIX:-}" != "1" ] && [ -f .visual-gate/hotfix-pending ]; then
-  echo "NOTE: clearing hotfix debt requires this deploy to pass the FULL gate (marker: $(cat .visual-gate/hotfix-pending))"
-fi
+# 1. Stage (no-op if this SHA is already an immutable release).
+$PIPELINE stage
 
-# 1. Build the candidate into the isolated staging dist. Live is untouched.
-rm -rf "$STAGING_DIST"
-npm -w apps/web run build -- --outDir dist-staging --emptyOutDir
-HASH=$(ls $STAGING_DIST/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js//')
-
-# 2. Serve the candidate on the private staging port (same Redis/API).
-WEB_DIST="$PWD/$STAGING_DIST" PORT="$STAGING_PORT" node apps/server/dist/index.js > .visual-gate/staging-server.log 2>&1 &
-STAGING_PID=$!
-trap 'kill $STAGING_PID 2>/dev/null || true' EXIT
-i=0
-until curl -sf "http://127.0.0.1:$STAGING_PORT/healthz" > /dev/null 2>&1; do
-  i=$((i+1)); [ "$i" -gt 40 ] && { echo "ERROR: staging server failed to start (see .visual-gate/staging-server.log)"; exit 1; }
-  sleep 0.5
-done
-curl -sf "http://127.0.0.1:$STAGING_PORT/" | grep -q "$HASH" || { echo "ERROR: staging serves the wrong bundle"; exit 1; }
-echo "staging: SHA $SHA bundle index-$HASH.js on http://127.0.0.1:$STAGING_PORT (reviewer preview)"
+# 2. Durable staging preview for the gate and for reviewer eyes.
+node --input-type=module - "$SHA" "$STAGING_PORT" <<'EOF'
+import { serveStaging, releaseDir, waitForHealth } from './scripts/release-pipeline.mjs';
+const [sha, port] = process.argv.slice(2);
+const info = serveStaging(process.cwd(), releaseDir(process.cwd(), sha), { port: Number(port) });
+const ok = await waitForHealth(`http://127.0.0.1:${info.port}/healthz`);
+if (!ok) { console.error(`ERROR: staging server not healthy (log: ${info.log})`); process.exit(1); }
+console.log(`staging: ${sha} on http://127.0.0.1:${info.port} (pid ${info.pid}, persists until promote/reject)`);
+EOF
 
 if [ "${DEPLOY_HOTFIX:-}" = "1" ]; then
-  # Hotfix lane: restore service first, full gate afterward (still against
-  # staging, but promotion is not blocked on it). Every use is logged and
-  # leaves debt that only a green normal deploy clears.
-  echo "$(date -u +%FT%TZ) $SHA by=${DEPLOY_BY:-unknown} reason=${DEPLOY_REASON:-unspecified}" >> .visual-gate/hotfix-log.txt
-  echo "$SHA" > .visual-gate/hotfix-pending
-  echo "HOTFIX LANE: promoting $SHA without gate; post-hotfix gate debt recorded"
+  echo "HOTFIX LANE: promoting $SHA without gate; debt recorded, cleared only by the next fully-green normal deploy"
+  $PIPELINE promote "$SHA"
 else
   # 3. Full visual gate against STAGING. Red = stop, live untouched.
   GATE_EXIT=0
   VISUAL_GATE_BASE="http://127.0.0.1:$STAGING_PORT" npm run visual-gate --silent || GATE_EXIT=$?
-  case "$GATE_EXIT" in
-    0) : ;;
-    2|3)
-      if [ "${VISUAL_GATE_ACK:-}" = "1" ]; then
-        echo "visual-gate: pixel/baseline diffs ACKNOWLEDGED by deployer (VISUAL_GATE_ACK=1)"
-      else
-        echo "visual-gate: pixel diffs (exit $GATE_EXIT) — review .visual-gate/diff, then re-run with VISUAL_GATE_ACK=1. LIVE IS UNCHANGED."
-        exit "$GATE_EXIT"
-      fi ;;
-    *)
-      # Geometry defects (4) and incomplete captures (5) are NEVER
-      # acknowledgeable, and now they also never reach users.
-      echo "visual-gate HARD FAIL (exit $GATE_EXIT): geometry defects or incomplete capture. LIVE IS UNCHANGED."
-      exit "$GATE_EXIT" ;;
-  esac
+  $PIPELINE gate "$SHA" "$GATE_EXIT" || {
+    echo "visual-gate exit $GATE_EXIT blocked the release. LIVE IS UNCHANGED (staging preview stays up for review)."
+    exit "$GATE_EXIT"
+  }
 
-  # 4. Second-person approval artifact tied to this SHA (T-86): a reviewer
-  # who is not the builder inspects the staging preview/frames and writes
-  # .visual-gate/approvals/<sha>.txt (free text: who/what was reviewed).
-  APPROVAL=".visual-gate/approvals/$SHA.txt"
-  if [ ! -f "$APPROVAL" ]; then
-    echo "BLOCKED: no reviewer approval artifact at $APPROVAL."
-    echo "A second person must review the staging preview (http://127.0.0.1:$STAGING_PORT) and frames, then write that file. LIVE IS UNCHANGED."
+  # 4. Authenticated second-person approval from the room.
+  $PIPELINE approve-check "$SHA" || {
+    echo "Waiting on approval. Staging preview: http://127.0.0.1:$STAGING_PORT - re-run bin/deploy-web after the approval message; completed phases resume."
     exit 6
-  fi
-  echo "approval: $(head -1 "$APPROVAL")"
-  rm -f .visual-gate/hotfix-pending
+  }
+
+  # 5. Walkthrough receipt (T-89) - validated, or an explicit reasoned skip.
+  $PIPELINE walkthrough "$SHA" || {
+    echo "BLOCKED: no walkthrough. Provide WALKTHROUGH_RECEIPT=path or WALKTHROUGH_SKIP_REASON=\"...\". LIVE IS UNCHANGED."
+    exit 7
+  }
+
+  # 6. Atomic pointer promotion + live verification (auto-reverts on failure).
+  $PIPELINE promote "$SHA"
 fi
 
-# 5. Atomic promotion: swap staging into live, keep a rollback pointer.
-rm -rf "$LIVE_DIST.prev"
-[ -d "$LIVE_DIST" ] && mv "$LIVE_DIST" "$LIVE_DIST.prev"
-mv "$STAGING_DIST" "$LIVE_DIST"
-curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "ERROR: live server unhealthy after swap"; exit 1; }
-if ! curl -sf http://127.0.0.1:8210/ | grep -q "$HASH"; then
-  echo "ERROR: live not serving the promoted bundle — swapping back"
-  mv "$LIVE_DIST" "$STAGING_DIST"; mv "$LIVE_DIST.prev" "$LIVE_DIST"
-  exit 1
-fi
-echo "OK: promoted index-$HASH.js ($SHA) to live. Rollback available via bin/rollback-web."
+# Retire the staging preview now that a ruling exists.
+node --input-type=module - "$SHA" <<'EOF'
+import { stagingInfo, releaseDir } from './scripts/release-pipeline.mjs';
+const info = stagingInfo(releaseDir(process.cwd(), process.argv[2]));
+if (info) { try { process.kill(-info.pid); } catch { try { process.kill(info.pid); } catch {} } }
+EOF
+$PIPELINE status

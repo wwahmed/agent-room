@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "npm -ws run test --if-present && node --test scripts/room-health.test.mjs scripts/validate-ux-walkthrough.test.mjs deploy/memberkey-proxy.test.mjs",
+    "test": "npm -ws run test --if-present && node --test scripts/room-health.test.mjs scripts/validate-ux-walkthrough.test.mjs scripts/release-pipeline.test.mjs deploy/memberkey-proxy.test.mjs",
     "build": "npm -ws run build --if-present",
     "dev:web": "npm -w apps/web run dev",
     "room:health": "node scripts/room-health.mjs",

@@ -45,3 +45,6 @@ deploy/mkproxy-*.log
 
 # T-87 watcher runtime state/logs
 tmp/builder-standing-watch*
+
+# T-95 immutable release artifacts + pointers (machine-local, never committed)
+releases/
