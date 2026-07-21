@@ -53,6 +53,12 @@ export function createClient(env: UpstashEnv): UpstashClient {
       if (out && typeof out === 'object' && 'error' in out && out.error) {
         throw new UpstashError(`${String(cmd[0] ?? '?')}: ${out.error}`);
       }
+      // Contract validation: an HTTP-200 body must carry a `result` key (null
+      // counts) or a surfaced error. `{}` returning undefined let callers —
+      // notably the merge-marker SET — treat silence as acknowledgement.
+      if (!out || typeof out !== 'object' || !('result' in out)) {
+        throw new UpstashError(`${String(cmd[0] ?? '?')}: malformed response (no result)`);
+      }
       return out.result as T;
     },
     async pipeline<T>(cmds: readonly (readonly (string | number)[])[]): Promise<T[]> {
@@ -64,6 +70,9 @@ export function createClient(env: UpstashEnv): UpstashClient {
         const item = out[i];
         if (item && typeof item === 'object' && 'error' in item && item.error) {
           throw new UpstashError(`pipeline[${i}] ${String(cmds[i]?.[0] ?? '?')}: ${item.error}`);
+        }
+        if (!item || typeof item !== 'object' || !('result' in item)) {
+          throw new UpstashError(`pipeline[${i}] ${String(cmds[i]?.[0] ?? '?')}: malformed response (no result)`);
         }
       }
       return out.map(x => x.result as T);
