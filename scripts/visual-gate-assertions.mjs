@@ -15,10 +15,15 @@ export function ruleOverflow(m) {
 }
 
 /** Interactive targets below the 44px floor (visible boxes only, deduped —
- *  one finding per distinct control anatomy, not one per rendered row). */
+ *  one finding per distinct control anatomy, not one per rendered row).
+ *  Links flowing INLINE inside message prose are exempt per WCAG 2.5.8's
+ *  inline exception: their height is constrained by the surrounding
+ *  line-height, and flagging them makes the gate hostage to any URL a
+ *  participant happens to post in the captured room. */
 export function ruleTargets(m) {
   const seen = new Set();
   return (m.buttons ?? [])
+    .filter(b => !b.inlineProse)
     .filter(b => b.w >= 8 && b.h >= 8 && (b.w < TARGET_FLOOR || b.h < TARGET_FLOOR))
     .filter(b => {
       const key = `${b.label}|${Math.round(b.w)}x${Math.round(b.h)}`;

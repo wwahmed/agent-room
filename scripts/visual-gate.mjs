@@ -248,6 +248,11 @@ for (const vp of VIEWPORTS) {
           const buttons = [...document.querySelectorAll(INTERACTIVE)].filter(vis).map(b => ({
             label: (b.getAttribute('aria-label') || b.getAttribute('placeholder') || b.textContent || '').trim().slice(0, 30),
             inScrollX: inScrollX(b),
+            // WCAG 2.5.8 inline exception: anchors flowing inline within
+            // message prose are height-bound by line-height, not a control box.
+            inlineProse: b.tagName === 'A'
+              && !!b.closest('[data-gate="msg-content"]')
+              && getComputedStyle(b).display === 'inline',
             ...box(b),
           }));
           const lum = el => {

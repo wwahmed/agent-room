@@ -56,6 +56,12 @@ describe('visual gate geometry assertions', () => {
     expect(ruleTargets({ ...clean, buttons: rows })).toHaveLength(1);
   });
 
+  it('inline prose links are exempt from the 44px floor (WCAG 2.5.8 inline exception); the same box as a control still fails', () => {
+    const link = { label: 'http://x/blobs/report.png', w: 623, h: 19, x: 5, y: 5 };
+    expect(ruleTargets({ ...clean, buttons: [{ ...link, inlineProse: true }] })).toEqual([]);
+    expect(ruleTargets({ ...clean, buttons: [link] })).toHaveLength(1);
+  });
+
   it('BROKEN: an overlay neither viewport-centered nor trigger-anchored is adrift', () => {
     const fails = ruleOverlayPlacement({ ...clean, overlay: { left: 100, width: 500 }, overlayTriggerCenter: 1100 });
     expect(fails[0]).toContain('overlay adrift');
