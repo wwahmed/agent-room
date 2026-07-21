@@ -141,6 +141,22 @@ lines.forEach((text, i) => {
   }
   if (typeof e.summary !== "string" || !e.summary.trim()) fail(n, "summary required");
 
+  if (isActive) {
+    // Submission identity: taskRef ties the row to the submission that
+    // produced it; null marks a session-level conduct event.
+    if (e.taskRef !== null && (typeof e.taskRef !== "string" || !REF_FORMATS.task.test(e.taskRef))) {
+      fail(n, "taskRef must be a T-NN task id or null (conduct event)");
+    }
+    // Evidence review: machine-checked when at least one ref is provable
+    // locally (commit/file); otherwise the row's facts need manual review
+    // and must say so.
+    const machine = Array.isArray(e.evidenceRefs) && e.evidenceRefs.some((ev) => ev && (ev.type === "commit" || ev.type === "file"));
+    const expected = machine ? "machine-checked" : "manual-required";
+    if (e.evidenceReview !== expected) {
+      fail(n, `evidenceReview must be '${expected}' for this row's refs (${machine ? "has" : "no"} locally provable evidence)`);
+    }
+  }
+
   if (!Array.isArray(e.evidenceRefs) || e.evidenceRefs.length === 0) {
     fail(n, "evidenceRefs must be non-empty: unlinked claims do not enter the ledger");
   } else {

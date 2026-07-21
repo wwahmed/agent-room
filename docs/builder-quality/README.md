@@ -12,14 +12,24 @@ verifier-audit ledger (`docs/verifier-audit/`) to everyone who ships.
   history against the committed baseline. Run before every commit.
 - `../../scripts/builder-standing.mjs`: the computed standing view. Only
   adjudicator-confirmed rows score; zero confirmed rows prints UNSCORED,
-  never a default number. Output per agent: overall standing over a rolling
-  ten-row window, trend versus prior rows, six category subscores, a
-  next-three relapse watch per confirmed defect, recurring-class flags, and
-  the pending queue. `--brief` emits a one-line room-ready summary; posting
-  it after each ledger commit is the update hook. Standing is derived on
-  demand and never stored, so a total cannot be edited or gamed. A row's
-  subject can never be its adjudicator; rows about the Master Lead are
-  adjudicated by the host.
+  never a default number. The scoring model is locked: six categories with
+  fixed weights (functional-correctness 25, visual-interaction-quality 25,
+  verification-discipline 20, dod-compliance 15, regression-containment 10,
+  candor-recovery 5); the overall is the weight-normalized composite over
+  evidenced categories. Windows and relapse are keyed to SUBMISSIONS via
+  `taskRef` (conduct rows are singleton events): the headline uses the last
+  ten distinct submissions, trend compares against the prior submissions,
+  and each confirmed defect watches the next three relevant submissions
+  (same category) for a same-class relapse. Rows without locally provable
+  evidence carry `evidenceReview: manual-required` and are flagged.
+  `--write-scoreboard` regenerates `SCOREBOARD.md` (a rendered artifact,
+  never the source of truth); `--brief` emits the room line.
+- `../../scripts/post-builder-standing.mjs`: the update hook. Run after
+  every task verification or host-reported incident; it posts the brief to
+  the room using a member key read from `WAKICHAT_MEMBERKEY_FILE`. Standing
+  is derived on demand and never stored, so a total cannot be edited or
+  gamed. A row's subject can never be its adjudicator; rows about the
+  Master Lead are adjudicated by the host.
 
 ## Rules
 
