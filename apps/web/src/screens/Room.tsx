@@ -41,7 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, isCurrentSeek, isFailedCard, outputsViewState, railSectionCount, seekExitRecovery, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
@@ -320,7 +320,9 @@ export function Room() {
     seekGenRef.current += 1;
     seekAttemptsRef.current = 0;
     setSourceSeekId(null);
-    const { recovery, terminalToast } = seekExitRecovery(exit, seekArtifactIdRef.current ?? `${sourceMessageId}-0`, sourceMessageId);
+    const artifactId = seekArtifactIdRef.current ?? `${sourceMessageId}-0`;
+    const { terminalToast } = seekExitRecovery(exit, artifactId, sourceMessageId);
+    const recovery = seekFailureReducer(null, { type: 'exit', exit, artifactId, sourceMessageId });
     setSeekFailure(recovery);
     if (recovery) selectTab('outputs');
     if (terminalToast) {
@@ -330,7 +332,7 @@ export function Room() {
   // Room change must not spill an interrupted seek's paging state into the
   // next room (rev18 review); bumping the generation makes any in-flight
   // completion from the old room inert.
-  useEffect(() => { seekGenRef.current += 1; setSourceSeekId(null); setSeekFailure(null); seekAttemptsRef.current = 0; }, [code]);
+  useEffect(() => { seekGenRef.current += 1; setSourceSeekId(null); setSeekFailure(f => seekFailureReducer(f, { type: 'room-change' })); seekAttemptsRef.current = 0; }, [code]);
   useEffect(() => {
     if (sourceSeekId == null) return;
     const action = seekStep(
@@ -342,7 +344,7 @@ export function Room() {
     );
     if (action === 'found') {
       setSourceSeekId(null);
-      setSeekFailure(null);
+      setSeekFailure(f => seekFailureReducer(f, { type: 'found' }));
       seekAttemptsRef.current = 0;
       window.setTimeout(() => {
         const el = document.getElementById(`msg-${sourceSeekId}`);
@@ -403,11 +405,7 @@ export function Room() {
   // window in which the wrong card can be focused.
   useEffect(() => {
     if (!seekFailure || mainTab !== 'outputs') return;
-    const card = document.querySelector<HTMLElement>(`[data-artifact-card="${CSS.escape(seekFailure.artifactId)}"]`);
-    if (card) {
-      card.scrollIntoView({ block: 'center' });
-      card.focus();
-    }
+    focusRecoveryCard(seekFailure.artifactId, document);
   }, [seekFailure, mainTab, serverArtifacts, outputsFilter, showAllArtifacts]);
   const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {
@@ -2635,7 +2633,7 @@ export function Room() {
                 now={now}
                 failed={isFailedCard(seekFailure, artifact.id)}
                 onOpenSource={messageId => {
-                  setSeekFailure(null);
+                  setSeekFailure(f => seekFailureReducer(f, { type: 'retry' }));
                   seekArtifactIdRef.current = artifact.id;
                   selectTab('chat');
                   seekGenRef.current += 1;

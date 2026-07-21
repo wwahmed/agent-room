@@ -92,3 +92,36 @@ export function seekExitRecovery(exit: SeekExit, artifactId: string, sourceMessa
 export function isFailedCard(recovery: SeekRecovery | null, artifactId: string): boolean {
   return recovery != null && recovery.artifactId === artifactId;
 }
+
+export type SeekFailureEvent =
+  | { type: 'exit'; exit: SeekExit; artifactId: string; sourceMessageId: number }
+  | { type: 'retry' }
+  | { type: 'found' }
+  | { type: 'room-change' };
+
+/** The COMPLETE failure-state transition table the component dispatches
+ *  through — every clearing path (retry, success, room change) is a tested
+ *  transition, not an ad-hoc setState. */
+export function seekFailureReducer(state: SeekRecovery | null, ev: SeekFailureEvent): SeekRecovery | null {
+  switch (ev.type) {
+    case 'exit': return seekExitRecovery(ev.exit, ev.artifactId, ev.sourceMessageId).recovery;
+    case 'retry':
+    case 'found':
+    case 'room-change':
+      return null;
+  }
+}
+
+interface FocusableCard { scrollIntoView(opts?: unknown): void; focus(): void }
+interface CardRoot { querySelector(sel: string): FocusableCard | null }
+
+/** Focus the EXACT recovery card if it exists in the current render;
+ *  returns whether it did — a missing card is a no-op, never a stale
+ *  focus on something else. */
+export function focusRecoveryCard(artifactId: string, root: CardRoot): boolean {
+  const card = root.querySelector(`[data-artifact-card="${artifactId.replace(/"/g, '')}"]`);
+  if (!card) return false;
+  card.scrollIntoView({ block: 'center' });
+  card.focus();
+  return true;
+}

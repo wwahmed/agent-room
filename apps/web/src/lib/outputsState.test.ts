@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, isCurrentSeek, isFailedCard, seekExitRecovery, seekPageBudget, seekStep } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, focusRecoveryCard, isCurrentSeek, isFailedCard, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -76,5 +76,39 @@ describe('seekExitRecovery (rev20b: one recovery state, both recoverable exits)'
     expect(isFailedCard(recovery, '5-1')).toBe(true);
     expect(isFailedCard(recovery, '5-0')).toBe(false); // same source, different card
     expect(isFailedCard(null, '5-1')).toBe(false);
+  });
+});
+
+describe('seekFailureReducer (the full lifecycle transition table)', () => {
+  const failed = seekFailureReducer(null, { type: 'exit', exit: 'failed-page', artifactId: '9-0', sourceMessageId: 9 });
+  it('recoverable exits enter the failure state', () => {
+    expect(failed).toEqual({ artifactId: '9-0', sourceMessageId: 9, reason: 'failed-page' });
+    expect(seekFailureReducer(null, { type: 'exit', exit: 'give-up-error', artifactId: '9-0', sourceMessageId: 9 })?.reason).toBe('exhausted');
+  });
+  it('retry clears', () => {
+    expect(seekFailureReducer(failed, { type: 'retry' })).toBeNull();
+  });
+  it('success clears', () => {
+    expect(seekFailureReducer(failed, { type: 'found' })).toBeNull();
+  });
+  it('room change clears', () => {
+    expect(seekFailureReducer(failed, { type: 'room-change' })).toBeNull();
+  });
+  it('a trimmed exit never enters the failure state', () => {
+    expect(seekFailureReducer(failed, { type: 'exit', exit: 'give-up-trimmed', artifactId: '9-0', sourceMessageId: 9 })).toBeNull();
+  });
+});
+
+describe('focusRecoveryCard (exact-card focus, no stale fallback)', () => {
+  it('focuses precisely the matching card', () => {
+    const calls: string[] = [];
+    const card = { scrollIntoView: () => calls.push('scroll'), focus: () => calls.push('focus') };
+    const root = { querySelector: (sel: string) => (sel === '[data-artifact-card="9-0"]' ? card : null) };
+    expect(focusRecoveryCard('9-0', root)).toBe(true);
+    expect(calls).toEqual(['scroll', 'focus']);
+  });
+  it('a missing card is a no-op, never a substitute focus', () => {
+    const root = { querySelector: () => null };
+    expect(focusRecoveryCard('9-0', root)).toBe(false);
   });
 });
