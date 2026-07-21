@@ -184,6 +184,8 @@ export function Room() {
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Sweep 2 (T-46): Outputs artifact list can expand past the newest 8.
+  const [showAllArtifacts, setShowAllArtifacts] = useState(false);
   const [ownerQuestions, setOwnerQuestions] = useState<RoomQuestion[]>([]);
   const [openQuestionId, setOpenQuestionId] = useState<string | null>(null);
   useEffect(() => {
@@ -1188,7 +1190,7 @@ export function Room() {
               </div>
               <button
                 onClick={() => copyText(joinUrl, 'Invite link copied')}
-                className="mt-3 min-h-11 w-full rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20 lg:min-h-0"
+                className="mt-3 min-h-11 w-full rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20"
               >
                 Copy invite link
               </button>
@@ -1453,12 +1455,12 @@ export function Room() {
                 {!ended && room.createdBy === self.name && (
                   <button
                     onClick={handleEndMeeting}
-                    className="min-h-11 flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20 lg:min-h-0"
+                    className="min-h-11 flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20"
                   >
                     End
                   </button>
                 )}
-                <button onClick={() => navigate('/')} className="min-h-11 flex-1 rounded-lg bg-surface-softer px-3 py-2 text-sm font-semibold text-ink-muted lg:min-h-0">
+                <button onClick={() => navigate('/')} className="min-h-11 flex-1 rounded-lg bg-surface-softer px-3 py-2 text-sm font-semibold text-ink-muted">
                   Home
                 </button>
               </div>
@@ -2143,13 +2145,13 @@ export function Room() {
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
-              <div className="mb-5 rounded-xl border border-accent-tint-border bg-accent-tint p-4">
-                <h2 className="text-sm font-semibold text-accent-deep mb-2">Report</h2>
-                <p className="mb-3 text-sm leading-relaxed text-accent-deep/80">Freeze this room into a shareable delivery report.</p>
+              <div className="mb-5 rounded-xl border border-border-faint bg-surface-1 p-4">
+                <h2 className="text-sm font-semibold text-ink mb-2">Report</h2>
+                <p className="mb-3 text-sm leading-relaxed text-ink-soft">Freeze this room into a shareable delivery report.</p>
                 <button
                   onClick={handleExportReport}
                   disabled={reportBusy || messages.length === 0}
-                  className="min-h-11 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0"
+                  className="min-h-11 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {reportBusy ? 'Saving…' : 'Save & Share'}
                 </button>
@@ -2162,9 +2164,20 @@ export function Room() {
                 </div>
                 {artifacts.length ? (
                   <div className="space-y-2">
-                    {artifacts.slice(-8).reverse().map(artifact => (
+                    {(showAllArtifacts ? artifacts.slice().reverse() : artifacts.slice(-8).reverse()).map(artifact => (
                       <ArtifactCard key={artifact.id} artifact={artifact} />
                     ))}
+                    {/* Sweep 2: the header count and the visible list must
+                        agree — when clipped, say so and offer the rest. */}
+                    {artifacts.length > 8 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllArtifacts(v => !v)}
+                        className="min-h-11 w-full rounded-lg text-[13px] font-semibold text-ink-soft transition hover:bg-surface-softer hover:text-ink"
+                      >
+                        {showAllArtifacts ? 'Show fewer' : `Show all ${artifacts.length}`}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft">
@@ -2194,7 +2207,7 @@ function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {
         </span>
         <span className="text-[12px] text-ink-faint">{artifact.author}</span>
       </div>
-      <p className="text-[12px] leading-relaxed text-ink">{artifact.text}</p>
+      <p className="text-[13px] leading-relaxed text-ink">{artifact.text}</p>
     </div>
   );
 }
