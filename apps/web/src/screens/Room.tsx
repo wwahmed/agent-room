@@ -41,6 +41,12 @@ import { startsMessageDay } from '../lib/messageDays.js';
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
 interface SelfIdentity { name: string; role: string }
+interface AttachmentUploadJob {
+  id: string;
+  file: File;
+  state: 'uploading' | 'failed';
+  error?: string;
+}
 
 function readStoredSelf(code: string): SelfIdentity | null {
   const stored = sessionStorage.getItem(`room:${code}:self`);
@@ -152,6 +158,8 @@ export function Room() {
   const [dictationDraft, setDictationDraft] = useState(false);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [attachBusy, setAttachBusy] = useState(false);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [attachmentJobs, setAttachmentJobs] = useState<AttachmentUploadJob[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
@@ -275,6 +283,7 @@ export function Room() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
 
   // Auto-grow the textarea: shrink to min, then expand to scrollHeight up to max.
@@ -1001,6 +1010,7 @@ export function Room() {
     const incoming = Array.from(files);
     if (!incoming.length) return;
     setAttachBusy(true);
+    setAttachmentMenuOpen(false);
     try {
       const slots = Math.max(0, MAX_ATTACHMENTS_PER_MESSAGE - attachments.length);
       const selected = incoming.slice(0, slots);
@@ -1008,17 +1018,41 @@ export function Room() {
         const { showToast } = await import('../components/Toast.js');
         showToast(`Only ${MAX_ATTACHMENTS_PER_MESSAGE} attachments per message`);
       }
-      const prepared: MessageAttachment[] = [];
-      for (const file of selected) {
-        prepared.push(await uploadAttachment(file, code));
+      const jobs = selected.map((file, index): AttachmentUploadJob => ({
+        id: `${Date.now()}-${index}-${file.name}`,
+        file,
+        state: 'uploading',
+      }));
+      setAttachmentJobs(prev => [...prev, ...jobs]);
+      for (const job of jobs) {
+        try {
+          const uploaded = await uploadAttachment(job.file, code);
+          setAttachments(prev => [...prev, uploaded].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
+          setAttachmentJobs(prev => prev.filter(item => item.id !== job.id));
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Upload failed';
+          setAttachmentJobs(prev => prev.map(item => item.id === job.id ? { ...item, state: 'failed', error: message } : item));
+        }
       }
-      setAttachments(prev => [...prev, ...prepared].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
-    } catch (e) {
-      const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? e.message : 'Attachment failed');
     } finally {
       setAttachBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  }
+
+  async function retryAttachment(job: AttachmentUploadJob) {
+    setAttachBusy(true);
+    setAttachmentJobs(prev => prev.map(item => item.id === job.id ? { ...item, state: 'uploading', error: undefined } : item));
+    try {
+      const uploaded = await uploadAttachment(job.file, code);
+      setAttachments(prev => [...prev, uploaded].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
+      setAttachmentJobs(prev => prev.filter(item => item.id !== job.id));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Upload failed';
+      setAttachmentJobs(prev => prev.map(item => item.id === job.id ? { ...item, state: 'failed', error: message } : item));
+    } finally {
+      setAttachBusy(false);
     }
   }
 
@@ -1708,6 +1742,29 @@ export function Room() {
                     ))}
                   </div>
                 )}
+                {attachmentJobs.length > 0 && (
+                  <div className="flex flex-wrap gap-2" aria-live="polite" aria-label="Attachment upload status">
+                    {attachmentJobs.map(job => (
+                      <div key={job.id} className={`flex max-w-[280px] items-center gap-2 rounded-lg border px-2.5 py-2 text-[12px] ${job.state === 'failed' ? 'border-amber-400/40 bg-amber-500/10' : 'border-accent-tint-border bg-accent-tint'}`}>
+                        {job.state === 'uploading' ? (
+                          <span className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-accent/20 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
+                        ) : (
+                          <span className="flex-shrink-0 font-bold text-amber-400" aria-hidden="true">!</span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold text-ink">{job.file.name}</span>
+                          <span className="block truncate text-ink-soft">{job.state === 'uploading' ? 'Uploading…' : job.error || 'Upload failed'}</span>
+                        </span>
+                        {job.state === 'failed' && (
+                          <>
+                            <button type="button" onClick={() => { void retryAttachment(job); }} className="min-h-8 rounded-md px-2 font-semibold text-accent hover:bg-surface">Retry</button>
+                            <button type="button" onClick={() => setAttachmentJobs(prev => prev.filter(item => item.id !== job.id))} aria-label={`Dismiss failed upload ${job.file.name}`} className="h-8 w-8 rounded-md font-bold text-ink-soft hover:bg-surface">×</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {/* T-63 (host: "this persistent big panel across the bottom …
                     you are wasting so much space; notice how Teams does it").
                     The chips were a permanent row of chrome. Teams floats its
@@ -1827,7 +1884,15 @@ export function Room() {
                      Borderless — the wrapper owns the border and focus ring now. */
                   className="w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-base leading-relaxed outline-none focus:ring-0"
                 />
-                <div className="flex items-center gap-0.5">
+                <div className="relative flex items-center gap-0.5">
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept={Array.from(ALLOWED_ATTACHMENT_TYPES).filter(type => type.startsWith('image/')).join(',')}
+                    onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
+                  />
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1837,10 +1902,13 @@ export function Room() {
                     onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
                   />
                   <button
-                    onClick={() => fileInputRef.current?.click()}
+                    type="button"
+                    onClick={() => setAttachmentMenuOpen(open => !open)}
                     disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
-                    title="Attach files"
-                    aria-label="Attach files"
+                    title="Add photos or files"
+                    aria-label="Add photos or files"
+                    aria-haspopup="menu"
+                    aria-expanded={attachmentMenuOpen}
                     className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50"
                   >
                     {attachBusy ? (
@@ -1851,6 +1919,22 @@ export function Room() {
                       </svg>
                     )}
                   </button>
+                  {attachmentMenuOpen && (
+                    <div role="menu" aria-label="Add attachment" className="absolute bottom-full left-0 z-30 mb-2 w-52 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-2xl">
+                      <button type="button" role="menuitem" onClick={() => imageInputRef.current?.click()} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink transition hover:bg-accent-tint">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-tint text-accent" aria-hidden="true">
+                          <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="2.5" width="12" height="11" rx="2"/><circle cx="5.5" cy="6" r="1.2"/><path d="m3.5 12 3.2-3 2.1 1.8 1.5-1.4 2.2 2.6"/></svg>
+                        </span>
+                        Photos & images
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => fileInputRef.current?.click()} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink transition hover:bg-surface-softer">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-softer text-ink-soft" aria-hidden="true">
+                          <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M4 1.8h5l3 3V14H4z"/><path d="M9 1.8V5h3"/></svg>
+                        </span>
+                        Files & documents
+                      </button>
+                    </div>
+                  )}
                   <VoiceButton
                     onStart={() => {
                       dictationBaseRef.current = text;
