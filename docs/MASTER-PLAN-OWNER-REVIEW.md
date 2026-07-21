@@ -42,10 +42,13 @@ cleanup you asked about lives.
 
 ## Program 3 - Room architecture V2
 
-**What you get:** rooms stop being one endless chat. Five room types
-(collaboration like this one, control room for you, focused build rooms,
-review rooms, archive), and work organized as Goal, then Epics, then Tasks,
-so you can see WHAT is being built without scrolling months of transcript.
+**What you get:** rooms stop being one endless chat. Five room types -
+collaboration (like this one), project (focused build; your control room is
+a template of this), review, incident, and interview-research; archiving is
+something any room does at end of life, not a type. (Plain-language gloss;
+the binding definitions live in the V2 spec.) Work is organized as Goal,
+then Epics, then Tasks, so you can see WHAT is being built without
+scrolling months of transcript.
 This room's history moves forward via a continuity capsule - nothing is
 lost, and the new room starts clean.
 
@@ -58,29 +61,31 @@ searchable, not re-imported).
 **What you get:** the app works on YOUR phone the way a chat app should:
 readable text at a size you choose, a composer that stays usable while
 attaching or dictating, no more losing the newest messages when you switch
-tabs and come back (the bug you reported today - it is tracked as the first
-item here), and no repeated dictation beeps.
+tabs and come back (the bug you reported today - sequenced as the next P0
+in the queue, so it may land even before this program formally opens), and
+no repeated dictation beeps.
 
 **Your decisions:** the reading-size default (a side-by-side is waiting for
 you); and this program needs YOU as the physical device tester before
 anything is called done - screenshots cannot prove how it feels in hand.
 
-## Program 5 - Desktop workspace
-
-**What you get:** the desktop app becomes a real workspace: switching rooms
-does not reload the whole app, panels are resizable, wide screens are used
-instead of wasted, and navigation does not lose your place.
-
-**Your decision:** priority order relative to Program 6 - the current draft
-puts data-truth first; flip them if desktop pain is worse for you.
-
-## Program 6 - Data truth, findability, performance
+## Program 5 - Data truth, findability, performance (runs before desktop)
 
 **What you get:** every number on Home is true (unread counts, activity),
 search that finds messages and decisions from any room, and the app staying
 fast as history grows. Also the server-hang investigation from yesterday.
 
-**Your decision:** none structural.
+**Your decision:** none structural, but this order - data truth before the
+desktop rework - is the ratified sequence; flip it if desktop pain is worse
+for you day to day.
+
+## Program 6 - Desktop workspace (last)
+
+**What you get:** the desktop app becomes a real workspace: switching rooms
+does not reload the whole app, panels are resizable, wide screens are used
+instead of wasted, and navigation does not lose your place.
+
+**Your decision:** none beyond the ordering choice above.
 
 ## Decisions waiting on you right now
 
