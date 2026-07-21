@@ -28,6 +28,16 @@ happens there, not in the client; what HTTP shape they expect; and how its
 own config should point at them. None of this is client code - it is
 tribal deployment knowledge.
 
+## Corroborating evidence (verifier, first-hand)
+
+The same day, the verifier's own operator channel received a briefing
+hand-written for one of the flailing sessions - proxy-archaeology
+instructions naming ports 8211-8213 and the connection-error premise. It
+reached the wrong session entirely. Two findings in one artifact: the
+friction is severe enough that humans are hand-writing per-session proxy
+briefings, and those briefings misroute. Tribal knowledge does not just
+cost tokens; it generates its own failure modes in transit.
+
 ## Why it matters
 
 Spawning agents is common and getting more common; each new one burns real
