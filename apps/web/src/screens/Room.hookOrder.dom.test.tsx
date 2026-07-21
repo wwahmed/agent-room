@@ -95,4 +95,43 @@ describe('Room hook-order stability across bootstrap transitions', () => {
     await h.transitionTo({ room: loadedRoom });
     expect(document.querySelector('textarea')).not.toBeNull();
   });
+
+  it('same-tree Chat -> Project -> People -> Outputs -> Chat keeps hook order stable', async () => {
+    await mountRoomAt({ room: loadedRoom });
+    const tab = (label: string) => {
+      const btn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+      expect(btn, `workspace tab "${label}"`).toBeTruthy();
+      return btn!;
+    };
+    for (const label of ['Project', 'People', 'Outputs', 'Chat']) {
+      await act(async () => { tab(label).click(); });
+      expect(document.querySelector('[data-gate="feed"], main, [role="tablist"]')).not.toBeNull();
+    }
+    expect(document.querySelector('textarea')).not.toBeNull(); // back in chat
+  });
+
+  it('Home -> Room -> Back -> reopen mounts and remounts cleanly', async () => {
+    hookState = { ...baseHook, room: loadedRoom };
+    sessionStorage.setItem('room:AAA-BBB-CCC:self', JSON.stringify({ name: 'ClaudeUI', role: '' }));
+    const { Room: RoomComponent } = await import('./Room.js');
+    const { useNavigate } = await import('react-router-dom');
+    const navRef: { current: ((to: string | number) => void) | null } = { current: null };
+    function NavBridge() { navRef.current = useNavigate() as (to: string | number) => void; return null; }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <NavBridge />
+        <Routes>
+          <Route path="/" element={<div>HOME SURFACE</div>} />
+          <Route path="/r/:code" element={<RoomComponent />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(document.body.textContent).toContain('HOME SURFACE');
+    await act(async () => { navRef.current!('/r/AAA-BBB-CCC'); });
+    expect(document.querySelector('textarea')).not.toBeNull();
+    await act(async () => { navRef.current!(-1); }); // browser Back
+    expect(document.body.textContent).toContain('HOME SURFACE');
+    await act(async () => { navRef.current!('/r/AAA-BBB-CCC'); }); // reopen
+    expect(document.querySelector('textarea')).not.toBeNull();
+  });
 });
