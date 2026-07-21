@@ -25,13 +25,13 @@ export function QuestionArtifactCard({ message, question, isOwner, onOpen }: Pro
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-accent">Question artifact</span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${question?.answer ? 'bg-emerald-500/10 text-emerald-600' : question ? 'bg-amber-500/10 text-amber-600' : 'bg-surface-softer text-ink-soft'}`}>{state}</span>
+            <span className="text-[13px] font-semibold uppercase tracking-wide text-accent">Question artifact</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${question?.answer ? 'bg-emerald-500/10 text-emerald-600' : question ? 'bg-amber-500/10 text-amber-600' : 'bg-surface-softer text-ink-soft'}`}>{state}</span>
           </span>
-          <span className="mt-1 block truncate text-sm font-semibold text-ink">
+          <span className="mt-1 block truncate text-base font-semibold text-ink">
             {isOwner && question ? question.prompt : 'Private decision for the room owner'}
           </span>
-          <span className="mt-0.5 block text-xs text-ink-soft">Created by {message.metadata?.targetAgentName || message.name} · Open artifact</span>
+          <span className="mt-0.5 block text-sm text-ink-soft">Created by {message.metadata?.targetAgentName || message.name} · Open artifact</span>
         </span>
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-ink-faint transition group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
       </button>

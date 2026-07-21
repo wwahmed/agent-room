@@ -80,8 +80,8 @@ export function QuestionArtifactSheet({ code, questionId, isOwner, onClose, onAn
       <section className="relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl">
         <header className="flex items-center justify-between gap-3 border-b border-border-faint px-4 py-3 sm:px-6">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-accent">Question artifact</div>
-            <h2 id="question-artifact-title" className="mt-0.5 text-base font-semibold text-ink">Owner decision document</h2>
+            <div className="text-[13px] font-semibold uppercase tracking-wide text-accent">Question artifact</div>
+            <h2 id="question-artifact-title" className="mt-0.5 text-lg font-semibold text-ink">Owner decision document</h2>
           </div>
           <button type="button" onClick={onClose} autoFocus={!isOwner} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface-softer" aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="m4 4 8 8M12 4l-8 8" /></svg></button>
         </header>
@@ -91,35 +91,35 @@ export function QuestionArtifactSheet({ code, questionId, isOwner, onClose, onAn
             <div className="py-8 text-center">
               <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-accent-tint text-accent" aria-hidden="true">🔒</div>
               <h3 className="font-semibold text-ink">Owner-only artifact</h3>
-              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-soft">The inline card is visible to the room, but its prompt and answer are available only to the authenticated owner and participating agents.</p>
+              <p className="mx-auto mt-2 max-w-sm text-base leading-relaxed text-ink-soft">The inline card is visible to the room, but its prompt and answer are available only to the authenticated owner and participating agents.</p>
             </div>
           ) : loading ? (
-            <div role="status" className="py-10 text-center text-sm text-ink-soft">Loading artifact…</div>
+            <div role="status" className="flex flex-col items-center gap-3 py-10 text-base font-medium text-ink-soft"><span className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />Loading artifact…</div>
           ) : question ? (
             <>
               <div className="mb-5 flex items-center justify-between gap-3">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${question.answer ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>{question.answer ? 'Completed' : 'Pending'}</span>
-                <span className="text-xs text-ink-faint">Created by {question.createdBy}</span>
+                <span className={`rounded-full px-2.5 py-1 text-sm font-semibold ${question.answer ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>{question.answer ? 'Completed' : 'Pending'}</span>
+                <span className="text-sm text-ink-faint">Created by {question.createdBy}</span>
               </div>
               <h3 className="text-xl font-semibold leading-snug text-ink">{question.prompt}</h3>
-              {question.context && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">{question.context}</p>}
+              {question.context && <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-ink-soft">{question.context}</p>}
 
               {question.answer ? (
                 <div className="mt-6 rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Owner answer</div>
+                  <div className="text-[13px] font-semibold uppercase tracking-wide text-emerald-600">Owner answer</div>
                   <div className="mt-2 whitespace-pre-wrap text-base font-medium text-ink">{questionAnswerLabels(question).join(', ')}</div>
                 </div>
               ) : question.mode === 'text' ? (
                 <label className="mt-6 block">
-                  <span className="mb-2 block text-sm font-semibold text-ink">Your answer</span>
+                  <span className="mb-2 block text-base font-semibold text-ink">Your answer</span>
                   <textarea value={textAnswer} onChange={event => setTextAnswer(event.target.value)} maxLength={5_000} rows={6} autoFocus className="w-full resize-y rounded-xl border border-border bg-surface-soft p-3 text-base text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint" />
                 </label>
               ) : (
                 <fieldset className="mt-6 space-y-2">
-                  <legend className="mb-2 text-sm font-semibold text-ink">{question.mode === 'single' ? 'Choose one' : 'Choose one or more'}</legend>
+                  <legend className="mb-2 text-base font-semibold text-ink">{question.mode === 'single' ? 'Choose one' : 'Choose one or more'}</legend>
                   {(question.options ?? []).map(option => {
                     const checked = selected.includes(option.id);
-                    return <label key={option.id} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm font-medium ${checked ? 'border-accent bg-accent-tint text-ink' : 'border-border-faint bg-surface-soft text-ink'}`}><input type={question.mode === 'single' ? 'radio' : 'checkbox'} name={`question-${question.id}`} checked={checked} onChange={() => toggle(option.id)} className="h-4 w-4" /><span>{option.label}</span></label>;
+                    return <label key={option.id} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border p-3 text-base font-medium ${checked ? 'border-accent bg-accent-tint text-ink' : 'border-border-faint bg-surface-soft text-ink'}`}><input type={question.mode === 'single' ? 'radio' : 'checkbox'} name={`question-${question.id}`} checked={checked} onChange={() => toggle(option.id)} className="h-4 w-4" /><span>{option.label}</span></label>;
                   })}
                 </fieldset>
               )}
