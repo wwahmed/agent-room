@@ -89,6 +89,15 @@ export function ruleStatusNoteWidth(m) {
   return out.slice(0, 4);
 }
 
+/** T-71 (design lead): a work-object title is a TITLE — never more than two
+ *  rendered lines. The parser cascade bounds characters; this bounds pixels. */
+export function ruleArtifactTitleLines(m) {
+  return (m.artifactTitles ?? [])
+    .filter(t => t.h > t.lh * 2.2)
+    .slice(0, 3)
+    .map(t => `work-object title exceeds two lines: ${Math.round(t.h / t.lh)} lines${t.snippet ? ` ("${t.snippet}")` : ''}`);
+}
+
 /** T-72 rev4 (design lead): the Show-more pointer box is auditable and
  *  strictly contained — inside its own Activity Note, intersecting neither
  *  the updates control nor any OTHER note (the next card). A hit target that
@@ -191,7 +200,7 @@ export function ruleTypeFloors(m) {
   return out.slice(0, 6);
 }
 
-const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote, ruleDisclosureClearance];
+const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote, ruleDisclosureClearance, ruleArtifactTitleLines];
 
 export function evaluateAssertions(measurement) {
   return RULES.flatMap(rule => rule(measurement));

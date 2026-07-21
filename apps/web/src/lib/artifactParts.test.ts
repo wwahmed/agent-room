@@ -25,3 +25,17 @@ describe('artifactParts (T-71 work-object titles)', () => {
     expect(artifactParts('   ')).toEqual({ title: '', summary: '' });
   });
 });
+
+describe('artifactParts locked cascade (design lead)', () => {
+  it('the long Action sentence splits at the last clause boundary, not mid-word', () => {
+    const r = artifactParts('Verify the populated Outputs hierarchy shows Decision, Action, and Result cards with derived titles.');
+    expect(r.title).toBe('Verify the populated Outputs hierarchy shows Decision, Action,');
+    expect(r.summary).toBe('and Result cards with derived titles.');
+    expect(r.title.endsWith('…')).toBe(false);
+  });
+  it('a colon clause boundary keeps the colon and continues cleanly', () => {
+    const r = artifactParts('Adopt one disclosure grammar across every bounded surface in the product: the reading endpoint form shipped by the status object work');
+    expect(r.title.endsWith(':')).toBe(true);
+    expect(r.summary.startsWith('the reading endpoint')).toBe(true);
+  });
+});

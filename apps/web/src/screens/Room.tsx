@@ -2515,18 +2515,39 @@ export function Room() {
 // T-71 work-object anatomy: kind is METADATA, not a title. The title is the
 // first meaningful line/sentence; anything longer becomes the bounded summary
 // below it (shared T-72 endpoint disclosure).
+// Locked cascade (design lead): explicit first line <=80 → first sentence
+// <=80 → last clause boundary (colon/semicolon/comma/dash) in 24-80 → last
+// word <=72. The summary CONTINUES after the boundary; no duplicated or
+// orphaned punctuation, no grammatically dangling halves.
 export function artifactParts(text: string): { title: string; summary: string } {
   const trimmed = text.trim();
   if (!trimmed) return { title: '', summary: '' };
   const nl = trimmed.indexOf('\n');
-  if (nl > 0 && nl <= 90) return { title: trimmed.slice(0, nl).trim(), summary: trimmed.slice(nl + 1).trim() };
-  const sentence = trimmed.match(/^([^.!?\n]{10,90}[.!?])(?:\s|$)/);
+  if (nl > 0 && nl <= 80) return { title: trimmed.slice(0, nl).trim(), summary: trimmed.slice(nl + 1).trim() };
+  const sentence = trimmed.match(/^([^.!?\n]{1,79}[.!?])(?:\s|$)/);
   if (sentence) return { title: sentence[1]!, summary: trimmed.slice(sentence[0].length).trim() };
-  if (trimmed.length <= 90) return { title: trimmed, summary: '' };
-  // No sentence boundary in reach: cut the title at a word and CONTINUE the
-  // remainder as the summary — never the same text twice, no double ellipsis.
-  const cut = trimmed.lastIndexOf(' ', 88);
-  const at = cut > 40 ? cut : 88;
+  if (trimmed.length <= 80 && nl < 0) return { title: trimmed, summary: '' };
+  const head = trimmed.slice(0, 81);
+  let cutAt = -1;
+  let cutLen = 0;
+  let keepPunct = false;
+  const clause = /[:;,](?=\s)|\s[—–-](?=\s)/g;
+  let m: RegExpExecArray | null;
+  while ((m = clause.exec(head))) {
+    if (m.index >= 24 && m.index <= 79) {
+      cutAt = m.index;
+      cutLen = m[0].length + 1;
+      keepPunct = /[:;,]/.test(m[0]![0]!);
+    }
+  }
+  if (cutAt > 0) {
+    return {
+      title: trimmed.slice(0, cutAt + (keepPunct ? 1 : 0)).trimEnd(),
+      summary: trimmed.slice(cutAt + cutLen).trimStart(),
+    };
+  }
+  const w = trimmed.lastIndexOf(' ', 72);
+  const at = w > 24 ? w : 72;
   return { title: `${trimmed.slice(0, at).trimEnd()}…`, summary: trimmed.slice(at).trimStart() };
 }
 
@@ -2545,7 +2566,7 @@ function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number 
         </span>
         <span className="msg-meta shrink-0">{artifact.author} · {messageTime(artifact.time, now)}</span>
       </div>
-      <h4 className="mt-1 text-[16px] font-semibold leading-snug text-ink">{title}</h4>
+      <h4 data-gate="artifact-title" className="mt-1 line-clamp-2 text-[16px] font-semibold leading-snug text-ink">{title}</h4>
       {summary && (
         <div className="text-ink-soft">
           <ClampedNoteBody text={summary} expandLabel="Show the full output" dataRole="artifact-body" />

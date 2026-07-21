@@ -58,3 +58,20 @@ describe('extractArtifacts marker anchoring (T-71 review-found bug)', () => {
     expect(extractArtifacts([msg('[DECISION] One.\n[TODO] Two.')])).toHaveLength(2);
   });
 });
+
+describe('extractArtifacts code-region skipping (design lead matrix)', () => {
+  const msg = (text: string) => ({ id: 2, type: 'msg', name: 'A', initials: 'A', color: '#000', role: '', client: 'cc', text, time: 2 }) as unknown as Message;
+  it('a marker inside a fenced code example is ignored', () => {
+    expect(extractArtifacts([msg('Example syntax:\n```\n[TODO] like this\n```\nend.')])).toEqual([]);
+  });
+  it('a 4-space indented code line is ignored', () => {
+    expect(extractArtifacts([msg('Indent example:\n    [DECISION] not real')])).toEqual([]);
+  });
+  it('a system message is ignored even with a marker line', () => {
+    const sys = { id: 3, type: 'sys', name: 'x', initials: 'X', color: '#000', role: '', client: 'cc', text: '[RESULT] nope', time: 3 } as unknown as Message;
+    expect(extractArtifacts([sys])).toEqual([]);
+  });
+  it('markers after a closed fence still extract', () => {
+    expect(extractArtifacts([msg('```\n[TODO] sample\n```\n[RESULT] Real one.')])).toHaveLength(1);
+  });
+});

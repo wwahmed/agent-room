@@ -300,6 +300,12 @@ for (const vp of VIEWPORTS) {
               // culprit in the finding instead of leaving a bare pixel count.
               return { w: r.width, wrapped: r.height > lh * 1.8, snippet: (b.textContent || '').trim().slice(0, 40) };
             }),
+            // T-71: work-object titles are mechanically bounded to two lines.
+            artifactTitles: [...document.querySelectorAll('[data-gate="artifact-title"]')].slice(-8).map(el => {
+              const r = el.getBoundingClientRect();
+              const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
+              return { h: r.height, lh, snippet: (el.textContent || '').trim().slice(0, 40) };
+            }),
             // T-72: Activity Note bodies must hold their full-width column.
             statusNotes: [...document.querySelectorAll('[data-gate="status-note"]')].slice(-6).map(el => {
               const body = el.querySelector('[data-gate="status-body"]');

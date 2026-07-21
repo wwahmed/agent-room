@@ -1,12 +1,5 @@
 import type { ArtifactKind, Message, RoomArtifact } from './types.js';
 
-// T-71 content-model fix (review-found bug: prose DISCUSSING a tag — 'the
-// tag [TODO] internally' — was harvested as a work object). Markers are
-// intentional LINE-LEVEL syntax: anchored at start of message or start of
-// line (optional leading whitespace). '>'-quoted lines never match, so
-// quoted transcript excerpts do not manufacture artifacts.
-const MARKER_PATTERN = /^[ \t]*\[(DECISION|TODO|STATUS|RESULT)\]\s*([^\n]+)/gim;
-
 const KIND_BY_MARKER: Record<string, ArtifactKind> = {
   DECISION: 'decision',
   TODO: 'todo',
@@ -14,15 +7,23 @@ const KIND_BY_MARKER: Record<string, ArtifactKind> = {
   RESULT: 'result',
 };
 
+// T-71 content-model fix (review-found bug): markers are intentional
+// LINE-LEVEL syntax, parsed line-by-line — prose discussing a tag, quoted
+// lines, fenced code examples, and 4-space indented code never manufacture
+// work objects.
+const MARKER_LINE = /^ {0,3}\[(DECISION|TODO|STATUS|RESULT)\]\s*(.+)/i;
+
 export function extractArtifacts(messages: Message[]): RoomArtifact[] {
   const artifacts: RoomArtifact[] = [];
 
   for (const message of messages) {
     if (message.type !== 'msg') continue;
-    let match: RegExpExecArray | null;
-    MARKER_PATTERN.lastIndex = 0;
-
-    while ((match = MARKER_PATTERN.exec(message.text))) {
+    let inFence = false;
+    for (const line of (message.text ?? '').split('\n')) {
+      if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
+      if (inFence) continue;
+      const match = line.match(MARKER_LINE);
+      if (!match) continue;
       const marker = match[1]?.toUpperCase();
       const text = match[2]?.trim();
       if (!marker || !text) continue;

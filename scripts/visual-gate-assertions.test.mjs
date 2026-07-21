@@ -6,6 +6,7 @@ import {
   ruleStatusNoteWidth,
   ruleFloatingVsStatusNote,
   ruleDisclosureClearance,
+  ruleArtifactTitleLines,
   ruleClipped,
   ruleFloatingVsComposer,
   ruleMixedTheme,
@@ -175,5 +176,15 @@ describe('ruleDisclosureClearance (T-72 rev4: auditable pointer boxes)', () => {
       { ...card, showMore: { left: 250, top: 170, right: 368, bottom: 214 }, updates: { left: 270, top: 216, right: 368, bottom: 258 } },
       { ...card, top: 270, bottom: 400 },
     ] })).toEqual([]);
+  });
+});
+
+describe('ruleArtifactTitleLines (T-71: titles are titles)', () => {
+  it('BROKEN: a three-line title fails', () => {
+    const fails = ruleArtifactTitleLines({ artifactTitles: [{ h: 63, lh: 21, snippet: 'a very long title' }] });
+    expect(fails[0]).toContain('work-object title exceeds two lines: 3 lines');
+  });
+  it('one- and two-line titles pass', () => {
+    expect(ruleArtifactTitleLines({ artifactTitles: [{ h: 21, lh: 21 }, { h: 42, lh: 21 }] })).toEqual([]);
   });
 });
