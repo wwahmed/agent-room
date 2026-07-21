@@ -204,15 +204,16 @@ export function RoomHeader({
             onClick={onShare}
             aria-label="Share room invite link"
             title="Share room invite link"
-            className="header-glass-control flex h-11 w-11 items-center justify-center gap-1.5 rounded-xl text-ink-soft transition hover:text-ink sm:w-auto sm:px-2.5"
+            className="header-glass-control flex h-11 w-11 items-center justify-center gap-1.5 rounded-xl text-ink-soft transition hover:text-ink md:w-auto md:px-2.5"
           >
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
               <path d="M8 10V1.8M4.9 4.7 8 1.6l3.1 3.1" />
               <path d="M3 7.5v5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-5" />
             </svg>
-            {/* Visible label wherever width allows (QA ruling): icon-only is
-                reserved for the 390 row where identity legibility wins. */}
-            <span className="hidden text-[13px] font-semibold sm:inline">Share</span>
+            {/* Visible label wherever width allows (QA ruling rev3): below md
+                the icon stays alone so room identity keeps its width — the
+                sm boundary inverted legibility at exactly 640 (VA-0076). */}
+            <span className="hidden text-[13px] font-semibold md:inline">Share</span>
           </button>
           <div ref={menuRef} className="relative">
             <button

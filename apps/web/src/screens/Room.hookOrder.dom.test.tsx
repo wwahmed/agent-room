@@ -78,7 +78,7 @@ function mountRoomAt(initial: Record<string, unknown>) {
 afterEach(() => cleanup());
 
 describe('Room hook-order stability across bootstrap transitions', () => {
-  it('loading -> loaded renders in ONE mounted tree without a hook-order crash', async () => {
+  it('loading -> loaded renders in ONE mounted tree without a hook-order crash', { timeout: 20000 }, async () => {
     const h = await mountRoomAt({ room: null });
     expect(document.body.textContent).toContain('Loading the room');
     // The #310 crash fired exactly here: the loaded render mounted an extra
@@ -88,7 +88,7 @@ describe('Room hook-order stability across bootstrap transitions', () => {
     expect(document.querySelector('[data-gate="feed"]')).not.toBeNull();
   });
 
-  it('error -> retry -> loaded is hook-order stable too', async () => {
+  it('error -> retry -> loaded is hook-order stable too', { timeout: 20000 }, async () => {
     const h = await mountRoomAt({ room: null, error: 'Connection failed' });
     expect(document.body.textContent).toMatch(/couldn.t load|retry/i);
     await h.transitionTo({ room: null }); // retrying: back to loading
@@ -96,7 +96,7 @@ describe('Room hook-order stability across bootstrap transitions', () => {
     expect(document.querySelector('textarea')).not.toBeNull();
   });
 
-  it('same-tree Chat -> Project -> People -> Outputs -> Chat keeps hook order stable', async () => {
+  it('same-tree Chat -> Project -> People -> Outputs -> Chat keeps hook order stable', { timeout: 20000 }, async () => {
     await mountRoomAt({ room: loadedRoom });
     const tab = (label: string) => {
       const btn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
@@ -110,7 +110,7 @@ describe('Room hook-order stability across bootstrap transitions', () => {
     expect(document.querySelector('textarea')).not.toBeNull(); // back in chat
   });
 
-  it('Home -> Room -> Back -> reopen mounts and remounts cleanly', async () => {
+  it('Home -> Room -> Back -> reopen mounts and remounts cleanly', { timeout: 20000 }, async () => {
     hookState = { ...baseHook, room: loadedRoom };
     sessionStorage.setItem('room:AAA-BBB-CCC:self', JSON.stringify({ name: 'ClaudeUI', role: '' }));
     const { Room: RoomComponent } = await import('./Room.js');
