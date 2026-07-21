@@ -20,6 +20,7 @@ describe('room command bar composition', () => {
     expect(header).toContain("agentCount === 1 ? 'agent' : 'agents'");
     expect(header).toContain('header-room-presence');
     expect(header).toContain('header-search-field');
+    expect(header).toContain('header-glass-control');
     expect(header).toContain('More room actions');
     expect(rail).not.toContain('wakichat-icon-192.png');
     expect(pane).not.toContain('h-[60px]');
@@ -43,5 +44,7 @@ describe('room command bar composition', () => {
     expect(search).toContain("hits.filter(hit => hit.type === 'task')");
     expect(search).toContain("event.key !== 'Tab'");
     expect(search).toContain('returnFocusRef.current?.focus()');
+    expect(search).toContain('command-search-palette');
+    expect(search).toContain('top-1.5');
   });
 });

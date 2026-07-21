@@ -1534,7 +1534,7 @@ export function Room() {
                     onClick={() => gotoMention(-1)}
                     disabled={mentionSeeking}
                     aria-label="Previous mention of you"
-                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
+                    className={`header-glass-control flex min-h-11 min-w-11 items-center justify-center rounded-lg transition disabled:opacity-50 ${tone}`}
                   >
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m3.5 10 4.5-5 4.5 5" />
@@ -1548,7 +1548,7 @@ export function Room() {
                     onClick={() => gotoMention(1)}
                     disabled={mentionSeeking}
                     aria-label="Next mention of you"
-                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
+                    className={`header-glass-control flex min-h-11 min-w-11 items-center justify-center rounded-lg transition disabled:opacity-50 ${tone}`}
                   >
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m3.5 6 4.5 5 4.5-5" />

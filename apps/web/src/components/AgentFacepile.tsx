@@ -112,7 +112,11 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
   if (agentCount <= 0) return null;
 
   const size = compact ? 'h-5 w-5 text-fixed text-[10px]' : 'h-7 w-7 text-[12px]';
-  const overlap = compact ? '-ml-2' : '-ml-3.5';
+  // T-60 rev2: Waqas's dense-header capture exposed the old 50% overlap as
+  // an unreadable CO/CL blob. Keep at least two-thirds of every 28px identity
+  // visible; 8px is a 29% overlap. Compact 20px faces retain their existing
+  // 8px overlap because that variant is intentionally monogram-only.
+  const overlap = '-ml-2';
   const label = facepileLabel(agentCount, agentStaleCount);
 
   return (

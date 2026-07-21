@@ -71,7 +71,7 @@ export function RoomHeader({
           <Link
             to="/"
             aria-label="Back to rooms"
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink"
+            className="header-glass-control flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink"
           >
             <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M10.5 3 5.5 8l5 5" />
@@ -126,7 +126,7 @@ export function RoomHeader({
             type="button"
             onClick={onSearch}
             aria-label="Search rooms, messages, and tasks"
-            className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink md:hidden"
+            className="header-glass-control flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink md:hidden"
           >
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
               <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
@@ -155,7 +155,7 @@ export function RoomHeader({
             onClick={onShare}
             aria-label="Copy invite link"
             title="Copy invite link"
-            className="hidden h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink sm:flex"
+            className="header-glass-control hidden h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink sm:flex"
           >
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M10.5 2.5h3v3M13.5 2.5 8.2 7.8" /><path d="M12.5 8.5v4a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h4" />
@@ -168,7 +168,7 @@ export function RoomHeader({
               aria-label="More room actions"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink ${menuOpen ? 'bg-surface-softer text-ink' : ''}`}
+              className={`header-glass-control flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink ${menuOpen ? 'header-glass-control-active text-ink' : ''}`}
             >
               <svg viewBox="0 0 16 16" width="19" height="19" fill="currentColor" aria-hidden="true">
                 <circle cx="3" cy="8" r="1.15" /><circle cx="8" cy="8" r="1.15" /><circle cx="13" cy="8" r="1.15" />

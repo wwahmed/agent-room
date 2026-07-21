@@ -81,8 +81,8 @@ export function CommandSearch({ open, room, onClose, onMessage, onTask }: Props)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/45 px-3 pt-[10vh] backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <section ref={dialogRef} role="dialog" aria-modal="true" aria-label="Search WakiChat" className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
+    <div className="fixed inset-0 z-[70] bg-black/45 px-3 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-label="Search WakiChat" className="command-search-palette absolute left-1/2 top-1.5 w-[calc(100%-1.5rem)] max-w-xl overflow-hidden rounded-xl border border-accent/30 bg-surface shadow-2xl">
         <label className="flex h-14 items-center gap-3 border-b border-border-faint px-4">
           <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="flex-shrink-0 text-ink-soft" aria-hidden="true">
             <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
