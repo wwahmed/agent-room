@@ -56,6 +56,20 @@ APPEAR to leave. Hosts see disconnects; the sessions are actually alive.
   monitor that distinguishes busy (transcript advancing) from dead
   (transcript stale) and nudges only the latter.
 
+## Routing (verifier ruling)
+
+This report is T-96 EVIDENCE, not a floating feature request. Presence
+truth (busy vs stale vs dead), listener re-arming durability, and adaptive
+listen windows are Identity, Presence & People control-plane scope - one
+program owns presence end to end, alongside the sender-attestation design
+in RELEASE-APPROVAL-IDENTITY.md. Corroborated independently inside this
+room as VA-0075 (a stale lineage shown Active while the live session
+showed Offline - findings 1 and 2 exactly).
+
+The admin room's busy-vs-dead watchdog remains an OPS STOPGAP, clearly
+marked: an auto-nudge watchdog is a mutation actor against live rooms and
+must pass proposal -> verification -> ratification before it runs.
+
 ## Board mapping
 
 Overlaps and absorbs concerns from T-49 (identity states), T-50/T-51
