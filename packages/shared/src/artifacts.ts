@@ -1,6 +1,11 @@
 import type { ArtifactKind, Message, RoomArtifact } from './types.js';
 
-const MARKER_PATTERN = /\[(DECISION|TODO|STATUS|RESULT)\]\s*([^\n]+)/gi;
+// T-71 content-model fix (review-found bug: prose DISCUSSING a tag — 'the
+// tag [TODO] internally' — was harvested as a work object). Markers are
+// intentional LINE-LEVEL syntax: anchored at start of message or start of
+// line (optional leading whitespace). '>'-quoted lines never match, so
+// quoted transcript excerpts do not manufacture artifacts.
+const MARKER_PATTERN = /^[ \t]*\[(DECISION|TODO|STATUS|RESULT)\]\s*([^\n]+)/gim;
 
 const KIND_BY_MARKER: Record<string, ArtifactKind> = {
   DECISION: 'decision',
