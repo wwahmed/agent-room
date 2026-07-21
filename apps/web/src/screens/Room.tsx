@@ -1677,13 +1677,13 @@ export function Room() {
         purpose="Deliverables, artifacts, and minutes this room has produced."
         summary={producedWork.length === 0 ? undefined : (
           <>
-            <SummaryChip tone="quiet">{producedWork.length} artifact{producedWork.length === 1 ? '' : 's'}</SummaryChip>
-            {producedWork.filter(a => a.kind === 'decision').length > 0 && (
-              <SummaryChip tone="ok">{producedWork.filter(a => a.kind === 'decision').length} decision{producedWork.filter(a => a.kind === 'decision').length === 1 ? '' : 's'}</SummaryChip>
-            )}
-            {producedWork.filter(a => a.kind === 'result').length > 0 && (
-              <SummaryChip tone="ok">{producedWork.filter(a => a.kind === 'result').length} result{producedWork.filter(a => a.kind === 'result').length === 1 ? '' : 's'}</SummaryChip>
-            )}
+            {(['decision', 'todo', 'result'] as const).map(kind => {
+              const count = producedWork.filter(a => a.kind === kind).length;
+              const noun = kind === 'decision' ? 'decision' : kind === 'todo' ? 'action' : 'result';
+              return count > 0
+                ? <SummaryChip key={kind} tone="ok">{count} {noun}{count === 1 ? '' : 's'}</SummaryChip>
+                : null;
+            })}
             <SummaryChip tone="quiet">Last produced {messageTime(producedWork[producedWork.length - 1]!.time, now)}</SummaryChip>
           </>
         )}
@@ -2530,20 +2530,25 @@ export function artifactParts(text: string): { title: string; summary: string } 
   return { title: `${trimmed.slice(0, at).trimEnd()}…`, summary: trimmed.slice(at).trimStart() };
 }
 
+// T-71 user-facing vocabulary: the page says Action; [TODO] stays protocol.
+function outputKindLabel(kind: ArtifactKind): string {
+  return kind === 'todo' ? 'Action' : artifactLabel(kind);
+}
+
 function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number }) {
   const { title, summary } = artifactParts(artifact.text);
   return (
     <div className="rounded-xl border border-border-faint bg-surface-softer p-3.5">
       <div className="flex items-center justify-between gap-2">
         <span className={`msg-meta font-semibold uppercase ${artifactTone(artifact.kind)}`}>
-          {artifactLabel(artifact.kind)}
+          {outputKindLabel(artifact.kind)}
         </span>
         <span className="msg-meta shrink-0">{artifact.author} · {messageTime(artifact.time, now)}</span>
       </div>
       <h4 className="mt-1 text-[16px] font-semibold leading-snug text-ink">{title}</h4>
       {summary && (
         <div className="text-ink-soft">
-          <ClampedNoteBody text={summary} />
+          <ClampedNoteBody text={summary} expandLabel="Show the full output" dataRole="artifact-body" />
         </div>
       )}
     </div>

@@ -24,7 +24,13 @@ function exactTime(t: number): string {
 // faded third line — unboxed inline text, not a detached row. The 44px hit
 // target extends into the dead space below the card, never over readable
 // text. Expanded Show less right-aligns after the body.
-export function ClampedNoteBody({ text }: { text: string }) {
+// Generic expandable-text primitive (design lead): callers provide honest
+// semantics — ActivityNote announces a status update, ArtifactCard an output.
+export function ClampedNoteBody({ text, expandLabel = 'Show the full status update', dataRole = 'status-body' }: {
+  text: string;
+  expandLabel?: string;
+  dataRole?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [clamped, setClamped] = useState(false);
@@ -36,7 +42,7 @@ export function ClampedNoteBody({ text }: { text: string }) {
 
   if (!text.trim()) return null;
   return (
-    <div data-gate="status-body" className="mt-1 min-w-0">
+    <div data-gate={dataRole} className="mt-1 min-w-0">
       {/* pb-5 reserves ~20px of IN-FLOW clearance inside the card, so the
           44px hit box (anchored to this wrapper's bottom) stays entirely
           within the Activity Note: it covers only the masked tail of line 3
@@ -49,7 +55,7 @@ export function ClampedNoteBody({ text }: { text: string }) {
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            aria-label="Show the full status update"
+            aria-label={expandLabel}
             data-gate="disclosure-more"
             className="absolute bottom-0 right-0 flex h-11 items-start justify-end"
           >
