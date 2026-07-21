@@ -2521,10 +2521,13 @@ export function artifactParts(text: string): { title: string; summary: string } 
   const trimmed = text.trim();
   const nl = trimmed.indexOf('\n');
   if (nl > 0 && nl <= 90) return { title: trimmed.slice(0, nl).trim(), summary: trimmed.slice(nl + 1).trim() };
-  const sentence = trimmed.match(/^(.{20,90}?[.!?])\s/);
+  const sentence = trimmed.match(/^([^.!?]{10,140}[.!?])(?:\s|$)/);
   if (sentence) return { title: sentence[1]!, summary: trimmed.slice(sentence[0].length).trim() };
-  if (trimmed.length <= 90) return { title: trimmed, summary: '' };
-  return { title: `${trimmed.slice(0, 87).trimEnd()}…`, summary: trimmed };
+  if (trimmed.length <= 140) return { title: trimmed, summary: '' };
+  // No sentence boundary in reach: cut the title at a word and continue the
+  // remainder in the summary — never duplicate the same text twice.
+  const cut = trimmed.lastIndexOf(' ', 120);
+  return { title: `${trimmed.slice(0, cut > 40 ? cut : 120).trimEnd()}…`, summary: `…${trimmed.slice(cut > 40 ? cut : 120).trimStart()}` };
 }
 
 function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number }) {
