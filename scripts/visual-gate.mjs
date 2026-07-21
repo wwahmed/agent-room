@@ -125,6 +125,7 @@ async function ensureFixtureRoom() {
   // T-71: produced work so the Outputs page photographs POPULATED state.
   await msg('GateB', '[DECISION] Ship the two-row Activity Note as the deterministic status object for all fixture runs.', id++);
   await msg('GateA', '[RESULT] Fixture room seeded: 21-line report, six rapid messages, a mention, a status run, and produced work objects.', id++);
+  await msg('GateB', '[TODO] Verify the populated Outputs hierarchy shows Decision, Action, and Result cards with derived titles.', id++);
   // T-72: a same-sender heartbeat RUN, so the collapsed "3 updates" Activity
   // Note is photographed and measured every run. Review finding: the NEWEST
   // member (the one the note displays) must be the LONG body — the ribbon

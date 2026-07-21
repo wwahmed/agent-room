@@ -2514,10 +2514,21 @@ export function Room() {
   }
 }
 
+// T-71 work-object anatomy: kind is METADATA, not a title. The title is the
+// first meaningful line/sentence; anything longer becomes the bounded summary
+// below it (shared T-72 endpoint disclosure).
+export function artifactParts(text: string): { title: string; summary: string } {
+  const trimmed = text.trim();
+  const nl = trimmed.indexOf('\n');
+  if (nl > 0 && nl <= 90) return { title: trimmed.slice(0, nl).trim(), summary: trimmed.slice(nl + 1).trim() };
+  const sentence = trimmed.match(/^(.{20,90}?[.!?])\s/);
+  if (sentence) return { title: sentence[1]!, summary: trimmed.slice(sentence[0].length).trim() };
+  if (trimmed.length <= 90) return { title: trimmed, summary: '' };
+  return { title: `${trimmed.slice(0, 87).trimEnd()}…`, summary: trimmed };
+}
+
 function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number }) {
-  // T-71: work objects read on the semantic ramp — meta row at the meta
-  // role, BOUNDED body on the note role with the T-72 reading-endpoint
-  // disclosure grammar. Never a full chat message dumped into a card.
+  const { title, summary } = artifactParts(artifact.text);
   return (
     <div className="rounded-xl border border-border-faint bg-surface-softer p-3.5">
       <div className="flex items-center justify-between gap-2">
@@ -2526,9 +2537,12 @@ function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number 
         </span>
         <span className="msg-meta shrink-0">{artifact.author} · {messageTime(artifact.time, now)}</span>
       </div>
-      <div className="text-ink">
-        <ClampedNoteBody text={artifact.text} />
-      </div>
+      <h4 className="mt-1 text-[16px] font-semibold leading-snug text-ink">{title}</h4>
+      {summary && (
+        <div className="text-ink-soft">
+          <ClampedNoteBody text={summary} />
+        </div>
+      )}
     </div>
   );
 }
