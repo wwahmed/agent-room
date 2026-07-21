@@ -71,14 +71,24 @@ export function isCurrentSeek(ticket: SeekTicket, current: { generation: number;
 }
 
 export type SeekExit = 'found' | 'failed-page' | 'give-up-trimmed' | 'give-up-error';
-export interface SeekRecovery { sourceMessageId: number; reason: 'failed-page' | 'exhausted' }
+/** Failure identity is the ARTIFACT (the card the user activated), not the
+ *  source message — one message can yield several cards, and exactly one of
+ *  them failed (rev20b implementation review). Source id rides along for
+ *  the jump itself. */
+export interface SeekRecovery { artifactId: string; sourceMessageId: number; reason: 'failed-page' | 'exhausted' }
 
 /** rev20b: BOTH recoverable exits route through one recovery state keyed to
- *  the originating source; the genuinely trimmed source is terminal — toast
+ *  the originating card; the genuinely trimmed source is terminal — toast
  *  only, never a retry. */
-export function seekExitRecovery(exit: SeekExit, sourceMessageId: number): { recovery: SeekRecovery | null; terminalToast: string | null } {
-  if (exit === 'failed-page') return { recovery: { sourceMessageId, reason: 'failed-page' }, terminalToast: null };
-  if (exit === 'give-up-error') return { recovery: { sourceMessageId, reason: 'exhausted' }, terminalToast: null };
+export function seekExitRecovery(exit: SeekExit, artifactId: string, sourceMessageId: number): { recovery: SeekRecovery | null; terminalToast: string | null } {
+  if (exit === 'failed-page') return { recovery: { artifactId, sourceMessageId, reason: 'failed-page' }, terminalToast: null };
+  if (exit === 'give-up-error') return { recovery: { artifactId, sourceMessageId, reason: 'exhausted' }, terminalToast: null };
   if (exit === 'give-up-trimmed') return { recovery: null, terminalToast: 'The source message is no longer available in this room\u2019s history.' };
   return { recovery: null, terminalToast: null };
+}
+
+/** Exactly ONE card wears the failure: the activated artifact, never its
+ *  same-source siblings. */
+export function isFailedCard(recovery: SeekRecovery | null, artifactId: string): boolean {
+  return recovery != null && recovery.artifactId === artifactId;
 }

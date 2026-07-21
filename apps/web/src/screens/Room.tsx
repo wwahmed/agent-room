@@ -41,7 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, isCurrentSeek, outputsViewState, railSectionCount, seekExitRecovery, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, isCurrentSeek, isFailedCard, outputsViewState, railSectionCount, seekExitRecovery, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
@@ -313,19 +313,16 @@ export function Room() {
   // recoverable exits (failed page, budget exhaustion) land here; the card
   // itself renders the inline error + Retry source jump.
   const [seekFailure, setSeekFailure] = useState<SeekRecovery | null>(null);
+  // The ARTIFACT the user activated — failure identity is the card, not the
+  // source message (one message can yield several cards).
+  const seekArtifactIdRef = useRef<string | null>(null);
   const enterSeekExit = (exit: 'failed-page' | 'give-up-trimmed' | 'give-up-error', sourceMessageId: number) => {
     seekGenRef.current += 1;
     seekAttemptsRef.current = 0;
     setSourceSeekId(null);
-    const { recovery, terminalToast } = seekExitRecovery(exit, sourceMessageId);
+    const { recovery, terminalToast } = seekExitRecovery(exit, seekArtifactIdRef.current ?? `${sourceMessageId}-0`, sourceMessageId);
     setSeekFailure(recovery);
-    if (recovery) {
-      selectTab('outputs');
-      window.setTimeout(() => {
-        const card = document.querySelector<HTMLElement>(`[data-source-card="${sourceMessageId}"]`);
-        if (card) { card.scrollIntoView({ block: 'center' }); card.focus(); }
-      }, 150);
-    }
+    if (recovery) selectTab('outputs');
     if (terminalToast) {
       void import('../components/Toast.js').then(({ showToast }) => showToast(terminalToast, 'error'));
     }
@@ -400,6 +397,18 @@ export function Room() {
   }, [code, artifactsNonce]);
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
+  // Focus handoff is a RENDER-KEYED effect, not a timer: it runs when the
+  // live recovery card exists in the Outputs render, and clearing the
+  // failure (retry / success / room change) invalidates it — no stale
+  // window in which the wrong card can be focused.
+  useEffect(() => {
+    if (!seekFailure || mainTab !== 'outputs') return;
+    const card = document.querySelector<HTMLElement>(`[data-artifact-card="${CSS.escape(seekFailure.artifactId)}"]`);
+    if (card) {
+      card.scrollIntoView({ block: 'center' });
+      card.focus();
+    }
+  }, [seekFailure, mainTab, serverArtifacts, outputsFilter, showAllArtifacts]);
   const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
@@ -2624,9 +2633,10 @@ export function Room() {
                 key={artifact.id}
                 artifact={artifact}
                 now={now}
-                failed={seekFailure?.sourceMessageId === artifact.sourceMessageId}
+                failed={isFailedCard(seekFailure, artifact.id)}
                 onOpenSource={messageId => {
                   setSeekFailure(null);
+                  seekArtifactIdRef.current = artifact.id;
                   selectTab('chat');
                   seekGenRef.current += 1;
                   seekAttemptsRef.current = 0;
@@ -2725,7 +2735,7 @@ function ArtifactCard({ artifact, now, failed, onOpenSource }: { artifact: RoomA
   const { title, summary } = artifactParts(artifact.text);
   return (
     <div
-      data-source-card={artifact.sourceMessageId}
+      data-artifact-card={artifact.id}
       tabIndex={-1}
       className={`rounded-xl border bg-surface-softer p-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${failed ? 'border-red-400/40' : 'border-border-faint'}`}
     >

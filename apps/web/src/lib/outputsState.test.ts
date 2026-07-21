@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, isCurrentSeek, seekExitRecovery, seekPageBudget, seekStep } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, isCurrentSeek, isFailedCard, seekExitRecovery, seekPageBudget, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -59,16 +59,22 @@ describe('isCurrentSeek (rev19: stale completions are inert)', () => {
 });
 
 describe('seekExitRecovery (rev20b: one recovery state, both recoverable exits)', () => {
-  it('failed-page and exhausted both produce card-keyed recovery, no toast', () => {
-    expect(seekExitRecovery('failed-page', 7)).toEqual({ recovery: { sourceMessageId: 7, reason: 'failed-page' }, terminalToast: null });
-    expect(seekExitRecovery('give-up-error', 7)).toEqual({ recovery: { sourceMessageId: 7, reason: 'exhausted' }, terminalToast: null });
+  it('failed-page and exhausted both produce CARD-keyed recovery, no toast', () => {
+    expect(seekExitRecovery('failed-page', '7-0', 7)).toEqual({ recovery: { artifactId: '7-0', sourceMessageId: 7, reason: 'failed-page' }, terminalToast: null });
+    expect(seekExitRecovery('give-up-error', '7-0', 7)).toEqual({ recovery: { artifactId: '7-0', sourceMessageId: 7, reason: 'exhausted' }, terminalToast: null });
   });
   it('a trimmed source is TERMINAL: toast, never a retry state', () => {
-    const r = seekExitRecovery('give-up-trimmed', 7);
+    const r = seekExitRecovery('give-up-trimmed', '7-0', 7);
     expect(r.recovery).toBeNull();
     expect(r.terminalToast).toContain('no longer available');
   });
   it('success clears everything', () => {
-    expect(seekExitRecovery('found', 7)).toEqual({ recovery: null, terminalToast: null });
+    expect(seekExitRecovery('found', '7-0', 7)).toEqual({ recovery: null, terminalToast: null });
+  });
+  it('duplicate-source siblings: exactly ONE card wears the failure', () => {
+    const { recovery } = seekExitRecovery('failed-page', '5-1', 5);
+    expect(isFailedCard(recovery, '5-1')).toBe(true);
+    expect(isFailedCard(recovery, '5-0')).toBe(false); // same source, different card
+    expect(isFailedCard(null, '5-1')).toBe(false);
   });
 });
