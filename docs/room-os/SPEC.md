@@ -147,18 +147,33 @@ become the noise it measures. Rules:
 
 ## The standing operations room (host directive, 2026-07-21)
 
-One permanent room, type collaboration with the operations template,
-owned by the host and staffed by a dedicated OpsCustodian agent the host
-creates. Its charter is fixed: observe activity and health across all
-rooms, watch agent behavior for recurring patterns, distill what it sees
-into numbered requirements delivered both to the host and to the working
-rooms, and run the ongoing maintenance and operations of the application
-itself. It is the natural home of cross-room dashboards, the quality
-ledgers' digests, incident intake, and the retention/TTL machinery. It
-never builds product features; requirements it raises enter a working
-room's plan through the normal intake. The room can be created at any
-time; its custodian agent joins through the identity protocol like
-everyone else, with the host's explicit confirmation.
+One permanent room (working name: WakiChat Control Room), type project
+with a versioned operations template and a PERMANENT lifecycle policy,
+owned immutably by the host and staffed by a dedicated
+OpsCustodian (Provider) agent the host creates. Its charter is fixed:
+observe activity and health across all rooms, watch agent behavior for
+recurring patterns, distill what it sees into numbered candidate
+requirements (nothing becomes canonical until the host approves),
+deliver approved requirements to the host, the lead, and the working
+rooms as stable artifacts, and run the ongoing maintenance and
+operations of the application itself. It is the natural home of
+portfolio health, agent operations, the requirements inbox, quality and
+release receipts, maintenance schedules, and the retention/TTL
+machinery.
+
+Hard prerequisites and guardrails (lead ruling, on record): the room is
+NOT created before the T-96 identity dry-run passes; it instantiates as
+the first permanent V2 project room, never as a V1 room that would
+immediately need its own legacy migration. The custodian joins through
+explicit role negotiation with host confirmation, and presence in the
+room grants no host authority to anyone. It reads summarized typed
+events across rooms, never full transcripts; monitoring is quiet and
+event-driven; it never builds features, reassigns tasks, removes agents,
+deploys, promotes, or mutates requirements silently. Private room
+content stays private unless a policy explicitly exports a health
+signal. Implementation of anything it raises happens in the affected
+working room under normal role separation. This supersedes this spec's
+earlier created-at-any-time wording.
 
 ## Room types
 
