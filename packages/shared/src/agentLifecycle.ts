@@ -222,6 +222,127 @@ export interface AgentReliabilityIncident {
   recoveryHint: 'rejoin' | 'reauthenticate' | 'contact_host' | 'none';
 }
 
+export interface AgentAliasCandidate {
+  sessionId: string;
+  displayName: string;
+  requestedAlias?: string;
+  role?: string;
+  joinedAt: number;
+}
+
+export interface AgentAliasAssignment extends AgentAliasCandidate {
+  /** Present only when a same-name live sibling requires disambiguation. */
+  visibleAlias?: string;
+}
+
+const normalizedLabel = (value: string | undefined): string | undefined => {
+  const label = value?.trim().replace(/\s+/g, ' ');
+  return label || undefined;
+};
+
+/**
+ * Assigns deterministic, human-visible aliases to concurrently live sessions
+ * that share a display name. Identity remains sessionId; aliases are labels.
+ */
+export function assignVisibleAgentAliases(candidates: readonly AgentAliasCandidate[]): AgentAliasAssignment[] {
+  const groups = new Map<string, AgentAliasCandidate[]>();
+  for (const candidate of candidates) {
+    const key = candidate.displayName.trim().toLocaleLowerCase();
+    groups.set(key, [...(groups.get(key) ?? []), candidate]);
+  }
+
+  const aliases = new Map<string, string>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const ordered = [...group].sort((a, b) => a.joinedAt - b.joinedAt || a.sessionId.localeCompare(b.sessionId));
+    const claimed = new Map<string, number>();
+    for (const candidate of ordered) {
+      const base = normalizedLabel(candidate.requestedAlias) ?? normalizedLabel(candidate.role) ?? 'session';
+      const key = base.toLocaleLowerCase();
+      const ordinal = (claimed.get(key) ?? 0) + 1;
+      claimed.set(key, ordinal);
+      aliases.set(candidate.sessionId, ordinal === 1 && !ordered.some(
+        other => other.sessionId !== candidate.sessionId
+          && (normalizedLabel(other.requestedAlias) ?? normalizedLabel(other.role) ?? 'session').toLocaleLowerCase() === key,
+      ) ? base : `${base} ${ordinal}`);
+    }
+  }
+
+  return candidates.map(candidate => ({
+    ...candidate,
+    ...(aliases.has(candidate.sessionId) ? { visibleAlias: aliases.get(candidate.sessionId) } : {}),
+  }));
+}
+
+export const AGENT_ACTIVITY_KINDS = [
+  'joined',
+  'reconnected',
+  'renamed',
+  'listening',
+  'degraded',
+  'stale',
+  'swept',
+  'self_left',
+  'host_removed',
+  'identity_replaced',
+  'credential_issued',
+  'credential_rotated',
+  'credential_rejected',
+  'incident_opened',
+  'incident_acknowledged',
+  'incident_resolved',
+  'recovery_started',
+  'recovery_succeeded',
+  'recovery_failed',
+] as const;
+
+export type AgentActivityKind = typeof AGENT_ACTIVITY_KINDS[number];
+
+export interface AgentActivityEvent {
+  eventId: string;
+  protocolVersion: typeof AGENT_LIFECYCLE_PROTOCOL_VERSION;
+  roomCode: string;
+  participantId: string;
+  sessionId: string;
+  occurredAt: number;
+  kind: AgentActivityKind;
+  actor: 'host' | 'server' | 'self' | 'custodian' | 'unknown';
+  mechanism: string;
+  reason?: AgentTerminationReason;
+  outcome: 'succeeded' | 'failed' | 'observed';
+  supersedesEventId?: string;
+}
+
+export function isAgentActivityEvent(value: unknown): value is AgentActivityEvent {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Partial<AgentActivityEvent>;
+  return event.protocolVersion === AGENT_LIFECYCLE_PROTOCOL_VERSION
+    && typeof event.eventId === 'string' && event.eventId.length > 0
+    && typeof event.roomCode === 'string' && event.roomCode.length > 0
+    && typeof event.participantId === 'string' && event.participantId.length > 0
+    && typeof event.sessionId === 'string' && event.sessionId.length > 0
+    && typeof event.occurredAt === 'number' && Number.isFinite(event.occurredAt)
+    && AGENT_ACTIVITY_KINDS.includes(event.kind as AgentActivityKind)
+    && ['host', 'server', 'self', 'custodian', 'unknown'].includes(String(event.actor))
+    && typeof event.mechanism === 'string' && event.mechanism.length > 0
+    && ['succeeded', 'failed', 'observed'].includes(String(event.outcome))
+    && (event.reason === undefined || AGENT_TERMINATION_REASONS.includes(event.reason));
+}
+
+/** Append-only + idempotent by eventId. Conflicting replays fail closed. */
+export function appendAgentActivity(
+  ledger: readonly AgentActivityEvent[],
+  event: AgentActivityEvent,
+): AgentActivityEvent[] {
+  if (!isAgentActivityEvent(event)) throw new TypeError('Invalid agent activity event.');
+  const previous = ledger.find(entry => entry.eventId === event.eventId);
+  if (!previous) return [...ledger, event];
+  if (JSON.stringify(previous) !== JSON.stringify(event)) {
+    throw new Error(`Agent activity event "${event.eventId}" conflicts with its existing append-only record.`);
+  }
+  return [...ledger];
+}
+
 export function isAgentReliabilityIncident(value: unknown): value is AgentReliabilityIncident {
   if (!value || typeof value !== 'object') return false;
   const incident = value as Partial<AgentReliabilityIncident>;

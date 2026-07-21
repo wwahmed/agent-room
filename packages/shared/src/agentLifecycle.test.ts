@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGENT_LIFECYCLE_PROTOCOL_VERSION,
+  appendAgentActivity,
   agentIdentityViolations,
+  assignVisibleAgentAliases,
+  isAgentActivityEvent,
   isAgentReliabilityIncident,
   transitionAgentLifecycle,
   type AgentLifecycleEvent,
@@ -78,5 +81,42 @@ describe('WakiChat Agent Lifecycle Protocol v1', () => {
     expect(isAgentReliabilityIncident(incident)).toBe(true);
     expect(isAgentReliabilityIncident({ ...incident, occurredAt: Number.NaN })).toBe(false);
     expect(isAgentReliabilityIncident({ ...incident, reason: 'some prose guess' })).toBe(false);
+  });
+
+  it('gives concurrent same-name siblings stable, distinct human aliases', () => {
+    const candidates = [
+      { sessionId: 's-review', displayName: 'Codex', role: 'review', joinedAt: 20 },
+      { sessionId: 's-build-2', displayName: 'Codex', role: 'build', joinedAt: 30 },
+      { sessionId: 's-build-1', displayName: 'Codex', role: 'build', joinedAt: 10 },
+      { sessionId: 's-other', displayName: 'Claude', role: 'build', joinedAt: 5 },
+    ];
+    const assigned = assignVisibleAgentAliases(candidates);
+    expect(assigned.map(candidate => [candidate.sessionId, candidate.visibleAlias])).toEqual([
+      ['s-review', 'review'],
+      ['s-build-2', 'build 2'],
+      ['s-build-1', 'build 1'],
+      ['s-other', undefined],
+    ]);
+    expect(assignVisibleAgentAliases([...candidates].reverse()).find(c => c.sessionId === 's-build-2')?.visibleAlias).toBe('build 2');
+  });
+
+  it('keeps Activity append-only and makes exact replay idempotent', () => {
+    const event = {
+      eventId: 'event-1',
+      protocolVersion: AGENT_LIFECYCLE_PROTOCOL_VERSION,
+      roomCode: 'twig-ant-stem',
+      participantId: 'participant-1',
+      sessionId: 'session-1',
+      occurredAt: 1_784_605_000_000,
+      kind: 'recovery_succeeded',
+      actor: 'custodian',
+      mechanism: 'reclaim_credential',
+      outcome: 'succeeded',
+    } as const;
+    expect(isAgentActivityEvent(event)).toBe(true);
+    expect(appendAgentActivity([], event)).toEqual([event]);
+    expect(appendAgentActivity([event], event)).toEqual([event]);
+    expect(() => appendAgentActivity([event], { ...event, outcome: 'failed' })).toThrow(/conflicts/);
+    expect(isAgentActivityEvent({ ...event, occurredAt: Number.NaN })).toBe(false);
   });
 });
