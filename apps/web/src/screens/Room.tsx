@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
-import { ActivityNote } from '../components/ActivityNote.js';
+import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
@@ -658,6 +658,9 @@ export function Room() {
 
   const [reportBusy, setReportBusy] = useState(false);
   const artifacts = extractArtifacts(messages);
+  // T-71 content-model ruling: STATUS is process exhaust, not produced work
+  // — it lives in Chat (as Activity Notes), never on the Outputs page.
+  const producedWork = artifacts.filter(a => a.kind !== 'status');
 
   async function handleExportReport() {
     if (!room) return;
@@ -1672,18 +1675,18 @@ export function Room() {
       <PageScaffold
         title="Outputs"
         purpose="Deliverables, artifacts, and minutes this room has produced."
-        summary={artifacts.length === 0 ? (
+        summary={producedWork.length === 0 ? (
           <SummaryChip tone="quiet">Nothing produced yet</SummaryChip>
         ) : (
           <>
-            <SummaryChip tone="quiet">{artifacts.length} artifact{artifacts.length === 1 ? '' : 's'}</SummaryChip>
-            {artifacts.filter(a => a.kind === 'decision').length > 0 && (
-              <SummaryChip tone="ok">{artifacts.filter(a => a.kind === 'decision').length} decision{artifacts.filter(a => a.kind === 'decision').length === 1 ? '' : 's'}</SummaryChip>
+            <SummaryChip tone="quiet">{producedWork.length} artifact{producedWork.length === 1 ? '' : 's'}</SummaryChip>
+            {producedWork.filter(a => a.kind === 'decision').length > 0 && (
+              <SummaryChip tone="ok">{producedWork.filter(a => a.kind === 'decision').length} decision{producedWork.filter(a => a.kind === 'decision').length === 1 ? '' : 's'}</SummaryChip>
             )}
-            {artifacts.filter(a => a.kind === 'result').length > 0 && (
-              <SummaryChip tone="ok">{artifacts.filter(a => a.kind === 'result').length} result{artifacts.filter(a => a.kind === 'result').length === 1 ? '' : 's'}</SummaryChip>
+            {producedWork.filter(a => a.kind === 'result').length > 0 && (
+              <SummaryChip tone="ok">{producedWork.filter(a => a.kind === 'result').length} result{producedWork.filter(a => a.kind === 'result').length === 1 ? '' : 's'}</SummaryChip>
             )}
-            <SummaryChip tone="quiet">Last produced {messageTime(artifacts[artifacts.length - 1]!.time, now)}</SummaryChip>
+            <SummaryChip tone="quiet">Last produced {messageTime(producedWork[producedWork.length - 1]!.time, now)}</SummaryChip>
           </>
         )}
         action={(
@@ -2445,11 +2448,10 @@ export function Room() {
     const kinds: Array<{ key: 'all' | ArtifactKind; label: string }> = [
       { key: 'all', label: 'All' },
       { key: 'decision', label: 'Decisions' },
-      { key: 'todo', label: 'TODOs' },
-      { key: 'status', label: 'Status' },
+      { key: 'todo', label: 'Actions' },
       { key: 'result', label: 'Results' },
     ];
-    const filtered = outputsFilter === 'all' ? artifacts : artifacts.filter(a => a.kind === outputsFilter);
+    const filtered = outputsFilter === 'all' ? producedWork : producedWork.filter(a => a.kind === outputsFilter);
     return (
       <div>
         <div role="group" aria-label="Filter outputs" className="mb-4 flex flex-wrap gap-1.5">
@@ -2470,7 +2472,7 @@ export function Room() {
         {filtered.length ? (
           <div className="space-y-2">
             {(showAllArtifacts ? filtered.slice().reverse() : filtered.slice(-8).reverse()).map(artifact => (
-              <ArtifactCard key={artifact.id} artifact={artifact} />
+              <ArtifactCard key={artifact.id} artifact={artifact} now={now} />
             ))}
             {filtered.length > 8 && (
               <button
@@ -2485,7 +2487,7 @@ export function Room() {
         ) : (
           <div className="rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
             {outputsFilter === 'all'
-              ? 'Nothing captured yet. Use [DECISION], [TODO], [STATUS], or [RESULT] in messages to build the delivery log.'
+              ? 'Nothing captured yet. Use [DECISION], [TODO], or [RESULT] in messages to build the delivery log.'
               : `No ${kinds.find(k => k.key === outputsFilter)?.label.toLowerCase()} captured yet — switch to All to see everything the room has produced.`}
           </div>
         )}
@@ -2496,8 +2498,15 @@ export function Room() {
           <div className="rounded-xl border border-dashed border-border bg-transparent p-4">
             <p className="text-[15px] font-semibold text-ink-soft sm:text-[14px]">No minutes yet</p>
             <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
-              Ask an agent to generate minutes from the composer. The result lands in the transcript and is captured in the delivery report.
+              Minutes land in the transcript and are captured in the delivery report.
             </p>
+            <button
+              type="button"
+              onClick={() => { appendText('Please generate minutes of this meeting so far.'); selectTab('chat'); }}
+              className="mt-3 flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+            >
+              Ask for minutes
+            </button>
           </div>
         </div>
       </div>
@@ -2505,18 +2514,21 @@ export function Room() {
   }
 }
 
-function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {
+function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number }) {
   // T-71: work objects read on the semantic ramp — meta row at the meta
-  // role, body at the note role — never 12/13px novels in gray cards.
+  // role, BOUNDED body on the note role with the T-72 reading-endpoint
+  // disclosure grammar. Never a full chat message dumped into a card.
   return (
     <div className="rounded-xl border border-border-faint bg-surface-softer p-3.5">
-      <div className="mb-1 flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <span className={`msg-meta font-semibold uppercase ${artifactTone(artifact.kind)}`}>
           {artifactLabel(artifact.kind)}
         </span>
-        <span className="msg-meta">{artifact.author}</span>
+        <span className="msg-meta shrink-0">{artifact.author} · {messageTime(artifact.time, now)}</span>
       </div>
-      <p className="msg-note text-ink">{artifact.text}</p>
+      <div className="text-ink">
+        <ClampedNoteBody text={artifact.text} />
+      </div>
     </div>
   );
 }

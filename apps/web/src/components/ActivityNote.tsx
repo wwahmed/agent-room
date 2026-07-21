@@ -24,7 +24,7 @@ function exactTime(t: number): string {
 // faded third line — unboxed inline text, not a detached row. The 44px hit
 // target extends into the dead space below the card, never over readable
 // text. Expanded Show less right-aligns after the body.
-function ClampedNoteBody({ text }: { text: string }) {
+export function ClampedNoteBody({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [clamped, setClamped] = useState(false);

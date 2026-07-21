@@ -122,6 +122,9 @@ async function ensureFixtureRoom() {
   await msg('GateA', longReport, id++);
   for (let i = 0; i < 6; i++) await msg(i % 2 ? 'GateA' : 'GateB', `Rapid fixture message ${i + 1}.`, id++);
   await msg('GateB', '@GateA a deterministic mention for the highlight state.', id++);
+  // T-71: produced work so the Outputs page photographs POPULATED state.
+  await msg('GateB', '[DECISION] Ship the two-row Activity Note as the deterministic status object for all fixture runs.', id++);
+  await msg('GateA', '[RESULT] Fixture room seeded: 21-line report, six rapid messages, a mention, a status run, and produced work objects.', id++);
   // T-72: a same-sender heartbeat RUN, so the collapsed "3 updates" Activity
   // Note is photographed and measured every run. Review finding: the NEWEST
   // member (the one the note displays) must be the LONG body — the ribbon
