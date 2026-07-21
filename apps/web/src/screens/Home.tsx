@@ -4,7 +4,8 @@ import { isValidCode } from '@agent-room/shared';
 import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
-import { AgentHealthChip, RoomBadges } from '../components/RoomBadges.js';
+import { RoomBadges } from '../components/RoomBadges.js';
+import { AgentFacepile } from '../components/AgentFacepile.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -178,21 +179,36 @@ export function Home() {
               // all day still read "21h ago" — that's the room's birthday, not its
               // last update. lastActivityAt is the one the host actually wants.
               const updatedAt = r.lastActivityAt ?? r.createdAt;
+              // T-34: stretched-link card. The whole row opens the chat via the
+              // absolutely-positioned Link overlay; the facepile is a SIBLING
+              // button layered above it (z-10) that opens People — no nested
+              // interactive elements, and keyboard order is chat then People.
+              const agentCount = r.agentCount ?? 0;
               return (
-                <button
+                <div
                   key={r.code}
-                  onClick={() => navigate(`/r/${r.code}`)}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint"
+                  className="relative flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint focus-within:border-accent-tint-border"
                   style={{ contentVisibility: 'auto', containIntrinsicSize: '72px' }}
                 >
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent">◇</div>
+                  <Link
+                    to={`/r/${r.code}`}
+                    aria-label={`Open ${r.topic}`}
+                    className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint"
+                  />
+                  {agentCount > 0 ? (
+                    <AgentFacepile
+                      code={r.code}
+                      agentCount={agentCount}
+                      agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? agentCount : 0)}
+                      agents={r.agents ?? []}
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent" aria-hidden="true">◇</div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold">{r.topic}</div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
                       <span className="truncate">{r.participants} here · updated {timeAgo(updatedAt)}</span>
-                      {/* T-25 rev2: health lives HERE with the room facts, not
-                          in the attention cluster, so red never reads as unread. */}
-                      <AgentHealthChip agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
                     </div>
                   </div>
                   {/* T-18/T-20: attention badges only — @mentions + refined unread. */}
@@ -202,7 +218,7 @@ export function Home() {
                     selfName={identity.name}
                   />
                   <span className="flex-shrink-0 text-sm font-semibold text-accent">Enter →</span>
-                </button>
+                </div>
               );
             })}
           </section>

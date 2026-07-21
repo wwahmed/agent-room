@@ -1,7 +1,8 @@
 import { Fragment, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ClipboardEvent, type DragEvent } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
+import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { Inspector, type InspectorTab } from '../components/Inspector.js';
 import { RecoverHostButton } from '../components/RecoverHostButton.js';
@@ -35,6 +36,7 @@ import {
 import { fetchHealth } from '../lib/api.js';
 import { relativeTime } from '../lib/relativeTime.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
+import { startsMessageDay } from '../lib/messageDays.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -177,7 +179,10 @@ export function Room() {
   // T-25: room-card health pills deep-link to /r/CODE?panel=people so the host
   // lands directly on the diagnosis view. Desktop gets the People peer tab,
   // mobile the inspector sheet; the param is then stripped so refreshes and
-  // back-navigation return to plain chat.
+  // back-navigation return to plain chat. T-34: keyed on location.search too —
+  // the pane facepile can target the room that is ALREADY open, which changes
+  // only the query string, not `code`.
+  const location = useLocation();
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('panel') !== 'people') return;
@@ -188,7 +193,7 @@ export function Room() {
     const query = params.toString();
     window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+  }, [code, location.search]);
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
   // T-68: the SERVER's listen-loop verdict (T-66 `health`). The web no longer
@@ -1494,6 +1499,7 @@ export function Room() {
                 for (const [n, cs] of byName) if (cs.size > 1) ambiguousNames.add(n);
                 return messages.map((m, i) => (
                   <Fragment key={m.id}>
+                  {startsMessageDay(messages[i - 1], m) && <MessageDayDivider time={m.time} now={now} />}
                   {/* T-65: the line he stopped reading at, so catching up has a
                       visible starting point instead of guesswork. */}
                   {m.id === firstUnreadIdRef.current && (

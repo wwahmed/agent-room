@@ -17,7 +17,14 @@ export interface RoomSummary {
    *  of them is currently listening/online per the server health verdicts. */
   agentCount: number;
   agentsAllHealthy: boolean;
+  /** T-34 (UX spec v2): per-agent identity + health for the facepile, capped,
+   *  plus the stale count so severity can be worded ("1 of 2 needs attention"). */
+  agentStaleCount: number;
+  agents: Array<{ name: string; color: string; initials: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
 }
+
+/** Facepile payload cap — 3 visible faces + the "+N" overflow chip's worth. */
+export const ROOM_LIST_AGENT_CAP = 4;
 
 export interface RoomIndexEntry {
   code: string;
@@ -67,10 +74,20 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
     // The raw room JSON is already in hand, so this costs no extra reads.
     const participants = Array.isArray(room.participants) ? (room.participants as Participant[]) : [];
     const agents = participants.filter(p => p?.client === 'cc');
-    const agentsAllHealthy = agents.every(p => {
-      const state = presenceState(p, now);
-      return state === 'listening' || state === 'online';
-    });
+    const agentStates = agents.map(p => presenceState(p, now));
+    const agentsAllHealthy = agentStates.every(state => state === 'listening' || state === 'online');
+    const agentStaleCount = agentStates.filter(state => state !== 'listening' && state !== 'online').length;
+    // T-34: healthy faces first so a lone stale agent never hides behind the
+    // "+N" overflow chip while the badge says something needs attention.
+    const facepile = agents
+      .map((p, i) => ({
+        name: typeof p.name === 'string' ? p.name : '',
+        color: typeof p.color === 'string' ? p.color : '#8b8fa3',
+        initials: typeof p.initials === 'string' && p.initials ? p.initials : (p.name?.[0] ?? '?').toUpperCase(),
+        state: agentStates[i]!,
+      }))
+      .sort((a, b) => Number(a.state === 'stale' || a.state === 'disconnected') - Number(b.state === 'stale' || b.state === 'disconnected'))
+      .slice(0, ROOM_LIST_AGENT_CAP);
     return {
       code: room.code,
       topic: typeof room.topic === 'string' ? room.topic : room.code,
@@ -82,6 +99,8 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
       messageCount: Number.isFinite(count) && count >= 0 ? count : 0,
       agentCount: agents.length,
       agentsAllHealthy,
+      agentStaleCount,
+      agents: facepile,
     };
   } catch {
     return null;

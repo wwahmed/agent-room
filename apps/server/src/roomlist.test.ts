@@ -92,3 +92,82 @@ describe('room list pagination', () => {
     expect(page.hasMore).toBe(false);
   });
 });
+
+// T-34: the facepile payload. One-room store with hand-built participants so
+// the derived agents array, ordering, cap, and stale count are pinned down.
+function facepileStore(participants: unknown[]) {
+  const store: RoomListStore = {
+    async count() { return 1; },
+    async range() { return [{ code: 'room-x', score: 1 }]; },
+    async read() {
+      return [{
+        raw: JSON.stringify({
+          code: 'room-x',
+          topic: 'X',
+          status: 'active',
+          createdBy: 'Waqas',
+          createdAt: 1,
+          participants,
+        }),
+        messageCountRaw: 0,
+      }];
+    },
+    async remove() {},
+  };
+  return store;
+}
+
+const agent = (name: string, opts: { listening?: boolean; staleMs?: number } = {}) => ({
+  name,
+  client: 'cc',
+  color: '#abc',
+  initials: name.slice(0, 2).toUpperCase(),
+  listenUntil: opts.listening ? Date.now() + 60_000 : 0,
+  lastSeenAt: Date.now() - (opts.staleMs ?? 0),
+});
+
+describe('room list agent facepile (T-34)', () => {
+  it('emits per-agent faces with server presence verdicts and a stale count', async () => {
+    const store = facepileStore([
+      { name: 'Waqas', client: 'web', lastSeenAt: Date.now() },
+      agent('Claude', { listening: true }),
+      agent('Codex', { staleMs: 60 * 60_000 }),
+    ]);
+    const page = await listIndexedRoomPage(store, 0, 10);
+    const room = page.rooms[0]!;
+    expect(room.agentCount).toBe(2);
+    expect(room.agentStaleCount).toBe(1);
+    expect(room.agentsAllHealthy).toBe(false);
+    // Healthy faces sort first so a stale agent never hides in the overflow.
+    expect(room.agents.map(a => a.name)).toEqual(['Claude', 'Codex']);
+    expect(room.agents[0]).toMatchObject({ state: 'listening', color: '#abc', initials: 'CL' });
+    expect(['stale', 'disconnected']).toContain(room.agents[1]!.state);
+  });
+
+  it('caps the payload while counts reflect every agent', async () => {
+    const store = facepileStore([
+      agent('A1', { listening: true }),
+      agent('A2', { listening: true }),
+      agent('A3', { staleMs: 60 * 60_000 }),
+      agent('A4', { listening: true }),
+      agent('A5', { listening: true }),
+      agent('A6', { staleMs: 60 * 60_000 }),
+    ]);
+    const page = await listIndexedRoomPage(store, 0, 10);
+    const room = page.rooms[0]!;
+    expect(room.agentCount).toBe(6);
+    expect(room.agentStaleCount).toBe(2);
+    expect(room.agents).toHaveLength(4);
+    // The cap keeps healthy-first ordering: all four visible payload faces are
+    // the healthy ones plus the first stale never displacing a healthy face.
+    expect(room.agents.slice(0, 4).every(a => a.state === 'listening')).toBe(true);
+  });
+
+  it('reports zero agents for a humans-only room', async () => {
+    const store = facepileStore([{ name: 'Waqas', client: 'web', lastSeenAt: Date.now() }]);
+    const page = await listIndexedRoomPage(store, 0, 10);
+    expect(page.rooms[0]!.agentCount).toBe(0);
+    expect(page.rooms[0]!.agentStaleCount).toBe(0);
+    expect(page.rooms[0]!.agents).toEqual([]);
+  });
+});

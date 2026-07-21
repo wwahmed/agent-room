@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { relativeTime } from '../lib/relativeTime.js';
-import { AgentHealthChip, RoomBadges } from './RoomBadges.js';
+import { RoomBadges } from './RoomBadges.js';
+import { AgentFacepile } from './AgentFacepile.js';
 
 // T-05 desktop room list (280px column between the rail and the chat).
 // Authenticated users get their active rooms with one-tap switching;
@@ -22,6 +23,9 @@ interface RoomSummary {
   // T-25: agent attachment + server health verdict for the card pill.
   agentCount?: number;
   agentsAllHealthy?: boolean;
+  // T-34: per-agent faces + stale count for the compact facepile.
+  agentStaleCount?: number;
+  agents?: Array<{ name: string; color: string; initials: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
 }
 
 export function RoomListPane({ activeCode, selfName }: { activeCode: string; selfName: string }) {
@@ -54,12 +58,18 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {rooms.map(r => {
           const active = r.code === activeCode;
+          // T-34: stretched-link row — the overlay Link opens the chat, the
+          // compact facepile is a sibling button (z-10) that opens People.
           return (
-            <Link
+            <div
               key={r.code}
-              to={`/r/${r.code}`}
-              className={`block min-h-11 rounded-lg px-3 py-2 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
+              className={`relative block min-h-11 rounded-lg px-3 py-2 transition ${active ? 'bg-accent-tint' : 'hover:bg-surface-softer'}`}
             >
+              <Link
+                to={`/r/${r.code}`}
+                aria-label={`Open ${r.topic}`}
+                className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint"
+              />
               <div className="flex items-baseline gap-2">
                 <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
                 {/* T-62 badge refined by T-18/T-20 — attention signals only.
@@ -83,11 +93,19 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                   {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
                   {r.status === 'ended' ? ' · ended' : ''}
                 </span>
-                {/* T-25 rev2: agent health sits with the room facts, visually
-                    apart from the attention badges above. */}
-                <AgentHealthChip agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
+                {(r.agentCount ?? 0) > 0 && (
+                  <span className="ml-auto">
+                    <AgentFacepile
+                      code={r.code}
+                      agentCount={r.agentCount ?? 0}
+                      agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? (r.agentCount ?? 0) : 0)}
+                      agents={r.agents ?? []}
+                      compact
+                    />
+                  </span>
+                )}
               </div>
-            </Link>
+            </div>
           );
         })}
       </div>

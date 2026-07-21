@@ -21,31 +21,9 @@ interface Props {
   compact?: boolean;
 }
 
-/**
- * T-25 rev3 (host: the chip "hijacks the click on the row" and is confusing):
- * a PASSIVE, corner-tucked indicator only. No handlers, no role, no tab stop —
- * the row's own click always opens the chat. The word "agents" is spelled out
- * so the count cannot be mistaken for messages, and the dot alone carries the
- * health verdict. Diagnosis path: open the room, then the People tab.
- */
-export function AgentHealthChip({ agentCount = 0, agentsAllHealthy = true }: { agentCount?: number; agentsAllHealthy?: boolean }) {
-  if (agentCount <= 0) return null;
-  const label = agentsAllHealthy
-    ? `${agentCount} agent${agentCount === 1 ? '' : 's'}, all healthy`
-    : `${agentCount} agent${agentCount === 1 ? '' : 's'}, attention needed — check People`;
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      className={`pointer-events-none ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[12px] font-semibold uppercase tracking-wide ${
-        agentsAllHealthy ? 'text-emerald-600/80' : 'text-red-500'
-      }`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${agentsAllHealthy ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} aria-hidden="true" />
-      {agentCount} agent{agentCount === 1 ? '' : 's'}
-    </span>
-  );
-}
+// T-25's AgentHealthChip lived here until T-34 replaced it with the
+// AgentFacepile (T-31 spec v2): avatars in the identity slot with the health
+// badge on the cluster, instead of a text pill fighting the meta row.
 
 export function RoomBadges({ code, messageCount, selfName, active = false, compact = false }: Props) {
   const raw = active ? 0 : unreadCount(code, messageCount, selfName);

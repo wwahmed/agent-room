@@ -150,6 +150,17 @@ body {
   }
 }
 
+/* T-34: one 300ms ease-out scale-in when a facepile badge DEGRADES. Runs
+   once, never loops (T-38 motion rule), and is skipped under reduced motion. */
+@keyframes facepile-degrade {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.facepile-degrade { animation: facepile-degrade 300ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .facepile-degrade { animation: none; }
+}
+
 /* T-54: brief highlight when jumping to a quoted message. */
 @keyframes reply-flash {
   0%, 100% { background-color: transparent; }
