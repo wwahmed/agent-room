@@ -126,6 +126,8 @@ export function Room() {
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
   const dictationBaseRef = useRef<string | null>(null);
+  const dictationUndoRef = useRef('');
+  const [dictationDraft, setDictationDraft] = useState(false);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [attachBusy, setAttachBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -760,6 +762,7 @@ export function Room() {
       replyTo: replyingTo ?? undefined,
     };
     setText('');
+    setDictationDraft(false);
     setAttachments([]);
     setReplyingTo(null);
     try {
@@ -1423,6 +1426,25 @@ export function Room() {
                     compact row below it inside the same bordered surface, so the
                     typing area is never squeezed by active buttons on mobile. */}
                 <div className="relative rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
+                {dictationDraft && text.trim() && (
+                  <div className="mx-1 mt-1 flex items-center gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-[11px]">
+                    <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft — editable. Type to revise, then Send.</span>
+                    <button
+                      type="button"
+                      onClick={() => { setText(dictationUndoRef.current); setDictationDraft(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
+                      className="min-h-8 rounded-md px-2 font-semibold text-accent hover:bg-surface"
+                    >
+                      Undo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setText(''); setDictationDraft(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
+                      className="min-h-8 rounded-md px-2 font-semibold text-red-300 hover:bg-red-500/10"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={text}
@@ -1471,19 +1493,27 @@ export function Room() {
                     )}
                   </button>
                   <VoiceButton
-                    onStart={() => { dictationBaseRef.current = text; }}
+                    onStart={() => {
+                      dictationBaseRef.current = text;
+                      dictationUndoRef.current = text;
+                      setDictationDraft(true);
+                    }}
                     onLiveTranscript={(live) => {
                       const base = (dictationBaseRef.current ?? '').trim();
                       setText(base && live ? `${base} ${live}` : live || dictationBaseRef.current || '');
+                      setDictationDraft(true);
                     }}
                     onTranscript={(t) => {
                       const base = (dictationBaseRef.current ?? '').trim();
                       setText(base && t ? `${base} ${t}` : t || base);
                       dictationBaseRef.current = null;
+                      setDictationDraft(true);
+                      requestAnimationFrame(() => textareaRef.current?.focus());
                     }}
                     onCancel={() => {
                       if (dictationBaseRef.current !== null) setText(dictationBaseRef.current);
                       dictationBaseRef.current = null;
+                      setDictationDraft(false);
                     }}
                     disabled={ended}
                   />

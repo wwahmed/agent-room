@@ -47,7 +47,7 @@ export interface DictationOptions {
 }
 
 const DEFAULT_MAX_MS = 5 * 60 * 1000;
-const FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture']);
+const FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
 
 export class DictationController {
   private state: DictationState = 'idle';
@@ -126,18 +126,25 @@ export class DictationController {
       const err = e?.error ?? 'unknown';
       if (FATAL_ERRORS.has(err)) {
         this.error = err === 'audio-capture'
-          ? 'No microphone available.'
+          ? 'No microphone is available.'
+          : err === 'network'
+          ? 'Speech recognition could not reach its service. Check your connection and try again.'
           : 'Microphone access was blocked. Enable mic permission to dictate.';
         this.clearRestart();
         this.clearDeadline();
         this.hardReset('idle');
         this.emit();
       }
-      // transient (no-speech/network/aborted) → handled by onend
+      // transient (no-speech/aborted) → handled by onend
     };
     rec.onend = () => {
       if (!isCurrent()) return;
       this.commitLive();
+      // Do NOT promote an interim tail on an automatic restart. Android/Chrome
+      // may replay a progressively longer interim phrase in each generation;
+      // committing every replay produced "this is this is my this is my text".
+      // Keep the tail live until the browser finalizes it or the user Stops.
+      this.emit();
       if (this.stopping) { this.finish(); return; }
       if (this.state === 'recording') {
         // premature end (pause/silence/hiccup) — keep going, don't finalize
@@ -175,6 +182,9 @@ export class DictationController {
   }
   private commitLive() {
     if (this.liveFinal) { this.finalText = DictationController.join(this.finalText, this.liveFinal); this.liveFinal = ''; }
+  }
+  private commitInterim() {
+    if (this.interim) { this.finalText = DictationController.join(this.finalText, this.interim); this.interim = ''; }
   }
 
   private scheduleRestart() {
@@ -217,7 +227,7 @@ export class DictationController {
     if (this.state !== 'recording') return;
     // preserve BOTH finalized and interim words spoken before the pause
     this.commitLive();
-    if (this.interim) { this.finalText = DictationController.join(this.finalText, this.interim); this.interim = ''; }
+    this.commitInterim();
     this.activeMs += this.o.now() - this.segmentStart;
     this.state = 'paused';
     this.clearRestart();
@@ -240,13 +250,24 @@ export class DictationController {
   stop() {
     if (this.state === 'idle') return;
     if (this.state === 'recording') this.activeMs += this.o.now() - this.segmentStart;
-    this.commitLive();
     this.clearRestart();
     this.clearDeadline();
     const rec = this.rec;
-    if (this.state === 'paused' || !rec) { this.finish(); return; }
+    if (this.state === 'paused' || !rec) {
+      this.commitLive();
+      this.commitInterim();
+      this.finish();
+      return;
+    }
     this.stopping = true;
-    try { rec.stop(); } catch { this.finish(); }
+    // SpeechRecognition may emit a last cumulative final result *after* stop().
+    // Let onresult replace liveFinal and let onend commit it exactly once. The
+    // old eager commit duplicated the pre-stop text when that final arrived.
+    try { rec.stop(); } catch {
+      this.commitLive();
+      this.commitInterim();
+      this.finish();
+    }
   }
 
   cancel() {

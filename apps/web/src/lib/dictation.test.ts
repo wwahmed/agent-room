@@ -10,9 +10,10 @@ class FakeRec implements RecognizerLike {
   onerror: ((e: any) => void) | null = null;
   onend: (() => void) | null = null;
   started = false; stopped = false; aborted = false;
+  beforeStop: (() => void) | null = null;
   constructor(private failStart = false) {}
   start() { if (this.failStart) throw new Error('start failed'); this.started = true; }
-  stop() { this.stopped = true; this.onend?.(); }
+  stop() { this.stopped = true; this.beforeStop?.(); this.onend?.(); }
   abort() { this.aborted = true; this.onend?.(); }
   emit(items: Array<{ final: boolean; text: string }>) {
     const results: any = items.map(it => ({ isFinal: it.final, 0: { transcript: it.text } }));
@@ -74,6 +75,17 @@ describe('DictationController', () => {
     expect(h.finals).toHaveLength(0);
   });
 
+  it('does not accumulate progressively replayed interim phrases across restarts', () => {
+    const h = harness();
+    h.c.start();
+    h.cur().emit([{ final: false, text: 'this is' }]);
+    h.cur().onend?.();
+    h.flushRestarts();
+    h.cur().emit([{ final: false, text: 'this is my text' }]);
+    h.c.stop();
+    expect(h.finals).toEqual(['this is my text']);
+  });
+
   it('explicit pause PRESERVES interim (not just final) and does not finalize; resume continues', () => {
     const h = harness();
     h.c.start();
@@ -96,6 +108,15 @@ describe('DictationController', () => {
     expect(h.finals).toEqual(['committed trailing']);
   });
 
+  it('does not double-commit when stop triggers a late cumulative final result', () => {
+    const h = harness();
+    h.c.start();
+    h.cur().emit([{ final: true, text: 'this is my' }]);
+    h.cur().beforeStop = () => h.cur().emit([{ final: true, text: 'this is my text' }]);
+    h.c.stop();
+    expect(h.finals).toEqual(['this is my text']);
+  });
+
   it('cancel discards everything — no delivery', () => {
     const h = harness();
     h.c.start();
@@ -115,6 +136,16 @@ describe('DictationController', () => {
     h.flushRestarts();
     expect(h.recCount()).toBe(1);
     expect(h.finals).toHaveLength(0);
+  });
+
+  it('network failure is fatal and visible instead of silently restarting forever', () => {
+    const h = harness();
+    h.c.start();
+    h.cur().onerror?.({ error: 'network' });
+    expect(h.snap().state).toBe('idle');
+    expect(h.snap().error).toMatch(/service|connection/i);
+    h.flushRestarts();
+    expect(h.recCount()).toBe(1);
   });
 
   it('pause-aware hard deadline auto-finalizes even during silence', () => {
