@@ -57,6 +57,20 @@ describe('chromeStep', () => {
     expect(v.hidden).toBe(false);
   });
 
+  it('programmatic teleports (first-unread landing, seeks) never flip chrome', () => {
+    // Cold load: landing jump from 0 to mid-feed must NOT read as a gesture.
+    let v = initialChromeVis(0);
+    v = step(v, 2400);
+    expect(v.hidden).toBe(false);
+    expect(v.accum).toBe(0);
+    // While hidden, an upward mention-seek teleport keeps state, no flicker.
+    v = step(v, 2460); // real gesture hides
+    expect(v.hidden).toBe(true);
+    v = step(v, 800); // seek far up
+    expect(v.hidden).toBe(true);
+    expect(v.accum).toBe(0);
+  });
+
   it('threshold is exact: accumulation equal to the hysteresis does not hide', () => {
     let v = initialChromeVis(0);
     v = step(v, CHROME_HYSTERESIS);

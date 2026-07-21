@@ -15,6 +15,12 @@ export interface ChromeVis {
 /** Deliberate-gesture threshold: touch noise below this never flips chrome. */
 export const CHROME_HYSTERESIS = 24;
 
+/** Per-sample deltas beyond this are TELEPORTS (first-unread landing, jump
+ *  to latest, mention seeks), not finger gestures — they reset the
+ *  accumulator without flipping visibility. A real swipe never moves this
+ *  far between two rAF samples. */
+export const JUMP_RESET = 300;
+
 /** Within this distance of the history top, chrome is always shown. */
 export const TOP_REVEAL = 8;
 
@@ -34,6 +40,9 @@ export function chromeStep(v: ChromeVis, top: number, pinned: boolean, atBottom:
   }
   const delta = top - v.lastTop;
   if (delta === 0) return v;
+  // Programmatic teleports are not reading gestures (gate caught the
+  // first-unread landing hiding chrome at load).
+  if (Math.abs(delta) > JUMP_RESET) return { hidden: v.hidden, accum: 0, lastTop: top };
   // Reversals restart the accumulator: intent is measured per direction.
   // A fresh accumulator (0) continues with either direction.
   const accum = v.accum === 0 || delta > 0 === v.accum > 0 ? v.accum + delta : delta;
