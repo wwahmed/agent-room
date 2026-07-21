@@ -40,13 +40,17 @@ export function RecoverHostButton({ code }: { code: string }) {
     state === 'working' ? 'Recovering…' : state === 'confirming' ? 'Tap again to confirm' : 'Recover host access';
 
   return (
+    // T-71 Lifecycle ruling: recovery is a compact outlined SECONDARY —
+    // it must never read as the page's second primary.
     <button
       type="button"
       onClick={onClick}
       disabled={state === 'working'}
       aria-label="Recover host access"
-      className={`w-full rounded-lg px-3 py-2.5 text-[12px] font-semibold transition disabled:opacity-60 ${
-        state === 'confirming' ? 'bg-accent text-white' : 'bg-accent-tint text-accent hover:opacity-90'
+      className={`flex min-h-11 w-fit items-center rounded-lg border px-4 text-sm font-semibold transition disabled:opacity-60 ${
+        state === 'confirming'
+          ? 'border-accent bg-accent text-white'
+          : 'border-border text-ink-soft hover:border-accent hover:text-accent'
       }`}
     >
       {label}

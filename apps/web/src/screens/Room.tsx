@@ -1275,6 +1275,9 @@ export function Room() {
         {settingsSectionHead('Identity')}
         <h4 className="text-[16px] font-semibold leading-snug text-ink">{room.topic}</h4>
         <RenameRoomControl room={room} isHost={isHost} onRenamed={() => { void refreshRoom(); }} />
+        {!isHost && (
+          <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">Renaming is a host control.</p>
+        )}
       </section>
       <section aria-label="Access" className="rounded-xl border border-border-faint bg-surface p-4">
         {settingsSectionHead('Access')}
@@ -1365,16 +1368,34 @@ export function Room() {
       </section>
       <section aria-label="Lifecycle" className="rounded-xl border border-border-faint bg-surface p-4">
         {settingsSectionHead('Lifecycle')}
-        <div className="flex flex-col gap-2">
-          <RecoverHostButton code={code} />
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="flex min-h-11 items-center justify-center rounded-lg border border-border px-3 text-sm font-semibold text-ink-soft transition hover:text-ink"
-          >
-            Leave to Home
-          </button>
-        </div>
+        {/* State object (design lead ruling): explicit state, ONE consequence
+            sentence, then conditional compact secondary actions. */}
+        {(() => {
+          const lifecycle = ended
+            ? { label: 'Room ended', tone: 'text-red-400', dot: 'bg-red-400', consequence: 'The meeting is over. Messages are preserved; the room can be reactivated from Home.' }
+            : listeningCount === 0
+              ? { label: 'Custodian absent', tone: 'text-amber-400', dot: 'bg-amber-400', consequence: 'No agent is listening right now. Messages will wait until one returns or is recovered below.' }
+              : { label: 'Room active', tone: 'text-emerald-400', dot: 'bg-emerald-400', consequence: `${listeningCount} agent${listeningCount === 1 ? ' is' : 's are'} listening; messages are delivered live.` };
+          return (
+            <>
+              <div className={`flex items-center gap-2 text-[15px] font-semibold ${lifecycle.tone}`}>
+                <span className={`h-2 w-2 rounded-full ${lifecycle.dot}`} aria-hidden="true" />
+                {lifecycle.label}
+              </div>
+              <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">{lifecycle.consequence}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {!ended && <RecoverHostButton code={code} />}
+                <button
+                  type="button"
+                  onClick={() => navigate('/')}
+                  className="flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:text-ink"
+                >
+                  Leave to Home
+                </button>
+              </div>
+            </>
+          );
+        })()}
       </section>
       {!ended && room.createdBy === self.name && (
         <section aria-label="Danger zone" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
@@ -1627,22 +1648,15 @@ export function Room() {
         title="Settings"
         purpose="Room identity, access, reply mode, and lifecycle."
         action={(
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => selectTab(prevTabRef.current)}
-              className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:text-ink"
-            >
-              <span aria-hidden="true">←</span> Back
-            </button>
-            <button
-              type="button"
-              onClick={() => copyText(joinUrl, 'Invite link copied')}
-              className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90"
-            >
-              Invite
-            </button>
-          </div>
+          /* One Back path: the command-bar chevron returns to the prior
+             destination while Settings is open (backOverride). */
+          <button
+            type="button"
+            onClick={() => copyText(joinUrl, 'Invite link copied')}
+            className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90"
+          >
+            Invite
+          </button>
         )}
       >
         {roomInfoPanel}
@@ -1683,6 +1697,10 @@ export function Room() {
             />
           )}
           mobileNavHidden={mainTab === 'room'}
+          backOverride={mainTab === 'room' ? {
+            label: `Back to ${MAIN_TABS.find(t => t.key === prevTabRef.current)?.label ?? 'Chat'}`,
+            onBack: () => selectTab(prevTabRef.current),
+          } : undefined}
           listeningCount={listeningCount}
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}

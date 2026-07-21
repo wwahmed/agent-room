@@ -29,6 +29,9 @@ interface Props {
   /** T-71: full-screen mobile pages (Settings) drop the nav row — chrome
    *  returns to 52px and the page provides its own title/Back orientation. */
   mobileNavHidden?: boolean;
+  /** T-71 one-Back-path ruling: while a full-screen page (Settings) is open,
+   *  the chevron returns THERE (prev destination), not to Home. */
+  backOverride?: { label: string; onBack: () => void };
 }
 
 export function RoomHeader({
@@ -47,6 +50,7 @@ export function RoomHeader({
   mentionNav,
   workspaceNav,
   mobileNavHidden,
+  backOverride,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -76,6 +80,18 @@ export function RoomHeader({
     <header className={`app-command-bar fixed inset-x-0 top-0 z-40 flex flex-col ${workspaceNav ? (mobileNavHidden ? 'h-[52px] lg:h-14' : 'h-[96px] lg:h-14') : 'h-[52px] items-center sm:h-14'}`}>
       <div className={`relative z-10 flex min-w-0 items-center px-1.5 sm:px-3 ${workspaceNav ? 'h-[52px] flex-shrink-0 lg:h-full' : 'h-full flex-1 w-full'}`}>
         <div className="flex min-w-0 items-center">
+          {backOverride ? (
+            <button
+              type="button"
+              onClick={backOverride.onBack}
+              aria-label={backOverride.label}
+              className="header-glass-control flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink"
+            >
+              <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M10.5 3 5.5 8l5 5" />
+              </svg>
+            </button>
+          ) : (
           <Link
             to="/"
             aria-label="Back to rooms"
@@ -85,6 +101,7 @@ export function RoomHeader({
               <path d="M10.5 3 5.5 8l5 5" />
             </svg>
           </Link>
+          )}
           <Link
             to="/"
             aria-label="WakiChat home"

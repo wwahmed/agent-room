@@ -38,9 +38,9 @@ export function RenameRoomControl({ room, isHost, onRenamed }: Props) {
       <button
         type="button"
         onClick={() => { setTopic(room.topic); setError(null); setEditing(true); }}
-        className="mt-1 min-h-9 rounded-md px-2 text-[12px] font-semibold text-accent transition hover:bg-accent-tint"
+        className="mt-2 flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
       >
-        Edit room name
+        Rename
       </button>
     );
   }
