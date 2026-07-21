@@ -157,13 +157,14 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
             <button
               type="button"
               onClick={() => controller().stop()}
-              aria-label="Send transcript to the message box"
-              title="Insert transcript"
-              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:opacity-90"
+              aria-label="Use voice draft"
+              title="Use draft — this does not send the message"
+              className="flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-white transition hover:opacity-90"
             >
-              <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true">
-                <path d="M2 7.4 13.2 2.6a.5.5 0 0 1 .66.64L9.3 14.2a.5.5 0 0 1-.94-.02L7 9.6 2.02 8.35a.5.5 0 0 1-.02-.95Z" />
+              <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m3 8.5 3.1 3.1L13 4.7" />
               </svg>
+              <span className="text-sm font-semibold">Use draft</span>
             </button>
           </div>
           {/* No transcript preview here anymore: the live text streams into the
