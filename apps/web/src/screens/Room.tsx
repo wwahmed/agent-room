@@ -40,7 +40,7 @@ import {
   unmarkSelfMessageSeen,
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
-import { relativeTime } from '../lib/relativeTime.js';
+import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
@@ -1385,16 +1385,11 @@ export function Room() {
                 {lifecycle.label}
               </div>
               <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">{lifecycle.consequence}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {!ended && <RecoverHostButton code={code} />}
-                <button
-                  type="button"
-                  onClick={() => navigate('/')}
-                  className="flex min-h-11 w-fit items-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:text-ink"
-                >
-                  Leave to Home
-                </button>
-              </div>
+              {!ended && (
+                <div className="mt-3">
+                  <RecoverHostButton code={code} />
+                </div>
+              )}
             </>
           );
         })()}
@@ -1414,6 +1409,16 @@ export function Room() {
           </button>
         </section>
       )}
+      {/* Subdued page footer: navigation is not lifecycle management. */}
+      <div className="flex justify-center pt-1">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="flex min-h-11 items-center px-4 text-[15px] font-semibold text-ink-soft transition hover:text-ink sm:text-[14px]"
+        >
+          Leave to Home
+        </button>
+      </div>
     </div>
   );
 
@@ -1667,10 +1672,20 @@ export function Room() {
       <PageScaffold
         title="Outputs"
         purpose="Deliverables, artifacts, and minutes this room has produced."
-        summary={<>
-          <SummaryChip tone="quiet">{artifacts.length} artifact{artifacts.length === 1 ? '' : 's'}</SummaryChip>
-          <SummaryChip tone="quiet">{messages.length} message{messages.length === 1 ? '' : 's'}</SummaryChip>
-        </>}
+        summary={artifacts.length === 0 ? (
+          <SummaryChip tone="quiet">Nothing produced yet</SummaryChip>
+        ) : (
+          <>
+            <SummaryChip tone="quiet">{artifacts.length} artifact{artifacts.length === 1 ? '' : 's'}</SummaryChip>
+            {artifacts.filter(a => a.kind === 'decision').length > 0 && (
+              <SummaryChip tone="ok">{artifacts.filter(a => a.kind === 'decision').length} decision{artifacts.filter(a => a.kind === 'decision').length === 1 ? '' : 's'}</SummaryChip>
+            )}
+            {artifacts.filter(a => a.kind === 'result').length > 0 && (
+              <SummaryChip tone="ok">{artifacts.filter(a => a.kind === 'result').length} result{artifacts.filter(a => a.kind === 'result').length === 1 ? '' : 's'}</SummaryChip>
+            )}
+            <SummaryChip tone="quiet">Last produced {messageTime(artifacts[artifacts.length - 1]!.time, now)}</SummaryChip>
+          </>
+        )}
         action={(
           <button
             type="button"
@@ -2476,8 +2491,13 @@ export function Room() {
         )}
         <div className="mt-6">
           <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Minutes</h3>
-          <div className="rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
-            Ask an agent to generate minutes from the composer. The result lands in the transcript and is captured in the delivery report.
+          {/* Explicitly an EMPTY STATE + prompt, never dressed as produced
+              work; generated minutes arrive as transcript artifacts. */}
+          <div className="rounded-xl border border-dashed border-border bg-transparent p-4">
+            <p className="text-[15px] font-semibold text-ink-soft sm:text-[14px]">No minutes yet</p>
+            <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+              Ask an agent to generate minutes from the composer. The result lands in the transcript and is captured in the delivery report.
+            </p>
           </div>
         </div>
       </div>
