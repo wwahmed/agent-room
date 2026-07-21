@@ -223,7 +223,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     // quiet accent-tint surface. Saturated accent is reserved for actions and
     // unread state so a long self-authored message never dominates the feed.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-5'}`}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-6'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
@@ -231,7 +231,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {/* T-30 rev3 per UX: the SHOUTING was the measure, not the glyphs —
               cap the line length at ~68ch and keep 15-16px type. */}
           {body.trim() && (
-            <div className="text-[14px] font-[350] leading-[1.7] [&_strong]:font-medium">
+            <div className="text-[15px] font-normal leading-[1.6] [&_strong]:font-semibold">
               <CollapsibleMessageBody text={body} selfName={selfName} />
             </div>
           )}
@@ -248,7 +248,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // giant saturated card behind every agent report. The incoming surface is
   // deliberately near-neutral so long work updates read like a calm Slack/
   // Teams transcript instead of a stack of alerts.
-  const bubble = { backgroundColor: 'transparent', borderColor: `${message.color}14` };
+  const bubble = { backgroundColor: 'transparent' };
   const agentSender = message.client === 'cc';
   // T-56 (host: "wasting space at top", "empty margin on the right"): incoming
   // bubbles are capped-width and left-aligned (pr-* leaves a right margin for
@@ -256,10 +256,11 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // corner, name + time sit on ONE line (no divider, no wrap), role hidden on
   // mobile.
   const rowClass = 'group relative pl-5 pr-12 sm:pl-6 sm:pr-20';
-  const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-xl border sm:max-w-[min(36rem,82%)] [overflow-wrap:anywhere]';
-  // Calm transcript type: stable 15px, explicitly normal weight, and enough
-  // leading to separate dense technical prose without enlarging it.
-  const bodyText = 'text-[14px] font-[350] leading-[1.7] [&_strong]:font-medium';
+  const bubbleShape = 'relative z-10 inline-block max-w-full break-words sm:max-w-[68ch] [overflow-wrap:anywhere]';
+  // T-41 acceptance sheet: stay on the deliberate token scale. Perceived
+  // shouting is solved by flat peer rows and hierarchy, not off-scale thin
+  // glyphs that become harder to read on a dark canvas.
+  const bodyText = 'text-[15px] font-normal leading-[1.6] [&_strong]:font-semibold';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.
@@ -277,7 +278,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   }
 
   return (
-    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-5`}>
+    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-6`}>
       <SwipeReplyIndicator progress={swipe.progress} />
       <div className={bubbleShape} style={{ ...bubble, ...swipe.style }}>
         {/* T-58 (host: "others on the left", "can barely read the name"): the
@@ -287,7 +288,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           <SenderAvatar message={message} sizeClass="h-7 w-7" textClass="text-[12px]" />
         </div>
         <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
-          <span className="text-[13px] font-medium" style={{ color: message.color }}>{message.name}</span>
+          <span className="text-[13px] font-semibold" style={{ color: message.color }}>{message.name}</span>
           {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
           <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>

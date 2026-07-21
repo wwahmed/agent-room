@@ -5,8 +5,10 @@ const source = readFileSync(new URL('./MessageRow.tsx', import.meta.url), 'utf8'
 
 describe('calm chat row anatomy', () => {
   it('keeps prose normal-weight and incoming identity tint quiet', () => {
-    expect(source).toContain("const bodyText = 'text-[14px] font-[350] leading-[1.7] [&_strong]:font-medium'");
+    expect(source).toContain("const bodyText = 'text-[15px] font-normal leading-[1.6] [&_strong]:font-semibold'");
     expect(source).toContain("backgroundColor: 'transparent'");
-    expect(source).toContain('sm:max-w-[min(36rem,82%)]');
+    expect(source).toContain('sm:max-w-[68ch]');
+    expect(source).not.toContain("bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded");
+    expect(source).not.toContain("bubbleShape = 'relative z-10 inline-block max-w-full break-words border");
   });
 });
