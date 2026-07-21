@@ -163,6 +163,22 @@ body {
   .facepile-degrade { animation: none; }
 }
 
+/* T-46: shared single-run entry motions for transient system surfaces.
+   150ms ease-out per the charter; nothing loops; reduced motion disables. */
+@keyframes surface-rise {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.toast-enter { animation: surface-rise 150ms ease-out; }
+@keyframes surface-drop {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+.banner-enter { animation: surface-drop 250ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter, .banner-enter { animation: none; }
+}
+
 /* T-54: brief highlight when jumping to a quoted message. */
 @keyframes reply-flash {
   0%, 100% { background-color: transparent; }

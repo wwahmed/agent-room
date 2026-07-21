@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RoomQuestion } from '@agent-room/shared';
 import { answerOwnerQuestion, createClient, listOwnerQuestions } from '../lib/api.js';
 import { questionAnswerLabels } from '../lib/questions.js';
+
+const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
 
 interface Props {
   code: string;
@@ -19,10 +21,31 @@ export function QuestionArtifactSheet({ code, questionId, isOwner, onClose, onAn
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // T-46: real modal behavior — Escape closes, Tab cycles INSIDE the sheet,
+  // and focus returns to whatever opened it. Matches the T-36 lightbox.
+  const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { onClose(); return; }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      returnFocus?.focus();
+    };
   }, [onClose]);
 
   useEffect(() => {
@@ -77,7 +100,7 @@ export function QuestionArtifactSheet({ code, questionId, isOwner, onClose, onAn
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="question-artifact-title">
       <button type="button" className="absolute inset-0 bg-black/55" onClick={onClose} aria-label="Close question artifact" />
-      <section className="relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl">
+      <section ref={dialogRef} className="relative z-10 flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl">
         <header className="flex items-center justify-between gap-3 border-b border-border-faint px-4 py-3 sm:px-6">
           <div>
             <div className="text-[13px] font-semibold uppercase tracking-wide text-accent">Question artifact</div>
