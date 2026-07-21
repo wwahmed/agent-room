@@ -1772,6 +1772,7 @@ export function Room() {
       color: participant.color,
       initials: participant.initials,
       harness: participant.harness,
+      participant,
       state: healthById.get(healthKey(participant.name, participant.client))?.state
         ?? ((participant.listenUntil ?? 0) > now ? 'listening' as const : 'online' as const),
     }));
@@ -1794,7 +1795,9 @@ export function Room() {
                   aria-label={`${a.name}, ${a.state} — open People`}
                   className="flex min-h-11 w-full items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
                 >
-                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-bold text-white" style={{ backgroundColor: a.color }} aria-hidden="true">{a.initials}</span>
+                  {/* Same avatar vocabulary as People/facepile (assessor
+                      residual): the shared AgentAvatar, not a bespoke chip. */}
+                  <span aria-hidden="true" className="flex-shrink-0"><AgentAvatar participant={a.participant} size="md" /></span>
                   <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{a.name}</span>
                   {/* Visible worded state — a bare glyph fails without color
                       or icon comprehension (red-team finding). */}
