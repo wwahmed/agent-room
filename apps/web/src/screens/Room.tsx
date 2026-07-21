@@ -226,7 +226,10 @@ export function Room() {
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   // T-80: the paperclip trigger — focus returns here on every sheet exit.
+  // T-84: phones render the paperclip LEFT of the field (its own button),
+  // so the sheet's focus return targets whichever trigger is visible.
   const attachTriggerRef = useRef<HTMLButtonElement>(null);
+  const attachTriggerPhoneRef = useRef<HTMLButtonElement>(null);
   const [attachmentJobs, setAttachmentJobs] = useState<AttachmentUploadJob[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
@@ -524,6 +527,19 @@ export function Room() {
     return () => ro.disconnect();
     // The wrapper element persists across ended/muted/composer swaps.
   }, [mainTab, roomReady]);
+  // T-84: when the bottom stack GROWS while the reader sits at the newest
+  // message (reply chip added, attachment chip lands, voice draft expands),
+  // re-anchor so the final line moves fully above the stack instead of
+  // disappearing behind it. Reading away from the bottom never jumps.
+  const prevComposerHRef = useRef(0);
+  useEffect(() => {
+    const grew = composerH > prevComposerHRef.current;
+    prevComposerHRef.current = composerH;
+    if (grew && atBottomRef.current) {
+      const feed = feedRef.current;
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }
+  }, [composerH]);
 
   // T-65: the read marker AS IT WAS when we arrived. The mark-read effect below
   // advances the stored marker the moment we're at the bottom, so we have to
@@ -572,7 +588,10 @@ export function Room() {
   function autoGrow(el: HTMLTextAreaElement | null) {
     if (!el) return;
     const min = composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT;
-    const max = composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT;
+    let max = composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT;
+    // T-85: on phones the transcript/draft region is CAPPED and scrolls
+    // internally — a long dictation must never push Stop/Send off-screen.
+    if (isPhone) max = Math.min(max, Math.round(window.innerHeight * 0.28));
     // Empty draft: snap to the resting height. Measuring scrollHeight here
     // would pick up a WRAPPED placeholder (narrow viewports) and leave the
     // box two lines tall after clearing.
@@ -2413,7 +2432,9 @@ export function Room() {
                   </div>
                 )}
                 {attachments.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  /* T-84/T-85: chip stacks CAP and scroll on phones — the
+                     bottom stack may never climb toward mid-screen. */
+                  <div className="flex flex-wrap gap-2 max-sm:max-h-28 max-sm:overflow-y-auto">
                     {attachments.map(attachment => (
                       <PendingAttachment
                         key={attachment.id}
@@ -2424,7 +2445,7 @@ export function Room() {
                   </div>
                 )}
                 {attachmentJobs.length > 0 && (
-                  <div className="flex flex-wrap gap-2" aria-live="polite" aria-label="Attachment upload status">
+                  <div className="flex flex-wrap gap-2 max-sm:max-h-28 max-sm:overflow-y-auto" aria-live="polite" aria-label="Attachment upload status">
                     {attachmentJobs.map(job => (
                       <div key={job.id} className={`flex max-w-[280px] items-center gap-2 rounded-lg border px-2.5 py-2 text-[12px] ${job.state === 'failed' ? 'border-amber-400/40 bg-amber-500/10' : 'border-accent-tint-border bg-accent-tint'}`}>
                         {job.state === 'uploading' ? (
@@ -2522,10 +2543,25 @@ export function Room() {
                     </button>
                   </div>
                 )}
-                {/* T-82: phone resting composer is ONE row — field, clip, mic,
-                    send — growing only with a real draft; >=sm keeps the
-                    field-above-tools layout from the earlier host ruling. */}
+                {/* T-82/T-84: phone resting composer is ONE row —
+                    [attach][flex field][mic], Send REPLACING mic the moment
+                    content exists (no disabled Send eating width); >=sm keeps
+                    the field-above-tools layout from the earlier host ruling. */}
                 <div className="max-sm:flex max-sm:items-end">
+                <button
+                  ref={attachTriggerPhoneRef}
+                  type="button"
+                  onClick={() => setAttachmentMenuOpen(open => !open)}
+                  disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
+                  aria-label="Add photos or files"
+                  aria-haspopup="dialog"
+                  aria-expanded={attachmentMenuOpen}
+                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 sm:hidden"
+                >
+                  <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m13 7.5-4.9 4.9a3.1 3.1 0 0 1-4.4-4.4l5.3-5.3a2.1 2.1 0 0 1 3 3l-5.3 5.3a1.1 1.1 0 0 1-1.6-1.6L9.8 4.7" />
+                  </svg>
+                </button>
                 <textarea
                   ref={textareaRef}
                   value={text}
@@ -2564,7 +2600,11 @@ export function Room() {
                   rows={1}
                   style={{
                     height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
-                    maxHeight: composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
+                    // T-85 phone cap mirrors autoGrow: long transcripts scroll
+                    // inside the field instead of displacing the controls.
+                    maxHeight: isPhone
+                      ? Math.min(composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT, Math.round(window.innerHeight * 0.28))
+                      : composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
                   }}
                   /* T-74: the semantic composer role keeps typed and placeholder
                      text readable at physical phone scale. Borderless — the
@@ -2597,7 +2637,7 @@ export function Room() {
                     aria-label="Add photos or files"
                     aria-haspopup="dialog"
                     aria-expanded={attachmentMenuOpen}
-                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50"
+                    className="hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 sm:flex"
                   >
                     {attachBusy ? (
                       <span className="text-xs font-semibold">…</span>
@@ -2615,8 +2655,12 @@ export function Room() {
                     onClose={() => setAttachmentMenuOpen(false)}
                     onPickImages={() => imageInputRef.current?.click()}
                     onPickFiles={() => fileInputRef.current?.click()}
-                    returnFocusRef={attachTriggerRef}
+                    returnFocusRef={isPhone ? attachTriggerPhoneRef : attachTriggerRef}
                   />
+                  {/* T-84 phone swap: mic yields to Send once content exists —
+                      but NEVER mid-dictation, when the stop/cancel controls
+                      must stay reachable (T-85). */}
+                  <span className={text.trim() && !dictationDraft ? 'max-sm:hidden' : 'contents'}>
                   <VoiceButton
                     onStart={() => {
                       dictationBaseRef.current = text;
@@ -2642,6 +2686,7 @@ export function Room() {
                     }}
                     disabled={ended}
                   />
+                  </span>
                   <span className="flex-1 max-sm:hidden" aria-hidden="true" />
                   <button
                     onClick={() => setComposerExpanded(v => !v)}
@@ -2662,7 +2707,11 @@ export function Room() {
                     disabled={!text.trim() && attachments.length === 0}
                     title="Send"
                     aria-label="Send message"
-                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    className={`h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 sm:flex ${
+                      // T-84: no disabled Send consuming phone width — it
+                      // APPEARS (replacing the mic) once content exists.
+                      text.trim() || attachments.length > 0 ? 'flex' : 'hidden'
+                    }`}
                   >
                     <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
                       <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />

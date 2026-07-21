@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- T-85: interactive-widget=resizes-content makes the Android keyboard
+         shrink the layout viewport, so the bottom overlay (composer, voice
+         controls, send) rides ABOVE the keyboard instead of hiding under it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#0B0F16" />
     <!-- T-43: resolve theme before first paint so there is no flash. Explicit
          stored choice wins, else the OS preference, else dark. Kept inline and
