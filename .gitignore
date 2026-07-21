@@ -42,3 +42,6 @@ deploy/.memberkey-store.json
 deploy/mkproxy-*.log
 .env.bak-*
 .visual-gate/
+
+# T-87 watcher runtime state/logs
+tmp/builder-standing-watch*

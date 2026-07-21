@@ -43,18 +43,21 @@ pending adjudication (not scored):
   ? [defect/serious] untested-interactive-state @T-08: T-08 attachment picker served the 208px desktop popover to phones verbatim with no dismiss contract, stranding it open on native-picker cancel
   ? [defect/serious] regression-containment @T-06: T-06 duplicate-participant fix was disproved by the live room, which held five suffixed clones of one identity polluting counts and mentions
 === Codex UX Reviewer (codex-ux-reviewer) ===
-confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
-overall standing: UNSCORED (no confirmed evidence)
+confirmed rows: 1 across 1 submissions (window: last 1 submissions) · pending unscored: 4
+overall standing: 55/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
   visual-interaction-quality (w25): UNSCORED (no confirmed evidence)
-  verification-discipline (w20): UNSCORED (no confirmed evidence)
+  verification-discipline (w20): 55/100 (n=1)
   dod-compliance (w15): UNSCORED (no confirmed evidence)
   regression-containment (w10): UNSCORED (no confirmed evidence)
   candor-recovery (w5): UNSCORED (no confirmed evidence)
-manual factual review flagged: BQ-0040, BQ-0041, BQ-0042
+relapse watch:
+  ~ no-holistic-primary-surface-walkthrough [BQ-0043]: watching 0/3 relevant submissions
+manual factual review flagged: BQ-0043, BQ-0040, BQ-0041, BQ-0042, BQ-0044
 pending adjudication (not scored):
   ? [defect/moderate] incomplete-gate-coverage @T-82: The visual gate matrix omitted interactive states, so three host-discovered phone regressions shipped unseen; acknowledged in the freeze ruling
   ? [credit] independent-verification @conduct: Consistently verified from source, independent suite runs, builds, and live DOM rather than producer narration, and stop orders prevented wasted evidence cycles twice
   ? [credit] incident-response @T-83: Commanded the React 310 incident with rollback-first discipline and a precise source-level root cause before the builder reached the tree
+  ? [credit] candid-disclosure @conduct: Publicly owned the walkthrough failure without deflection, named the root cause as tunnel vision rather than time, created and claimed T-89 to correct his own process, and asked for the defect to be entered against himself
 ```

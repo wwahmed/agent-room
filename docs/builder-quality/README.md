@@ -24,12 +24,27 @@ verifier-audit ledger (`docs/verifier-audit/`) to everyone who ships.
   evidence carry `evidenceReview: manual-required` and are flagged.
   `--write-scoreboard` regenerates `SCOREBOARD.md` (a rendered artifact,
   never the source of truth); `--brief` emits the room line.
-- `../../scripts/post-builder-standing.mjs`: the update hook. Run after
-  every task verification or host-reported incident; it posts the brief to
-  the room using a member key read from `WAKICHAT_MEMBERKEY_FILE`. Standing
-  is derived on demand and never stored, so a total cannot be edited or
-  gamed. A row's subject can never be its adjudicator; rows about the
-  Master Lead are adjudicated by the host.
+- `../../scripts/builder-standing-watch.mjs`: the automatic-governance
+  daemon. It watches the room task board and, on every verification event
+  (a task moving to done or rejected) or host incident intake (a new
+  P0/Urgent/Emergency/incident task), regenerates `SCOREBOARD.md` and posts
+  the standing brief to the room. Nobody has to remember to run anything;
+  the daemon runs in the background from repo root:
+  `WAKICHAT_MEMBERKEY_FILE=... nohup node scripts/builder-standing-watch.mjs
+  >> tmp/builder-standing-watch.log 2>&1 &`. Restart-safe via
+  `tmp/builder-standing-watch.json`; the first run seeds silently.
+- `../../scripts/post-builder-standing.mjs`: the posting path the daemon
+  invokes (also runnable by hand). It ALWAYS regenerates `SCOREBOARD.md`
+  first and takes the brief from that same computation, so the posted line
+  and the linked artifact cannot disagree and the scoreboard cannot be
+  stale at post time. Member key comes only from `WAKICHAT_MEMBERKEY_FILE`.
+  Standing is derived on demand and never stored, so a total cannot be
+  edited or gamed. A row's subject can never be its adjudicator; rows about
+  the Master Lead are adjudicated by the host.
+- `../../.githooks/pre-commit` (enable with `git config core.hooksPath
+  .githooks`): validates any staged ledger and regenerates plus stages
+  `SCOREBOARD.md` whenever `ledger.jsonl` is committed, so a committed
+  ledger can never ship with a stale scoreboard.
 
 ## Rules
 

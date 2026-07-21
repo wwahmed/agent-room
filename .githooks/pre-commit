@@ -1,0 +1,19 @@
+#!/bin/sh
+# T-87 rev4: mechanical ledger governance at commit time.
+# Enable once per clone: git config core.hooksPath .githooks
+set -e
+staged=$(git diff --cached --name-only)
+
+case "$staged" in
+*docs/verifier-audit/ledger.jsonl*)
+  node scripts/validate-verifier-ledger.mjs ;;
+esac
+
+case "$staged" in
+*docs/builder-quality/ledger.jsonl*)
+  node scripts/validate-builder-ledger.mjs
+  # The scoreboard is derived from the ledger: regenerate and stage it in the
+  # same commit so a committed ledger can never ship with a stale SCOREBOARD.
+  node scripts/builder-standing.mjs --write-scoreboard >/dev/null
+  git add docs/builder-quality/SCOREBOARD.md ;;
+esac
