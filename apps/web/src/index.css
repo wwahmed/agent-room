@@ -108,18 +108,24 @@ body {
   }
   .msg-prose strong { font-weight: 600; color: rgb(var(--ink)); }
   @media (max-width: 639px) {
-    .msg-prose { font-size: 17px; line-height: 1.55; }
+    .msg-prose { font-size: 18px; line-height: 1.55; }
   }
-  /* T-70 follow-up (Waqas: agent names unreadable on the phone): the author
-     line is part of the reading hierarchy — 13px desktop, 15px on phones,
-     always one step under the prose so hierarchy holds. */
+  /* T-70 (TechLead's locked ramp): the author line is the identity anchor —
+     13px/600 desktop, 16px/600 on phones. In dark mode names render FULL
+     NEUTRAL INK, never the raw sender color: chromatic small text on
+     near-black is a legibility lottery; identity color lives in the avatar.
+     The !important is deliberate — it must beat the inline sender-color
+     style, which stays for light mode where the darker variants pass AA. */
   .msg-author {
     font-size: 13px;
     font-weight: 600;
     line-height: 1.3;
   }
+  :root:not([data-theme='light']) .msg-author {
+    color: rgb(var(--ink)) !important;
+  }
   @media (max-width: 639px) {
-    .msg-author { font-size: 15px; }
+    .msg-author { font-size: 16px; }
   }
 
   .ui-control {

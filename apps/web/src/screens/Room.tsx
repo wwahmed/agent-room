@@ -1589,7 +1589,7 @@ export function Room() {
               onClick={() => selectTab(t.key)}
               // Gate finding (the Waqas screenshot): five tabs must FIT 390px
               // — icons yield below sm and padding tightens so no tab clips.
-              className={`-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-2 text-[14px] font-semibold transition sm:px-3 ${
+              className={`-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-2 text-[16px] font-semibold transition sm:px-3 sm:text-[14px] ${
                 mainTab === t.key
                   ? 'border-accent text-accent'
                   : 'border-transparent text-ink-soft hover:text-ink'
