@@ -202,6 +202,17 @@ body {
     :root[data-reading-scale='compact'] .msg-meta { font-size: 14px; }
   }
 
+  /* T-80: native <dialog> attachment sheet. Phone shows a dimmed backdrop;
+     desktop keeps the top layer's click-catching but stays visually quiet. */
+  .attachment-sheet::backdrop {
+    background: rgb(0 0 0 / 0.45);
+  }
+  @media (min-width: 640px) {
+    .attachment-sheet::backdrop {
+      background: transparent;
+    }
+  }
+
   .ui-control {
     min-height: 44px;
     border-radius: 8px;
