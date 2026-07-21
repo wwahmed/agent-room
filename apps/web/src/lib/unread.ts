@@ -91,7 +91,13 @@ export function isSelfAuthored(
 }
 
 /** Find the first loaded, unread message that was not authored by this user. */
-export function firstUnreadMessageIndex<T extends { name?: string; client?: string; type?: string }>(
+/** T-20: heartbeat/"on it" pings the server stamped via the status send path.
+ *  Operational noise: rendered quietly, never counted as unread. */
+export function isStatusPing(message: { metadata?: { kind?: string } | Record<string, unknown> }): boolean {
+  return (message.metadata as { kind?: string } | undefined)?.kind === 'status';
+}
+
+export function firstUnreadMessageIndex<T extends { name?: string; client?: string; type?: string; metadata?: Record<string, unknown> }>(
   messages: T[],
   messageTotal: number,
   readCount: number,
@@ -100,7 +106,7 @@ export function firstUnreadMessageIndex<T extends { name?: string; client?: stri
   const loadedStart = Math.max(0, messageTotal - messages.length);
   const firstLoadedUnread = Math.max(0, readCount - loadedStart);
   return messages.findIndex((message, index) =>
-    index >= firstLoadedUnread && !isSelfAuthored(message, selfName));
+    index >= firstLoadedUnread && !isSelfAuthored(message, selfName) && !isStatusPing(message));
 }
 
 /**

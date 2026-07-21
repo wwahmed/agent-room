@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   firstUnreadMessageIndex,
   isSelfAuthored,
+  isStatusPing,
   markRoomRead,
   markSelfMessageSeen,
   unmarkSelfMessageSeen,
@@ -110,6 +111,30 @@ describe('unread counts (T-62)', () => {
     const messages = [
       { type: 'msg', client: 'cc', name: 'Claude' },
       { type: 'msg', client: 'web', name: 'Waqas' },
+    ];
+    expect(firstUnreadMessageIndex(messages, 2, 1, 'Waqas')).toBe(-1);
+  });
+
+  // T-20: stamped heartbeat/status pings are operational noise.
+  it('classifies only metadata.kind === "status" as a status ping', () => {
+    expect(isStatusPing({ metadata: { kind: 'status' } })).toBe(true);
+    expect(isStatusPing({ metadata: { modeAtSend: 'open' } })).toBe(false);
+    expect(isStatusPing({})).toBe(false);
+  });
+
+  it('skips status pings when placing the unread divider', () => {
+    const messages = [
+      { type: 'msg', client: 'cc', name: 'Claude' },
+      { type: 'msg', client: 'cc', name: 'Codex', metadata: { kind: 'status' } },
+      { type: 'msg', client: 'cc', name: 'Codex' },
+    ];
+    expect(firstUnreadMessageIndex(messages, 3, 1, 'Waqas')).toBe(2);
+  });
+
+  it('returns no divider when the only unread traffic is status pings', () => {
+    const messages = [
+      { type: 'msg', client: 'cc', name: 'Claude' },
+      { type: 'msg', client: 'cc', name: 'Codex', metadata: { kind: 'status' } },
     ];
     expect(firstUnreadMessageIndex(messages, 2, 1, 'Waqas')).toBe(-1);
   });

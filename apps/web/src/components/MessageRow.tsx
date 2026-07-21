@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Message } from '@agent-room/shared';
 import { AttachmentList, MessageText, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
+import { isStatusPing } from '../lib/unread.js';
 import { MessageMenu } from './MessageMenu.js';
 
 // T-05 editorial message rows. Sender identity is the primary visual
@@ -190,6 +191,22 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
       <div className="flex justify-center px-4 py-0.5">
         <div className="max-w-[90%] rounded-md bg-surface-softer px-2.5 py-1 text-center text-[11px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
           {systemEventLabel(message)}
+        </div>
+      </div>
+    );
+  }
+
+  // T-20 (host: "special status chip ... so that I don't get distracted by
+  // noise"): stamped heartbeat/status pings render as a quiet centered row —
+  // sender-attributed but visually operational, not conversational. They are
+  // also excluded from every unread surface (see lib/unread.ts).
+  if (isStatusPing(message)) {
+    return (
+      <div id={`msg-${message.id}`} className="flex justify-center px-4 py-0.5" title={exactTime(message.time)}>
+        <div className="flex max-w-[90%] items-baseline gap-1.5 rounded-md border border-border-faint bg-surface-softer px-2.5 py-1 text-[11px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
+          <span className="rounded bg-black/10 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider" aria-label="Status update">status</span>
+          <span className="font-semibold" style={{ color: message.color }}>{message.name}</span>
+          <span>{message.text}</span>
         </div>
       </div>
     );

@@ -24,6 +24,7 @@ import {
   firstUnreadMessageIndex,
   getReadCount,
   isSelfAuthored,
+  isStatusPing,
   markRoomRead,
   markSelfMessageSeen,
   unmarkSelfMessageSeen,
@@ -569,8 +570,10 @@ export function Room() {
       if (el) el.scrollTop = el.scrollHeight - anchor.heightBefore + anchor.topBefore;
     }
 
+    // T-16 excludes your own messages; T-20 also excludes stamped status pings
+    // so heartbeat noise never inflates the "N new messages" pill.
     const appendedUnread = appended > 0
-      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name)).length
+      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name) && !isStatusPing(message)).length
       : 0;
 
     if (prevLenRef.current === 0 && len > 0) {
