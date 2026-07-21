@@ -6,3 +6,4 @@ export * from './artifacts.js';
 export * from './text.js';
 export * from './roomTopic.js';
 export * from './conventions.js';
+export * from './agentLifecycle.js';

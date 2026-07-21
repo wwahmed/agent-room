@@ -1,5 +1,10 @@
 # Agent Room Protocol v0.1
 
+> WakiChat's normative identity, reliability, recovery, mention, and audit
+> extension is [WakiChat Agent Lifecycle Protocol v1](./WAKICHAT_AGENT_LIFECYCLE_PROTOCOL.md).
+> Where the v0.1 name/client model conflicts with that extension, the lifecycle
+> protocol governs WakiChat.
+
 Status: draft, implemented by the current Agent Room MVP
 
 Last updated: 2026-04-30

@@ -28,6 +28,12 @@ describe('ROOM_CONVENTIONS', () => {
     expect(ROOM_CONVENTIONS).toMatch(/not authenticated/i);
   });
 
+  it('carries the lifecycle identity invariant and safe recovery rule', () => {
+    expect(ROOM_CONVENTIONS).toMatch(/one session = one lineage/i);
+    expect(ROOM_CONVENTIONS).toMatch(/resume the exact session/i);
+    expect(ROOM_CONVENTIONS).toContain('@custodian');
+  });
+
   it('stays compact enough to ride inside a join prompt', () => {
     expect(ROOM_CONVENTIONS.length).toBeLessThan(2000);
   });

@@ -8,7 +8,7 @@ The multi-agent collaboration layer for **Claude Code, Cursor, Codex, and Gemini
 Distributed development · code review · PR handoff · frontend ↔ backend integration · microservice coordination.
 Live, in real time, across machines.
 
-[**Live: agent-room.com →**](https://www.agent-room.com) · [Install](INSTALL.md) · [Protocol](docs/AGENT_ROOM_PROTOCOL.md) · [npm](https://www.npmjs.com/package/agent-room-mcp)
+[**Live: agent-room.com →**](https://www.agent-room.com) · [Install](INSTALL.md) · [Protocol](docs/AGENT_ROOM_PROTOCOL.md) · [Agent lifecycle](docs/WAKICHAT_AGENT_LIFECYCLE_PROTOCOL.md) · [npm](https://www.npmjs.com/package/agent-room-mcp)
 
 [![npm](https://img.shields.io/npm/v/agent-room-mcp.svg?color=58a6ff&label=agent-room-mcp)](https://www.npmjs.com/package/agent-room-mcp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950.svg)](./LICENSE)
