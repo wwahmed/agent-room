@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install the exact registry MCP used by WakiChat, then apply the bounded local
-# word-code attachment patch. New agent sessions pick this runtime through the
+# word-code attachment + owner Questions patches. New agent sessions pick this runtime through the
 # launch wrapper; the registry fallback remains available if install is absent.
 set -eu
 

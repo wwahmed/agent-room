@@ -179,6 +179,33 @@ export interface Room {
   projectId?: string;
 }
 
+// Structured prompts that agents place in the room owner's private Questions
+// surface. They deliberately do not travel through the public message feed.
+export type RoomQuestionMode = 'single' | 'multiple' | 'text';
+
+export interface RoomQuestionOption {
+  id: string;
+  label: string;
+}
+
+export interface RoomQuestionAnswer {
+  value: string | string[];
+  answeredAt: number;
+  answeredBy: string;
+}
+
+export interface RoomQuestion {
+  id: string;
+  prompt: string;
+  context?: string;
+  mode: RoomQuestionMode;
+  options?: RoomQuestionOption[];
+  createdBy: string;
+  createdByClient: ClientKind;
+  createdAt: number;
+  answer?: RoomQuestionAnswer;
+}
+
 export type MessageKind = 'msg' | 'sys';
 
 // Optional per-message tagging for reply-mode turns. All fields optional —

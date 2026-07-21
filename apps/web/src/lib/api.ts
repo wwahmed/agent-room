@@ -7,6 +7,7 @@ import type {
   ReplyModeConfig,
   RoleInTurn,
   Room,
+  RoomQuestion,
   RoomReport,
 } from '@agent-room/shared';
 
@@ -519,6 +520,33 @@ export async function getRoomReport(
   code: string,
 ): Promise<RoomReport | null> {
   return (await call<{ report: RoomReport | null }>({ action: 'getReport', code })).report;
+}
+
+// ---------- owner questions ----------
+
+export async function listOwnerQuestions(_client: ApiClient, code: string): Promise<RoomQuestion[]> {
+  const out = await call<{ questions: RoomQuestion[] }>({
+    action: 'questionList',
+    code,
+    hostKey: storedHostKey(code),
+  });
+  return out.questions;
+}
+
+export async function answerOwnerQuestion(
+  _client: ApiClient,
+  code: string,
+  id: string,
+  value: string | string[],
+): Promise<RoomQuestion> {
+  const out = await call<{ question: RoomQuestion }>({
+    action: 'questionAnswer',
+    code,
+    id,
+    value,
+    hostKey: storedHostKey(code),
+  });
+  return out.question;
 }
 
 // ---------- projects (T-18) ----------

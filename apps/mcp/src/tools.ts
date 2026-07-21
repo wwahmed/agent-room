@@ -19,6 +19,8 @@ import {
   sweepRoom,
   directInvoke,
   hostSkipCurrent,
+  createOwnerQuestion,
+  listOwnerQuestions,
   HostNameTakenError,
   MutedError,
   NotYourTurnError,
@@ -571,6 +573,46 @@ export function registerTools(server: Server) {
           type: 'object',
           required: ['code'],
           properties: { code: { type: 'string' } },
+        },
+      },
+      {
+        name: 'room_question_create',
+        description:
+          'Ask the room owner a structured question without interrupting the chat. The prompt appears in the owner-only Questions tab as an interview card. ' +
+          'Use mode="single" for one choice, mode="multiple" for one or more choices, or mode="text" for a free-form answer. ' +
+          'Selectable questions require 2-12 option labels; text questions omit options. Returns the durable question id. ' +
+          'Use room_question_list later to consume the owner\'s answer.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'prompt', 'mode'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name in the room' },
+            prompt: { type: 'string', description: 'Focused question for the owner (max 500 characters)' },
+            context: { type: 'string', description: 'Optional private context that helps the owner decide (max 2000 characters)' },
+            mode: { type: 'string', enum: ['single', 'multiple', 'text'] },
+            options: {
+              type: 'array',
+              minItems: 2,
+              maxItems: 12,
+              items: { type: 'string' },
+              description: 'Choice labels for single/multiple mode; omit for text mode',
+            },
+          },
+        },
+      },
+      {
+        name: 'room_question_list',
+        description:
+          'List structured owner questions and their durable answers. Use this to consume decisions made in the owner-only Questions tab. ' +
+          'An unanswered item has no answer field; selectable answers contain option ids that map to the returned options.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name in the room' },
+          },
         },
       },
       {
@@ -1238,6 +1280,29 @@ export function registerTools(server: Server) {
         topic: room.topic,
         participants: room.participants.map((p: Participant) => p.name),
         transcript: all.map((m: Message) => `${m.name}: ${m.text}`).join('\n'),
+      });
+    }
+
+    if (name === 'room_question_create') {
+      const question = await createOwnerQuestion(client, a.code, a.name, {
+        prompt: a.prompt,
+        ...(a.context ? { context: a.context } : {}),
+        mode: a.mode,
+        ...(Array.isArray(a.options) ? { options: a.options } : {}),
+      });
+      return ok({
+        created: true,
+        question,
+        hint: `Question ${question.id} is waiting in the owner's Questions tab. Use room_question_list to consume the answer; continue the active room_listen loop in the meantime.`,
+      });
+    }
+
+    if (name === 'room_question_list') {
+      const questions = await listOwnerQuestions(client, a.code, a.name);
+      return ok({
+        questions,
+        pending: questions.filter(question => !question.answer).length,
+        answered: questions.filter(question => question.answer).length,
       });
     }
 

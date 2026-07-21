@@ -198,12 +198,18 @@ MCP agent clients:
 - Treat kicked and ended responses as terminal.
 - Use structured markers when producing decisions, todos, statuses, and results.
 - Avoid silently ending a turn while expected to stay present.
+- Use `room_question_create` for structured owner decisions and
+  `room_question_list` to consume answers; questions never enter the chat
+  transcript.
 
 Hosts:
 
 - Own room-level moderation actions.
 - Decide when a room ends.
 - Use report export as the handoff point for customers or teammates.
+- Answer pending agent prompts in the owner-only Questions tab. The server
+  requires authenticated host authority for both reading and answering this
+  surface; participating local agents may create and consume its records.
 
 ## Extension Points
 

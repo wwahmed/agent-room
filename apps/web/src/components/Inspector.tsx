@@ -9,37 +9,42 @@ import { VersionTag } from './VersionTag.js';
 // host handlers); this component only owns the responsive chrome, the
 // tab strip, and dismissal.
 
-export type InspectorTab = 'people' | 'project' | 'outputs' | 'room';
+export type InspectorTab = 'questions' | 'people' | 'project' | 'outputs' | 'room';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   renderTab: (tab: InspectorTab) => ReactNode;
   initialTab?: InspectorTab;
+  questionCount?: number;
 }
 
 const TABS: Array<{ key: InspectorTab; label: string }> = [
+  { key: 'questions', label: 'Questions' },
   { key: 'people', label: 'People' },
   { key: 'project', label: 'Project' },
   { key: 'outputs', label: 'Outputs' },
   { key: 'room', label: 'Room' },
 ];
 
-export function Inspector({ open, onClose, renderTab, initialTab = 'people' }: Props) {
+export function Inspector({ open, onClose, renderTab, initialTab = 'people', questionCount = 0 }: Props) {
   const [tab, setTab] = useState<InspectorTab>(initialTab);
   if (!open) return null;
 
   const panel = (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div className="flex h-[60px] flex-shrink-0 items-center gap-1 border-b border-border-faint px-1.5">
-        <div className="flex min-w-0 flex-1 gap-1">
+        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`min-h-12 flex-1 rounded-lg px-1.5 text-[15px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
+              className={`min-h-12 min-w-[68px] flex-1 rounded-lg px-1.5 text-[14px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
             >
-              {t.label}
+              <span>{t.label}</span>
+              {t.key === 'questions' && questionCount > 0 && (
+                <span className="ml-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-white" aria-label={`${questionCount} pending questions`}>{questionCount}</span>
+              )}
             </button>
           ))}
         </div>

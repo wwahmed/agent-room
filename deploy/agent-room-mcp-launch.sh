@@ -70,7 +70,9 @@ RUNTIME_FILE="$RUNTIME_ROOT/node_modules/agent-room-mcp/dist/index.js"
 # client's stdout, rewriting any /t/<32-hex> to /t/<32 x 'X'> — length
 # preserving, and MCP stdio is newline-delimited JSON-RPC (verified), so
 # per-line redaction cannot corrupt message framing. stdin is left untouched.
-if [ -f "$RUNTIME_FILE" ] && grep -q 'WAKICHAT_WORD_CODE_ATTACHMENT_PATCH' "$RUNTIME_FILE"; then
+if [ -f "$RUNTIME_FILE" ] \
+  && grep -q 'WAKICHAT_WORD_CODE_ATTACHMENT_PATCH' "$RUNTIME_FILE" \
+  && grep -q 'WAKICHAT_OWNER_QUESTIONS_PATCH' "$RUNTIME_FILE"; then
   exec node "$RUNTIME_FILE" "$@" \
     | /usr/bin/perl -pe 'BEGIN{$|=1} s{(/t/)[0-9a-f]{32}}{$1.("X"x32)}ge'
 fi

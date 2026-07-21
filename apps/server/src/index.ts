@@ -28,6 +28,7 @@
 //                   ONLY when unambiguous; every use logs a [security] event.
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -61,7 +62,8 @@ import {
 import { redactRoomPayload } from './redact.js';
 import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
-import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
+import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
+import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
 import {
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
@@ -913,6 +915,49 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       }
       return { skipped };
     }
+    case 'questionList': {
+      const room = await getRoom(client, code);
+      if (caller.kind === 'user') {
+        await requireHost(code, payload.hostKey as string | undefined, caller);
+      } else {
+        requireQuestionAgent(room.participants, String(payload.name || ''));
+      }
+      return { questions: await listRoomQuestions(code) };
+    }
+    case 'questionCreate': {
+      if (caller.kind !== 'local') {
+        throw taskError('NotHostError', 'Only an agent in this room can create an owner question.');
+      }
+      const room = await getRoom(client, code);
+      if (room.status !== 'active') throw taskError('BadRequestError', 'Cannot create a question in an ended room.');
+      const name = String(payload.name || '').trim();
+      requireQuestionAgent(room.participants, name);
+      const question = createRoomQuestion({
+        id: `Q-${randomUUID()}`,
+        prompt: payload.prompt,
+        context: payload.context,
+        mode: payload.mode,
+        options: payload.options,
+        createdBy: name,
+        now: nowMs(),
+      });
+      await appendRoomQuestion(code, question);
+      return { question };
+    }
+    case 'questionAnswer': {
+      if (caller.kind !== 'user') {
+        throw taskError('NotHostError', 'Only the authenticated room owner can answer questions.');
+      }
+      await requireHost(code, payload.hostKey as string | undefined, caller);
+      const room = await getRoom(client, code);
+      const question = await answerStoredRoomQuestion(
+        code,
+        String(payload.id || ''),
+        payload.value,
+        room.ownerName || room.createdBy,
+      );
+      return { question };
+    }
     case 'taskBoard': {
       await getRoom(client, code);
       return { board: await getTaskBoard(code) };
@@ -1124,6 +1169,45 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     default:
       throw new Error(`unknown action: ${action || '(none)'}`);
   }
+}
+
+// ---------- owner questions ----------
+
+function roomQuestionsKey(code: string): string {
+  return `room-questions:${code}`;
+}
+
+async function listRoomQuestions(code: string): Promise<RoomQuestion[]> {
+  const rows = await redis.lrange(roomQuestionsKey(code), 0, -1);
+  return rows.flatMap((row) => {
+    try {
+      return [JSON.parse(row) as RoomQuestion];
+    } catch {
+      return [];
+    }
+  });
+}
+
+async function appendRoomQuestion(code: string, question: RoomQuestion): Promise<void> {
+  const key = roomQuestionsKey(code);
+  await redis.rpush(key, JSON.stringify(question));
+  await redis.expire(key, ROOM_TTL_SECONDS);
+}
+
+async function answerStoredRoomQuestion(
+  code: string,
+  id: string,
+  value: unknown,
+  answeredBy: string,
+): Promise<RoomQuestion> {
+  const key = roomQuestionsKey(code);
+  const questions = await listRoomQuestions(code);
+  const index = questions.findIndex(question => question.id === id);
+  if (index < 0) throw taskError('RoomNotFoundError', `Question ${id || '(missing)'} not found.`);
+  const answered = answerRoomQuestion(questions[index]!, value, answeredBy, nowMs());
+  await redis.lset(key, index, JSON.stringify(answered));
+  await redis.expire(key, ROOM_TTL_SECONDS);
+  return answered;
 }
 
 // ---------- task board (npm client >= 0.25 contract; not in the public repo) ----------

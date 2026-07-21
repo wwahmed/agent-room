@@ -18,6 +18,8 @@ import type {
   ReplyMode,
   ReplyModeConfig,
   Room,
+  RoomQuestion,
+  RoomQuestionMode,
   RoomReport,
 } from '@agent-room/shared';
 import type { AppendResult, TurnState, TurnSpokenEntry } from '@agent-room/upstash-client';
@@ -271,4 +273,32 @@ export async function hostSkipCurrent(
     hostKey,
   });
   return body.skipped;
+}
+
+export async function createOwnerQuestion(
+  client: RoomApiClient,
+  code: string,
+  name: string,
+  input: { prompt: string; context?: string; mode: RoomQuestionMode; options?: string[] },
+): Promise<RoomQuestion> {
+  const body = await client.post<{ question: RoomQuestion }>({
+    action: 'questionCreate',
+    code,
+    name,
+    ...input,
+  });
+  return body.question;
+}
+
+export async function listOwnerQuestions(
+  client: RoomApiClient,
+  code: string,
+  name: string,
+): Promise<RoomQuestion[]> {
+  const body = await client.post<{ questions: RoomQuestion[] }>({
+    action: 'questionList',
+    code,
+    name,
+  });
+  return body.questions;
 }
