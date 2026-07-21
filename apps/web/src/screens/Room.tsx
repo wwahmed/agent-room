@@ -5,6 +5,7 @@ import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { Inspector, type InspectorTab } from '../components/Inspector.js';
 import { RecoverHostButton } from '../components/RecoverHostButton.js';
+import { RenameRoomControl } from '../components/RenameRoomControl.js';
 import { WorkspaceRail } from '../components/WorkspaceRail.js';
 import { RoomListPane } from '../components/RoomListPane.js';
 import { ProjectPanel } from '../components/ProjectPanel.js';
@@ -120,7 +121,7 @@ export function Room() {
     })();
     return () => { cancelled = true; };
   }, [self, code, navigate]);
-  const { room, messages, error, sendMessage, refreshRoom, forceRefresh, messageTotal } = useRoom(code, self?.name ?? '');
+  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
@@ -504,9 +505,34 @@ export function Room() {
     prevLenRef.current = len;
   }, [messages.length]);
 
-  if (error) return <div className="p-10 text-red-600">{error}</div>;
+  // T-07: `error` is only ever set when the room has NOT loaded (mid-session
+  // blips set `degraded` instead), so this branch is the bootstrap-failure
+  // state: actionable copy + retry, not a raw exception filling the screen.
+  // Polling keeps running underneath, so it also self-heals without a tap.
+  if (error) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
+        <div className="text-3xl" aria-hidden="true">📡</div>
+        <h2 className="text-lg font-semibold text-ink">Can't reach the room</h2>
+        <p className="max-w-sm text-sm text-ink-soft">{error}</p>
+        <button
+          onClick={() => { void forceRefresh(); }}
+          className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+        >
+          Retry now
+        </button>
+      </div>
+    );
+  }
   if (!self) return <div className="p-10 text-ink-soft">Redirecting to join…</div>;
-  if (!room) return <div className="p-10 text-ink-soft">Loading…</div>;
+  if (!room) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 p-10 text-ink-soft" aria-live="polite">
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />
+        <span className="text-sm">Loading the room…</span>
+      </div>
+    );
+  }
 
   // From here down `self` is non-null (early-returned above). Capture it in a
   // narrowed const so closures inside JSX don't have to re-check.
@@ -864,6 +890,7 @@ export function Room() {
             <div className="p-4 border-b border-border-faint">
               <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Room</div>
               <h2 className="text-sm font-semibold leading-snug">{room.topic}</h2>
+              <RenameRoomControl room={room} isHost={isHost} onRenamed={() => { void refreshRoom(); }} />
               <div className="mt-3">
                 <MeetingCodePill code={code} />
               </div>
@@ -1141,6 +1168,18 @@ export function Room() {
           onToggleInspector={() => setInspectorOpen(v => !v)}
         />
 
+        {/* T-07: mid-session poll failures surface as this quiet strip while the
+            interval retries underneath — never as a screen-replacing error. */}
+        {degraded && (
+          <div
+            role="status"
+            className="flex flex-shrink-0 items-center justify-center gap-2 border-b border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-[12px] font-semibold text-amber-500"
+          >
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400/40 border-t-amber-500" aria-hidden="true" />
+            Connection hiccup — reconnecting…
+          </div>
+        )}
+
         {/* T-64 (host: "instead of a sidebar with tabs, make all tabs peers of
             the chat, so there's more space"). People/Project/Outputs/Room used to
             live in a permanent 320px right column that squeezed the conversation
@@ -1383,7 +1422,7 @@ export function Room() {
                     the input keeps its full width; the tools live on their own
                     compact row below it inside the same bordered surface, so the
                     typing area is never squeezed by active buttons on mobile. */}
-                <div className="rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
+                <div className="relative rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
                 <textarea
                   ref={textareaRef}
                   value={text}

@@ -35,53 +35,10 @@ function mmss(ms: number): string {
 const IDLE: DictationSnapshot = { state: 'idle', finalText: '', interim: '', elapsedMs: 0, error: null };
 const BARS = 22;
 
-// Truthful mic-level meter: taps the real input via getUserMedia + an
-// AnalyserNode and returns a 0..1 RMS level while `active`. If the mic can't be
-// tapped it stays 0 — the waveform then rides a gentle synthetic idle so the
-// bar still visibly signals "recording".
-function useMicLevel(active: boolean): number {
-  const [level, setLevel] = useState(0);
-  useEffect(() => {
-    if (!active) { setLevel(0); return; }
-    const AC: typeof AudioContext | undefined =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (!AC || !navigator.mediaDevices?.getUserMedia) return;
-    let stream: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
-    let raf = 0;
-    let cancelled = false;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(s => {
-      if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
-      stream = s;
-      ctx = new AC();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      ctx.createMediaStreamSource(s).connect(analyser);
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        analyser.getByteTimeDomainData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) { const v = ((data[i] ?? 128) - 128) / 128; sum += v * v; }
-        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3.2));
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    }).catch(() => { /* no level available; synthetic idle animation carries the waveform */ });
-    return () => {
-      cancelled = true;
-      if (raf) cancelAnimationFrame(raf);
-      stream?.getTracks().forEach(t => t.stop());
-      ctx?.close().catch(() => {});
-    };
-  }, [active]);
-  return level;
-}
-
 export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled }: Props) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const [tick, setTick] = useState(0);
   const ctrlRef = useRef<DictationController | null>(null);
-  const level = useMicLevel(snap.state === 'recording');
 
   // The controller is created once; keep the latest callbacks in refs so its
   // long-lived onChange/onFinalize always call the current handlers.
@@ -126,8 +83,6 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
     return ctrlRef.current;
   }
 
-  const preview = (snap.finalText + ' ' + snap.interim).trim();
-
   return (
     <div className="flex-shrink-0">
       <button
@@ -153,23 +108,23 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
       </button>
 
       {active && (
-        // T-57 (host: "recording strip so small and doesn't work"): a full-width
-        // recording bar pinned to the bottom, replacing the composer while
-        // active — big discard · live ●+timer · animated waveform · big send,
-        // WhatsApp-style. Timer + waveform driven by the tick above.
+        // T-02 rev2 (was T-57's full-screen fixed bar): the recorder now overlays
+        // ONLY the composer's tool row — anchored to the bordered wrapper, which
+        // is position:relative — so the textarea above stays visible while T-01
+        // streams the live transcript into it. Discard · ●+timer · waveform ·
+        // insert, driven by the tick above.
         <div
           role="group"
           aria-label="Voice recording"
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface px-3 pt-3 shadow-2xl"
-          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+          className="absolute inset-x-0 bottom-0 z-10 rounded-b-2xl border-t border-border bg-surface px-2 py-1"
         >
-          <div className="mx-auto flex w-full max-w-[860px] items-center gap-3">
+          <div className="flex w-full items-center gap-3">
             <button
               type="button"
               onClick={() => { controller().cancel(); onCancel?.(); }}
               aria-label="Discard recording"
               title="Discard"
-              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
             >
               <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 4.5h10M6.4 4.5V3.6a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v.9M4.8 4.5l.4 8a1 1 0 0 0 1 .95h3.6a1 1 0 0 0 1-.95l.4-8" />
@@ -181,11 +136,13 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
               <span className="font-mono text-[16px] tabular-nums text-ink" aria-label={`Recording ${mmss(snap.elapsedMs)}`}>{mmss(snap.elapsedMs)}</span>
             </span>
 
-            {/* live waveform: real mic level drives amplitude; a gentle synthetic
-                sine keeps the bars moving even when the mic can't be tapped */}
+            {/* Activity animation only. Do NOT open a second getUserMedia stream
+                here: Web Speech owns the microphone for this session. The old
+                analyser could show live bars while starving recognition on some
+                browser/device combinations. */}
             <span className="flex h-8 flex-1 items-center justify-center gap-[3px] overflow-hidden" aria-hidden="true">
               {Array.from({ length: BARS }, (_, i) => {
-                const amp = 4 + level * 26;
+                const amp = 11;
                 const h = 3 + Math.abs(Math.sin(tick * 0.6 + i * 0.7)) * amp;
                 return (
                   <span
@@ -202,23 +159,25 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
               onClick={() => controller().stop()}
               aria-label="Send transcript to the message box"
               title="Insert transcript"
-              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:opacity-90"
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:opacity-90"
             >
               <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true">
                 <path d="M2 7.4 13.2 2.6a.5.5 0 0 1 .66.64L9.3 14.2a.5.5 0 0 1-.94-.02L7 9.6 2.02 8.35a.5.5 0 0 1-.02-.95Z" />
               </svg>
             </button>
           </div>
+          {/* No transcript preview here anymore: the live text streams into the
+              textarea directly above (T-01), which stays visible now that this
+              strip no longer covers the whole composer. */}
+        </div>
+      )}
 
-          {(preview || snap.error) && (
-            <div className="mx-auto mt-2 w-full max-w-[860px] px-1">
-              {snap.error ? (
-                <span className="text-[12px] font-semibold text-red-300">{snap.error}</span>
-              ) : (
-                <span className="line-clamp-2 text-[13px] text-ink-soft">{preview}</span>
-              )}
-            </div>
-          )}
+      {!active && snap.error && (
+        <div
+          role="alert"
+          className="fixed bottom-20 left-1/2 z-50 w-[min(92vw,34rem)] -translate-x-1/2 rounded-xl border border-red-400/40 bg-red-950 px-4 py-3 text-sm font-semibold text-red-100 shadow-2xl"
+        >
+          {snap.error}
         </div>
       )}
     </div>

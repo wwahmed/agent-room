@@ -20,14 +20,30 @@ interface UseRoomState {
   room: Room | null;
   messages: Message[];
   error: string | null;
+  /** T-07: true while polls are failing AFTER the room has loaded. The UI shows
+   *  a small "reconnecting" hint instead of replacing the whole screen — a
+   *  mid-session blip must never wipe an already-rendered room. */
+  degraded: boolean;
   /** T-62: the server's ABSOLUTE message counter (survives LTRIM). This is the
    *  currency the unread badge is denominated in — the retained list length
    *  would silently under-count once history is trimmed. */
   messageTotal: number;
 }
 
+// T-07: users were seeing a raw "TypeError: Failed to fetch" fill the screen
+// when the first fetch fired before the network was up (typical on a phone
+// resuming from background). Map transport-level noise to something a human
+// can act on; keep real server messages as-is.
+export function friendlyError(e: unknown): string {
+  const s = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  if (/failed to fetch|networkerror|load failed|fetch failed|abort/i.test(s)) {
+    return "Can't reach the room server. Check your connection — retrying automatically.";
+  }
+  return s;
+}
+
 export function useRoom(code: string, selfName: string) {
-  const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null, messageTotal: 0 });
+  const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null, degraded: false, messageTotal: 0 });
   const cursor = useRef(0);
   const clientRef = useRef(createClient());
 
@@ -60,6 +76,11 @@ export function useRoom(code: string, selfName: string) {
     console.debug(traceTag, 'pullMessages.fire', { cursor: cursor.current, t: startedAt });
     try {
       const fresh = await listMessages(clientRef.current, code, cursor.current);
+      // T-07: any successful poll heals both failure indicators. Before this,
+      // only forceRefresh cleared `error`, so a single failed poll left the
+      // full-screen error up until the next visibilitychange — the "transient
+      // error that eventually goes away" Waqas reported.
+      setState(s => (s.error !== null || s.degraded) ? { ...s, error: null, degraded: false } : s);
       console.debug(traceTag, 'pullMessages.fetched', {
         fresh: fresh.length,
         ms: Date.now() - startedAt,
@@ -118,7 +139,13 @@ export function useRoom(code: string, selfName: string) {
       });
     } catch (e) {
       console.debug(traceTag, 'pullMessages.error', e);
-      setState(s => ({ ...s, error: String(e) }));
+      // T-07: a failure with the room already on screen degrades quietly (the
+      // interval keeps retrying); only a failure with NOTHING loaded yet may
+      // claim the screen, and then with an actionable message, not a raw
+      // TypeError.
+      setState(s => s.room
+        ? (s.degraded ? s : { ...s, degraded: true })
+        : { ...s, error: friendlyError(e) });
     } finally {
       inFlightRef.current = null;
     }
@@ -127,9 +154,11 @@ export function useRoom(code: string, selfName: string) {
   const pullRoom = useCallback(async () => {
     try {
       const r = await getRoom(clientRef.current, code);
-      setState(s => ({ ...s, room: r }));
+      setState(s => ({ ...s, room: r, error: null, degraded: false }));
     } catch (e) {
-      setState(s => ({ ...s, error: String(e) }));
+      setState(s => s.room
+        ? (s.degraded ? s : { ...s, degraded: true })
+        : { ...s, error: friendlyError(e) });
     }
   }, [code]);
 
@@ -156,15 +185,17 @@ export function useRoom(code: string, selfName: string) {
       ]);
       // Match server-side logical cursor (counter) so polling stays correct after LTRIM; legacy rooms fall back.
       cursor.current = total ?? fresh.length;
-      setState({ room: r, messages: fresh, error: null, messageTotal: cursor.current });
+      setState({ room: r, messages: fresh, error: null, degraded: false, messageTotal: cursor.current });
     } catch (e) {
-      setState(s => ({ ...s, error: String(e) }));
+      setState(s => s.room
+        ? (s.degraded ? s : { ...s, degraded: true })
+        : { ...s, error: friendlyError(e) });
     }
   }, [code]);
 
   useEffect(() => {
     cursor.current = 0;
-    setState({ room: null, messages: [], error: null, messageTotal: 0 });
+    setState({ room: null, messages: [], error: null, degraded: false, messageTotal: 0 });
 
     let msgTimer: ReturnType<typeof setInterval> | null = null;
     let roomTimer: ReturnType<typeof setInterval> | null = null;
