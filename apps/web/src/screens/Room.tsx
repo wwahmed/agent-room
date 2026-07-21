@@ -65,12 +65,14 @@ function readStoredSelf(code: string): SelfIdentity | null {
 // always-four-line resting height.
 // T-64: Chat sits alongside the former Inspector tabs as an equal.
 type MainTab = 'chat' | InspectorTab;
-const MAIN_TABS: Array<{ key: MainTab; label: string }> = [
-  { key: 'chat', label: 'Chat' },
-  { key: 'people', label: 'People' },
-  { key: 'project', label: 'Project' },
-  { key: 'outputs', label: 'Outputs' },
-  { key: 'room', label: 'Room' },
+// T-42: every tab is icon + text label — the 16px/1.5-stroke line set from the
+// T-38 charter. Icons disambiguate at a glance; the label is never dropped.
+const MAIN_TABS: Array<{ key: MainTab; label: string; icon: React.ReactNode }> = [
+  { key: 'chat', label: 'Chat', icon: <path d="M2 3.5h12v8H8.5L5 14v-2.5H2v-8Z" /> },
+  { key: 'people', label: 'People', icon: <><circle cx="5.5" cy="5" r="2.25" /><path d="M1.75 13c.5-2.2 2-3.5 3.75-3.5S8.75 10.8 9.25 13" /><circle cx="11.5" cy="5.5" r="1.75" /><path d="M10.9 9.6c1.6.2 2.8 1.4 3.2 3.4" /></> },
+  { key: 'project', label: 'Project', icon: <><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M2 6h12" /></> },
+  { key: 'outputs', label: 'Outputs', icon: <><path d="M8 1.75 14 4.5v7L8 14.25 2 11.5v-7L8 1.75Z" /><path d="M2 4.5 8 7.25l6-2.75M8 7.25v7" /></> },
+  { key: 'room', label: 'Room', icon: <><circle cx="8" cy="8" r="6" /><path d="M8 5.25v.1M8 7.5V11" /></> },
 ];
 
 const STATE_TONE_PRESENCE = {
@@ -184,24 +186,26 @@ export function Room() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [code, room?.createdBy, self?.name]);
 
-  // T-25: room-card health pills deep-link to /r/CODE?panel=people so the host
-  // lands directly on the diagnosis view. Desktop gets the People peer tab,
-  // mobile the inspector sheet; the param is then stripped so refreshes and
-  // back-navigation return to plain chat. T-34: keyed on location.search too —
-  // the pane facepile can target the room that is ALREADY open, which changes
-  // only the query string, not `code`.
+  // T-42: DURABLE panel deep-links. /r/CODE?panel=<tab> is a real address for
+  // every panel (people/project/outputs/room): landing on it opens that tab,
+  // refreshing keeps it, and switching tabs rewrites the param in place
+  // (replaceState — no history spam, so Back still leaves the room). T-34:
+  // keyed on location.search so the pane facepile can target the room that is
+  // ALREADY open, which changes only the query string, not `code`.
   const location = useLocation();
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('panel') !== 'people') return;
-    // T-30: the tab bar exists at every width now, so the People PEER TAB is
-    // the single deep-link target — opening the sheet too double-presented it.
-    setMainTab('people');
-    params.delete('panel');
-    const query = params.toString();
-    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    const panel = new URLSearchParams(window.location.search).get('panel');
+    if (panel && MAIN_TABS.some(t => t.key === panel)) setMainTab(panel as MainTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, location.search]);
+  const selectTab = (tab: MainTab) => {
+    setMainTab(tab);
+    const params = new URLSearchParams(window.location.search);
+    if (tab === 'chat') params.delete('panel');
+    else params.set('panel', tab);
+    const query = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+  };
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
   // T-68: the SERVER's listen-loop verdict (T-66 `health`). The web no longer
@@ -1426,12 +1430,16 @@ export function Room() {
           onShare={() => copyText(joinUrl, 'Invite link copied')}
           onToggleInspector={() => setInspectorOpen(v => !v)}
           mentionNav={selfMentionIds.length > 0 ? (
-            // T-18 rev2: the standing prev/next entry point, parked by the
-            // title per the UX spec. Quiet by default; amber only while unseen
-            // mentions exist. 44px targets, explicit labels.
+            // T-18 rev2 + T-42 (UX: "@↑ 29 @↓ is cryptic"): the counter now
+            // SAYS what it counts — "3 mentions" / "1/3 mentions" — and the
+            // steppers are chevron icons with full accessible names. Quiet by
+            // default; amber only while unseen mentions exist. 44px targets.
             (() => {
               const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
               const tone = unseenMentions > 0 ? 'text-amber-500' : 'text-ink-soft';
+              const counter = pos === -1
+                ? `${selfMentionIds.length} mention${selfMentionIds.length === 1 ? '' : 's'}`
+                : `${pos + 1}/${selfMentionIds.length} mentions`;
               return (
                 <span role="group" aria-label="Step through mentions of you" className="flex flex-shrink-0 items-center">
                   <button
@@ -1440,12 +1448,14 @@ export function Room() {
                     disabled={mentionSeeking}
                     aria-label="Previous mention of you"
                     title="Previous mention of you"
-                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[13px] font-bold transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
+                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
                   >
-                    @↑
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m3.5 10 4.5-5 4.5 5" />
+                    </svg>
                   </button>
-                  <span className={`text-[12px] font-semibold tabular-nums ${tone}`} aria-hidden="true">
-                    {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
+                  <span className={`whitespace-nowrap text-[12px] font-semibold tabular-nums ${tone}`} aria-hidden="true">
+                    @ {counter}
                   </span>
                   <button
                     type="button"
@@ -1453,9 +1463,11 @@ export function Room() {
                     disabled={mentionSeeking}
                     aria-label="Next mention of you"
                     title="Next mention of you"
-                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[13px] font-bold transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
+                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
                   >
-                    @↓
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m3.5 6 4.5 5 4.5-5" />
+                    </svg>
                   </button>
                 </span>
               );
@@ -1481,18 +1493,24 @@ export function Room() {
             text labels, horizontally scrollable when narrow, never icon-only.
             The header people icon still opens the slide-over sheet as a
             shortcut, but the tabs are the primary navigation everywhere. */}
-        <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-faint px-3">
+        {/* T-42: proper tablist semantics + icon-and-label tabs; selecting a
+            tab rewrites ?panel= so every panel is a durable address. */}
+        <div role="tablist" aria-label="Room sections" className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-faint px-3">
           {MAIN_TABS.map(t => (
             <button
               key={t.key}
-              onClick={() => setMainTab(t.key)}
-              aria-current={mainTab === t.key ? 'page' : undefined}
-              className={`-mb-px min-h-11 border-b-2 px-3 text-[14px] font-semibold transition ${
+              role="tab"
+              aria-selected={mainTab === t.key}
+              onClick={() => selectTab(t.key)}
+              className={`-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-3 text-[14px] font-semibold transition ${
                 mainTab === t.key
                   ? 'border-accent text-accent'
                   : 'border-transparent text-ink-soft hover:text-ink'
               }`}
             >
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {t.icon}
+              </svg>
               {t.label}
             </button>
           ))}

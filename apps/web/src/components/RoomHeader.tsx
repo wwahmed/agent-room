@@ -31,10 +31,12 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
           "top bar and buttons are microscopic"): taller bar, larger title,
           bigger icon controls. */}
       <div className="mx-auto flex h-full w-full max-w-[860px] items-center gap-1.5">
+      {/* T-42: back stays visible until the rooms PANE takes over navigation
+          (xl). It was lg:hidden, leaving the lg..xl band with no way back. */}
       <Link
         to="/"
         aria-label="Back to rooms"
-        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-softer hover:text-ink lg:hidden"
+        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-softer hover:text-ink xl:hidden"
       >
         <svg viewBox="0 0 16 16" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M10.5 3 5.5 8l5 5" />
