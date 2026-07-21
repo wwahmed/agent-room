@@ -1469,11 +1469,11 @@ export function Room() {
         <div className={`min-h-0 flex-1 flex-col ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
 
             <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto py-4 relative">
-              {/* T-21: cap the text column at a comfortable reading measure
-                  on wide monitors; the feed surface stays full-bleed. Self
-                  messages right-align WITHIN the measure instead of
-                  stranding at the far edge of an ultrawide. */}
-              <div className="mx-auto w-full max-w-[860px]">
+              {/* T-48: the conversation canvas uses the desktop pane instead
+                  of stopping at the old 860px rail. MessageRow still caps prose
+                  at 68ch, so added canvas width improves alignment and gives
+                  images/artifacts room without creating unreadably long text. */}
+              <div className="mx-auto w-full max-w-[1120px]">
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
               {hasOlder && (
@@ -1667,8 +1667,8 @@ export function Room() {
                     Release to attach
                   </div>
                 )}
-                {/* T-21: composer aligns to the same reading measure as the feed. */}
-                <div className="mx-auto flex w-full max-w-[860px] flex-col gap-2">
+                {/* T-48: composer aligns to the wider conversation canvas. */}
+                <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-2">
                 {isHost && mutedCount > 0 && (
                   <div className="text-[12px] font-semibold text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-md px-2 py-1.5 flex items-center gap-2">
                     <span>🔇</span>
