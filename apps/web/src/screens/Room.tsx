@@ -41,7 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, isCurrentSeek, outputsViewState, railSectionCount, seekPageBudget, seekStep, type ArtifactFetchState } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, isCurrentSeek, outputsViewState, railSectionCount, seekExitRecovery, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
@@ -309,10 +309,31 @@ export function Room() {
   seekIdRef.current = sourceSeekId;
   const codeRef = useRef(code);
   codeRef.current = code;
+  // rev20b: ONE recovery state keyed to the originating source. Both
+  // recoverable exits (failed page, budget exhaustion) land here; the card
+  // itself renders the inline error + Retry source jump.
+  const [seekFailure, setSeekFailure] = useState<SeekRecovery | null>(null);
+  const enterSeekExit = (exit: 'failed-page' | 'give-up-trimmed' | 'give-up-error', sourceMessageId: number) => {
+    seekGenRef.current += 1;
+    seekAttemptsRef.current = 0;
+    setSourceSeekId(null);
+    const { recovery, terminalToast } = seekExitRecovery(exit, sourceMessageId);
+    setSeekFailure(recovery);
+    if (recovery) {
+      selectTab('outputs');
+      window.setTimeout(() => {
+        const card = document.querySelector<HTMLElement>(`[data-source-card="${sourceMessageId}"]`);
+        if (card) { card.scrollIntoView({ block: 'center' }); card.focus(); }
+      }, 150);
+    }
+    if (terminalToast) {
+      void import('../components/Toast.js').then(({ showToast }) => showToast(terminalToast, 'error'));
+    }
+  };
   // Room change must not spill an interrupted seek's paging state into the
   // next room (rev18 review); bumping the generation makes any in-flight
   // completion from the old room inert.
-  useEffect(() => { seekGenRef.current += 1; setSourceSeekId(null); seekAttemptsRef.current = 0; }, [code]);
+  useEffect(() => { seekGenRef.current += 1; setSourceSeekId(null); setSeekFailure(null); seekAttemptsRef.current = 0; }, [code]);
   useEffect(() => {
     if (sourceSeekId == null) return;
     const action = seekStep(
@@ -324,6 +345,7 @@ export function Room() {
     );
     if (action === 'found') {
       setSourceSeekId(null);
+      setSeekFailure(null);
       seekAttemptsRef.current = 0;
       window.setTimeout(() => {
         const el = document.getElementById(`msg-${sourceSeekId}`);
@@ -335,12 +357,7 @@ export function Room() {
         armArrivalFlash(el, feedRef.current, 'onscrollend' in window);
       }, 60);
     } else if (action === 'give-up-trimmed' || action === 'give-up-error') {
-      setSourceSeekId(null);
-      seekAttemptsRef.current = 0;
-      void import('../components/Toast.js').then(({ showToast }) =>
-        showToast(action === 'give-up-trimmed'
-          ? 'The source message is no longer available in this room\u2019s history.'
-          : 'Couldn\u2019t load enough history to reach the source message. Try again.', 'error'));
+      enterSeekExit(action, sourceSeekId);
     } else if (action === 'load-more') {
       seekAttemptsRef.current += 1;
       const ticket = { generation: seekGenRef.current, code, target: sourceSeekId };
@@ -350,14 +367,7 @@ export function Room() {
         // speaks for the current seek (generation + room + target). A stale
         // resolution after a room switch or superseding seek is inert.
         if (!isCurrentSeek(ticket, { generation: seekGenRef.current, code: codeRef.current, target: seekIdRef.current })) return;
-        seekGenRef.current += 1;
-        seekAttemptsRef.current = 0;
-        setSourceSeekId(null);
-        // Actionable recovery (rev19 item 3): return the reader to the
-        // Outputs card whose View in chat IS the retry control.
-        selectTab('outputs');
-        void import('../components/Toast.js').then(({ showToast }) =>
-          showToast('Couldn\u2019t load older history to reach the source. Tap View in chat to retry.', 'error'));
+        enterSeekExit('failed-page', ticket.target as number);
       });
     } // 'wait': a page is already in flight
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2614,7 +2624,9 @@ export function Room() {
                 key={artifact.id}
                 artifact={artifact}
                 now={now}
+                failed={seekFailure?.sourceMessageId === artifact.sourceMessageId}
                 onOpenSource={messageId => {
+                  setSeekFailure(null);
                   selectTab('chat');
                   seekGenRef.current += 1;
                   seekAttemptsRef.current = 0;
@@ -2709,10 +2721,14 @@ function outputKindLabel(kind: ArtifactKind): string {
   return kind === 'todo' ? 'Action' : artifactLabel(kind);
 }
 
-function ArtifactCard({ artifact, now, onOpenSource }: { artifact: RoomArtifact; now?: number; onOpenSource?: (messageId: number) => void }) {
+function ArtifactCard({ artifact, now, failed, onOpenSource }: { artifact: RoomArtifact; now?: number; failed?: boolean; onOpenSource?: (messageId: number) => void }) {
   const { title, summary } = artifactParts(artifact.text);
   return (
-    <div className="rounded-xl border border-border-faint bg-surface-softer p-3.5">
+    <div
+      data-source-card={artifact.sourceMessageId}
+      tabIndex={-1}
+      className={`rounded-xl border bg-surface-softer p-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${failed ? 'border-red-400/40' : 'border-border-faint'}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className={`msg-meta font-semibold uppercase ${artifactTone(artifact.kind)}`}>
           {outputKindLabel(artifact.kind)}
@@ -2725,15 +2741,22 @@ function ArtifactCard({ artifact, now, onOpenSource }: { artifact: RoomArtifact;
           <ClampedNoteBody text={summary} expandLabel="Show the full output" dataRole="artifact-body" />
         </div>
       )}
+      {/* rev20b: the failed card carries its own inline error and the
+          relabeled retry — recovery lives ON the originating card. */}
+      {failed && (
+        <div role="alert" className="mt-2 rounded-lg border border-red-400/30 bg-red-500/5 px-3 py-2 text-[15px] leading-relaxed text-red-400 sm:text-[14px]">
+          The jump to this source failed — history couldn't be loaded.
+        </div>
+      )}
       {/* Provenance beats vague export (design lead): every work object
           links back to its source message. */}
       {onOpenSource && (
         <button
           type="button"
           onClick={() => onOpenSource(artifact.sourceMessageId)}
-          className="msg-disclosure -mb-1.5 -ml-2 mt-0.5 flex h-11 items-center px-2 text-ink-soft transition hover:text-accent"
+          className={`msg-disclosure -mb-1.5 -ml-2 mt-0.5 flex h-11 items-center px-2 transition ${failed ? 'font-semibold text-red-400 hover:text-red-300' : 'text-ink-soft hover:text-accent'}`}
         >
-          View in chat
+          {failed ? 'Retry source jump' : 'View in chat'}
         </button>
       )}
     </div>

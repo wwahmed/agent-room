@@ -69,3 +69,16 @@ export function isCurrentSeek(ticket: SeekTicket, current: { generation: number;
     && ticket.code === current.code
     && ticket.target === current.target;
 }
+
+export type SeekExit = 'found' | 'failed-page' | 'give-up-trimmed' | 'give-up-error';
+export interface SeekRecovery { sourceMessageId: number; reason: 'failed-page' | 'exhausted' }
+
+/** rev20b: BOTH recoverable exits route through one recovery state keyed to
+ *  the originating source; the genuinely trimmed source is terminal — toast
+ *  only, never a retry. */
+export function seekExitRecovery(exit: SeekExit, sourceMessageId: number): { recovery: SeekRecovery | null; terminalToast: string | null } {
+  if (exit === 'failed-page') return { recovery: { sourceMessageId, reason: 'failed-page' }, terminalToast: null };
+  if (exit === 'give-up-error') return { recovery: { sourceMessageId, reason: 'exhausted' }, terminalToast: null };
+  if (exit === 'give-up-trimmed') return { recovery: null, terminalToast: 'The source message is no longer available in this room\u2019s history.' };
+  return { recovery: null, terminalToast: null };
+}

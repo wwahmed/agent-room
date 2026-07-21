@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, isCurrentSeek, seekPageBudget, seekStep } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, isCurrentSeek, seekExitRecovery, seekPageBudget, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -55,5 +55,20 @@ describe('isCurrentSeek (rev19: stale completions are inert)', () => {
     expect(isCurrentSeek(ticket, { generation: 3, code: 'BBB', target: 42 })).toBe(false);
     expect(isCurrentSeek(ticket, { generation: 4, code: 'AAA', target: 42 })).toBe(false);
     expect(isCurrentSeek(ticket, { generation: 3, code: 'AAA', target: null })).toBe(false);
+  });
+});
+
+describe('seekExitRecovery (rev20b: one recovery state, both recoverable exits)', () => {
+  it('failed-page and exhausted both produce card-keyed recovery, no toast', () => {
+    expect(seekExitRecovery('failed-page', 7)).toEqual({ recovery: { sourceMessageId: 7, reason: 'failed-page' }, terminalToast: null });
+    expect(seekExitRecovery('give-up-error', 7)).toEqual({ recovery: { sourceMessageId: 7, reason: 'exhausted' }, terminalToast: null });
+  });
+  it('a trimmed source is TERMINAL: toast, never a retry state', () => {
+    const r = seekExitRecovery('give-up-trimmed', 7);
+    expect(r.recovery).toBeNull();
+    expect(r.terminalToast).toContain('no longer available');
+  });
+  it('success clears everything', () => {
+    expect(seekExitRecovery('found', 7)).toEqual({ recovery: null, terminalToast: null });
   });
 });
