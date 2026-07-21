@@ -161,8 +161,17 @@ body {
   to { transform: scale(1); opacity: 1; }
 }
 .facepile-degrade { animation: facepile-degrade 300ms ease-out; }
+
+/* Delight kit 4: presence arrival — one 400ms scale-in with a green ring
+   ripple when a NEW agent joins the cluster. Single-shot, never on mount. */
+@keyframes facepile-arrive {
+  0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgb(var(--success) / 0.55); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); box-shadow: 0 0 0 10px rgb(var(--success) / 0); }
+}
+.facepile-arrive { animation: facepile-arrive 400ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  .facepile-degrade { animation: none; }
+  .facepile-degrade, .facepile-arrive { animation: none; }
 }
 
 /* T-46 (UX header spec): the sanctioned brand wash — surface-1 base with a
@@ -175,16 +184,82 @@ body {
     rgb(var(--surface-1, var(--surface)));
 }
 
-/* T-58: the room uses one continuous command surface across every desktop
-   column. A restrained brand tint gives the left edge hierarchy; the border
-   and short shadow separate chrome from work without a heavy floating slab. */
+/* T-60: a confident command surface, keyed to the composer's focus glow.
+   Layered violet + cyan light gives the chrome its own atmosphere without
+   tinting the reading canvas. The bottom edge is a luminous gradient rather
+   than another flat divider, so header and room no longer read as one sheet. */
 .app-command-bar {
+  isolation: isolate;
+  overflow: visible;
   background:
-    radial-gradient(620px 130px at 6% 0%, rgb(var(--accent) / 0.09), transparent 68%),
-    rgb(var(--surface-1, var(--surface)));
+    radial-gradient(820px 170px at 9% -105%, rgb(var(--accent) / 0.48), transparent 68%),
+    radial-gradient(620px 150px at 82% -120%, rgb(34 211 238 / 0.22), transparent 72%),
+    linear-gradient(105deg, rgb(var(--surface-2) / 0.98), rgb(var(--surface-1) / 0.97) 46%, rgb(var(--accent-tint) / 0.86));
   box-shadow:
-    0 1px 0 rgb(var(--border) / 0.35),
-    0 12px 28px -28px rgb(0 0 0 / 0.48);
+    0 12px 34px -24px rgb(var(--accent) / 0.56),
+    0 16px 38px -30px rgb(0 0 0 / 0.72);
+}
+.app-command-bar::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 1%, rgb(var(--accent) / 0.76) 12%, rgb(34 211 238 / 0.44) 50%, rgb(var(--accent) / 0.5) 84%, transparent 99%);
+  box-shadow: 0 2px 16px rgb(var(--accent) / 0.24);
+}
+.header-brand-orb {
+  position: relative;
+  background: linear-gradient(145deg, rgb(var(--accent) / 0.18), rgb(34 211 238 / 0.08));
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-deep) / 0.12), 0 8px 24px -12px rgb(var(--accent) / 0.9);
+}
+.header-brand-orb:hover {
+  background: linear-gradient(145deg, rgb(var(--accent) / 0.28), rgb(34 211 238 / 0.14));
+}
+.header-room-identity {
+  border: 1px solid transparent;
+  background: linear-gradient(110deg, rgb(var(--surface-1) / 0.26), transparent);
+}
+.header-room-identity:hover {
+  border-color: rgb(var(--accent) / 0.22);
+  background: linear-gradient(110deg, rgb(var(--accent) / 0.12), rgb(var(--surface-1) / 0.34));
+}
+.header-room-presence {
+  background: rgb(var(--surface-0) / 0.28);
+  box-shadow: inset 0 0 0 1px rgb(var(--border-faint) / 0.62);
+}
+.header-live-dot {
+  box-shadow: 0 0 0 3px rgb(var(--success) / 0.11), 0 0 10px rgb(var(--success) / 0.7);
+}
+.header-search-field {
+  border: 1px solid rgb(var(--accent) / 0.22);
+  background: linear-gradient(110deg, rgb(var(--surface-0) / 0.78), rgb(var(--surface-1) / 0.66));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 8px 24px -18px rgb(var(--accent) / 0.8);
+}
+.group:hover > .header-search-field {
+  border-color: rgb(var(--accent) / 0.52);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 8px 26px -14px rgb(var(--accent) / 0.72);
+}
+.header-team-pill {
+  border: 1px solid rgb(var(--success) / 0.2);
+  background: linear-gradient(110deg, rgb(var(--success) / 0.1), rgb(var(--surface-1) / 0.36));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 8px 22px -18px rgb(var(--success) / 0.75);
+}
+.header-team-pill:hover {
+  border-color: rgb(var(--success) / 0.34);
+  background: linear-gradient(110deg, rgb(var(--success) / 0.15), rgb(var(--surface-1) / 0.44));
+}
+.header-team-pill-warn {
+  border-color: rgb(var(--warning) / 0.28);
+  background: linear-gradient(110deg, rgb(var(--warning) / 0.12), rgb(var(--surface-1) / 0.38));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 8px 22px -18px rgb(var(--warning) / 0.7);
+}
+:root[data-theme='light'] .app-command-bar {
+  background:
+    radial-gradient(820px 170px at 9% -105%, rgb(var(--accent) / 0.32), transparent 68%),
+    radial-gradient(620px 150px at 82% -120%, rgb(8 145 178 / 0.15), transparent 72%),
+    linear-gradient(105deg, rgb(247 248 255), rgb(var(--surface-1)) 48%, rgb(var(--accent-tint) / 0.94));
+  box-shadow: 0 12px 34px -26px rgb(var(--accent) / 0.42), 0 6px 18px -14px rgb(15 23 42 / 0.28);
 }
 
 /* T-46: shared single-run entry motions for transient system surfaces.

@@ -89,6 +89,26 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
     return () => window.clearTimeout(timer);
   }, [agentStaleCount]);
 
+  // Delight kit item 4 (light follows attention): a newly ARRIVED agent's
+  // face scales 0.8 -> 1 with one 400ms green ring ripple. Never on mount
+  // (prev starts as the current roster), never looping, reduced-motion
+  // guarded in CSS like every other single-shot here.
+  const prevNames = useRef<Set<string> | null>(null);
+  const [arrived, setArrived] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const names = new Set(agents.map(a => a.name));
+    if (prevNames.current) {
+      const fresh = [...names].filter(n => !prevNames.current!.has(n));
+      if (fresh.length) {
+        setArrived(new Set(fresh));
+        const timer = window.setTimeout(() => setArrived(new Set()), 450);
+        prevNames.current = names;
+        return () => window.clearTimeout(timer);
+      }
+    }
+    prevNames.current = names;
+  }, [agents]);
+
   if (agentCount <= 0) return null;
 
   const size = compact ? 'h-5 w-5 text-fixed text-[10px]' : 'h-7 w-7 text-[12px]';
@@ -127,7 +147,7 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
                 key={`${agent.name}-${i}`}
                 className={`${size} ${i > 0 ? overlap : ''} text-fixed relative flex items-center justify-center rounded-full font-bold text-white ring-2 ring-surface ${
                   isStaleState(agent.state) ? 'opacity-45 grayscale' : ''
-                }`}
+                } ${arrived.has(agent.name) ? 'facepile-arrive' : ''}`}
                 style={{ backgroundColor: agent.color, zIndex: visible.length + 1 - i }}
                 aria-hidden="true"
               >
