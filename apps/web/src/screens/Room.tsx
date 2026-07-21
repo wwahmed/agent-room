@@ -891,22 +891,22 @@ export function Room() {
   // columns + mobile tab bar became one toggleable Inspector).
   const roomInfoPanel = (
             <div className="p-4 border-b border-border-faint">
-              <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Room</div>
-              <h2 className="text-sm font-semibold leading-snug">{room.topic}</h2>
+              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Room</div>
+              <h2 className="text-[15px] font-semibold leading-snug lg:text-sm">{room.topic}</h2>
               <RenameRoomControl room={room} isHost={isHost} onRenamed={() => { void refreshRoom(); }} />
               <div className="mt-3">
                 <MeetingCodePill code={code} />
               </div>
               <button
                 onClick={() => copyText(joinUrl, 'Invite link copied')}
-                className="mt-3 w-full text-[11px] font-semibold text-accent bg-accent-tint px-3 py-2 rounded-lg hover:bg-accent/20"
+                className="mt-3 min-h-11 w-full rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20 lg:min-h-0 lg:text-[11px]"
               >
                 Copy invite link
               </button>
               <div className="mt-3 rounded-lg border border-border-faint bg-surface-softer p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold uppercase text-ink-faint">Reply mode</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 text-[9px] font-semibold text-ink-soft">
+                  <span className="text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Reply mode</span>
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft lg:text-[9px]">
                     {modeLabel(replyMode)}
                   </span>
                 </div>
@@ -916,7 +916,7 @@ export function Room() {
                       value={replyMode}
                       onChange={e => { void updateReplyMode(e.target.value as ReplyMode); }}
                       disabled={modeBusy}
-                      className="h-9 w-full rounded-md border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
+                      className="h-11 w-full rounded-md border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60 lg:h-9 lg:text-xs"
                     >
                       <option value="open">Open</option>
                       <option value="sequential">Sequential</option>
@@ -927,7 +927,7 @@ export function Room() {
                         value={selectedLeadAgentName}
                         onChange={e => { void updateReplyMode('sequential', { leadAgentName: e.target.value, leadAgentClient: 'cc' }); }}
                         disabled={modeBusy || activeRoomAgents.length === 0}
-                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
+                        className="h-11 w-full rounded-md border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60 lg:h-9 lg:text-xs"
                         aria-label="Lead agent"
                       >
                         {activeRoomAgents.length === 0 ? (
@@ -942,7 +942,7 @@ export function Room() {
                         value={selectedModeratorAgentName}
                         onChange={e => { void updateReplyMode('moderator', { moderatorAgentName: e.target.value, moderatorAgentClient: 'cc' }); }}
                         disabled={modeBusy || activeRoomAgents.length === 0}
-                        className="h-9 w-full rounded-md border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60"
+                        className="h-11 w-full rounded-md border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint disabled:opacity-60 lg:h-9 lg:text-xs"
                         aria-label="Moderator agent"
                       >
                         {activeRoomAgents.length === 0 ? (
@@ -956,10 +956,10 @@ export function Room() {
                       <div className="rounded-md border border-border-faint bg-surface px-2 py-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="truncate text-[11px] font-semibold text-ink">
+                            <div className="truncate text-sm font-semibold text-ink lg:text-[11px]">
                               {currentSpeaker ? `Now: ${currentSpeaker.name}` : 'No active turn'}
                             </div>
-                            <div className="text-[9px] text-ink-soft">
+                            <div className="text-xs text-ink-soft lg:text-[9px]">
                               {currentSpeaker && currentDeadlineMs !== null
                                 ? `${Math.ceil(currentDeadlineMs / 1000)}s left`
                                 : 'Waiting'}
@@ -970,7 +970,7 @@ export function Room() {
                               type="button"
                               onClick={() => { void handleSkipCurrent(); }}
                               disabled={modeBusy}
-                              className="h-7 rounded-md border border-amber-400/30 bg-amber-500/10 px-2 text-[10px] font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-60"
+                              className="min-h-11 rounded-md border border-amber-400/30 bg-amber-500/10 px-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-60 lg:min-h-7 lg:px-2 lg:text-[10px]"
                             >
                               Skip
                             </button>
@@ -993,8 +993,8 @@ export function Room() {
 
   const peoplePanel = (
             <div className="p-4">
-              <div className="text-[10px] font-semibold uppercase text-ink-faint mb-1">Participants</div>
-              <p className="mb-3 text-[10px] leading-relaxed text-ink-soft">
+              <div className="mb-1 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Participants</div>
+              <p className="mb-3 text-sm leading-relaxed text-ink-soft lg:text-[10px]">
                 Listening = inside an active listen window. Disconnected = no heartbeat for 5+ min, likely the CLI session was killed without leaving cleanly — host can remove with the × button.
               </p>
               <div className="space-y-2">
@@ -1022,12 +1022,12 @@ export function Room() {
                     >
                       <Avatar initials={p.initials} color={p.color} size="sm" />
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-semibold truncate flex items-center gap-1 flex-wrap">
+                        <div className="flex flex-wrap items-center gap-1 truncate text-sm font-semibold lg:text-xs">
                           {p.name}
-                          {p.name === room.createdBy && <span className="text-[9px] font-semibold text-accent bg-accent-tint px-1 py-px rounded">host</span>}
-                          {isMuted && <span className="text-[9px] font-semibold text-amber-300 bg-amber-500/15 px-1 py-px rounded">muted</span>}
+                          {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[11px] font-semibold text-accent lg:text-[9px]">host</span>}
+                          {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[11px] font-semibold text-amber-300 lg:text-[9px]">muted</span>}
                         </div>
-                        <div className="text-[10px] text-ink-soft truncate">
+                        <div className="truncate text-xs text-ink-soft lg:text-[10px]">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
                         </div>
                         {/* T-68: the state is the SERVER's verdict (T-66), not a
@@ -1036,7 +1036,7 @@ export function Room() {
                             recently — they stay distinct, because collapsing them is
                             what let presence lie. */}
                         {presence && (
-                          <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
+                          <div className={`mt-0.5 flex items-center gap-1 text-[11px] font-medium lg:text-[9px] ${STATE_TONE_PRESENCE[presence.state].text}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${STATE_TONE_PRESENCE[presence.state].dot}`} />
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
@@ -1139,12 +1139,12 @@ export function Room() {
                 {!ended && room.createdBy === self.name && (
                   <button
                     onClick={handleEndMeeting}
-                    className="flex-1 text-[11px] font-semibold text-red-300 bg-red-500/10 px-3 py-2 rounded-lg hover:bg-red-500/20"
+                    className="min-h-11 flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20 lg:min-h-0 lg:text-[11px]"
                   >
                     End
                   </button>
                 )}
-                <button onClick={() => navigate('/')} className="flex-1 text-[11px] font-semibold text-ink-muted bg-surface-softer px-3 py-2 rounded-lg">
+                <button onClick={() => navigate('/')} className="min-h-11 flex-1 rounded-lg bg-surface-softer px-3 py-2 text-sm font-semibold text-ink-muted lg:min-h-0 lg:text-[11px]">
                   Home
                 </button>
               </div>
@@ -1566,15 +1566,15 @@ export function Room() {
     return (
           <div>
             <div className="p-4 border-b border-border-faint">
-              <div className="text-[10px] font-semibold uppercase text-ink-faint mb-2">Outputs</div>
+              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Outputs</div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
                   <div className="text-base font-semibold">{messages.length}</div>
-                  <div className="text-[10px] text-ink-soft">Messages</div>
+                  <div className="text-xs text-ink-soft lg:text-[10px]">Messages</div>
                 </div>
                 <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
                   <div className="text-base font-semibold">{activeRoom.participants.length}</div>
-                  <div className="text-[10px] text-ink-soft">People</div>
+                  <div className="text-xs text-ink-soft lg:text-[10px]">People</div>
                 </div>
               </div>
             </div>
@@ -1582,11 +1582,11 @@ export function Room() {
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
               <div className="mb-5 rounded-xl border border-accent-tint-border bg-accent-tint p-4">
                 <h2 className="text-sm font-semibold text-accent-deep mb-2">Report</h2>
-                <p className="text-[11px] leading-relaxed text-accent-deep/80 mb-3">Freeze this room into a shareable delivery report.</p>
+                <p className="mb-3 text-sm leading-relaxed text-accent-deep/80 lg:text-[11px]">Freeze this room into a shareable delivery report.</p>
                 <button
                   onClick={handleExportReport}
                   disabled={reportBusy || messages.length === 0}
-                  className="w-full bg-accent text-white text-[11px] font-semibold px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="min-h-11 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 lg:text-[11px]"
                 >
                   {reportBusy ? 'Saving…' : 'Save & Share'}
                 </button>
@@ -1595,7 +1595,7 @@ export function Room() {
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-semibold">Artifacts</h2>
-                  <span className="text-[10px] text-ink-soft">{artifacts.length}</span>
+                  <span className="text-xs text-ink-soft lg:text-[10px]">{artifacts.length}</span>
                 </div>
                 {artifacts.length ? (
                   <div className="space-y-2">
@@ -1604,7 +1604,7 @@ export function Room() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[11px] leading-relaxed text-ink-soft">
+                  <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft lg:text-[11px]">
                     Use [DECISION], [TODO], [STATUS], or [RESULT] in messages to build the delivery log.
                   </div>
                 )}
@@ -1613,7 +1613,7 @@ export function Room() {
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold">Minutes</h2>
               </div>
-              <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[11px] leading-relaxed text-ink-soft">
+              <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft lg:text-[11px]">
                 Ask an agent to generate minutes from the composer. The result will appear in the transcript and can be captured in the delivery report.
               </div>
             </div>

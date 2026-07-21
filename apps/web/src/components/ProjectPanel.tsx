@@ -115,8 +115,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   if (!room.projectId) {
     return (
       <div className="p-4">
-        <div className="mb-2 text-[10px] font-semibold uppercase text-ink-faint">Project</div>
-        <p className="mb-3 text-xs leading-relaxed text-ink-soft">
+        <div className="mb-2 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Project</div>
+        <p className="mb-3 text-sm leading-relaxed text-ink-soft lg:text-xs">
           This room is not attached to a project yet. Attaching one gives its
           task board a durable Markdown ledger in the project repository.
         </p>
@@ -142,10 +142,10 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
             >
               {busy ? 'Attaching…' : 'Attach project'}
             </button>
-            {error && <div className="mt-2 text-xs text-red-400">{error}</div>}
+            {error && <div className="mt-2 text-sm text-red-400 lg:text-xs">{error}</div>}
           </>
         ) : (
-          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-xs text-ink-soft">
+          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft lg:text-xs">
             Only the host can attach a project.
           </div>
         )}
@@ -155,21 +155,21 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
 
   return (
     <div className="p-4">
-      <div className="mb-1 text-[10px] font-semibold uppercase text-ink-faint">Project</div>
+      <div className="mb-1 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Project</div>
       <div className="mb-3">
         <div className="text-sm font-semibold">{project?.name ?? room.projectId}</div>
-        <div className="text-[11px] text-ink-faint">id: {room.projectId} · tasks sync to the repo ledger on every board change</div>
+        <div className="text-xs text-ink-faint lg:text-[11px]">id: {room.projectId} · tasks sync to the repo ledger on every board change</div>
       </div>
 
       {project && project.docs.length > 0 && (
         <div className="mb-4">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase text-ink-faint">Documents</div>
+          <div className="mb-1.5 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Documents</div>
           <div className="flex flex-wrap gap-1.5">
             {project.docs.map(role => (
               <button
                 key={role}
                 onClick={() => setDocRole(prev => prev === role ? null : role)}
-                className={`min-h-9 rounded-lg border px-2.5 text-xs font-semibold transition ${docRole === role ? 'border-accent bg-accent-tint text-accent' : 'border-border bg-surface-softer text-ink-muted hover:text-ink'}`}
+                className={`min-h-11 rounded-lg border px-2.5 text-sm font-semibold transition lg:min-h-9 lg:text-xs ${docRole === role ? 'border-accent bg-accent-tint text-accent' : 'border-border bg-surface-softer text-ink-muted hover:text-ink'}`}
               >
                 {role}
               </button>
@@ -177,22 +177,22 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
           </div>
           {docRole && doc && (
             <div className="mt-2 rounded-lg border border-border-faint bg-surface-sunken p-3">
-              <div className="mb-1.5 text-[10px] text-ink-faint">{doc.rel}{doc.truncated ? ' · truncated preview' : ''} · read-only</div>
-              <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-ink-muted">{doc.content || '(empty)'}</pre>
+              <div className="mb-1.5 text-xs text-ink-faint lg:text-[10px]">{doc.rel}{doc.truncated ? ' · truncated preview' : ''} · read-only</div>
+              <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-muted lg:text-[11px]">{doc.content || '(empty)'}</pre>
             </div>
           )}
         </div>
       )}
 
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase text-ink-faint">Tasks {tasks ? `· ${visible.length}/${tasks.length}` : ''}</div>
+        <div className="text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Tasks {tasks ? `· ${visible.length}/${tasks.length}` : ''}</div>
       </div>
       <div className="mb-2 flex gap-1.5">
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
           aria-label="Filter by status"
-          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none lg:h-9 lg:text-xs"
         >
           <option value="all">All statuses</option>
           {Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -201,7 +201,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
           value={assigneeFilter}
           onChange={e => setAssigneeFilter(e.target.value)}
           aria-label="Filter by assignee"
-          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-xs font-semibold text-ink outline-none"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none lg:h-9 lg:text-xs"
         >
           <option value="all">All assignees</option>
           {assignees.map(a => <option key={a} value={a}>{a}</option>)}
@@ -209,21 +209,21 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
       </div>
 
       <div className="space-y-2">
-        {tasks === null && <div className="text-xs text-ink-soft">Loading…</div>}
+        {tasks === null && <div className="text-sm text-ink-soft lg:text-xs">Loading…</div>}
         {tasks !== null && visible.length === 0 && (
-          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-xs text-ink-soft">No tasks match.</div>
+          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft lg:text-xs">No tasks match.</div>
         )}
         {visible.map(t => (
           <div key={t.id} className="rounded-lg border border-border-faint bg-surface-softer p-3">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
-              <span className="font-mono text-[11px] font-bold text-ink">{t.id}</span>
-              <span className={`rounded border px-1.5 py-px text-[9px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
+              <span className="font-mono text-xs font-bold text-ink lg:text-[11px]">{t.id}</span>
+              <span className={`rounded border px-1.5 py-px text-[11px] font-semibold lg:text-[9px] ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
             </div>
-            <div className="text-xs font-semibold leading-snug">{t.title}</div>
-            <div className="mt-1 text-[10px] text-ink-faint">
+            <div className="text-sm font-semibold leading-snug lg:text-xs">{t.title}</div>
+            <div className="mt-1 text-xs text-ink-faint lg:text-[10px]">
               {t.owner ? `owner ${t.owner}` : 'unowned'}{t.verifier ? ` · verifier ${t.verifier}` : ''}
             </div>
-            {t.note && <div className="mt-1.5 line-clamp-3 text-[10px] leading-relaxed text-ink-soft">{t.note}</div>}
+            {t.note && <div className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink-soft lg:text-[10px]">{t.note}</div>}
           </div>
         ))}
       </div>

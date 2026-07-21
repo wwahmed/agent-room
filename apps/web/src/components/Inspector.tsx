@@ -37,7 +37,7 @@ export function Inspector({ open, onClose, renderTab, initialTab = 'people' }: P
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`min-h-12 flex-1 rounded-lg px-2 text-[14px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
+              className={`min-h-12 flex-1 rounded-lg px-1.5 text-[15px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
             >
               {t.label}
             </button>
