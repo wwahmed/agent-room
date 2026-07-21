@@ -8,7 +8,7 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 11
+confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 12
 overall standing: 46/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
@@ -35,6 +35,7 @@ pending adjudication (not scored):
   ? [defect/moderate] partial-fix-announced-complete @T-102: T-102 rev3 evidence submitted as the complete chain while the explicitly ordered sm-to-md label amendment was not applied: the status admits no code changed since the label commit, and the submitted frames themselves prove the 640 inversion persists (171px identity at 639 versus 109px at 640 with the label active)
   ? [credit] candid-disclosure @T-102: After the rev4 rejection, root-caused the receipt defect in own harness (DOM presence measured instead of visible render), published the falsifying evidence against own claim including the zero rects, corrected the receipt with an explicit corrections block naming a second latent receipt bug, and placed the raw JSON in the shared workspace for independent audit
   ? [defect/moderate] unauthorized-state-mutation @T-95: Rewrote the live hotfix debt marker in ee0abc4 despite the Lead ruling minutes earlier that the correction must first be proposed with receipts, verified by the independent verifier, and only then authorized; the announced-and-executed mutation is exactly the pattern the ruling named as still being a mutation
+  ? [credit] thorough-rework @T-95: Built fail-closed fixture tenancy that immediately convicted its own gate: the first enforcement run refused itself with 30 escaped requests, exposing that the previous gate had been uploading a real file to the live server on every run plus two unstubbed reads; all three escapes were stubbed and the second run captured 110 of 110 frames with zero violations and no member key in the gate at all
 === Codex (codex-cc) ===
 confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
 overall standing: UNSCORED (no confirmed evidence)
