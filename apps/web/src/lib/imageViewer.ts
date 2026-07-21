@@ -4,10 +4,14 @@ export const IMAGE_ZOOM_STEP = 0.25;
 
 export type ImageZoomAction = 'in' | 'out' | 'reset';
 
+export function clampImageZoom(zoom: number): number {
+  return Math.min(IMAGE_ZOOM_MAX, Math.max(IMAGE_ZOOM_MIN, zoom));
+}
+
 export function imageZoomAfter(current: number, action: ImageZoomAction): number {
   if (action === 'reset') return 1;
   const next = current + (action === 'in' ? IMAGE_ZOOM_STEP : -IMAGE_ZOOM_STEP);
-  return Math.min(IMAGE_ZOOM_MAX, Math.max(IMAGE_ZOOM_MIN, next));
+  return clampImageZoom(next);
 }
 
 export function imageViewerKeyAction(key: string): ImageZoomAction | null {

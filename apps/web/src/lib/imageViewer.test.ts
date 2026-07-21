@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   IMAGE_ZOOM_MAX,
   IMAGE_ZOOM_MIN,
+  clampImageZoom,
   imageViewerKeyAction,
   imageZoomAfter,
   imageZoomLabel,
@@ -17,6 +18,9 @@ describe('image viewer zoom', () => {
   it('clamps zoom to the supported range', () => {
     expect(imageZoomAfter(IMAGE_ZOOM_MAX, 'in')).toBe(IMAGE_ZOOM_MAX);
     expect(imageZoomAfter(IMAGE_ZOOM_MIN, 'out')).toBe(IMAGE_ZOOM_MIN);
+    expect(clampImageZoom(7)).toBe(IMAGE_ZOOM_MAX);
+    expect(clampImageZoom(0.1)).toBe(IMAGE_ZOOM_MIN);
+    expect(clampImageZoom(1.42)).toBe(1.42);
   });
 
   it('maps discoverable keyboard shortcuts', () => {
