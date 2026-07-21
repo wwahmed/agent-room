@@ -31,11 +31,21 @@ Each object is a versioned, room-scoped artifact with a schema, an owner,
 and a defined mutation rule. "Pinned" means surfaced permanently in the
 room UI, not buried in chat scroll.
 
-### 1. Charter (pinned, versioned)
-Topic, owner, north star, success criteria, explicit non-goals,
-constraints, release channels (staging/live), and cadence. Every program
-and epic must trace to a charter line. Charter changes are visible room
-events requiring host confirmation.
+### 1. Charter and Requirements (pinned, versioned, two documents)
+Two separate living artifacts, deliberately not one:
+- The Charter and Requirements document holds the owner's intent: north
+  star, goals, success criteria, explicit non-goals, constraints, and
+  evolving requirements. It is massaged continuously: when the owner (or
+  any user) states or refines a goal in chat, the room distills it into a
+  numbered requirement revision, announces the delta, and the owner
+  confirms. Every requirement keeps its history.
+- The Plan document (the roadmap) holds delivery: programs, epics, tasks,
+  dependencies, WIP. It references requirement numbers and reorganizes
+  freely as work proceeds, without touching the requirements themselves.
+Goals change by conversation; the plan changes by planning. Keeping them
+separate is what lets both evolve without corrupting each other. Every
+program and epic must trace to a requirement line, and charter changes
+are visible room events requiring host confirmation.
 
 ### 2. Roster (the T-92 protocol, referenced not duplicated)
 Opaque participant IDs and lineage IDs; role and provider as mutable
