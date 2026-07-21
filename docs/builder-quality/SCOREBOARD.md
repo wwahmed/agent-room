@@ -8,7 +8,7 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 3 across 1 submissions (window: last 1 submissions) · pending unscored: 9
+confirmed rows: 3 across 1 submissions (window: last 1 submissions) · pending unscored: 10
 overall standing: 61/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
@@ -32,6 +32,7 @@ pending adjudication (not scored):
   ? [credit] candid-disclosure @conduct: Repeatedly self-disclosed process faults unprompted, including the unannounced live build, the filtered log tail behind a false green claim, and the crossed-deploy sequence
   ? [credit] thorough-rework @T-78: Closed the five-blocker account-menu rework fully with shared controls and live system-theme proof, approved on independent review
   ? [defect/moderate] partial-fix-announced-complete @T-102: T-102 rev3 evidence submitted as the complete chain while the explicitly ordered sm-to-md label amendment was not applied: the status admits no code changed since the label commit, and the submitted frames themselves prove the 640 inversion persists (171px identity at 639 versus 109px at 640 with the label active)
+  ? [credit] candid-disclosure @T-102: After the rev4 rejection, root-caused the receipt defect in own harness (DOM presence measured instead of visible render), published the falsifying evidence against own claim including the zero rects, corrected the receipt with an explicit corrections block naming a second latent receipt bug, and placed the raw JSON in the shared workspace for independent audit
 === Codex (codex-cc) ===
 confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
 overall standing: UNSCORED (no confirmed evidence)
