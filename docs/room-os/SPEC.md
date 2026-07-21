@@ -192,6 +192,16 @@ RoomOS lands beside what exists, never on top of it:
   index; no big-bang rewrite, and existing rooms keep working untouched.
 - A legacy room that never migrates stays fully functional as type
   "legacy"; migration is an offer, not an event that happens to you.
+- Build-phase retention ruling (host, 2026-07-21): for active build
+  rooms, chat is disposable and work is not. Migration moves a
+  continuity capsule (task tree with state and evidence, roster stable
+  IDs and assignments, requirements and plan revisions, decisions and
+  risks referenced by open work, a handoff summary) and leaves the old
+  room as a read-only archive for a retention window. Constraint the
+  capsule must honor: any evidence ref cited by an open task or a
+  quality-ledger row must be promoted into the capsule or into durable
+  archive storage BEFORE the archive's TTL can expire; otherwise task
+  evidence dangles and the evidence-gated model silently breaks.
 
 ## Performance discipline
 
