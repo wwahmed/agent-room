@@ -202,7 +202,8 @@ Master UX Lead / ProductSystemsAdvisor, with UX-Adversary auditing the receipt.
 T-65, T-67, T-68, T-71, T-81, T-88, T-90.
 
 Entry: immutable staging and identity-aware People model exist; north-star
-full-frame designs approved at 1280/1440/2032 before implementation.
+full-frame designs approved at compact desktop 981/1024 plus 1280/1440/2032
+before implementation.
 
 Smallest safe first slice: T-90 shell persistence. Remove the keyed room
 remount only after `useRoom` has code-keyed cancellation/reinitialization and a
@@ -212,12 +213,17 @@ the same slice.
 Exit:
 
 - incremental room switching preserves shell, rail, scroll, pane, focus, cache;
+- global, session-rare actions (New room, Join, Install) live in header/nav or
+  account chrome instead of consuming the prime Home canvas; Home uses desktop
+  width for current work, attention, and useful context rather than centering a
+  phone-width column in an empty field;
 - 56–64px progressive composer; contextual tools and bounded expansion;
 - accessible persisted rail/context resizing and intentional surplus width;
 - grouped real rooms, fixture tenancy hidden, virtualized 100+ room behavior;
 - theme-aware accessible scrollbars, refined message/action/reply/media objects;
 - cohesive tokens and primary tabs without residual/superseded UI layers;
-- complete 1280/1440/2032, 125%/150%, keyboard and five-minute walkthrough.
+- complete 981/1024/1280/1440/2032, 125%/150%, keyboard and five-minute
+  walkthrough.
 
 Host checkpoint: approve full-frame north-star designs and a working shell-only
 slice before the visual rebuild continues.
@@ -240,6 +246,9 @@ list load behavior without changing UI; publish a data-flow and cache contract.
 Exit:
 
 - live count/activity/unread truth without full refresh;
+- counts, tabs, filters, and summaries exclude hidden fixture tenancy by the
+  same predicate as the visible list—never “Active 19” beside four real rooms
+  and “15 test rooms hidden”;
 - bounded, virtualized, searchable 100+ room list with stable grouping/sorting;
 - explicit all-caught-up/history-boundary semantics;
 - one canonical account/sort surface, not duplicate T-26/T-27 variants;
