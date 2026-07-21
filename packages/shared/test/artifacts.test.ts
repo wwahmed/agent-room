@@ -95,3 +95,16 @@ describe('extractArtifacts multiline continuation (review finding: dropped detai
     expect(a[0]!.text).toBe('Real.');
   });
 });
+
+describe('continuation boundaries (rev16 review)', () => {
+  const msg = (text: string) => ({ id: 11, type: 'msg', name: 'A', initials: 'A', color: '#000', role: '', client: 'cc', text, time: 11 }) as unknown as Message;
+  it('4-space indented code ends the block instead of joining the artifact', () => {
+    const a = extractArtifacts([msg('[DECISION] Use markers.\n    [TODO] indented code example')]);
+    expect(a).toHaveLength(1);
+    expect(a[0]!.text).toBe('Use markers.');
+  });
+  it('blank lines inside a decision are part of it', () => {
+    const a = extractArtifacts([msg('[DECISION] Locked:\n\n1. one\n2. two')]);
+    expect(a[0]!.text).toBe('Locked:\n\n1. one\n2. two');
+  });
+});

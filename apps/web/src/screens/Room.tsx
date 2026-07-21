@@ -295,6 +295,32 @@ export function Room() {
     const query = params.toString();
     window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
   };
+  // T-71 (rev16): real provenance jump — page history backward until the
+  // source message is loaded, then scroll AND flash it; if Redis has
+  // trimmed the source, say so honestly instead of doing nothing.
+  const [sourceSeekId, setSourceSeekId] = useState<number | null>(null);
+  useEffect(() => {
+    if (sourceSeekId == null) return;
+    if (messages.some(m => m.id === sourceSeekId)) {
+      setSourceSeekId(null);
+      window.setTimeout(() => {
+        const el = document.getElementById(`msg-${sourceSeekId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('reply-flash');
+          window.setTimeout(() => el.classList.remove('reply-flash'), 1200);
+        }
+      }, 60);
+    } else if (!hasOlder) {
+      setSourceSeekId(null);
+      void import('../components/Toast.js').then(({ showToast }) =>
+        showToast('The source message is no longer available in this room\u2019s history.', 'error'));
+    } else if (!loadingOlder) {
+      void loadOlder();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceSeekId, messages, hasOlder, loadingOlder]);
+
   // T-71: poll the board lightly for the rail's project pulse.
   useEffect(() => {
     let cancelled = false;
@@ -303,7 +329,17 @@ export function Room() {
         .then(b => { if (!cancelled) setTaskPulse(b.tasks); })
         .catch(() => { if (!cancelled) setTaskPulse(null); });
       getRoomArtifacts(createClient(), code)
-        .then(r => { if (!cancelled) { setArtifactState({ room: code, artifacts: r.artifacts }); setArtifactsErrorRoom(null); } })
+        .then(r => {
+          if (cancelled) return;
+          if (r.backfillPending) {
+            // Another caller is rebuilding the index: stay in Loading and
+            // check back shortly — never a false zero (rev16 item 2).
+            window.setTimeout(() => { if (!cancelled) setArtifactsNonce(n => n + 1); }, 1500);
+            return;
+          }
+          setArtifactState({ room: code, artifacts: r.artifacts });
+          setArtifactsErrorRoom(null);
+        })
         .catch(() => { if (!cancelled) setArtifactsErrorRoom(code); });
     };
     pull();
@@ -1710,17 +1746,20 @@ export function Room() {
             <SummaryChip tone="quiet">Last produced {messageTime(producedWork[producedWork.length - 1]!.time, now)}</SummaryChip>
           </>
         )}
-        action={(
+        action={outputsViewState(serverArtifacts, artifactsError) === 'ready' && producedWork.length > 0 ? (
+          /* Hidden while the work set is unknown (loading/error) and at true
+             zero — a report of unverified or absent work must not be one tap
+             away (rev16 item 7). */
           <button
             type="button"
             onClick={handleExportReport}
-            disabled={reportBusy || messages.length === 0}
+            disabled={reportBusy}
             aria-label="Create a shareable delivery report of this room and copy its link"
             className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {reportBusy ? 'Saving…' : 'Share report'}
           </button>
-        )}
+        ) : undefined}
       >
         {renderOutputs()}
       </PageScaffold>
@@ -1737,6 +1776,84 @@ export function Room() {
         ?? ((participant.listenUntil ?? 0) > now ? 'listening' as const : 'online' as const),
     }));
   const headerAgentStaleCount = headerAgents.filter(agent => agent.state === 'stale' || agent.state === 'disconnected').length;
+
+  // T-71 (rev16 item 6): the contextual rail is a WORKSPACE surface — it
+  // pairs with chat AND the destination pages at >=1440, earning its column
+  // via the two-populated-sections rule.
+  const contextRail = railSectionCount(headerAgents.length, taskPulse?.length ?? 0, serverArtifacts) >= 2 ? (
+
+        <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
+          <section aria-label="Active agents">
+            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
+            <div className="space-y-1">
+              {headerAgents.slice(0, 6).map(a => (
+                <button
+                  key={a.name}
+                  type="button"
+                  onClick={() => selectTab('people')}
+                  aria-label={`${a.name}, ${a.state} — open People`}
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
+                >
+                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-bold text-white" style={{ backgroundColor: a.color }} aria-hidden="true">{a.initials}</span>
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{a.name}</span>
+                  {/* Visible worded state — a bare glyph fails without color
+                      or icon comprehension (red-team finding). */}
+                  <span className={`flex flex-shrink-0 items-center gap-1 text-[14px] font-medium ${STATE_TONE_PRESENCE[a.state].text}`}>
+                    {presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}
+                    {a.state === 'listening' || a.state === 'online' ? 'Active' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
+                  </span>
+                </button>
+              ))}
+              {headerAgents.length === 0 && <p className="text-[14px] text-ink-soft">No agents connected yet.</p>}
+            </div>
+          </section>
+          {taskPulse && taskPulse.length > 0 && (() => {
+            const doneCount = taskPulse.filter(t => t.state === 'done').length;
+            const reviewCount = taskPulse.filter(t => t.state === 'awaiting_review').length;
+            return (
+              <section aria-label="Project pulse">
+                <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
+                <button
+                  type="button"
+                  onClick={() => selectTab('project')}
+                  aria-label={`Project: ${doneCount} of ${taskPulse.length} verified — open Project`}
+                  className="w-full rounded-lg border border-border-faint bg-surface-softer p-3 text-left transition hover:border-accent/40"
+                >
+                  <div className="text-[14px] font-semibold text-ink">{doneCount} of {taskPulse.length} verified</div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border-faint">
+                    <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.round((doneCount / taskPulse.length) * 100)}%` }} />
+                  </div>
+                  <p className="mt-2 text-[14px] text-ink-soft">{taskPulse.length - doneCount} open · {reviewCount} awaiting review</p>
+                </button>
+              </section>
+            );
+          })()}
+          <section aria-label="Recent outputs">
+            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
+            {producedWork.length > 0 ? (
+              <ul className="space-y-1">
+                {producedWork.slice(-3).reverse().map(a => (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectTab('outputs')}
+                      aria-label={`Output from ${a.author} — open Outputs`}
+                      className="flex min-h-11 w-full items-center rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
+                    >
+                      <span className="truncate text-[14px] text-ink-soft" title={a.text}>
+                        <span className="font-semibold text-ink">{a.author}</span> · {a.text.slice(0, 60)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[14px] text-ink-soft">Nothing produced yet.</p>
+            )}
+          </section>
+        </aside>
+  ) : null;
+
 
   return (
     <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'room' ? 'pt-[52px]' : 'pt-[96px]'}`}>
@@ -1841,8 +1958,11 @@ export function Room() {
 
         {/* T-30: a non-chat tab owns the pane at EVERY width now, not just lg. */}
         {mainTab !== 'chat' && (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-[860px]">{renderPanel(mainTab)}</div>
+          <div className="flex min-h-0 flex-1">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-[860px]">{renderPanel(mainTab)}</div>
+            </div>
+            {contextRail}
           </div>
         )}
 
@@ -2348,81 +2468,7 @@ export function Room() {
             (Room owns the poll, ProjectPanel consumes the same data), every
             item deep-links to its owning page, no duplicate actions, no
             independent scroll, >=1440 only. */}
-        {/* Collapse rule (pixel review 3): the rail must EARN its 300px —
-            fewer than two populated preview sections and it folds away
-            (header presence already covers agents alone). */}
-        {railSectionCount(headerAgents.length, taskPulse?.length ?? 0, serverArtifacts) >= 2 && (
-        <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
-          <section aria-label="Active agents">
-            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
-            <div className="space-y-1">
-              {headerAgents.slice(0, 6).map(a => (
-                <button
-                  key={a.name}
-                  type="button"
-                  onClick={() => selectTab('people')}
-                  aria-label={`${a.name}, ${a.state} — open People`}
-                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
-                >
-                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-bold text-white" style={{ backgroundColor: a.color }} aria-hidden="true">{a.initials}</span>
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{a.name}</span>
-                  {/* Visible worded state — a bare glyph fails without color
-                      or icon comprehension (red-team finding). */}
-                  <span className={`flex flex-shrink-0 items-center gap-1 text-[14px] font-medium ${STATE_TONE_PRESENCE[a.state].text}`}>
-                    {presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}
-                    {a.state === 'listening' || a.state === 'online' ? 'Active' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
-                  </span>
-                </button>
-              ))}
-              {headerAgents.length === 0 && <p className="text-[14px] text-ink-soft">No agents connected yet.</p>}
-            </div>
-          </section>
-          {taskPulse && taskPulse.length > 0 && (() => {
-            const doneCount = taskPulse.filter(t => t.state === 'done').length;
-            const reviewCount = taskPulse.filter(t => t.state === 'awaiting_review').length;
-            return (
-              <section aria-label="Project pulse">
-                <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
-                <button
-                  type="button"
-                  onClick={() => selectTab('project')}
-                  aria-label={`Project: ${doneCount} of ${taskPulse.length} verified — open Project`}
-                  className="w-full rounded-lg border border-border-faint bg-surface-softer p-3 text-left transition hover:border-accent/40"
-                >
-                  <div className="text-[14px] font-semibold text-ink">{doneCount} of {taskPulse.length} verified</div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border-faint">
-                    <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.round((doneCount / taskPulse.length) * 100)}%` }} />
-                  </div>
-                  <p className="mt-2 text-[14px] text-ink-soft">{taskPulse.length - doneCount} open · {reviewCount} awaiting review</p>
-                </button>
-              </section>
-            );
-          })()}
-          <section aria-label="Recent outputs">
-            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
-            {producedWork.length > 0 ? (
-              <ul className="space-y-1">
-                {producedWork.slice(-3).reverse().map(a => (
-                  <li key={a.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectTab('outputs')}
-                      aria-label={`Output from ${a.author} — open Outputs`}
-                      className="flex min-h-11 w-full items-center rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
-                    >
-                      <span className="truncate text-[14px] text-ink-soft" title={a.text}>
-                        <span className="font-semibold text-ink">{a.author}</span> · {a.text.slice(0, 60)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[14px] text-ink-soft">Nothing produced yet.</p>
-            )}
-          </section>
-        </aside>
-        )}
+        {contextRail}
         </div>
       </main>
 
@@ -2488,7 +2534,7 @@ export function Room() {
       return (
         <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
           <p className="text-[15px] font-semibold text-red-400 sm:text-[14px]">Couldn't load produced work</p>
-          <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">The room's output index didn't respond. Your work is safe on the server.</p>
+          <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">The output index didn't respond, so this room's work can't be shown or verified right now.</p>
           <button
             type="button"
             onClick={() => setArtifactsNonce(n => n + 1)}
@@ -2525,7 +2571,7 @@ export function Room() {
                 now={now}
                 onOpenSource={messageId => {
                   selectTab('chat');
-                  window.setTimeout(() => document.getElementById(`msg-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+                  setSourceSeekId(messageId);
                 }}
               />
             ))}
@@ -2542,7 +2588,7 @@ export function Room() {
         ) : (
           <div className="rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
             {outputsFilter === 'all'
-              ? 'Nothing produced yet. Use [DECISION], [TODO], or [RESULT] in messages to build the delivery log.'
+              ? 'Nothing produced yet. Decisions, actions, and results from this room will appear here as the work lands.'
               : `No ${kinds.find(k => k.key === outputsFilter)?.label.toLowerCase()} produced yet — switch to All to see everything the room has produced.`}
           </div>
         )}

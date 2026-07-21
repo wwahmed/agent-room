@@ -68,7 +68,7 @@ import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments } from './messageAttachments.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
-import { backfillRoomArtifacts, listRoomArtifacts,
+import { ensureArtifactIndex, listRoomArtifacts,
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
   casRoom,
@@ -1586,9 +1586,14 @@ const server = createServer(async (req, res) => {
       const roomCode = roomParam ? canonicalizeCode(roomParam) : null;
       if (!roomCode) return sendJson(res, 400, { error: 'BadRequest', message: 'room is required.' });
       try {
-        await backfillRoomArtifacts(client, roomCode);
+        const { pending } = await ensureArtifactIndex(client, roomCode);
+        if (pending) {
+          // A concurrent rebuild holds the lock: the client must stay in
+          // Loading — an empty list here would be a false zero (rev16).
+          return sendJson(res, 200, { artifacts: [], backfillPending: true });
+        }
         const artifacts = await listRoomArtifacts(client, roomCode);
-        return sendJson(res, 200, { artifacts });
+        return sendJson(res, 200, { artifacts, backfillPending: false });
       } catch (e) {
         const err = e as Error;
         return sendJson(res, statusForError(err), { error: err.name, message: err.message });

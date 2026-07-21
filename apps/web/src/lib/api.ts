@@ -622,10 +622,10 @@ export async function readProjectDoc(
 
 // T-71: the durable produced-work index — room-wide, independent of the
 // loaded transcript window.
-export async function getRoomArtifacts(_client: ApiClient, code: string): Promise<{ artifacts: import('@agent-room/shared').RoomArtifact[] }> {
+export async function getRoomArtifacts(_client: ApiClient, code: string): Promise<{ artifacts: import('@agent-room/shared').RoomArtifact[]; backfillPending?: boolean }> {
   const res = await fetch(`/api/artifacts?room=${encodeURIComponent(code)}`);
   if (!res.ok) throw new Error(`artifacts fetch failed (${res.status})`);
-  return await res.json() as { artifacts: import('@agent-room/shared').RoomArtifact[] };
+  return await res.json() as { artifacts: import('@agent-room/shared').RoomArtifact[]; backfillPending?: boolean };
 }
 
 export async function getTaskBoard(_client: ApiClient, code: string): Promise<{ tasks: BoardTask[] }> {

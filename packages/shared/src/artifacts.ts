@@ -54,7 +54,13 @@ export function extractArtifacts(messages: Message[]): RoomArtifact[] {
         continue;
       }
       if (current) {
-        if (/^ {0,3}>/.test(line)) { flush(); continue; }
+        // Boundaries that END a block: quoted lines and indented code
+        // (4+ spaces or tab — the Markdown code rule the single-line
+        // acceptance already enforced). Blank lines are INTENTIONALLY part
+        // of the artifact: real decisions separate their lists with blank
+        // lines, and the block still stops at any marker/fence/quote/code
+        // boundary or end of message.
+        if (/^ {0,3}>/.test(line) || /^( {4,}|\t)/.test(line)) { flush(); continue; }
         current.parts.push(line);
       }
     }
