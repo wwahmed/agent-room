@@ -221,7 +221,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
       <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-6'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
-        <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
+        <div style={swipe.style} data-gate="msg-content" data-gate-self="true" className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {/* T-30/T-48: keep 15px type and a deliberate readable measure;
               80ch uses large desktop canvases without turning prose into an

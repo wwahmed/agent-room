@@ -81,12 +81,12 @@ describe('visual gate geometry assertions', () => {
   });
 });
 
-describe('ruleScrollReach (T-63 review: reachability, not blanket exemption)', () => {
-  it('BROKEN: a container hiding most of its content fails', () => {
-    const fails = ruleScrollReach({ scrollContainers: [{ label: 'tabs', clientWidth: 300, scrollWidth: 600 }] });
-    expect(fails[0]).toContain('hides majority of content');
+describe('ruleScrollReach (rev3: hidden controls, no magic ratio)', () => {
+  it('BROKEN: a container fully hiding an interactive control fails', () => {
+    const fails = ruleScrollReach({ scrollContainers: [{ label: 'tabs', hiddenControls: 1 }] });
+    expect(fails[0]).toContain('fully hides 1 interactive control');
   });
-  it('minor overflow within the 1.6x budget passes', () => {
-    expect(ruleScrollReach({ scrollContainers: [{ label: 'tabs', clientWidth: 300, scrollWidth: 400 }] })).toEqual([]);
+  it('overflow that keeps every control at least partially visible passes', () => {
+    expect(ruleScrollReach({ scrollContainers: [{ label: 'tabs', hiddenControls: 0 }] })).toEqual([]);
   });
 });

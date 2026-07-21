@@ -95,14 +95,14 @@ export function ruleFloatingVsComposer(m) {
     .map(f => `floating control overlaps composer: "${f.label}"`);
 }
 
-/** Scrollable-x containers may hide overflow, but not the MAJORITY of their
- *  content — a tab bar hiding most tabs at a width is a reachability defect,
- *  which the clipped-rule exemption alone would mask. */
+/** Scrollable-x containers must not FULLY hide interactive controls at rest.
+ *  No magic ratio (rev3 review): the deterministic signal is a control the
+ *  user cannot see at all without discovering that scrolling exists. */
 export function ruleScrollReach(m) {
   return (m.scrollContainers ?? [])
-    .filter(c => c.clientWidth > 40 && c.scrollWidth > c.clientWidth * 1.6)
+    .filter(c => (c.hiddenControls ?? 0) > 0)
     .slice(0, 3)
-    .map(c => `scroll container hides majority of content: ${Math.round(c.clientWidth)}px shows ${Math.round(c.scrollWidth)}px ("${c.label}")`);
+    .map(c => `scroll container fully hides ${c.hiddenControls} interactive control(s) at rest ("${c.label}")`);
 }
 
 const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach];

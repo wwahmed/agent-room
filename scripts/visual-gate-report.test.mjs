@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameVerdict, gateSummary, CHANGE_THRESHOLD } from './visual-gate-report.mjs';
+import { frameVerdict, gateSummary, enumerateFrames, CHANGE_THRESHOLD } from './visual-gate-report.mjs';
 
 describe('frameVerdict', () => {
   it('flags a frame only past the threshold', () => {
@@ -53,5 +53,13 @@ describe('exit precedence integration (T-63 review)', () => {
     const s = gateSummary([frameVerdict('a', 50, 100)], [{ frame: 'a', failure: 'x' }], { expected: 40, captured: 12 });
     expect(s.exitCode).toBe(5);
     expect(s.text).toContain('CAPTURE-INCOMPLETE 12/40');
+  });
+});
+
+describe('enumerateFrames (rev3: static matrix, unshrinkable)', () => {
+  it('enumerates states x viewports x themes deterministically', () => {
+    const frames = enumerateFrames(['home', 'fixture'], ['390', '1440'], ['dark', 'light']);
+    expect(frames).toHaveLength(8);
+    expect(frames).toContain('fixture-390-light.png');
   });
 });

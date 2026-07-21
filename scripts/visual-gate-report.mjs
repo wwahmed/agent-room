@@ -43,3 +43,18 @@ export function gateSummary(verdicts, geometryFailures = [], capture = null) {
     incomplete,
   };
 }
+
+/** T-63 rev3: the frame matrix is enumerated STATICALLY before any capture,
+ *  so a failed state (fixture seeding, palette not opening) can never shrink
+ *  the expected count and fake a complete run. */
+export function enumerateFrames(states, viewports, themes) {
+  const frames = [];
+  for (const vp of viewports) {
+    for (const theme of themes) {
+      for (const st of states) {
+        frames.push(`${st}-${vp}-${theme}.png`);
+      }
+    }
+  }
+  return frames;
+}

@@ -40,7 +40,7 @@ export function Bubble({ message, self, ambiguousNames, selfName }: Props) {
     <div className={`flex w-full gap-2 ${self ? 'flex-row-reverse' : ''}`}>
       {!self && <Avatar initials={message.initials} color={message.color} size="md" />}
       <div
-        className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3.5 py-2.5 shadow-sm break-words [overflow-wrap:anywhere] rounded-2xl ${
+        data-gate="msg-content" className={`min-w-0 max-w-[85%] sm:max-w-[min(640px,75%)] px-3.5 py-2.5 shadow-sm break-words [overflow-wrap:anywhere] rounded-2xl ${
           self ? 'bg-accent text-white rounded-br-sm' : 'text-ink rounded-bl-sm'
         }`}
         // Per-sender tint: a translucent wash of the sender's avatar color over the

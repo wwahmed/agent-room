@@ -24,8 +24,20 @@ echo "OK: deployed bundle index-$HASH.js and server is serving it."
 # baseline (exit 3). Review .visual-gate/diff, then promote deliberately with
 # `npm run visual-gate:baseline`. After a human has reviewed, re-run with
 # VISUAL_GATE_ACK=1 to acknowledge and pass.
-if [ "${VISUAL_GATE_ACK:-}" = "1" ]; then
-  npm run visual-gate --silent || echo "visual-gate: differences ACKNOWLEDGED by deployer (VISUAL_GATE_ACK=1)"
-else
-  npm run visual-gate --silent || { echo "visual-gate FAILED: review .visual-gate/diff before announcing, then promote or re-run with VISUAL_GATE_ACK=1"; exit 2; }
-fi
+npm run visual-gate --silent
+GATE_EXIT=$?
+case "$GATE_EXIT" in
+  0) : ;;
+  2|3)
+    if [ "${VISUAL_GATE_ACK:-}" = "1" ]; then
+      echo "visual-gate: pixel/baseline differences ACKNOWLEDGED by deployer (VISUAL_GATE_ACK=1)"
+    else
+      echo "visual-gate FAILED (exit $GATE_EXIT): review .visual-gate/diff, then promote or re-run with VISUAL_GATE_ACK=1"
+      exit "$GATE_EXIT"
+    fi ;;
+  *)
+    # Geometry defects (4) and incomplete captures (5) are NEVER acknowledgeable:
+    # they are deterministic product/tooling failures, not review judgment calls.
+    echo "visual-gate HARD FAIL (exit $GATE_EXIT): geometry defects or incomplete capture — fix before deploying"
+    exit "$GATE_EXIT" ;;
+esac

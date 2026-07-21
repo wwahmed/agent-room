@@ -22,7 +22,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
-import { frameVerdict, gateSummary } from './visual-gate-report.mjs';
+import { frameVerdict, gateSummary, enumerateFrames } from './visual-gate-report.mjs';
 import { evaluateAssertions } from './visual-gate-assertions.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -59,12 +59,12 @@ const STATES = [
       // Desktop field and the mobile icon share the accessible name, so the
       // palette state exists at EVERY width (review finding).
       const trigger = p.locator('header').getByRole('button', { name: /Search rooms/ }).first();
-      if (await trigger.count()) {
-        const tb = await trigger.boundingBox();
-        STATES.find(s => s.name === 'palette').triggerCenter = tb ? tb.x + tb.width / 2 : null;
-        await trigger.click();
-        await p.waitForTimeout(600);
-      }
+      const tb = await trigger.boundingBox();
+      STATES.find(s => s.name === 'palette').triggerCenter = tb ? tb.x + tb.width / 2 : null;
+      await trigger.click();
+      // Readiness is REQUIRED (review finding): no dialog, no frame.
+      await p.locator('[role="dialog"]').first().waitFor({ timeout: 5000 });
+      await p.waitForTimeout(400);
     },
   },
 ];
@@ -108,20 +108,33 @@ async function ensureFixtureRoom() {
   writeFileSync(FIXTURE_FILE, code);
   return code;
 }
-const FIXTURE_ROOM = await ensureFixtureRoom().catch(e => { console.error('fixture room failed:', e.message); return null; });
-if (FIXTURE_ROOM) {
-  STATES.push({
-    name: 'fixture',
-    path: `/r/${FIXTURE_ROOM}`,
-    ready: async p => { await p.waitForSelector('textarea', { timeout: 15000 }).catch(() => {}); await p.waitForTimeout(2000); },
-  });
+// rev3 (review finding): the fixture is REQUIRED. A failed seed no longer
+// shrinks the matrix — its frames simply fail capture and the STATIC expected
+// count reports CAPTURE-INCOMPLETE at exit 5.
+let FIXTURE_ROOM = null;
+try {
+  FIXTURE_ROOM = await ensureFixtureRoom();
+} catch (e) {
+  console.error(`fixture room failed (frames will fail, run will be INCOMPLETE): ${e.message}`);
 }
-let expectedFrames = 0;
+STATES.push({
+  name: 'fixture',
+  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}` : '/r/NON-EXI-STENT',
+  // Readiness is REQUIRED: the seeded dense content must actually be there.
+  ready: async p => {
+    await p.waitForSelector('textarea', { timeout: 15000 });
+    await p.getByText('Rapid fixture message 6').first().waitFor({ timeout: 8000 });
+    await p.waitForTimeout(1200);
+  },
+});
+
+const EXPECTED = enumerateFrames(STATES.map(s => s.name), VIEWPORTS.map(v => v.tag), THEMES);
 let capturedFrames = 0;
 
 // Stale CURRENT frames from a prior run must never masquerade as this run's
 // evidence (review finding): clear before capturing.
 rmSync(CURRENT, { recursive: true, force: true });
+rmSync(DIFF, { recursive: true, force: true });
 for (const dir of [WORK, BASELINE, CURRENT, DIFF]) mkdirSync(dir, { recursive: true });
 const memberKey = existsSync(KEY_FILE) ? readFileSync(KEY_FILE, 'utf8').trim() : '';
 
@@ -140,7 +153,6 @@ for (const vp of VIEWPORTS) {
     }, [ROOM, memberKey]);
     for (const state of STATES) {
       const name = `${state.name}-${vp.tag}-${theme}.png`;
-      expectedFrames += 1;
       try {
         await page.goto(`${BASE}${state.path}`, { waitUntil: 'domcontentloaded' });
         await state.ready(page);
@@ -155,8 +167,9 @@ for (const vp of VIEWPORTS) {
             }
             return false;
           };
-          const buttons = [...document.querySelectorAll('button, [role="tab"], a[aria-label]')].filter(vis).map(b => ({
-            label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 30),
+          const INTERACTIVE = 'button, [role="tab"], [role="button"], a[href], a[aria-label], input, textarea, select, summary';
+          const buttons = [...document.querySelectorAll(INTERACTIVE)].filter(vis).map(b => ({
+            label: (b.getAttribute('aria-label') || b.getAttribute('placeholder') || b.textContent || '').trim().slice(0, 30),
             inScrollX: inScrollX(b),
             ...box(b),
           }));
@@ -178,7 +191,14 @@ for (const vp of VIEWPORTS) {
           const scrollContainers = [...document.querySelectorAll('*')]
             .filter(el => { const cs = getComputedStyle(el); return /(auto|scroll)/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1; })
             .slice(0, 8)
-            .map(el => ({ label: (el.getAttribute('aria-label') || el.className || '').toString().slice(0, 30), clientWidth: el.clientWidth, scrollWidth: el.scrollWidth }));
+            .map(el => {
+              const cr = el.getBoundingClientRect();
+              const hiddenControls = [...el.querySelectorAll(INTERACTIVE)].filter(c => {
+                const r = c.getBoundingClientRect();
+                return r.width > 1 && (r.left >= cr.right - 1 || r.right <= cr.left + 1);
+              }).length;
+              return { label: (el.getAttribute('aria-label') || el.className || '').toString().slice(0, 30), clientWidth: el.clientWidth, scrollWidth: el.scrollWidth, hiddenControls };
+            });
           return {
             viewportW: innerWidth,
             viewportH: innerHeight,
@@ -233,7 +253,7 @@ for (const name of readdirSync(CURRENT).filter(f => f.endsWith('.png'))) {
   verdicts.push(verdict);
 }
 
-const summary = gateSummary(verdicts, geometryFailures, { expected: expectedFrames, captured: capturedFrames });
+const summary = gateSummary(verdicts, geometryFailures, { expected: EXPECTED.length, captured: capturedFrames });
 console.log(summary.text);
 if (summary.exitCode === 2) console.log('review .visual-gate/diff, then promote deliberately: npm run visual-gate:baseline');
 if (summary.exitCode === 3) console.log('no baseline for the NEW frames — create it deliberately: npm run visual-gate:baseline');
