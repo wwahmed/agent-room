@@ -23,6 +23,9 @@ interface Props {
   agents: AgentFace[];
   agentStaleCount: number;
   mentionNav?: React.ReactNode;
+  /** T-71: the workspace switcher. Centered inside the bar at lg+; rendered
+   *  as the second row of the SAME header shell below lg (52 + 44 = 96px). */
+  workspaceNav?: React.ReactNode;
 }
 
 export function RoomHeader({
@@ -39,6 +42,7 @@ export function RoomHeader({
   agents,
   agentStaleCount,
   mentionNav,
+  workspaceNav,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -65,8 +69,8 @@ export function RoomHeader({
   }, [menuOpen]);
 
   return (
-    <header className="app-command-bar fixed inset-x-0 top-0 z-40 flex h-[52px] items-center sm:h-14">
-      <div className="relative z-10 flex h-full min-w-0 flex-1 items-center px-1.5 sm:px-3">
+    <header className={`app-command-bar fixed inset-x-0 top-0 z-40 flex flex-col ${workspaceNav ? 'h-[96px] lg:h-14' : 'h-[52px] items-center sm:h-14'}`}>
+      <div className={`relative z-10 flex min-w-0 items-center px-1.5 sm:px-3 ${workspaceNav ? 'h-[52px] flex-shrink-0 lg:h-full' : 'h-full flex-1 w-full'}`}>
         <div className="flex min-w-0 items-center">
           <Link
             to="/"
@@ -106,6 +110,10 @@ export function RoomHeader({
           </button>
         </div>
 
+        {workspaceNav && (
+          <div className="absolute left-1/2 hidden -translate-x-1/2 lg:block">{workspaceNav}</div>
+        )}
+        {!workspaceNav && (
         <button
           type="button"
           onClick={onSearch}
@@ -120,18 +128,32 @@ export function RoomHeader({
             <kbd className="ml-auto rounded-md border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">⌘K</kbd>
           </span>
         </button>
+        )}
 
         <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
           <button
             type="button"
             onClick={onSearch}
             aria-label="Search rooms, messages, and tasks"
-            className="header-glass-control flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink md:hidden"
+            className={`header-glass-control flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink ${workspaceNav ? 'lg:hidden' : 'md:hidden'}`}
           >
             <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
               <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
             </svg>
           </button>
+          {workspaceNav && (
+            <button
+              type="button"
+              onClick={onSearch}
+              aria-label="Search rooms, messages, and tasks"
+              className="header-glass-control hidden h-11 flex-shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-ink-soft transition hover:text-ink lg:flex"
+            >
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
+              </svg>
+              <kbd className="rounded-md border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">⌘K</kbd>
+            </button>
+          )}
           <div className="hidden sm:block">{mentionNav}</div>
           {agentCount > 0 && (
             <div
@@ -204,6 +226,9 @@ export function RoomHeader({
           />
         </div>
       </div>
+      {workspaceNav && (
+        <div className="flex h-11 flex-shrink-0 items-center px-2 lg:hidden">{workspaceNav}</div>
+      )}
     </header>
   );
 }

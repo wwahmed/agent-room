@@ -2,6 +2,7 @@ import { Fragment, useRef, useState, useEffect, useLayoutEffect, useMemo, useCal
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
+import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
@@ -96,8 +97,8 @@ function PageScaffold({ title, purpose, summary, action, children }: {
     <section className="px-4 pb-8 pt-5 sm:px-6">
       <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-lg font-bold tracking-tight text-ink">{title}</h2>
-          <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{purpose}</p>
+          <h2 className="text-[24px] font-bold leading-tight tracking-tight text-ink">{title}</h2>
+          <p className="mt-1 text-[16px] leading-relaxed text-ink-soft sm:text-[15px]">{purpose}</p>
         </div>
         {action}
       </header>
@@ -114,7 +115,7 @@ const CHIP_TONES = {
 } as const;
 
 function SummaryChip({ tone, children }: { tone: keyof typeof CHIP_TONES; children: React.ReactNode }) {
-  return <span className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${CHIP_TONES[tone]}`}>{children}</span>;
+  return <span className={`rounded-full border px-2.5 py-1 text-[15px] font-semibold sm:text-[14px] ${CHIP_TONES[tone]}`}>{children}</span>;
 }
 
 // T-44: People shares the facepile's presence vocabulary — green = healthy
@@ -264,8 +265,13 @@ export function Room() {
     if (panel && (panel === 'room' || MAIN_TABS.some(t => t.key === panel))) setMainTab(panel as MainTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, location.search]);
+  // T-71: Settings' Back returns to the destination the reader came from.
+  const prevTabRef = useRef<MainTab>('chat');
   const selectTab = (tab: MainTab) => {
-    setMainTab(tab);
+    setMainTab(current => {
+      if (tab === 'room' && current !== 'room') prevTabRef.current = current;
+      return tab;
+    });
     const params = new URLSearchParams(window.location.search);
     if (tab === 'chat') params.delete('panel');
     else params.set('panel', tab);
@@ -1400,12 +1406,12 @@ export function Room() {
                     >
                       <AgentAvatar participant={p} size="lg" />
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1 truncate text-sm font-semibold lg:text-xs">
+                        <div className="msg-author flex flex-wrap items-center gap-1 truncate">
                           {p.name}
                           {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[12px] font-semibold text-accent">host</span>}
                           {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[12px] font-semibold text-amber-300">muted</span>}
                         </div>
-                        <div className="truncate text-xs text-ink-soft">
+                        <div className="msg-meta truncate">
                           {[p.role, kindLabel].filter(Boolean).join(' · ')}
                         </div>
                         {/* T-68: the state is the SERVER's verdict (T-66), not a
@@ -1414,7 +1420,7 @@ export function Room() {
                             recently — they stay distinct, because collapsing them is
                             what let presence lie. */}
                         {presence && (
-                          <div className={`mt-0.5 flex items-center gap-1 text-[12px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
+                          <div className={`msg-meta mt-0.5 flex items-center gap-1 font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
                             {presenceGlyph(STATE_TONE_PRESENCE[presence.state].glyph)}
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
@@ -1601,10 +1607,22 @@ export function Room() {
       </PageScaffold>
     ) : tab === 'project' ? (
       <PageScaffold title="Project" purpose="The evidence-gated task board: claimed, built, submitted, verified.">
-        <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
+        <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} board={taskPulse} onAttached={() => { void refreshRoom(); }} />
       </PageScaffold>
     ) : tab === 'room' ? (
-      <PageScaffold title="Settings" purpose="Room identity, access, reply mode, and lifecycle.">
+      <PageScaffold
+        title="Settings"
+        purpose="Room identity, access, reply mode, and lifecycle."
+        action={(
+          <button
+            type="button"
+            onClick={() => selectTab(prevTabRef.current)}
+            className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:text-ink"
+          >
+            <span aria-hidden="true">←</span> Back
+          </button>
+        )}
+      >
         {roomInfoPanel}
         {roomFooterPanel}
       </PageScaffold>
@@ -1627,13 +1645,22 @@ export function Room() {
   const headerAgentStaleCount = headerAgents.filter(agent => agent.state === 'stale' || agent.state === 'disconnected').length;
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken pt-[52px] sm:pt-14">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken pt-[96px] lg:pt-14">
       <WorkspaceRail />
       <RoomListPane activeCode={code} selfName={me.name} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
         <RoomHeader
           room={activeRoom}
           ended={ended}
+          workspaceNav={(
+            /* T-71: navigation lives IN the command bar — no third chrome
+               band. Settings open = four segments stay four, none active. */
+            <WorkspaceSwitcher
+              destinations={MAIN_TABS}
+              active={mainTab === 'room' ? null : mainTab}
+              onSelect={key => selectTab(key as MainTab)}
+            />
+          )}
           listeningCount={listeningCount}
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}
@@ -1712,37 +1739,6 @@ export function Room() {
             Connection hiccup — reconnecting…
           </div>
         )}
-
-        {/* T-71 (design lead ruling): the thin underlined tab band is replaced
-            by a compact WORKSPACE SWITCHER — four destinations as filled
-            44px segments, no fifth tab, no horizontal scroll, no sliver.
-            Settings (formerly the Room tab) lives in the header overflow.
-            T-42's durable ?panel= addresses are unchanged. */}
-        <div role="tablist" aria-label="Workspace sections" className="flex flex-shrink-0 items-center gap-1 border-b border-border-faint bg-surface px-3 py-1.5 sm:px-5">
-          {MAIN_TABS.map(t => (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={mainTab === t.key}
-              onClick={() => selectTab(t.key)}
-              className={`room-tab-label flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-semibold transition sm:flex-none sm:px-4 ${
-                mainTab === t.key
-                  ? 'bg-accent-tint text-accent'
-                  : 'text-ink-soft hover:bg-surface-softer hover:text-ink'
-              }`}
-            >
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="hidden sm:block">
-                {t.icon}
-              </svg>
-              {t.label}
-            </button>
-          ))}
-          {mainTab === 'room' && (
-            <span role="tab" aria-selected="true" className="room-tab-label flex min-h-11 items-center gap-1.5 rounded-lg bg-accent-tint px-3 font-semibold text-accent sm:px-4">
-              Settings
-            </span>
-          )}
-        </div>
 
         {/* T-30: a non-chat tab owns the pane at EVERY width now, not just lg. */}
         {mainTab !== 'chat' && (
@@ -2249,18 +2245,28 @@ export function Room() {
               </div>
             )}
         </div>
-        <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 overflow-y-auto border-l border-border-faint bg-surface px-4 py-5 xl:flex">
+        {/* T-71 rail rules (locked): preview only, ONE shared board source
+            (Room owns the poll, ProjectPanel consumes the same data), every
+            item deep-links to its owning page, no duplicate actions, no
+            independent scroll, >=1440 only. */}
+        <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
           <section aria-label="Active agents">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
-            <div className="space-y-2">
+            <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
+            <div className="space-y-1">
               {headerAgents.slice(0, 6).map(a => (
-                <div key={a.name} className="flex items-center gap-2">
+                <button
+                  key={a.name}
+                  type="button"
+                  onClick={() => selectTab('people')}
+                  aria-label={`${a.name}, ${a.state} — open People`}
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
+                >
                   <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-bold text-white" style={{ backgroundColor: a.color }} aria-hidden="true">{a.initials}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{a.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">{a.name}</span>
                   <span className={`flex flex-shrink-0 items-center ${STATE_TONE_PRESENCE[a.state].text}`} title={a.state}>{presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}</span>
-                </div>
+                </button>
               ))}
-              {headerAgents.length === 0 && <p className="text-[13px] text-ink-soft">No agents connected yet.</p>}
+              {headerAgents.length === 0 && <p className="text-[14px] text-ink-soft">No agents connected yet.</p>}
             </div>
           </section>
           {taskPulse && taskPulse.length > 0 && (() => {
@@ -2268,36 +2274,44 @@ export function Room() {
             const reviewCount = taskPulse.filter(t => t.state === 'awaiting_review').length;
             return (
               <section aria-label="Project pulse">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
-                <div className="rounded-lg border border-border-faint bg-surface-softer p-3">
-                  <div className="text-sm font-semibold text-ink">{doneCount} of {taskPulse.length} verified</div>
+                <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
+                <button
+                  type="button"
+                  onClick={() => selectTab('project')}
+                  aria-label={`Project: ${doneCount} of ${taskPulse.length} verified — open Project`}
+                  className="w-full rounded-lg border border-border-faint bg-surface-softer p-3 text-left transition hover:border-accent/40"
+                >
+                  <div className="text-[14px] font-semibold text-ink">{doneCount} of {taskPulse.length} verified</div>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border-faint">
                     <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.round((doneCount / taskPulse.length) * 100)}%` }} />
                   </div>
-                  <p className="mt-2 text-[12px] text-ink-soft">{taskPulse.length - doneCount} open · {reviewCount} awaiting review</p>
-                  <button type="button" onClick={() => selectTab('project')} className="mt-1 flex min-h-11 items-center text-[13px] font-semibold text-accent transition hover:opacity-80">
-                    Open Project
-                  </button>
-                </div>
+                  <p className="mt-2 text-[14px] text-ink-soft">{taskPulse.length - doneCount} open · {reviewCount} awaiting review</p>
+                </button>
               </section>
             );
           })()}
           <section aria-label="Recent outputs">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
+            <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
             {artifacts.length > 0 ? (
-              <ul className="space-y-1.5">
+              <ul className="space-y-1">
                 {artifacts.slice(-3).reverse().map(a => (
-                  <li key={a.id} className="truncate text-[13px] text-ink-soft" title={a.text}>
-                    <span className="font-semibold text-ink">{a.author}</span> · {a.text.slice(0, 60)}
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectTab('outputs')}
+                      aria-label={`Output from ${a.author} — open Outputs`}
+                      className="flex min-h-11 w-full items-center rounded-lg px-1.5 text-left transition hover:bg-surface-softer"
+                    >
+                      <span className="truncate text-[14px] text-ink-soft" title={a.text}>
+                        <span className="font-semibold text-ink">{a.author}</span> · {a.text.slice(0, 60)}
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-[13px] text-ink-soft">Nothing produced yet.</p>
+              <p className="text-[14px] text-ink-soft">Nothing produced yet.</p>
             )}
-            <button type="button" onClick={() => selectTab('outputs')} className="mt-1 flex min-h-11 items-center text-[13px] font-semibold text-accent transition hover:opacity-80">
-              Open Outputs
-            </button>
           </section>
         </aside>
         </div>

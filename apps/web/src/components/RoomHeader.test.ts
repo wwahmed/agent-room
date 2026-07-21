@@ -25,7 +25,10 @@ describe('room command bar composition', () => {
     expect(header).toContain('More room actions');
     expect(rail).not.toContain('wakichat-icon-192.png');
     expect(pane).not.toContain('h-[60px]');
-    expect(room).toContain('bg-surface-sunken pt-[52px] sm:pt-14');
+    // T-71: in-room mobile chrome is the 96px two-row header shell
+    // (52px identity + 44px workspace switcher), one row at lg+.
+    expect(room).toContain('bg-surface-sunken pt-[96px] lg:pt-14');
+    expect(header).toContain('workspaceNav');
   });
 
   it('keeps mobile navigation and touch-size header actions', () => {

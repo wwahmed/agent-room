@@ -73,9 +73,12 @@ interface Props {
   isHost: boolean;
   selfName: string;
   onAttached: () => void;
+  /** T-71 rail rule: ONE board source. When the parent owns the poll it
+   *  passes the tasks here and this panel's own poll stands down. */
+  board?: BoardTask[] | null;
 }
 
-export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
+export function ProjectPanel({ room, isHost, selfName, onAttached, board }: Props) {
   const location = useLocation();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
@@ -95,6 +98,9 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   }, []);
 
   useEffect(() => {
+    // T-71: when the parent supplies the board (shared source with the
+    // contextual rail), this panel must not run a second poll.
+    if (board !== undefined) return;
     if (!room.projectId) return;
     let cancelled = false;
     const pull = () => {
@@ -105,7 +111,11 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
     pull();
     const id = window.setInterval(pull, 30_000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [room.code, room.projectId]);
+  }, [room.code, room.projectId, board !== undefined]);
+
+  useEffect(() => {
+    if (board !== undefined) setTasks(board ?? []);
+  }, [board]);
 
   useEffect(() => {
     setTaskPreferences(loadTaskPreferences(room.code));
