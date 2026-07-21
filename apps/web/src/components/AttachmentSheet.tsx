@@ -19,6 +19,7 @@ interface Props {
 }
 
 const BACK_STATE = 'wakichat:attachment-sheet';
+let openNonce = 0;
 
 export function AttachmentSheet({ open, onClose, onPickImages, onPickFiles, returnFocusRef }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -30,7 +31,12 @@ export function AttachmentSheet({ open, onClose, onPickImages, onPickFiles, retu
   useEffect(() => {
     if (!open) return;
     poppedRef.current = false;
-    try { window.history.pushState({ [BACK_STATE]: true }, ''); } catch { /* sandboxed */ }
+    // Per-open nonce: history.back() is ASYNC, so a rapid close-and-reopen
+    // could otherwise let the OLD close's back() pop the NEW open's entry
+    // and silently dismiss the fresh sheet. Cleanup only consumes an entry
+    // it can prove is its own.
+    const nonce = ++openNonce;
+    try { window.history.pushState({ [BACK_STATE]: nonce }, ''); } catch { /* sandboxed */ }
     const onPop = () => { poppedRef.current = true; onClose(); };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -48,7 +54,7 @@ export function AttachmentSheet({ open, onClose, onPickImages, onPickFiles, retu
       document.removeEventListener('mousedown', onPointer);
       if (!poppedRef.current) {
         try {
-          if ((window.history.state as Record<string, unknown> | null)?.[BACK_STATE]) window.history.back();
+          if ((window.history.state as Record<string, unknown> | null)?.[BACK_STATE] === nonce) window.history.back();
         } catch { /* sandboxed */ }
       }
       returnFocusRef.current?.focus();
