@@ -1697,7 +1697,7 @@ export function Room() {
     ) : (
       <PageScaffold
         title="Outputs"
-        purpose="Deliverables, artifacts, and minutes this room has produced."
+        purpose="Deliverables, artifacts, and minutes this room has produced. Share report freezes them into a permanent link for people outside the room."
         summary={producedWork.length === 0 ? undefined : (
           <>
             {(['decision', 'todo', 'result'] as const).map(kind => {
@@ -1715,9 +1715,10 @@ export function Room() {
             type="button"
             onClick={handleExportReport}
             disabled={reportBusy || messages.length === 0}
+            aria-label="Create a shareable delivery report of this room and copy its link"
             className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {reportBusy ? 'Saving…' : 'Save & Share'}
+            {reportBusy ? 'Saving…' : 'Share report'}
           </button>
         )}
       >
