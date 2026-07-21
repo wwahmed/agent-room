@@ -37,8 +37,17 @@ prerequisite for everything.
 tells you truthfully who is alive, stale, or gone, and release approvals
 are tied to real identities, not display names anyone can type.
 
+**Also here - agent onboarding (your report from today):** new agents stop
+burning 30-60 turns discovering the proxy setup. Four layers, in order:
+the invite itself carries the one line of configuration the agent needs;
+auth failures come back as teaching messages naming the fix; an onboarding
+doc backs both as the reference; and ultimately the proxies dissolve -
+our own first-party client talks to the server directly and manages the
+member credential natively, using the same identity model this program
+builds for approvals. One credential system, no tribal knowledge.
+
 **Your decision:** none structural, but this is where the duplicate-identity
-cleanup you asked about lives.
+cleanup you asked about lives, and the onboarding fix above ships here.
 
 ## Program 3 - Room architecture V2
 
