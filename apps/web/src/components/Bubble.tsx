@@ -1,8 +1,9 @@
 import { Avatar } from './Avatar.js';
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { Message, MessageAttachment } from '@agent-room/shared';
 import { normalizeEscapedWhitespace } from '@agent-room/shared';
 import { MENTION_SOURCE, isSelfMention } from '../lib/mentions.js';
+import { ImageLightbox } from './ImageLightbox.js';
 
 interface Props {
   message: Message;
@@ -85,29 +86,35 @@ export function systemEventLabel(message: Message): string {
 
 // Exported for MessageRow (T-05 editorial rows) — same renderer, new layout.
 export function AttachmentList({ attachments }: { attachments: MessageAttachment[] }) {
+  const [preview, setPreview] = useState<MessageAttachment | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
+
   return (
-    <div className="mt-2 space-y-2">
-      {attachments.map(attachment => (
-        attachment.type === 'image'
-          ? <ImageAttachment key={attachment.id} attachment={attachment} />
-          : <FileAttachment key={attachment.id} attachment={attachment} />
-      ))}
-    </div>
+    <>
+      <div className="mt-2 space-y-2">
+        {attachments.map(attachment => (
+          attachment.type === 'image'
+            ? <ImageAttachment key={attachment.id} attachment={attachment} onOpen={() => setPreview(attachment)} />
+            : <FileAttachment key={attachment.id} attachment={attachment} />
+        ))}
+      </div>
+      {preview && <ImageLightbox attachment={preview} onClose={closePreview} />}
+    </>
   );
 }
 
-function ImageAttachment({ attachment }: { attachment: MessageAttachment }) {
+function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment; onOpen: () => void }) {
   return (
     <div className="overflow-hidden rounded-lg border border-black/10 bg-black/5">
-      <a href={attachment.url} target="_blank" rel="noreferrer" className="block">
+      <button type="button" onClick={onOpen} className="block w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" aria-label={`Open ${attachment.name} in image viewer`}>
         <img src={attachment.url} alt={attachment.name} className="max-h-64 w-full object-contain" />
-      </a>
+      </button>
       <div className="flex items-center justify-between gap-2 border-t border-black/10 px-2 py-1.5 text-[12px]">
         <div className="min-w-0">
           <div className="truncate font-semibold">{attachment.name}</div>
           <div className="opacity-60">{formatBytes(attachment.size)} · {fileTypeLabel(attachment)}</div>
         </div>
-        <AttachmentActions attachment={attachment} />
+        <AttachmentActions attachment={attachment} onOpen={onOpen} />
       </div>
     </div>
   );
@@ -128,17 +135,14 @@ function FileAttachment({ attachment }: { attachment: MessageAttachment }) {
   );
 }
 
-function AttachmentActions({ attachment }: { attachment: MessageAttachment }) {
+function AttachmentActions({ attachment, onOpen }: { attachment: MessageAttachment; onOpen?: () => void }) {
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <a
-        href={attachment.url}
-        target="_blank"
-        rel="noreferrer"
-        className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface"
-      >
-        Open
-      </a>
+      {onOpen ? (
+        <button type="button" onClick={onOpen} className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface">View</button>
+      ) : (
+        <a href={attachment.url} target="_blank" rel="noreferrer" className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface">Open</a>
+      )}
       <a
         href={attachment.url}
         download={attachment.name}
