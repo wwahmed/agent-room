@@ -120,11 +120,13 @@ async function ensureFixtureRoom() {
   for (let i = 0; i < 6; i++) await msg(i % 2 ? 'GateA' : 'GateB', `Rapid fixture message ${i + 1}.`, id++);
   await msg('GateB', '@GateA a deterministic mention for the highlight state.', id++);
   // T-72: a same-sender heartbeat RUN, so the collapsed "3 updates" Activity
-  // Note (and its full-width body) is photographed and measured every run.
-  // One line is long enough to wrap at 390 — the ribbon regression's trigger.
+  // Note is photographed and measured every run. Review finding: the NEWEST
+  // member (the one the note displays) must be the LONG body — the ribbon
+  // regression's exact trigger — so the gate measures the hard state, clamped
+  // with Show more, not a harmless two-word fixture.
   await msg('GateA', 'status ping fixture', id++, 'status');
-  await msg('GateA', 'Deterministic heartbeat: build finished green and the deploy step is proceeding to verification now.', id++, 'status');
-  await msg('GateA', 'status run fixture, newest member', id++, 'status');
+  await msg('GateA', 'status run fixture, older member', id++, 'status');
+  await msg('GateA', 'Deterministic heartbeat: the build finished green and the deploy step is proceeding to verification now. Full report: the bundle hash matched the source tree, the visual gate ran every frame of the matrix, and no geometry findings remain outstanding on this deploy candidate.', id++, 'status');
   // rev4 (review finding): the VIEWER's own message, so the self-bubble
   // anatomy renders in fixture frames. Sent as ClaudeUI with the gate's key.
   if (memberKey) {
