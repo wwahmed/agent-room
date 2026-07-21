@@ -1,0 +1,17 @@
+{
+  "comment": "Approved semantic type FLOORS (minimums, px) per the pinned mobile contract. The enforced design may exceed these; dropping below any of them fails the deploy. Update only with the design lead's ruling.",
+  "phone": {
+    "prose": { "fontSize": 19, "fontWeight": 400 },
+    "author": { "fontSize": 17, "fontWeight": 700 },
+    "composerTyped": { "fontSize": 18 },
+    "tab": { "fontSize": 16 },
+    "meta": { "fontSize": 14 }
+  },
+  "desktop": {
+    "prose": { "fontSize": 15, "fontWeight": 400 },
+    "author": { "fontSize": 13, "fontWeight": 600 },
+    "composerTyped": { "fontSize": 16 },
+    "tab": { "fontSize": 14 },
+    "meta": { "fontSize": 12 }
+  }
+}

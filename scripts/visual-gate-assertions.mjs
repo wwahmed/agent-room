@@ -109,7 +109,29 @@ export function ruleScrollReach(m) {
   return out.slice(0, 4);
 }
 
-const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach];
+/** T-63 acceptance (design lead): the approved semantic type roles are
+ *  mechanically gated. Floors come from scripts/type-floors.json; a computed
+ *  size or weight below floor on the LIVE element fails the deploy. The
+ *  fourth type regression of the night shipped through a green gate — this
+ *  rule is why that cannot happen a fifth time. */
+export function ruleTypeFloors(m) {
+  if (!m.typeRoles || !m.typeFloors) return [];
+  const floors = m.viewportW < 640 ? m.typeFloors.phone : m.typeFloors.desktop;
+  const out = [];
+  for (const [role, floor] of Object.entries(floors ?? {})) {
+    const live = m.typeRoles[role];
+    if (!live) continue; // role absent on this surface — the matrix covers it elsewhere
+    if (floor.fontSize && live.fontSize < floor.fontSize - 0.01) {
+      out.push(`type floor: ${role} ${live.fontSize}px < ${floor.fontSize}px minimum`);
+    }
+    if (floor.fontWeight && live.fontWeight < floor.fontWeight) {
+      out.push(`type floor: ${role} weight ${live.fontWeight} < ${floor.fontWeight} minimum`);
+    }
+  }
+  return out.slice(0, 6);
+}
+
+const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors];
 
 export function evaluateAssertions(measurement) {
   return RULES.flatMap(rule => rule(measurement));

@@ -25,6 +25,8 @@ import pixelmatch from 'pixelmatch';
 import { frameVerdict, gateSummary, enumerateFrames } from './visual-gate-report.mjs';
 import { evaluateAssertions } from './visual-gate-assertions.mjs';
 
+const TYPE_FLOORS = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'type-floors.json'), 'utf8'));
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WORK = process.env.VISUAL_GATE_WORK ?? join(ROOT, '.visual-gate');
 const BASELINE = join(WORK, 'baseline');
@@ -50,6 +52,19 @@ const STATES = [
   { name: 'chat', path: `/r/${ROOM}`, ready: async p => { await p.waitForSelector('textarea', { timeout: 15000 }); await p.waitForTimeout(2400); } },
   { name: 'people', path: `/r/${ROOM}?panel=people`, ready: async p => p.waitForTimeout(2400) },
   { name: 'outputs', path: `/r/${ROOM}?panel=outputs`, ready: async p => p.waitForTimeout(2400) },
+  {
+    // T-63 acceptance: the state nobody photographed — the composer WITH
+    // typed content and focus, where the fourth regression lived.
+    name: 'composer-typed',
+    path: `/r/${ROOM}`,
+    ready: async p => {
+      await p.waitForSelector('textarea', { timeout: 15000 });
+      const ta = p.locator('textarea').first();
+      await ta.click();
+      await ta.type('Deterministic typed fixture text');
+      await p.waitForTimeout(600);
+    },
+  },
   {
     name: 'palette',
     path: `/r/${ROOM}`,
@@ -234,9 +249,32 @@ for (const vp of VIEWPORTS) {
             feed: feedEl ? box(feedEl) : null,
             floating,
             scrollContainers,
+            // T-63 acceptance: computed type per semantic role, from the LIVE
+            // elements. composerTyped reads the focused textarea only when it
+            // actually holds a value (the state that kept regressing).
+            typeRoles: (() => {
+              const roles = {};
+              const grab = (sel, name) => {
+                const el = document.querySelector(sel);
+                if (!el) return;
+                const c = getComputedStyle(el);
+                roles[name] = { fontSize: parseFloat(c.fontSize), fontWeight: parseInt(c.fontWeight, 10) || 400 };
+              };
+              grab('.msg-prose', 'prose');
+              grab('.msg-author', 'author');
+              grab('[role="tab"]', 'tab');
+              grab('.msg-meta', 'meta');
+              const ta = document.querySelector('textarea');
+              if (ta && ta.value) {
+                const c = getComputedStyle(ta);
+                roles.composerTyped = { fontSize: parseFloat(c.fontSize), fontWeight: parseInt(c.fontWeight, 10) || 400 };
+              }
+              return roles;
+            })(),
           };
         });
         if (state.triggerCenter) measurement.overlayTriggerCenter = state.triggerCenter;
+        measurement.typeFloors = TYPE_FLOORS;
         for (const failure of evaluateAssertions(measurement)) {
           geometryFailures.push({ frame: name, failure });
         }

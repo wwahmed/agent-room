@@ -225,7 +225,8 @@ export function Home() {
                 role="tab"
                 aria-selected={view === key}
                 onClick={() => { setView(key); setShowTestRooms(false); }}
-                className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition ${
+                // Type-floor gate finding: role=tab reads 16px on phones.
+                className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[16px] font-semibold transition sm:text-sm ${
                   view === key ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
                 }`}
               >

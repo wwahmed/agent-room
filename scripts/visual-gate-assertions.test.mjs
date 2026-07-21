@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateAssertions,
   ruleScrollReach,
+  ruleTypeFloors,
   ruleClipped,
   ruleFloatingVsComposer,
   ruleMixedTheme,
@@ -96,5 +97,24 @@ describe('ruleScrollReach partial clipping (rev4)', () => {
   it('BROKEN: a control mostly clipped by its container edge fails', () => {
     const fails = ruleScrollReach({ scrollContainers: [{ label: 'tabs', hiddenControls: 0, partiallyHiddenControls: 1 }] });
     expect(fails[0]).toContain('partially clips 1 interactive control');
+  });
+});
+
+describe('ruleTypeFloors (T-63 acceptance: mechanically gated type roles)', () => {
+  const floors = {
+    phone: { prose: { fontSize: 19, fontWeight: 400 }, composerTyped: { fontSize: 18 } },
+    desktop: { prose: { fontSize: 15, fontWeight: 400 } },
+  };
+  it('BROKEN: 13px phone prose fails the floor', () => {
+    const fails = ruleTypeFloors({ viewportW: 390, typeFloors: floors, typeRoles: { prose: { fontSize: 13, fontWeight: 400 } } });
+    expect(fails[0]).toContain('type floor: prose 13px < 19px minimum');
+  });
+  it('BROKEN: a typed composer at 16px on a phone fails the 18px floor', () => {
+    const fails = ruleTypeFloors({ viewportW: 390, typeFloors: floors, typeRoles: { composerTyped: { fontSize: 16, fontWeight: 400 } } });
+    expect(fails[0]).toContain('composerTyped 16px < 18px');
+  });
+  it('meeting or exceeding the floor passes; absent roles are skipped', () => {
+    expect(ruleTypeFloors({ viewportW: 390, typeFloors: floors, typeRoles: { prose: { fontSize: 20, fontWeight: 400 } } })).toEqual([]);
+    expect(ruleTypeFloors({ viewportW: 1440, typeFloors: floors, typeRoles: {} })).toEqual([]);
   });
 });
