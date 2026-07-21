@@ -223,7 +223,13 @@ for (const vp of VIEWPORTS) {
               body: lum(document.body),
             },
             overlay: dialog ? (r => ({ left: r.left, width: r.width }))(dialog.getBoundingClientRect()) : null,
-            bubbles: [...document.querySelectorAll('[data-gate="msg-content"]')].slice(-10).map(b => b.getBoundingClientRect().width),
+            bubbles: [...document.querySelectorAll('[data-gate="msg-content"]')].slice(-10).map(b => {
+              const r = b.getBoundingClientRect();
+              const lh = parseFloat(getComputedStyle(b).lineHeight) || 24;
+              // Only WRAPPED content can be 'collapsed' — a short one-liner is
+              // intrinsically narrow and that is fine.
+              return { w: r.width, wrapped: r.height > lh * 1.8 };
+            }),
             composer: composerEl ? box(composerEl) : null,
             feed: feedEl ? box(feedEl) : null,
             floating,

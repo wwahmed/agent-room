@@ -60,11 +60,12 @@ describe('visual gate geometry assertions', () => {
     expect(ruleOverlayPlacement({ ...clean, overlay: { left: 470, width: 500 }, overlayTriggerCenter: null })).toEqual([]);
   });
 
-  it('BROKEN: a 150px message bubble on a phone collapses below the minimum', () => {
-    const fails = ruleMobileBubbles({ ...clean, viewportW: 390, bubbles: [150] });
+  it('BROKEN: a WRAPPED 150px bubble on a phone collapses below the minimum', () => {
+    const fails = ruleMobileBubbles({ ...clean, viewportW: 390, bubbles: [{ w: 150, wrapped: true }] });
     expect(fails[0]).toContain('message content collapsed: 150px');
-    // same width on desktop is fine
-    expect(ruleMobileBubbles({ ...clean, viewportW: 1440, bubbles: [150] })).toEqual([]);
+    // an intrinsically narrow one-liner is fine; desktop is fine either way
+    expect(ruleMobileBubbles({ ...clean, viewportW: 390, bubbles: [{ w: 150, wrapped: false }] })).toEqual([]);
+    expect(ruleMobileBubbles({ ...clean, viewportW: 1440, bubbles: [{ w: 150, wrapped: true }] })).toEqual([]);
   });
 
   it('BROKEN: dark header over a light canvas is a mixed-theme shell', () => {

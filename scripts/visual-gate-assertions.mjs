@@ -67,9 +67,9 @@ export function ruleOverlayPlacement(m) {
 export function ruleMobileBubbles(m) {
   if (m.viewportW > 480) return [];
   return (m.bubbles ?? [])
-    .filter(w => w > 0 && w < MOBILE_BUBBLE_MIN)
+    .filter(b => (typeof b === 'object' ? b.wrapped && b.w > 0 && b.w < MOBILE_BUBBLE_MIN : b > 0 && b < MOBILE_BUBBLE_MIN))
     .slice(0, 3)
-    .map(w => `message content collapsed: ${Math.round(w)}px < ${MOBILE_BUBBLE_MIN}px minimum`);
+    .map(b => `message content collapsed: ${Math.round(typeof b === 'object' ? b.w : b)}px < ${MOBILE_BUBBLE_MIN}px minimum`);
 }
 
 /** Shell surfaces must agree on a theme: no dark header over a light canvas. */
