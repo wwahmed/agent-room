@@ -20,7 +20,14 @@ import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
-import { markRoomRead, getReadCount } from '../lib/unread.js';
+import {
+  firstUnreadMessageIndex,
+  getReadCount,
+  isSelfAuthored,
+  markRoomRead,
+  markSelfMessageSeen,
+  unmarkSelfMessageSeen,
+} from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { relativeTime } from '../lib/relativeTime.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
@@ -189,12 +196,15 @@ export function Room() {
   if (arrivalReadRef.current === null && messageTotal > 0) {
     arrivalReadRef.current = getReadCount(code) ?? messageTotal;
   }
-  const unreadOnArrival = Math.max(0, messageTotal - (arrivalReadRef.current ?? messageTotal));
-  // Index of the first message he hasn't read. The feed holds the tail of the
-  // absolute counter, so count back from the end.
-  const firstUnreadIdx = unreadOnArrival > 0 && unreadOnArrival <= messages.length
-    ? messages.length - unreadOnArrival
-    : -1;
+  // The absolute marker locates the unread tail within the bounded message
+  // page. Skip messages authored by this browser identity so they never create
+  // a misleading "new messages" divider for their own sender.
+  const firstUnreadIdx = firstUnreadMessageIndex(
+    messages,
+    messageTotal,
+    arrivalReadRef.current ?? messageTotal,
+    self?.name,
+  );
   const firstUnreadId = firstUnreadIdx >= 0 ? messages[firstUnreadIdx]?.id ?? null : null;
   const firstUnreadIdRef = useRef<number | null>(null);
   if (firstUnreadIdRef.current === null && firstUnreadId != null) firstUnreadIdRef.current = firstUnreadId;
@@ -204,8 +214,8 @@ export function Room() {
   // while scrolled UP deliberately does not mark read — those messages are still
   // unseen, which is the whole point of the badge.
   useEffect(() => {
-    if (messageTotal > 0 && atBottomRef.current) markRoomRead(code, messageTotal);
-  }, [messageTotal, code]);
+    if (messageTotal > 0 && atBottomRef.current) markRoomRead(code, messageTotal, self?.name);
+  }, [messageTotal, code, self?.name]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -559,6 +569,10 @@ export function Room() {
       if (el) el.scrollTop = el.scrollHeight - anchor.heightBefore + anchor.topBefore;
     }
 
+    const appendedUnread = appended > 0
+      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name)).length
+      : 0;
+
     if (prevLenRef.current === 0 && len > 0) {
       const target = firstUnreadIdRef.current;
       const el = target != null ? document.getElementById(`msg-${target}`) : null;
@@ -574,8 +588,8 @@ export function Room() {
     } else if (appended > 0 && atBottomRef.current) {
       feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
       setUnseenCount(0);
-    } else if (appended > 0) {
-      setUnseenCount((n) => n + appended);
+    } else if (appendedUnread > 0) {
+      setUnseenCount((n) => n + appendedUnread);
     }
     prevLenRef.current = len;
     prevLastIdRef.current = len > 0 ? messages[len - 1]!.id : null;
@@ -894,9 +908,13 @@ export function Room() {
     setDictationDraft(false);
     setAttachments([]);
     setReplyingTo(null);
+    // The server's absolute count lands on the next poll. Record the successful
+    // intent now so navigating home during that gap cannot badge our own send.
+    markSelfMessageSeen(code, me.name);
     try {
       await sendMessage(msg);
     } catch (e) {
+      unmarkSelfMessageSeen(code, me.name);
       const { showToast } = await import('../components/Toast.js');
       showToast(e instanceof Error ? `Send failed: ${e.message}` : 'Send failed');
       setText(body); // restore draft
@@ -1289,7 +1307,7 @@ export function Room() {
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken">
       <WorkspaceRail />
-      <RoomListPane activeCode={code} />
+      <RoomListPane activeCode={code} selfName={me.name} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
         <RoomHeader
           room={activeRoom}

@@ -21,7 +21,7 @@ interface RoomSummary {
   messageCount?: number;
 }
 
-export function RoomListPane({ activeCode }: { activeCode: string }) {
+export function RoomListPane({ activeCode, selfName }: { activeCode: string; selfName: string }) {
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export function RoomListPane({ activeCode }: { activeCode: string }) {
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {rooms.map(r => {
           const active = r.code === activeCode;
-          const unread = unreadCount(r.code, r.messageCount);
+          const unread = unreadCount(r.code, r.messageCount, selfName);
           return (
             <Link
               key={r.code}

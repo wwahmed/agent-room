@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { markRoomRead, unreadCount } from './unread.js';
+import {
+  firstUnreadMessageIndex,
+  isSelfAuthored,
+  markRoomRead,
+  markSelfMessageSeen,
+  unmarkSelfMessageSeen,
+  unreadCount,
+} from './unread.js';
 
 // The suite runs in node (no DOM), so stand up the bit of Storage we depend on.
 const store = new Map<string, string>();
@@ -54,5 +61,56 @@ describe('unread counts (T-62)', () => {
     markRoomRead('B', 2);
     expect(unreadCount('A', 12)).toBe(2);
     expect(unreadCount('B', 12)).toBe(10);
+  });
+
+  it('excludes a locally-authored message immediately while preserving other unread messages', () => {
+    markRoomRead('R', 10, 'Waqas');
+    markSelfMessageSeen('R', 'Waqas');
+    expect(unreadCount('R', 11, 'Waqas')).toBe(0);
+    expect(unreadCount('R', 12, 'Waqas')).toBe(1);
+  });
+
+  it('keeps pending self-authored counts isolated by browser identity', () => {
+    markRoomRead('R', 3, 'Waqas');
+    markSelfMessageSeen('R', 'Waqas');
+    expect(unreadCount('R', 4, 'Waqas')).toBe(0);
+    expect(unreadCount('R', 4, 'Claude')).toBe(1);
+  });
+
+  it('clears the pending self subtraction after the reader catches up', () => {
+    markRoomRead('R', 10, 'Waqas');
+    markSelfMessageSeen('R', 'Waqas');
+    markRoomRead('R', 11, 'Waqas');
+    expect(unreadCount('R', 12, 'Waqas')).toBe(1);
+  });
+
+  it('rolls back the pending self subtraction when send fails', () => {
+    markRoomRead('R', 10, 'Waqas');
+    markSelfMessageSeen('R', 'Waqas');
+    unmarkSelfMessageSeen('R', 'Waqas');
+    expect(unreadCount('R', 11, 'Waqas')).toBe(1);
+  });
+
+  it('recognizes only messages from the current web identity as self-authored', () => {
+    expect(isSelfAuthored({ type: 'msg', client: 'web', name: 'Waqas' }, 'waqas')).toBe(true);
+    expect(isSelfAuthored({ type: 'msg', client: 'cc', name: 'Waqas' }, 'Waqas')).toBe(false);
+    expect(isSelfAuthored({ type: 'sys', client: 'web', name: 'Waqas' }, 'Waqas')).toBe(false);
+  });
+
+  it('places the unread divider on the first unread message from someone else', () => {
+    const messages = [
+      { type: 'msg', client: 'web', name: 'Claude' },
+      { type: 'msg', client: 'web', name: 'Waqas' },
+      { type: 'msg', client: 'cc', name: 'Claude' },
+    ];
+    expect(firstUnreadMessageIndex(messages, 13, 11, 'Waqas')).toBe(2);
+  });
+
+  it('returns no divider when every unread message is self-authored', () => {
+    const messages = [
+      { type: 'msg', client: 'cc', name: 'Claude' },
+      { type: 'msg', client: 'web', name: 'Waqas' },
+    ];
+    expect(firstUnreadMessageIndex(messages, 2, 1, 'Waqas')).toBe(-1);
   });
 });

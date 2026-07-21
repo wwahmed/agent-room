@@ -124,7 +124,7 @@ export function Home() {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Your rooms</h2>
             {activeRooms.map(r => {
               // T-62: unread since this device last read to the bottom of the room.
-              const unread = unreadCount(r.code, r.messageCount);
+              const unread = unreadCount(r.code, r.messageCount, identity.name);
               // The card used to age off createdAt, so a room that had been busy
               // all day still read "21h ago" — that's the room's birthday, not its
               // last update. lastActivityAt is the one the host actually wants.
