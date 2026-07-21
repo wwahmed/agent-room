@@ -68,6 +68,21 @@ The policy leaves the builder's write authority entirely: only Waqas (host
 key holder) can change who approves releases, every change is versioned and
 kept, and the pipeline records the policy version + digest in the release.
 
+### Room-of-record binding (verifier finding, pre-implementation)
+
+Room-scoped policy alone is spoofable: a builder can create a FRESH room,
+hold its host key legitimately, set that room's policy to name their own
+sibling identity, and point the pipeline at it - every check then passes.
+Closure: `getReleasePolicy` also returns the policy room's host identity
+hash (`hostAuthIdHash`, derived server-side from the room creator's
+verified Access identity), and the pipeline refuses any policy room whose
+host hash differs from the RATIFIED OWNER hash. The owner hash is recorded
+once, at ratification, in the release pipeline's committed configuration -
+changing it is a reviewed commit the owner and Lead see, and a
+builder-minted room can never satisfy it because the builder cannot forge
+Waqas's server-verified Access identity. The governance room code itself is
+then convenience, not authority.
+
 ## Pipeline consumption (changes in scripts/release-pipeline.mjs)
 
 `approve-check` then requires ALL of:
@@ -93,6 +108,15 @@ Proposed procedure, needing the Lead's ratification before any of it runs:
    authorization - server restarts are held state under the standing rule;
 4. post-restart verification: healthz, a probe send with a wrong memberKey
    (must refuse), one attested message inspected for the new metadata.
+
+Pre-cutover runbook steps (verifier findings, named so neither is a
+surprise):
+- BEFORE enforcement flips, verify the host's own web row carries an
+  authIdHash - otherwise the host locks himself out of approving with an
+  unattested row. If absent, one fresh authenticated join repairs it.
+- The initial `setReleasePolicy` is a HOST action: until Waqas performs it,
+  no approval can succeed anywhere. That is correct fail-closed behavior
+  and an explicit, scheduled step of the cutover, not an incident.
 
 ## Explicitly out of scope here
 
