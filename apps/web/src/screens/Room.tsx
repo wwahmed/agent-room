@@ -231,6 +231,8 @@ export function Room() {
   const [taskPulse, setTaskPulse] = useState<BoardTask[] | null>(null);
   // Sweep 2 (T-46): Outputs artifact list can expand past the newest 8.
   const [showAllArtifacts, setShowAllArtifacts] = useState(false);
+  // T-71: Outputs filter chips — deliverables/artifacts by kind.
+  const [outputsFilter, setOutputsFilter] = useState<'all' | ArtifactKind>('all');
   const [ownerQuestions, setOwnerQuestions] = useState<RoomQuestion[]>([]);
   const [openQuestionId, setOpenQuestionId] = useState<string | null>(null);
   useEffect(() => {
@@ -1662,7 +1664,24 @@ export function Room() {
         {roomInfoPanel}
       </PageScaffold>
     ) : (
-      <PageScaffold title="Outputs" purpose="Deliverables, artifacts, and minutes this room has produced.">
+      <PageScaffold
+        title="Outputs"
+        purpose="Deliverables, artifacts, and minutes this room has produced."
+        summary={<>
+          <SummaryChip tone="quiet">{artifacts.length} artifact{artifacts.length === 1 ? '' : 's'}</SummaryChip>
+          <SummaryChip tone="quiet">{messages.length} message{messages.length === 1 ? '' : 's'}</SummaryChip>
+        </>}
+        action={(
+          <button
+            type="button"
+            onClick={handleExportReport}
+            disabled={reportBusy || messages.length === 0}
+            className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {reportBusy ? 'Saving…' : 'Save & Share'}
+          </button>
+        )}
+      >
         {renderOutputs()}
       </PageScaffold>
     );
@@ -2406,86 +2425,78 @@ export function Room() {
   // pre-T-05 source position (smaller diff) while the Inspector calls it
   // lazily per open tab.
   function renderOutputs() {
+    // T-71: the page anatomy owns title/summary/primary; this is the CONTENT
+    // — filter chips over work-object cards, then the Minutes object.
+    const kinds: Array<{ key: 'all' | ArtifactKind; label: string }> = [
+      { key: 'all', label: 'All' },
+      { key: 'decision', label: 'Decisions' },
+      { key: 'todo', label: 'TODOs' },
+      { key: 'status', label: 'Status' },
+      { key: 'result', label: 'Results' },
+    ];
+    const filtered = outputsFilter === 'all' ? artifacts : artifacts.filter(a => a.kind === outputsFilter);
     return (
-          <div>
-            <div className="p-4 border-b border-border-faint">
-              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint">Outputs</div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
-                  <div className="text-base font-semibold">{messages.length}</div>
-                  <div className="text-xs text-ink-soft">Messages</div>
-                </div>
-                <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
-                  <div className="text-base font-semibold">{activeRoom.participants.length}</div>
-                  <div className="text-xs text-ink-soft">People</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto p-4">
-              <div className="mb-5 rounded-xl border border-border-faint bg-surface-1 p-4">
-                <h2 className="text-sm font-semibold text-ink mb-2">Report</h2>
-                <p className="mb-3 text-sm leading-relaxed text-ink-soft">Freeze this room into a shareable delivery report.</p>
-                <button
-                  onClick={handleExportReport}
-                  disabled={reportBusy || messages.length === 0}
-                  className="min-h-11 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {reportBusy ? 'Saving…' : 'Save & Share'}
-                </button>
-              </div>
-
-              <div className="mb-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold">Artifacts</h2>
-                  <span className="text-xs text-ink-soft">{artifacts.length}</span>
-                </div>
-                {artifacts.length ? (
-                  <div className="space-y-2">
-                    {(showAllArtifacts ? artifacts.slice().reverse() : artifacts.slice(-8).reverse()).map(artifact => (
-                      <ArtifactCard key={artifact.id} artifact={artifact} />
-                    ))}
-                    {/* Sweep 2: the header count and the visible list must
-                        agree — when clipped, say so and offer the rest. */}
-                    {artifacts.length > 8 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllArtifacts(v => !v)}
-                        className="min-h-11 w-full rounded-lg text-[13px] font-semibold text-ink-soft transition hover:bg-surface-softer hover:text-ink"
-                      >
-                        {showAllArtifacts ? 'Show fewer' : `Show all ${artifacts.length}`}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft">
-                    Use [DECISION], [TODO], [STATUS], or [RESULT] in messages to build the delivery log.
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold">Minutes</h2>
-              </div>
-              <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft">
-                Ask an agent to generate minutes from the composer. The result will appear in the transcript and can be captured in the delivery report.
-              </div>
-            </div>
+      <div>
+        <div role="group" aria-label="Filter outputs" className="mb-4 flex flex-wrap gap-1.5">
+          {kinds.map(k => (
+            <button
+              key={k.key}
+              type="button"
+              aria-pressed={outputsFilter === k.key}
+              onClick={() => { setOutputsFilter(k.key); setShowAllArtifacts(false); }}
+              className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg px-3 text-[15px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-[14px] ${
+                outputsFilter === k.key ? 'workspace-active' : 'workspace-idle hover:bg-surface-softer'
+              }`}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+        {filtered.length ? (
+          <div className="space-y-2">
+            {(showAllArtifacts ? filtered.slice().reverse() : filtered.slice(-8).reverse()).map(artifact => (
+              <ArtifactCard key={artifact.id} artifact={artifact} />
+            ))}
+            {filtered.length > 8 && (
+              <button
+                type="button"
+                onClick={() => setShowAllArtifacts(v => !v)}
+                className="flex min-h-11 w-full items-center justify-center rounded-lg text-[15px] font-semibold text-ink-soft transition hover:bg-surface-softer hover:text-ink sm:text-[14px]"
+              >
+                {showAllArtifacts ? 'Show fewer' : `Show all ${filtered.length}`}
+              </button>
+            )}
           </div>
+        ) : (
+          <div className="rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+            {outputsFilter === 'all'
+              ? 'Nothing captured yet. Use [DECISION], [TODO], [STATUS], or [RESULT] in messages to build the delivery log.'
+              : `No ${kinds.find(k => k.key === outputsFilter)?.label.toLowerCase()} captured yet — switch to All to see everything the room has produced.`}
+          </div>
+        )}
+        <div className="mt-6">
+          <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Minutes</h3>
+          <div className="rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+            Ask an agent to generate minutes from the composer. The result lands in the transcript and is captured in the delivery report.
+          </div>
+        </div>
+      </div>
     );
   }
 }
 
 function ArtifactCard({ artifact }: { artifact: RoomArtifact }) {
+  // T-71: work objects read on the semantic ramp — meta row at the meta
+  // role, body at the note role — never 12/13px novels in gray cards.
   return (
-    <div className="rounded-lg border border-border-faint bg-surface-softer p-3">
+    <div className="rounded-xl border border-border-faint bg-surface-softer p-3.5">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className={`text-[12px] font-semibold uppercase ${artifactTone(artifact.kind)}`}>
+        <span className={`msg-meta font-semibold uppercase ${artifactTone(artifact.kind)}`}>
           {artifactLabel(artifact.kind)}
         </span>
-        <span className="text-[12px] text-ink-faint">{artifact.author}</span>
+        <span className="msg-meta">{artifact.author}</span>
       </div>
-      <p className="text-[13px] leading-relaxed text-ink">{artifact.text}</p>
+      <p className="msg-note text-ink">{artifact.text}</p>
     </div>
   );
 }
