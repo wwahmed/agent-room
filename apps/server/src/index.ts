@@ -61,6 +61,7 @@ import {
   type RoomListStore,
 } from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
+import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY } from './search.js';
 import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
@@ -1543,6 +1544,33 @@ const server = createServer(async (req, res) => {
         roomListLimit(url.searchParams.get('limit')),
       );
       return sendJson(res, 200, page);
+    }
+
+    // ---------- T-59: the search behind the command bar's ⌘K field ----------
+    // Rooms always; messages + tasks only when a room code is given, so every
+    // request stays bounded. Hits carry deep-link ids and never credentials.
+    if (path === '/api/search' && req.method === 'GET') {
+      const searchCaller = await resolveCaller(req);
+      if (searchCaller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const q = String(url.searchParams.get('q') ?? '').trim();
+      if (q.length < SEARCH_MIN_QUERY) return sendJson(res, 200, { query: q, hits: [] });
+      await ensureRoomActivityIndex();
+      const page = await listIndexedRoomPage(roomListStore, 0, 100);
+      const hits = searchRooms(page.rooms, q);
+      const roomParam = url.searchParams.get('room');
+      const roomCode = roomParam ? canonicalizeCode(roomParam) : null;
+      if (roomCode) {
+        try {
+          const [messages, board] = await Promise.all([
+            listMessages(client, roomCode, 0),
+            getTaskBoard(roomCode),
+          ]);
+          hits.push(...searchMessages(messages, q, roomCode));
+          hits.push(...searchTasks(board.tasks ?? [], q, roomCode));
+        } catch { /* unknown/expired room: room-topic hits still return */ }
+      }
+      hits.sort((a, b) => b.score - a.score);
+      return sendJson(res, 200, { query: q, hits });
     }
 
     // ---------- T-18: project registry (ids + doc roles only, never paths) ----------
