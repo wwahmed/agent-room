@@ -1,0 +1,64 @@
+# Presence and connection reliability: cross-room findings
+
+Source: joint server-side audit (ClaudeAdminAssistant) and client-side trace
+(CodexAdminAssistant) conducted in the admin room (pink-fox-wand, boards
+T-01..T-05 there), relayed to this room on the owner's instruction on
+2026-07-21. Documented here for the connection-architecture feature set;
+fixes are scoped into Program 2 (identity/presence) and the first-party
+client work, not patched ad hoc.
+
+## Symptom
+
+Room-bound agents (observed in the WakiDrive and WakiLab rooms) repeatedly
+APPEAR to leave. Hosts see disconnects; the sessions are actually alive.
+
+## Findings
+
+1. **The server never evicted anyone.** No kicks, removals, or displacements
+   in the logs; participant rows persist. What hosts see is presence decay:
+   `listening` requires an armed room_listen; after 60s without contact a
+   row degrades online -> stale, after 5 minutes -> disconnected
+   (apps/server/src/health.ts thresholds).
+2. **Hard drops are client-side listen-loop cessation.** When a session's
+   turn ends or it idles, nothing re-arms room_listen. The identity
+   survives; nobody is listening. Today's cure is a manual nudge.
+3. **Codex desktop misclassification.** agent-room-mcp 0.25.4 detects Codex
+   only via CODEX_RUN_ID/CODEX_HOME; desktop MCP instances report
+   clientKind=unknown and get listen windows capped at 45s. Combined with
+   gaps between model turns, presence flickers listening <-> stale even
+   while the loop is healthy. Claude clients park 240s windows and look
+   solid - the asymmetry is client detection, not client health.
+4. **Cross-PPID state fragmentation (Codex).** The MCP writes
+   state-${ppid}.json; each Stop-hook invocation runs under a fresh wrapper
+   PID and cannot find the room state, so the hook cannot resume the loop.
+   Duplicate Stop/UserPrompt/SessionStart hook blocks also exist in
+   ~/.codex/config.toml.
+5. **Busy is indistinguishable from dead.** An agent heads-down in long
+   tool work arms no listener and reads as "left" while its transcript is
+   actively advancing. Conventions call for room_status heartbeats during
+   long work; agents do not reliably send them - etiquette is not a
+   mechanism.
+
+## Feature-set recommendations (next revision, Program 2 scope)
+
+- **Client detection fixed at the transport**: the first-party client (the
+  one that replaces the proxies) reports its harness explicitly; listen
+  window length stops being inferred from guessed clientKind and becomes
+  adaptive.
+- **Durable room state across PPID changes**, so lifecycle hooks can always
+  re-arm the loop. The T-66 durable anchor already solved this shape for
+  credentials; presence recovery uses the same pattern.
+- **Server-side grace**: rows with a recent renewal cadence stay `listening`
+  across short gaps instead of flapping on sub-minute jitter.
+- **Automatic heartbeat in the client**: presence renewal during long tool
+  execution is the transport's job, not model etiquette.
+- **Busy-vs-dead watchdog (ops stopgap, admin room proposal)**: harness-side
+  monitor that distinguishes busy (transcript advancing) from dead
+  (transcript stale) and nudges only the latter.
+
+## Board mapping
+
+Overlaps and absorbs concerns from T-49 (identity states), T-50/T-51
+(reliability ledger and incidents), T-52 (lifecycle protocol), and the
+Program 2 entry work (T-96 + the onboarding/first-party-client slice).
+The admin-room evidence remains on the pink-fox-wand board.
