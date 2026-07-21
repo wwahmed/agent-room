@@ -12,6 +12,13 @@ import {
   type ProjectCandidate,
   type ProjectSummary,
 } from '../lib/api.js';
+import {
+  PENDING_TASK_STATES,
+  projectTaskCounts,
+  projectTasksForView,
+  type PendingTaskState,
+  type ProjectTaskSegment,
+} from '../lib/projectTasks.js';
 
 // T-18 Project tab. Unattached rooms get a host-only picker; attached
 // rooms show the live task board (status/assignee filters) and read-only
@@ -34,6 +41,32 @@ const STATE_TONE: Record<BoardTask['state'], string> = {
   rejected: 'text-red-300 bg-red-500/10 border-red-400/30',
 };
 
+const COMPLETED_PAGE_SIZE = 40;
+
+interface TaskPreferences {
+  roomCode: string;
+  segment: ProjectTaskSegment;
+  status: 'all' | PendingTaskState;
+  assignee: string;
+}
+
+function loadTaskPreferences(roomCode: string): TaskPreferences {
+  const fallback: TaskPreferences = { roomCode, segment: 'pending', status: 'all', assignee: 'all' };
+  try {
+    const stored = JSON.parse(localStorage.getItem(`wakichat:project-tasks:${roomCode}`) ?? '{}') as Partial<TaskPreferences>;
+    return {
+      roomCode,
+      segment: stored.segment === 'completed' ? 'completed' : 'pending',
+      status: stored.status === 'all' || PENDING_TASK_STATES.includes(stored.status as PendingTaskState)
+        ? stored.status as TaskPreferences['status']
+        : 'all',
+      assignee: typeof stored.assignee === 'string' ? stored.assignee : 'all',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 interface Props {
   room: Room;
   isHost: boolean;
@@ -48,8 +81,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   const [pickId, setPickId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | BoardTask['state']>('all');
-  const [assigneeFilter, setAssigneeFilter] = useState('all');
+  const [taskPreferences, setTaskPreferences] = useState<TaskPreferences>(() => loadTaskPreferences(room.code));
+  const [completedLimit, setCompletedLimit] = useState(COMPLETED_PAGE_SIZE);
   const [docRole, setDocRole] = useState<string | null>(null);
   const [doc, setDoc] = useState<{ rel: string; content: string; truncated: boolean } | null>(null);
 
@@ -72,6 +105,20 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   }, [room.code, room.projectId]);
 
   useEffect(() => {
+    setTaskPreferences(loadTaskPreferences(room.code));
+    setCompletedLimit(COMPLETED_PAGE_SIZE);
+  }, [room.code]);
+
+  useEffect(() => {
+    if (taskPreferences.roomCode !== room.code) return;
+    localStorage.setItem(`wakichat:project-tasks:${room.code}`, JSON.stringify({
+      segment: taskPreferences.segment,
+      status: taskPreferences.status,
+      assignee: taskPreferences.assignee,
+    }));
+  }, [room.code, taskPreferences]);
+
+  useEffect(() => {
     if (!room.projectId || !docRole) { setDoc(null); return; }
     let cancelled = false;
     void readProjectDoc(room.projectId, docRole).then(d => {
@@ -86,11 +133,18 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
     for (const t of tasks ?? []) if (t.owner) names.add(t.owner);
     return [...names].sort();
   }, [tasks]);
+  const preferences = taskPreferences.roomCode === room.code ? taskPreferences : loadTaskPreferences(room.code);
+  const counts = projectTaskCounts(tasks ?? []);
+  const matchingTasks = projectTasksForView(tasks ?? [], preferences.segment, preferences.status, preferences.assignee);
+  const visible = preferences.segment === 'completed' ? matchingTasks.slice(0, completedLimit) : matchingTasks;
 
-  const visible = (tasks ?? []).filter(t =>
-    (statusFilter === 'all' || t.state === statusFilter) &&
-    (assigneeFilter === 'all' || t.owner === assigneeFilter),
-  );
+  function updateTaskPreferences(change: Partial<Omit<TaskPreferences, 'roomCode'>>) {
+    setTaskPreferences(current => ({
+      ...(current.roomCode === room.code ? current : loadTaskPreferences(room.code)),
+      ...change,
+      roomCode: room.code,
+    }));
+  }
 
   async function doAttach() {
     if (!pickId) return;
@@ -184,31 +238,51 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
         </div>
       )}
 
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold uppercase text-ink-faint">Tasks {tasks ? `· ${visible.length}/${tasks.length}` : ''}</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Tasks</div>
       </div>
-      <div className="mb-2 flex gap-1.5">
+      <div className="mb-3 grid grid-cols-2 rounded-xl border border-border bg-surface-sunken p-1" role="tablist" aria-label="Task views">
+        {(['pending', 'completed'] as const).map(segment => (
+          <button
+            key={segment}
+            type="button"
+            role="tab"
+            aria-selected={preferences.segment === segment}
+            aria-controls="project-task-list"
+            onClick={() => { updateTaskPreferences({ segment }); setCompletedLimit(COMPLETED_PAGE_SIZE); }}
+            className={`min-h-11 rounded-lg px-3 text-[13px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${preferences.segment === segment ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft hover:text-ink'}`}
+          >
+            {segment === 'pending' ? 'Pending' : 'Completed'}
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-[12px] ${preferences.segment === segment ? 'bg-accent-tint text-accent' : 'bg-surface-softer text-ink-faint'}`}>
+              {counts[segment]}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="mb-3 flex gap-1.5">
+        {preferences.segment === 'pending' && (
+          <select
+            value={preferences.status}
+            onChange={event => updateTaskPreferences({ status: event.target.value as TaskPreferences['status'] })}
+            aria-label="Filter pending tasks by status"
+            className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-accent"
+          >
+            <option value="all">All pending stages</option>
+            {PENDING_TASK_STATES.map(state => <option key={state} value={state}>{STATE_LABEL[state]}</option>)}
+          </select>
+        )}
         <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
-          aria-label="Filter by status"
-          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none lg:h-9 lg:text-xs"
-        >
-          <option value="all">All statuses</option>
-          {Object.entries(STATE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select
-          value={assigneeFilter}
-          onChange={e => setAssigneeFilter(e.target.value)}
+          value={preferences.assignee}
+          onChange={event => updateTaskPreferences({ assignee: event.target.value })}
           aria-label="Filter by assignee"
-          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none lg:h-9 lg:text-xs"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-accent"
         >
           <option value="all">All assignees</option>
           {assignees.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
       </div>
 
-      <div className="space-y-2">
+      <div id="project-task-list" role="tabpanel" className="space-y-2" aria-live="polite">
         {tasks === null && (
           // T-30: an intentional loading state, not a bare tiny string.
           <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-lg border border-border-faint bg-surface-softer px-3 py-2.5 text-sm text-ink-soft">
@@ -216,8 +290,10 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
             Loading the task board…
           </div>
         )}
-        {tasks !== null && visible.length === 0 && (
-          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft lg:text-xs">No tasks match.</div>
+        {tasks !== null && matchingTasks.length === 0 && (
+          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft">
+            {preferences.segment === 'pending' ? 'No pending tasks match these filters.' : 'No completed tasks match this filter.'}
+          </div>
         )}
         {visible.map(t => (
           <div key={t.id} className="rounded-lg border border-border-faint bg-surface-softer p-3">
@@ -232,6 +308,15 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
             {t.note && <div className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink-soft">{t.note}</div>}
           </div>
         ))}
+        {preferences.segment === 'completed' && visible.length < matchingTasks.length && (
+          <button
+            type="button"
+            onClick={() => setCompletedLimit(limit => limit + COMPLETED_PAGE_SIZE)}
+            className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-ink-soft hover:bg-surface-softer hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Load {Math.min(COMPLETED_PAGE_SIZE, matchingTasks.length - visible.length)} more completed tasks
+          </button>
+        )}
       </div>
     </div>
   );
