@@ -93,7 +93,7 @@ export function CommandSearch({ open, room, onClose, onMessage, onTask }: Props)
             value={query}
             onChange={event => setQuery(event.target.value)}
             placeholder="Search rooms, messages, tasks…"
-            className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-faint"
+            className="min-h-11 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-faint"
           />
           <kbd className="rounded-md border border-border-faint bg-surface-softer px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">Esc</kbd>
         </label>

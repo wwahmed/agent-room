@@ -1700,7 +1700,7 @@ export function Room() {
                       type="button"
                       onClick={scrollToBottom}
                       aria-label={unseenCount > 0 ? `Jump to ${unseenCount} new messages` : 'Jump to latest messages'}
-                      className="flex w-fit items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
+                      className="flex min-h-11 w-fit items-center gap-1.5 rounded-full bg-accent px-4 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
                     >
                       <span aria-hidden="true">↓</span>
                       {unseenCount > 0
