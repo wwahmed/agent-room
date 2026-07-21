@@ -194,6 +194,10 @@ export function Room() {
   // advances the stored marker the moment we're at the bottom, so we have to
   // snapshot it first or "first unread" would always resolve to "nothing".
   const arrivalReadRef = useRef<number | null>(null);
+  // T-22: opening a room acknowledges the badge once, after the arrival marker
+  // above has been snapshotted for first-unread positioning. Later arrivals are
+  // only acknowledged while the reader is actually at the bottom.
+  const arrivalMarkedRef = useRef(false);
   if (arrivalReadRef.current === null && messageTotal > 0) {
     arrivalReadRef.current = getReadCount(code) ?? messageTotal;
   }
@@ -210,12 +214,17 @@ export function Room() {
   const firstUnreadIdRef = useRef<number | null>(null);
   if (firstUnreadIdRef.current === null && firstUnreadId != null) firstUnreadIdRef.current = firstUnreadId;
 
-  // T-62: while the reader is caught up (parked at the bottom of the feed), keep
-  // this room's read marker level with the server's absolute counter. Reading
-  // while scrolled UP deliberately does not mark read — those messages are still
-  // unseen, which is the whole point of the badge.
+  // T-22: opening the room clears its home-card badge, but only after the old
+  // marker was captured above so first-unread navigation remains stable. From
+  // then on, new traffic advances the marker only while parked at the bottom.
   useEffect(() => {
-    if (messageTotal > 0 && atBottomRef.current) markRoomRead(code, messageTotal, self?.name);
+    if (messageTotal <= 0) return;
+    if (!arrivalMarkedRef.current) {
+      arrivalMarkedRef.current = true;
+      markRoomRead(code, messageTotal, self?.name);
+    } else if (atBottomRef.current) {
+      markRoomRead(code, messageTotal, self?.name);
+    }
   }, [messageTotal, code, self?.name]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -518,6 +527,7 @@ export function Room() {
   function scrollToBottom() {
     const el = feedRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight });
+    markRoomRead(code, messageTotal, self?.name);
     setUnseenCount(0);
   }
 
@@ -527,7 +537,12 @@ export function Room() {
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     atBottomRef.current = distanceFromBottom < 80;
     setAtBottom(atBottomRef.current);
-    if (atBottomRef.current) setUnseenCount(0);
+    if (atBottomRef.current) {
+      // messageTotal does not change when the reader scrolls, so the effect
+      // above cannot observe this transition. Persist it here immediately.
+      markRoomRead(code, messageTotal, self?.name);
+      setUnseenCount(0);
+    }
     // T-04: nearing the top pulls the previous history page. Anchor the current
     // scroll geometry first so the prepend adjustment below can hold the
     // reader's place instead of letting content jump down under them.
