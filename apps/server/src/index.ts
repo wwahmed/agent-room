@@ -61,7 +61,7 @@ import {
   type RoomListStore,
 } from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
-import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY } from './search.js';
+import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
 import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
@@ -1561,8 +1561,13 @@ const server = createServer(async (req, res) => {
       const roomCode = roomParam ? canonicalizeCode(roomParam) : null;
       if (roomCode) {
         try {
+          // Bounded Redis transfer (T-59 review): fetch ONLY the newest search
+          // window, not the whole list — the cursor anchors to the absolute
+          // counter so LTRIMmed history cannot desync it.
+          const total = await getMessageTotalCount(client, roomCode);
+          const from = Math.max(0, total - SEARCH_MESSAGE_WINDOW);
           const [messages, board] = await Promise.all([
-            listMessages(client, roomCode, 0),
+            listMessages(client, roomCode, from),
             getTaskBoard(roomCode),
           ]);
           hits.push(...searchMessages(messages, q, roomCode));
