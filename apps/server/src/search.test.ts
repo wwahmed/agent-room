@@ -84,3 +84,11 @@ describe('searchTasks', () => {
     expect(searchTasks(tasks, 'zzz', 'abc')).toHaveLength(0);
   });
 });
+
+describe('stripMarkdown in snippets', () => {
+  it('renders plain prose, never source (UX polish on T-58 review)', () => {
+    const s = snippetAround('**The v2 treatment:** the `facepile` takes [the slot](url).', 'facepile');
+    expect(s).toContain('The v2 treatment: the facepile takes the slot.');
+    expect(s).not.toMatch(/[*`[\]]/);
+  });
+});

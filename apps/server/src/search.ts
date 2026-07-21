@@ -39,9 +39,18 @@ export function matchScore(text: string, query: string): number {
   return 40;
 }
 
+/** Markdown noise stripped for palette display: emphasis markers, backticks,
+ *  heading hashes, and link syntax — snippets are plain prose, never source. */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`~]+/g, '')
+    .replace(/^#{1,6}\s+/gm, '');
+}
+
 /** Snippet centered on the first match, single line, bounded length. */
 export function snippetAround(text: string, query: string, span = 90): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
+  const flat = stripMarkdown(text).replace(/\s+/g, ' ').trim();
   const at = norm(flat).indexOf(norm(query));
   if (at < 0) return flat.slice(0, span);
   const start = Math.max(0, at - Math.floor((span - query.length) / 2));
