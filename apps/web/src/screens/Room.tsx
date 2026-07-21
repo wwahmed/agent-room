@@ -1379,9 +1379,11 @@ export function Room() {
                     </button>
                   </div>
                 )}
-                {/* One row, Teams-style: the tools sit INSIDE the input's right
-                    edge instead of claiming a row of their own below it. */}
-                <div className="flex items-end gap-0.5 rounded-2xl border border-border bg-surface-softer pl-1 pr-1.5 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
+                {/* Host direction 2026-07-20 (supersedes the T-63 one-row layout):
+                    the input keeps its full width; the tools live on their own
+                    compact row below it inside the same bordered surface, so the
+                    typing area is never squeezed by active buttons on mobile. */}
+                <div className="rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
                 <textarea
                   ref={textareaRef}
                   value={text}
@@ -1403,9 +1405,9 @@ export function Room() {
                   }}
                   /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus.
                      Borderless — the wrapper owns the border and focus ring now. */
-                  className="min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-base leading-relaxed outline-none focus:ring-0"
+                  className="w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-base leading-relaxed outline-none focus:ring-0"
                 />
-                <div className="flex flex-shrink-0 items-center gap-0.5">
+                <div className="flex items-center gap-0.5">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1446,6 +1448,7 @@ export function Room() {
                     }}
                     disabled={ended}
                   />
+                  <span className="flex-1" aria-hidden="true" />
                   <button
                     onClick={() => setComposerExpanded(v => !v)}
                     title={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
