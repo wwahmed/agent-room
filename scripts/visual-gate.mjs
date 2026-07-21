@@ -302,10 +302,18 @@ for (const vp of VIEWPORTS) {
           // T-86 semantic anatomy: the field, the visible bottom stack, the
           // final message, and the feed's at-bottom flag feed the width /
           // tail-clearance / in-viewport rules.
+          // The 68% contract is against the COMPOSER'S inner width, not the
+          // raw viewport (review finding 4).
+          const composerBoxEl = document.querySelector('[data-gate="composer"]');
           const taEl = document.querySelector('[data-gate="composer"] textarea');
           const composerField = taEl && vis(taEl)
-            ? { ...box(taEl), empty: !taEl.value }
+            ? { ...box(taEl), empty: !taEl.value, containerW: composerBoxEl ? composerBoxEl.clientWidth : innerWidth }
             : null;
+          // Keyboard/browser chrome shrink the VISUAL viewport while
+          // innerHeight lies (review finding 1): containment checks use it.
+          const vv = window.visualViewport
+            ? { w: window.visualViewport.width, h: window.visualViewport.height, top: window.visualViewport.offsetTop, left: window.visualViewport.offsetLeft }
+            : { w: innerWidth, h: innerHeight, top: 0, left: 0 };
           const stackEl = document.querySelector('.room-bottom-chrome') ?? document.querySelector('[data-gate="composer"]');
           const bottomStack = stackEl && vis(stackEl) ? box(stackEl) : null;
           const bottomStackControls = stackEl
@@ -315,8 +323,13 @@ for (const vp of VIEWPORTS) {
               }))
             : [];
           const feedForStack = document.querySelector('[data-gate="feed"]');
+          // The COMPLETE terminal message block — row container including
+          // actions/reply/attachment tail (review finding 5), falling back
+          // to prose content where rows carry no id.
+          const rowEls = [...document.querySelectorAll('[id^="msg-"]')];
           const msgEls = [...document.querySelectorAll('[data-gate="msg-content"]')];
-          const lastMessage = msgEls.length ? box(msgEls[msgEls.length - 1]) : null;
+          const lastEl = rowEls[rowEls.length - 1] ?? msgEls[msgEls.length - 1] ?? null;
+          const lastMessage = lastEl ? box(lastEl) : null;
           const atBottom = feedForStack
             ? feedForStack.scrollHeight - feedForStack.scrollTop - feedForStack.clientHeight < 80
             : false;
@@ -356,6 +369,7 @@ for (const vp of VIEWPORTS) {
             bottomStackControls,
             lastMessage,
             atBottom,
+            vv,
             surfaces: {
               header: lum(document.querySelector('header')),
               aside: lum(document.querySelector('aside')),

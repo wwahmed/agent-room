@@ -60,12 +60,20 @@ describe('visual gate geometry assertions', () => {
     expect(ruleTargets({ ...clean, buttons: rows })).toHaveLength(1);
   });
 
-  it('BROKEN: a phone resting field under 68% width fails; empty-state and phone-only scoping hold', () => {
+  it('BROKEN: a phone resting field under 68% of the COMPOSER width fails; empty-state and phone-only scoping hold', () => {
     const phone = { ...clean, viewportW: 390, viewportH: 844 };
-    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 202, h: 44, x: 60, y: 700, empty: true } })[0]).toContain('51.8%');
-    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 280, h: 44, x: 50, y: 700, empty: true } })).toEqual([]);
-    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 202, h: 44, x: 60, y: 700, empty: false } })).toEqual([]); // typed state exempt
-    expect(ruleComposerFieldWidth({ ...clean, composerField: { w: 202, h: 44, x: 60, y: 700, empty: true } })).toEqual([]); // desktop exempt
+    // Denominator is the composer inner width, not the viewport.
+    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 190, h: 44, x: 60, y: 700, empty: true, containerW: 366 } })[0]).toContain('51.9%');
+    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 270, h: 44, x: 50, y: 700, empty: true, containerW: 366 } })).toEqual([]);
+    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 190, h: 44, x: 60, y: 700, empty: false, containerW: 366 } })).toEqual([]); // typed state exempt
+    expect(ruleComposerFieldWidth({ ...clean, composerField: { w: 190, h: 44, x: 60, y: 700, empty: true, containerW: 366 } })).toEqual([]); // desktop exempt
+  });
+
+  it('bottom-stack containment honors the VISUAL viewport when present', () => {
+    const m = { ...clean, viewportW: 390, viewportH: 844, vv: { w: 390, h: 500, top: 0, left: 0 } }; // keyboard open
+    // In-bounds for innerHeight but BELOW the visual viewport = failure.
+    expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 330, y: 700, w: 44, h: 44 }] })[0]).toContain('visual viewport');
+    expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 330, y: 440, w: 44, h: 44 }] })).toEqual([]);
   });
 
   it('BROKEN: a final message hidden behind the bottom stack fails tail clearance at the newest position', () => {
@@ -77,7 +85,7 @@ describe('visual gate geometry assertions', () => {
 
   it('BROKEN: a voice/send control off the viewport edge fails; in-bounds controls pass', () => {
     const m = { ...clean, viewportW: 390, viewportH: 844 };
-    expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 200, y: 850, w: 44, h: 44 }] })[0]).toContain('outside viewport');
+    expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 200, y: 850, w: 44, h: 44 }] })[0]).toContain('outside the visual viewport');
     expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 330, y: 780, w: 44, h: 44 }] })).toEqual([]);
   });
 

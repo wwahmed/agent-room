@@ -209,10 +209,13 @@ export function ruleTypeFloors(m) {
  *  disabled Send or extra chrome eating the row fails the deploy. */
 export function ruleComposerFieldWidth(m) {
   if (!m.composerField || !m.composerField.empty || m.viewportW > 639) return [];
-  const ratio = m.composerField.w / m.viewportW;
+  // Contract: 68% of the COMPOSER'S inner width (design lead correction —
+  // dividing by the raw viewport can false-pass or false-fail).
+  const denom = m.composerField.containerW || m.viewportW;
+  const ratio = m.composerField.w / denom;
   return ratio >= 0.68
     ? []
-    : [`resting field owns ${(ratio * 100).toFixed(1)}% of ${m.viewportW}px — floor is 68%`];
+    : [`resting field owns ${(ratio * 100).toFixed(1)}% of the ${Math.round(denom)}px composer — floor is 68%`];
 }
 
 /** T-84/T-86: at the newest message, the final line ends >=16px above the
@@ -228,11 +231,14 @@ export function ruleTailClearance(m) {
 /** T-85/T-86: every control inside the bottom stack (send, stop, cancel,
  *  attach) sits fully inside the viewport in EVERY captured state. */
 export function ruleBottomStackControlsInViewport(m) {
+  // Containment is against the VISUAL viewport (design lead correction):
+  // keyboard and browser chrome shrink it while innerHeight lies.
+  const vv = m.vv ?? { w: m.viewportW, h: m.viewportH, top: 0, left: 0 };
   return (m.bottomStackControls ?? [])
     .filter(b => b.w >= 8 && b.h >= 8)
-    .filter(b => b.x < -1 || b.y < -1 || b.x + b.w > m.viewportW + 1 || b.y + b.h > m.viewportH + 1)
+    .filter(b => b.x < vv.left - 1 || b.y < vv.top - 1 || b.x + b.w > vv.left + vv.w + 1 || b.y + b.h > vv.top + vv.h + 1)
     .slice(0, 4)
-    .map(b => `bottom-stack control outside viewport: "${b.label}" at ${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}x${Math.round(b.h)}`);
+    .map(b => `bottom-stack control outside the visual viewport: "${b.label}" at ${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}x${Math.round(b.h)}`);
 }
 
 /** T-82/T-86: the floating Latest pill may not cover the final message. */

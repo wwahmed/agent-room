@@ -235,6 +235,11 @@ export function Room() {
   // controls historically left the screen. Explicit query param only;
   // for a real user it merely fills a local draft.
   useEffect(() => {
+    // Non-production guard (design lead finding 3): the injection hook only
+    // answers on loopback origins — the gate's staging server — never on the
+    // public origin.
+    const host = window.location.hostname;
+    if (host !== '127.0.0.1' && host !== 'localhost') return;
     if (new URLSearchParams(window.location.search).get('gateFixture') !== 'voice-draft') return;
     setText(`Voice transcript fixture: ${'the reader keeps dictating a long update without pausing so the field must cap and scroll internally '.repeat(6)}`);
     setDictationDraft(true);
