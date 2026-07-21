@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, useEffect, useCallback, type ClipboardEvent, type DragEvent } from 'react';
+import { Fragment, useRef, useState, useEffect, useLayoutEffect, useCallback, type ClipboardEvent, type DragEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
@@ -121,7 +121,7 @@ export function Room() {
     })();
     return () => { cancelled = true; };
   }, [self, code, navigate]);
-  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal } = useRoom(code, self?.name ?? '');
+  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal, hasOlder, loadingOlder, loadOlder } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
@@ -163,6 +163,11 @@ export function Room() {
   // already there; if they've scrolled up, hold their spot and count arrivals.
   const atBottomRef = useRef(true);
   const prevLenRef = useRef(0);
+  // T-04: previous LAST message id — distinguishes appended messages from a
+  // prepended history page — and the scroll geometry captured just before a
+  // prepend so the reader's position survives it.
+  const prevLastIdRef = useRef<number | null>(null);
+  const prependAnchorRef = useRef<{ heightBefore: number; topBefore: number } | null>(null);
   const [unseenCount, setUnseenCount] = useState(0);
   // T-65: is the reader parked at the bottom? (ref drives logic, state drives the
   // jump-to-bottom button's visibility.)
@@ -473,6 +478,13 @@ export function Room() {
     atBottomRef.current = distanceFromBottom < 80;
     setAtBottom(atBottomRef.current);
     if (atBottomRef.current) setUnseenCount(0);
+    // T-04: nearing the top pulls the previous history page. Anchor the current
+    // scroll geometry first so the prepend adjustment below can hold the
+    // reader's place instead of letting content jump down under them.
+    if (el.scrollTop < 150 && hasOlder && !loadingOlder) {
+      prependAnchorRef.current = { heightBefore: el.scrollHeight, topBefore: el.scrollTop };
+      void loadOlder();
+    }
   }
 
   // T-48: on new messages, stick to the bottom only for the initial load or when
@@ -483,9 +495,31 @@ export function Room() {
   // FIRST render of a room we land on the first unread message instead of the
   // bottom, so catching up starts where he stopped reading rather than at the
   // end of a conversation he hasn't seen.
-  useEffect(() => {
+  // T-04 refactor: length deltas alone can't tell "new at the bottom" from "an
+  // older page prepended at the top", and the two need OPPOSITE scroll
+  // behavior. Appends are counted from the previous LAST message id; anything
+  // beyond that is a prepend, which restores the anchored scroll geometry
+  // captured by onFeedScroll instead of yanking to the bottom / inflating the
+  // unread pill. useLayoutEffect so the prepend adjustment lands before paint.
+  useLayoutEffect(() => {
     const len = messages.length;
-    const added = len - prevLenRef.current;
+    const prevLastId = prevLastIdRef.current;
+    let appended: number;
+    if (prevLenRef.current === 0 || prevLastId == null) {
+      appended = len;
+    } else {
+      const idx = messages.findIndex(m => m.id === prevLastId);
+      appended = idx === -1 ? Math.max(0, len - prevLenRef.current) : len - idx - 1;
+    }
+    const prepended = len - prevLenRef.current - appended;
+
+    if (prepended > 0 && prependAnchorRef.current) {
+      const el = feedRef.current;
+      const anchor = prependAnchorRef.current;
+      prependAnchorRef.current = null;
+      if (el) el.scrollTop = el.scrollHeight - anchor.heightBefore + anchor.topBefore;
+    }
+
     if (prevLenRef.current === 0 && len > 0) {
       const target = firstUnreadIdRef.current;
       const el = target != null ? document.getElementById(`msg-${target}`) : null;
@@ -498,14 +532,15 @@ export function Room() {
         feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
         setUnseenCount(0);
       }
-    } else if (atBottomRef.current) {
+    } else if (appended > 0 && atBottomRef.current) {
       feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
       setUnseenCount(0);
-    } else if (added > 0) {
-      setUnseenCount((n) => n + added);
+    } else if (appended > 0) {
+      setUnseenCount((n) => n + appended);
     }
     prevLenRef.current = len;
-  }, [messages.length]);
+    prevLastIdRef.current = len > 0 ? messages[len - 1]!.id : null;
+  }, [messages]);
 
   // T-07: `error` is only ever set when the room has NOT loaded (mid-session
   // blips set `degraded` instead), so this branch is the bootstrap-failure
@@ -1221,6 +1256,14 @@ export function Room() {
                   messages right-align WITHIN the measure instead of
                   stranding at the far edge of an ultrawide. */}
               <div className="mx-auto w-full max-w-[860px]">
+              {/* T-04: history is windowed; this strip marks the top of the
+                  loaded window and doubles as the fetch indicator. */}
+              {hasOlder && (
+                <div className="flex items-center justify-center gap-2 py-2 text-[11px] font-semibold text-ink-faint" aria-live="polite">
+                  {loadingOlder && <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />}
+                  {loadingOlder ? 'Loading earlier messages…' : 'Scroll up for earlier messages'}
+                </div>
+              )}
               {(() => {
                 // Names that appear with more than one client in the room get
                 // disambiguated as "Name · web" / "Name · cc" in each bubble.

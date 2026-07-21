@@ -426,8 +426,10 @@ export async function listMessages(
   _client: ApiClient,
   code: string,
   fromIndex: number,
+  limit?: number,
 ): Promise<Message[]> {
-  return (await call<{ messages: Message[] }>({ action: 'messages', code, cursor: fromIndex })).messages;
+  // T-04: `limit` bounds the page for history paging; omitted = cursor-to-end.
+  return (await call<{ messages: Message[] }>({ action: 'messages', code, cursor: fromIndex, ...(limit ? { limit } : {}) })).messages;
 }
 
 export async function getMessageTotalCount(

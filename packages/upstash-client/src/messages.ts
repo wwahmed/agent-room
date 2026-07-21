@@ -319,10 +319,15 @@ export async function appendSystemMessage(
 // LTRIM trims the head, so a list-index cursor would skip messages past
 // MAX_MESSAGES_PER_ROOM. The counter key + LLEN let us reconstruct where the
 // caller's next unread message actually lives in the (possibly trimmed) list.
+// T-04: `limit` (optional) caps how many messages are returned starting at
+// `fromIndex`. Omitted = to the end of the list (the polling path). A bounded
+// LRANGE is what lets the web load "the previous page" during upward scroll
+// without pulling everything from that point forward.
 export async function listMessages(
   client: UpstashClient,
   code: string,
-  fromIndex: number
+  fromIndex: number,
+  limit?: number
 ): Promise<Message[]> {
   // One pipeline: ask for both the absolute count and the current list length.
   // count===null means this is a legacy room created before the counter was
@@ -356,6 +361,7 @@ export async function listMessages(
   }
 
   if (start >= listLen) return [];
-  const raw = await client.command<string[]>(['LRANGE', msgsKey(code), start, -1]);
+  const end = limit !== undefined && limit > 0 ? Math.min(start + limit - 1, listLen - 1) : -1;
+  const raw = await client.command<string[]>(['LRANGE', msgsKey(code), start, end]);
   return raw.map(line => JSON.parse(line) as Message);
 }

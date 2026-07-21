@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { friendlyError } from './useRoom.js';
+import { friendlyError, INITIAL_PAGE_SIZE, OLDER_PAGE_SIZE, initialPageStart, olderPageRange } from './useRoom.js';
 
 // T-07: the raw transport exception ("TypeError: Failed to fetch") was being
 // rendered full-screen during room bootstrap. These pin the mapping from
@@ -27,5 +27,35 @@ describe('friendlyError', () => {
 
   it('stringifies non-Error values', () => {
     expect(friendlyError('boom')).toBe('boom');
+  });
+});
+
+// T-04: bounded history paging math.
+describe('initialPageStart', () => {
+  it('starts the window one page before the end', () => {
+    expect(initialPageStart(500)).toBe(500 - INITIAL_PAGE_SIZE);
+  });
+
+  it('clamps to 0 for short histories', () => {
+    expect(initialPageStart(10)).toBe(0);
+    expect(initialPageStart(0)).toBe(0);
+  });
+
+  it('falls back to 0 for legacy rooms without a counter', () => {
+    expect(initialPageStart(null)).toBe(0);
+  });
+});
+
+describe('olderPageRange', () => {
+  it('asks for the full page above the window', () => {
+    expect(olderPageRange(300)).toEqual({ from: 300 - OLDER_PAGE_SIZE, count: OLDER_PAGE_SIZE });
+  });
+
+  it('clamps the first page to index 0 with a partial count', () => {
+    expect(olderPageRange(30)).toEqual({ from: 0, count: 30 });
+  });
+
+  it('returns an empty range at the top of history', () => {
+    expect(olderPageRange(0)).toEqual({ from: 0, count: 0 });
   });
 });

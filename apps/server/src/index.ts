@@ -630,7 +630,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       return { room: roomRest, participant: outParticipant, memberKey };
     }
     case 'messages': {
-      return { messages: await listMessages(client, code, Number(payload.cursor || 0)) };
+      // T-04: optional `limit` bounds the page; omitted keeps cursor-to-end.
+      const rawLimit = Number(payload.limit);
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : undefined;
+      return { messages: await listMessages(client, code, Number(payload.cursor || 0), limit) };
     }
     // T-66: per-participant listen-loop health, so the app can show who is
     // ACTUALLY listening rather than leaving the host to guess whether an agent

@@ -28,6 +28,29 @@ interface UseRoomState {
    *  currency the unread badge is denominated in — the retained list length
    *  would silently under-count once history is trimmed. */
   messageTotal: number;
+  /** T-04: older history exists beyond the earliest loaded message. */
+  hasOlder: boolean;
+  /** T-04: an older page is being fetched (upward-scroll spinner). */
+  loadingOlder: boolean;
+}
+
+// T-04: bounded history paging. The initial load takes only the most recent
+// page — long rooms were loading their entire history up front, which is what
+// made the chat sluggish to open. Older pages arrive on demand as the reader
+// scrolls toward the top.
+export const INITIAL_PAGE_SIZE = 80;
+export const OLDER_PAGE_SIZE = 80;
+
+/** First absolute index of the initial bounded page. Exported for tests. */
+export function initialPageStart(total: number | null): number {
+  if (total === null || !Number.isFinite(total)) return 0;
+  return Math.max(0, total - INITIAL_PAGE_SIZE);
+}
+
+/** [from, count] for the page ABOVE the current oldest loaded index. */
+export function olderPageRange(oldestIndex: number): { from: number; count: number } {
+  const from = Math.max(0, oldestIndex - OLDER_PAGE_SIZE);
+  return { from, count: oldestIndex - from };
 }
 
 // T-07: users were seeing a raw "TypeError: Failed to fetch" fill the screen
@@ -43,8 +66,11 @@ export function friendlyError(e: unknown): string {
 }
 
 export function useRoom(code: string, selfName: string) {
-  const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null, degraded: false, messageTotal: 0 });
+  const [state, setState] = useState<UseRoomState>({ room: null, messages: [], error: null, degraded: false, messageTotal: 0, hasOlder: false, loadingOlder: false });
   const cursor = useRef(0);
+  // T-04: absolute index of messages[0] — where the loaded window starts.
+  const oldestIndex = useRef(0);
+  const loadingOlderRef = useRef(false);
   const clientRef = useRef(createClient());
 
   // In-flight guard with TIMEOUT escape hatch. Two failure modes we hit:
@@ -95,8 +121,10 @@ export function useRoom(code: string, selfName: string) {
         // and reset.
         const total = await getMessageTotalCount(clientRef.current, code);
         if (total !== null && cursor.current > total) {
-          cursor.current = 0;
-          const recover = await listMessages(clientRef.current, code, 0);
+          // T-04: recover a bounded recent page, not the whole history.
+          const from = initialPageStart(total);
+          cursor.current = from;
+          const recover = await listMessages(clientRef.current, code, from);
           cursor.current = total;
           setState(s => {
             const seen = new Set(s.messages.map(m => m.id));
@@ -178,14 +206,27 @@ export function useRoom(code: string, selfName: string) {
   const forceRefresh = useCallback(async () => {
     cursor.current = 0;
     try {
-      const [r, fresh, total] = await Promise.all([
+      // T-04: bounded bootstrap — total count first, then only the most recent
+      // page instead of the room's whole history. Legacy rooms without the
+      // counter (total === null) still load from 0.
+      const [r, total] = await Promise.all([
         getRoom(clientRef.current, code),
-        listMessages(clientRef.current, code, 0),
         getMessageTotalCount(clientRef.current, code),
       ]);
+      const from = initialPageStart(total);
+      const fresh = await listMessages(clientRef.current, code, from);
       // Match server-side logical cursor (counter) so polling stays correct after LTRIM; legacy rooms fall back.
       cursor.current = total ?? fresh.length;
-      setState({ room: r, messages: fresh, error: null, degraded: false, messageTotal: cursor.current });
+      oldestIndex.current = from;
+      setState({
+        room: r,
+        messages: fresh,
+        error: null,
+        degraded: false,
+        messageTotal: cursor.current,
+        hasOlder: from > 0 && fresh.length > 0,
+        loadingOlder: false,
+      });
     } catch (e) {
       setState(s => s.room
         ? (s.degraded ? s : { ...s, degraded: true })
@@ -193,9 +234,44 @@ export function useRoom(code: string, selfName: string) {
     }
   }, [code]);
 
+  // T-04: fetch the page above the current window and prepend it. Returns how
+  // many messages arrived so the caller can keep the scroll position anchored.
+  const loadOlder = useCallback(async (): Promise<number> => {
+    if (loadingOlderRef.current) return 0;
+    const { from, count } = olderPageRange(oldestIndex.current);
+    if (count <= 0) {
+      setState(s => s.hasOlder ? { ...s, hasOlder: false } : s);
+      return 0;
+    }
+    loadingOlderRef.current = true;
+    setState(s => ({ ...s, loadingOlder: true }));
+    try {
+      const older = await listMessages(clientRef.current, code, from, count);
+      oldestIndex.current = from;
+      setState(s => {
+        const seen = new Set(s.messages.map(m => m.id));
+        const fresh = older.filter(m => !seen.has(m.id));
+        return {
+          ...s,
+          messages: [...fresh, ...s.messages],
+          // Empty page above us = that history has been trimmed away; stop asking.
+          hasOlder: from > 0 && older.length > 0,
+          loadingOlder: false,
+        };
+      });
+      return older.length;
+    } catch {
+      // Non-fatal: the reader keeps the window they have; scrolling retries.
+      setState(s => ({ ...s, loadingOlder: false }));
+      return 0;
+    } finally {
+      loadingOlderRef.current = false;
+    }
+  }, [code]);
+
   useEffect(() => {
     cursor.current = 0;
-    setState({ room: null, messages: [], error: null, degraded: false, messageTotal: 0 });
+    setState({ room: null, messages: [], error: null, degraded: false, messageTotal: 0, hasOlder: false, loadingOlder: false });
 
     let msgTimer: ReturnType<typeof setInterval> | null = null;
     let roomTimer: ReturnType<typeof setInterval> | null = null;
@@ -249,7 +325,11 @@ export function useRoom(code: string, selfName: string) {
     };
     window.addEventListener('focus', onWinFocus);
 
-    start(document.hidden);
+    // T-04: bootstrap through forceRefresh — a bounded recent page — instead of
+    // letting the first pullMessages(cursor=0) drag in the entire history.
+    // start() still runs its immediate pulls, but they are no-ops against the
+    // already-anchored cursor.
+    forceRefresh().finally(() => start(document.hidden));
 
     return () => {
       document.removeEventListener('visibilitychange', onVis);
@@ -291,5 +371,5 @@ export function useRoom(code: string, selfName: string) {
     }
   }, [code, pullMessages]);
 
-  return { ...state, sendMessage, refreshRoom: pullRoom, forceRefresh };
+  return { ...state, sendMessage, refreshRoom: pullRoom, forceRefresh, loadOlder };
 }
