@@ -148,7 +148,7 @@ export function AccountMenu({ name, email, onOpenSettings }: Props) {
                     setReadingScale(option.value);
                     setScaleState(option.value);
                   }}
-                  className={`min-h-11 flex-1 rounded-md px-1 text-[13px] font-semibold transition ${
+                  className={`min-h-11 flex-1 rounded-md px-1 text-[15px] font-semibold sm:text-[13px] transition ${
                     scale === option.value ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
                   }`}
                 >
