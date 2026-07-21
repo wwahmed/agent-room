@@ -230,6 +230,15 @@ export function Room() {
   // so the sheet's focus return targets whichever trigger is visible.
   const attachTriggerRef = useRef<HTMLButtonElement>(null);
   const attachTriggerPhoneRef = useRef<HTMLButtonElement>(null);
+  // T-86: inert state-injection hook for the gate's voice-draft fixture —
+  // headless capture has no microphone, and this is the state where send
+  // controls historically left the screen. Explicit query param only;
+  // for a real user it merely fills a local draft.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('gateFixture') !== 'voice-draft') return;
+    setText(`Voice transcript fixture: ${'the reader keeps dictating a long update without pausing so the field must cap and scroll internally '.repeat(6)}`);
+    setDictationDraft(true);
+  }, []);
   const [attachmentJobs, setAttachmentJobs] = useState<AttachmentUploadJob[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);

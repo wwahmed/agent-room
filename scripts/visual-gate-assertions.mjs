@@ -205,7 +205,47 @@ export function ruleTypeFloors(m) {
   return out.slice(0, 6);
 }
 
-const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote, ruleDisclosureClearance, ruleArtifactTitleLines];
+/** T-84/T-86: the EMPTY resting field owns >=68% of phone width — a
+ *  disabled Send or extra chrome eating the row fails the deploy. */
+export function ruleComposerFieldWidth(m) {
+  if (!m.composerField || !m.composerField.empty || m.viewportW > 639) return [];
+  const ratio = m.composerField.w / m.viewportW;
+  return ratio >= 0.68
+    ? []
+    : [`resting field owns ${(ratio * 100).toFixed(1)}% of ${m.viewportW}px — floor is 68%`];
+}
+
+/** T-84/T-86: at the newest message, the final line ends >=16px above the
+ *  visible bottom stack — the tail is never hidden behind the composer. */
+export function ruleTailClearance(m) {
+  if (!m.lastMessage || !m.bottomStack || !m.atBottom) return [];
+  const gap = m.bottomStack.y - (m.lastMessage.y + m.lastMessage.h);
+  return gap >= 15
+    ? []
+    : [`final message tail ${Math.round(gap)}px above the bottom stack — floor is 16px`];
+}
+
+/** T-85/T-86: every control inside the bottom stack (send, stop, cancel,
+ *  attach) sits fully inside the viewport in EVERY captured state. */
+export function ruleBottomStackControlsInViewport(m) {
+  return (m.bottomStackControls ?? [])
+    .filter(b => b.w >= 8 && b.h >= 8)
+    .filter(b => b.x < -1 || b.y < -1 || b.x + b.w > m.viewportW + 1 || b.y + b.h > m.viewportH + 1)
+    .slice(0, 4)
+    .map(b => `bottom-stack control outside viewport: "${b.label}" at ${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}x${Math.round(b.h)}`);
+}
+
+/** T-82/T-86: the floating Latest pill may not cover the final message. */
+export function ruleFloatingVsLastMessage(m) {
+  if (!m.lastMessage) return [];
+  const L = m.lastMessage;
+  return (m.floating ?? [])
+    .filter(f => f.w >= 8)
+    .filter(f => !(f.x + f.w < L.x || L.x + L.w < f.x || f.y + f.h < L.y || L.y + L.h < f.y))
+    .map(f => `floating control overlaps the final message: "${f.label}"`);
+}
+
+const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote, ruleDisclosureClearance, ruleArtifactTitleLines, ruleComposerFieldWidth, ruleTailClearance, ruleBottomStackControlsInViewport, ruleFloatingVsLastMessage];
 
 export function evaluateAssertions(measurement) {
   return RULES.flatMap(rule => rule(measurement));

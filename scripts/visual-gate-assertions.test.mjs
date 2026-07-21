@@ -14,6 +14,10 @@ import {
   ruleOverflow,
   ruleOverlayPlacement,
   ruleTargets,
+  ruleComposerFieldWidth,
+  ruleTailClearance,
+  ruleBottomStackControlsInViewport,
+  ruleFloatingVsLastMessage,
 } from './visual-gate-assertions.mjs';
 
 // T-63 DoD: every assertion is proven by a deliberately broken fixture.
@@ -54,6 +58,33 @@ describe('visual gate geometry assertions', () => {
   it('duplicate small targets collapse to one finding per anatomy', () => {
     const rows = Array.from({ length: 6 }, (_, i) => ({ label: 'Message actions', w: 24, h: 24, x: 5, y: 5 + i * 40 }));
     expect(ruleTargets({ ...clean, buttons: rows })).toHaveLength(1);
+  });
+
+  it('BROKEN: a phone resting field under 68% width fails; empty-state and phone-only scoping hold', () => {
+    const phone = { ...clean, viewportW: 390, viewportH: 844 };
+    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 202, h: 44, x: 60, y: 700, empty: true } })[0]).toContain('51.8%');
+    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 280, h: 44, x: 50, y: 700, empty: true } })).toEqual([]);
+    expect(ruleComposerFieldWidth({ ...phone, composerField: { w: 202, h: 44, x: 60, y: 700, empty: false } })).toEqual([]); // typed state exempt
+    expect(ruleComposerFieldWidth({ ...clean, composerField: { w: 202, h: 44, x: 60, y: 700, empty: true } })).toEqual([]); // desktop exempt
+  });
+
+  it('BROKEN: a final message hidden behind the bottom stack fails tail clearance at the newest position', () => {
+    const base = { ...clean, atBottom: true, bottomStack: { x: 0, y: 700, w: 390, h: 144 } };
+    expect(ruleTailClearance({ ...base, lastMessage: { x: 10, y: 600, w: 300, h: 140 } })[0]).toContain('floor is 16px');
+    expect(ruleTailClearance({ ...base, lastMessage: { x: 10, y: 500, w: 300, h: 180 } })).toEqual([]); // ends 20px clear
+    expect(ruleTailClearance({ ...base, atBottom: false, lastMessage: { x: 10, y: 600, w: 300, h: 140 } })).toEqual([]); // mid-read exempt
+  });
+
+  it('BROKEN: a voice/send control off the viewport edge fails; in-bounds controls pass', () => {
+    const m = { ...clean, viewportW: 390, viewportH: 844 };
+    expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 200, y: 850, w: 44, h: 44 }] })[0]).toContain('outside viewport');
+    expect(ruleBottomStackControlsInViewport({ ...m, bottomStackControls: [{ label: 'Send message', x: 330, y: 780, w: 44, h: 44 }] })).toEqual([]);
+  });
+
+  it('BROKEN: the floating pill covering the final message fails; clear separation passes', () => {
+    const m = { ...clean, lastMessage: { x: 10, y: 500, w: 300, h: 120 } };
+    expect(ruleFloatingVsLastMessage({ ...m, floating: [{ label: 'Jump to latest', x: 250, y: 590, w: 120, h: 44 }] })[0]).toContain('overlaps the final message');
+    expect(ruleFloatingVsLastMessage({ ...m, floating: [{ label: 'Jump to latest', x: 250, y: 640, w: 120, h: 44 }] })).toEqual([]);
   });
 
   it('inline prose links are exempt from the 44px floor (WCAG 2.5.8 inline exception); the same box as a control still fails', () => {

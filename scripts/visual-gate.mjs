@@ -206,6 +206,43 @@ STATES.push({
   },
 });
 
+// T-86: the interactive states the host actually broke in — permanent
+// fixtures, not one-off checks. composer-attach stacks a real pending chip
+// through the real input; voice-draft drives the dictation-editing state via
+// the inert ?gateFixture hook (headless has no microphone).
+STATES.push({
+  name: 'composer-attach',
+  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}` : '/r/NON-EXI-STENT',
+  ready: async p => {
+    await p.waitForSelector('textarea', { timeout: 15000 });
+    await p.waitForTimeout(1200);
+    await p.locator('input[type="file"]').first().setInputFiles({
+      name: 'gate-fixture.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489' +
+        '0000000d49444154789c626001000000ffff03000006000557bfabd4' +
+        '0000000049454e44ae426082',
+        'hex',
+      ),
+    });
+    // Readiness: the pending-attachment chip (or its upload row) is REQUIRED.
+    await p.getByText('gate-fixture.png').first().waitFor({ timeout: 10000 });
+    await p.waitForTimeout(600);
+  },
+});
+STATES.push({
+  name: 'voice-draft',
+  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}?gateFixture=voice-draft` : '/r/NON-EXI-STENT',
+  ready: async p => {
+    await p.waitForSelector('textarea', { timeout: 15000 });
+    // Readiness: the voice-draft banner is REQUIRED — this is the state
+    // where send controls historically left the screen.
+    await p.getByText('Voice draft').first().waitFor({ timeout: 8000 });
+    await p.waitForTimeout(800);
+  },
+});
+
 const EXPECTED = enumerateFrames(STATES.map(s => s.name), VIEWPORTS.map(v => v.tag), THEMES);
 let capturedFrames = 0;
 
@@ -262,6 +299,27 @@ for (const vp of VIEWPORTS) {
             if (c.length > 3 && parseFloat(c[3]) === 0) return null;
             return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
           };
+          // T-86 semantic anatomy: the field, the visible bottom stack, the
+          // final message, and the feed's at-bottom flag feed the width /
+          // tail-clearance / in-viewport rules.
+          const taEl = document.querySelector('[data-gate="composer"] textarea');
+          const composerField = taEl && vis(taEl)
+            ? { ...box(taEl), empty: !taEl.value }
+            : null;
+          const stackEl = document.querySelector('.room-bottom-chrome') ?? document.querySelector('[data-gate="composer"]');
+          const bottomStack = stackEl && vis(stackEl) ? box(stackEl) : null;
+          const bottomStackControls = stackEl
+            ? [...stackEl.querySelectorAll(INTERACTIVE)].filter(vis).map(b => ({
+                label: (b.getAttribute('aria-label') || b.textContent || '').trim().slice(0, 30),
+                ...box(b),
+              }))
+            : [];
+          const feedForStack = document.querySelector('[data-gate="feed"]');
+          const msgEls = [...document.querySelectorAll('[data-gate="msg-content"]')];
+          const lastMessage = msgEls.length ? box(msgEls[msgEls.length - 1]) : null;
+          const atBottom = feedForStack
+            ? feedForStack.scrollHeight - feedForStack.scrollTop - feedForStack.clientHeight < 80
+            : false;
           const dialog = document.querySelector('[role="dialog"]');
           // Semantic hooks (review finding): real composer/feed rectangles and
           // floating controls come from data-gate attributes, not class guesses.
@@ -293,6 +351,11 @@ for (const vp of VIEWPORTS) {
             viewportH: innerHeight,
             scrollWidth: document.documentElement.scrollWidth,
             buttons,
+            composerField,
+            bottomStack,
+            bottomStackControls,
+            lastMessage,
+            atBottom,
             surfaces: {
               header: lum(document.querySelector('header')),
               aside: lum(document.querySelector('aside')),
