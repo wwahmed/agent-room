@@ -19,6 +19,7 @@ import {
   APPROVAL_PREFIX,
   acquireLock,
   approvalLine,
+  buildServeDir,
   atomicPointSymlink,
   debtSettledBy,
   hashDirectory,
@@ -89,11 +90,40 @@ test('stage produces an immutable, hashed, phase-marked release', async () => {
   await assert.rejects(() => stage(repo.root, stageOpts(repo)), /immutable/);
 });
 
-test('stage refuses a dirty tree - no bypass exists', async () => {
-  const repo = makeRepo();
-  writeFileSync(join(repo.root, 'wip.txt'), 'uncommitted\n');
-  await assert.rejects(() => stage(repo.root, stageOpts(repo)), /dirty/);
-  await assert.rejects(() => stage(repo.root, stageOpts(repo, { allowDirty: true })), /dirty/, 'the removed escape hatch must stay removed');
+test('stage builds from an isolated worktree: shared-tree dirt cannot enter the artifact', { timeout: 30000 }, async () => {
+  // A real workspace repo whose build script emits whatever marker.txt says.
+  const root = mkdtempSync(join(tmpdir(), 'rp-wt-'));
+  roots.push(root);
+  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  git(['init', '-q']);
+  git(['config', 'user.email', 'test@test']);
+  git(['config', 'user.name', 'Builder']);
+  writeFileSync(join(root, '.gitignore'), 'releases/\n.visual-gate/\n');
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'sbx', private: true, workspaces: ['apps/*'] }));
+  mkdirSync(join(root, 'apps', 'web'), { recursive: true });
+  writeFileSync(join(root, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'web', version: '1.0.0', scripts: { build: 'node build.mjs' } }));
+  writeFileSync(
+    join(root, 'apps', 'web', 'build.mjs'),
+    [
+      "import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      "const outDir = process.argv[process.argv.indexOf('--outDir') + 1];",
+      "const marker = readFileSync('marker.txt', 'utf8').trim();",
+      "mkdirSync(join(outDir, 'assets'), { recursive: true });",
+      'writeFileSync(join(outDir, "index.html"), `<script src="/assets/index-${marker}.js"></script>`);',
+      'writeFileSync(join(outDir, "assets", `index-${marker}.js`), marker);',
+    ].join('\n'),
+  );
+  writeFileSync(join(root, 'apps', 'web', 'marker.txt'), 'committed1\n');
+  git(['add', '.']);
+  git(['commit', '-qm', 'v1']);
+  // Dirty the SHARED tree the way another builder's WIP would.
+  writeFileSync(join(root, 'apps', 'web', 'marker.txt'), 'SENTINEL-dirty\n');
+  const { meta, dir } = await stage(root, {});
+  assert.equal(meta.bundle, 'index-committed1.js', 'artifact came from the COMMIT, not the dirty checkout');
+  assert.ok(!existsSync(join(dir, 'dist', 'assets', 'index-SENTINEL-dirty.js')), 'sentinel never entered the artifact');
+  assert.equal(readFileSync(join(root, 'apps', 'web', 'marker.txt'), 'utf8').trim(), 'SENTINEL-dirty', 'shared tree untouched');
+  assert.ok(!existsSync(join(root, 'releases', `.build-${meta.fullSha}`)), 'build worktree cleaned up');
 });
 
 test('normal promote demands gate, approval, and walkthrough phases', async () => {
@@ -109,7 +139,7 @@ test('normal promote demands gate, approval, and walkthrough phases', async () =
   assert.ok(hasPhase(dir, 'promoted'));
   const p = paths(repo.root);
   assert.equal(pointerTarget(p.current), dir);
-  assert.equal(pointerTarget(p.liveLink), join(dir, 'dist'));
+  assert.equal(pointerTarget(p.liveLink), join(dir, 'serve'), 'live serves the derived union dir, not the immutable dist');
 });
 
 test('gate recording enforces the exit-code policy', () => {
@@ -128,6 +158,7 @@ test('approval binds digests + nonce, and only registered non-lineage identities
   const artifactSha256 = 'b'.repeat(64);
   const gateResultSha256 = 'c'.repeat(64);
   const nonce = 'deadbeefdeadbeef';
+  const policyDigest = 'a1'.repeat(32);
   const registry = {
     approvers: [{ label: 'Verifier', name: 'UX-Adversary (2)', client: 'cc' }],
     builderLineages: [{ label: 'Claude', baseNames: ['Claude', 'ClaudeUI'] }],
@@ -137,8 +168,8 @@ test('approval binds digests + nonce, and only registered non-lineage identities
     { name: 'ClaudeUI (3)', client: 'web' },
     { name: 'UX-Adversary (2)', client: 'cc' },
   ];
-  const bind = { fullSha, artifactSha256, gateResultSha256, nonce, registry, participants };
-  const line = approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce });
+  const bind = { fullSha, artifactSha256, gateResultSha256, nonce, policyDigest, registry, participants };
+  const line = approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce, policyDigest });
 
   // Builder and suffixed builder-lineage identities can never approve.
   assert.equal(parseApproval([{ id: 1, name: 'Claude', text: line }], bind), null);
@@ -148,8 +179,10 @@ test('approval binds digests + nonce, and only registered non-lineage identities
   // A registered name with no live participant row of the registered client is refused.
   assert.equal(parseApproval([{ id: 4, name: 'UX-Adversary (2)', text: line }], { ...bind, participants: [] }), null);
   // Wrong nonce, wrong artifact digest, plain-SHA approvals: all replay-dead.
-  assert.equal(parseApproval([{ id: 5, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce: 'ffffffffffffffff' }) }], bind), null);
-  assert.equal(parseApproval([{ id: 6, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256: 'd'.repeat(64), gateResultSha256, nonce }) }], bind), null);
+  assert.equal(parseApproval([{ id: 5, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce: 'ffffffffffffffff', policyDigest }) }], bind), null);
+  assert.equal(parseApproval([{ id: 6, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256: 'd'.repeat(64), gateResultSha256, nonce, policyDigest }) }], bind), null);
+  // An approval granted under a DIFFERENT (tampered) policy digest is refused.
+  assert.equal(parseApproval([{ id: 9, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce, policyDigest: 'b2'.repeat(32) }) }], bind), null);
   assert.equal(parseApproval([{ id: 7, name: 'UX-Adversary (2)', text: `${APPROVAL_PREFIX} ${fullSha}` }], bind), null);
   // The registered verifier posting the exact challenge line passes.
   const ok = parseApproval([{ id: 8, name: 'UX-Adversary (2)', text: `${line} staging reviewed` }], bind);
@@ -212,7 +245,9 @@ test('rollback flips the pointer pair and is itself reversible', async () => {
 
   const first = await rollback(repo.root, { by: 'Builder' });
   assert.equal(first.to, dir);
-  assert.equal(pointerTarget(p.liveLink), join(dir, 'dist'));
+  assert.equal(pointerTarget(p.liveLink), join(dir, 'serve'));
+  // The union retains the departed release's hashed assets for in-flight pages.
+  assert.ok(existsSync(join(dir, 'serve', 'assets', 'index-vtwo123.js')), 'rolled-back serve dir retains the newer bundle for in-flight clients');
   assert.equal(pointerTarget(p.previous), dir2, 'rollback keeps a path back forward');
   const second = await rollback(repo.root, { by: 'Builder' });
   assert.equal(second.to, dir2, 'roll forward works because rollback swapped the pair');
@@ -233,7 +268,7 @@ test('first promotion imports a legacy real-directory dist as a release', async 
   assert.match(previous, /imported-/);
   assert.ok(existsSync(join(previous, 'dist', 'assets', 'index-old999.js')), 'legacy bundle preserved for rollback');
   await rollback(repo.root, { by: 'Builder' });
-  assert.equal(pointerTarget(p.liveLink), join(previous, 'dist'));
+  assert.equal(pointerTarget(p.liveLink), join(previous, 'serve'));
 });
 
 test('importLegacyDist is a no-op once the pointer exists', () => {
@@ -350,7 +385,7 @@ test('reconcile completes a verified interrupted promote and restores an unverif
   writePhase(dir, 'walkthrough', { receiptSha256: 'a'.repeat(64) });
   mkdirSync(p.releases, { recursive: true });
   atomicPointSymlink(p.current, dir);
-  atomicPointSymlink(p.liveLink, join(dir, 'dist'));
+  atomicPointSymlink(p.liveLink, buildServeDir(dir, null));
   const completed = await reconcile(repo.root, {});
   assert.equal(completed.state, 'completed');
   assert.ok(hasPhase(dir, 'promoted'));
@@ -363,11 +398,11 @@ test('reconcile completes a verified interrupted promote and restores an unverif
   const { dir: dir2 } = await stage(repo.root, { buildFn: fakeBuild('vtwo'), fixtureFiles: [repo.fixture] });
   atomicPointSymlink(p.previous, dir);
   atomicPointSymlink(p.current, dir2);
-  atomicPointSymlink(p.liveLink, join(dir2, 'dist'));
+  atomicPointSymlink(p.liveLink, buildServeDir(dir2, dir));
   const restored = await reconcile(repo.root, {});
   assert.equal(restored.state, 'restored');
   assert.equal(pointerTarget(p.current), dir, 'pointer went back to the last verified release');
-  assert.equal(pointerTarget(p.liveLink), join(dir, 'dist'));
+  assert.equal(pointerTarget(p.liveLink), join(dir, 'serve'));
   assert.equal(hasPhase(dir2, 'promoted'), false, 'the unverified release was never blessed');
   // Idempotence: a second reconcile reports consistent and changes nothing.
   assert.equal((await reconcile(repo.root, {})).state, 'consistent');

@@ -36,7 +36,9 @@ import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync,
   closeSync,
+  cpSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -151,11 +153,20 @@ export function acquireLock(root, cmd = 'pipeline') {
       return () => rmSync(lockDir, { recursive: true, force: true });
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
-      let held = null;
-      try {
-        held = JSON.parse(readFileSync(metaFile, 'utf8'));
-      } catch {
-        held = null; // creator crashed between mkdir and write; treat as stale
+      const readHolder = () => {
+        try {
+          return JSON.parse(readFileSync(metaFile, 'utf8'));
+        } catch {
+          return null;
+        }
+      };
+      let held = readHolder();
+      if (!held) {
+        // A LIVE creator sits between mkdir and its holder write for a few
+        // milliseconds - grace-wait and re-read before calling it crashed,
+        // or a concurrent acquirer could rob a healthy holder.
+        spawnSync('sleep', ['0.15']);
+        held = readHolder();
       }
       const liveStart = held ? processStart(held.pid) : null;
       const holderAlive = held && liveStart !== null && liveStart === held.start;
@@ -244,11 +255,6 @@ export const readPhase = (dir, name) => (hasPhase(dir, name) ? readJson(phaseFil
 export async function stage(root, opts = {}) {
   const { channel = 'normal', buildFn, fixtureFiles } = opts;
   const git = opts.gitInfo ?? gitInfo(root);
-  if (git.dirty.length) {
-    // No bypass, no recorded-dirt escape hatch: a release keyed by full
-    // commit SHA must be reproducible from exactly that commit.
-    throw new Error(`working tree is dirty (${git.dirty.length} paths) - an immutable release must map to a commit. Commit first.`);
-  }
   const dir = releaseDir(root, git.fullSha);
   if (hasPhase(dir, 'staged')) {
     if (channel === 'hotfix' || opts.reuse) return { dir, meta: readJson(join(dir, 'meta.json')), reused: true };
@@ -261,11 +267,27 @@ export async function stage(root, opts = {}) {
 
   if (buildFn) await buildFn(dist);
   else {
-    const build = spawnSync('npm', ['-w', 'apps/web', 'run', 'build', '--', '--outDir', dist, '--emptyOutDir'], {
-      cwd: root,
-      stdio: 'inherit',
-    });
-    if (build.status !== 0) throw new Error(`build failed (exit ${build.status})`);
+    // Build from an ISOLATED clean worktree of exactly this commit - the
+    // shared checkout is never read, so uncommitted changes there (another
+    // builder's WIP) cannot enter the artifact, and a dirty tree is simply
+    // irrelevant rather than a blocker.
+    const wt = join(paths(root).releases, `.build-${git.fullSha}`);
+    spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: root });
+    const add = spawnSync('git', ['worktree', 'add', '--detach', wt, git.fullSha], { cwd: root, encoding: 'utf8' });
+    if (add.status !== 0) throw new Error(`could not create build worktree: ${add.stderr}`);
+    try {
+      if (existsSync(join(root, 'node_modules')) && !existsSync(join(wt, 'node_modules'))) {
+        symlinkSync(join(root, 'node_modules'), join(wt, 'node_modules'));
+      }
+      if (process.env.RP_CRASH_POINT === 'mid-build') process.exit(137); // test hook: only ever makes runs FAIL
+      const build = spawnSync('npm', ['-w', 'apps/web', 'run', 'build', '--', '--outDir', dist, '--emptyOutDir'], {
+        cwd: wt,
+        stdio: 'inherit',
+      });
+      if (build.status !== 0) throw new Error(`build failed (exit ${build.status})`);
+    } finally {
+      spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: root });
+    }
   }
 
   const bundle = readdirSync(join(dist, 'assets')).find(f => /^index-.*\.js$/.test(f));
@@ -423,13 +445,19 @@ export function recordGate(root, dir, { exitCode, acked = false, base }) {
 // hashes, so the pipeline cannot itself see whether a row is keyed. The
 // verifier's live wrong-key probe covers that today; a server-exposed
 // per-row `keyed` flag is the T-96 closure.
-export const approvalLine = ({ fullSha, artifactSha256, gateResultSha256, nonce }) =>
-  `${APPROVAL_PREFIX} ${fullSha} artifact=${artifactSha256} gate=${gateResultSha256} nonce=${nonce}`;
+export const approvalLine = ({ fullSha, artifactSha256, gateResultSha256, nonce, policyDigest }) =>
+  `${APPROVAL_PREFIX} ${fullSha} artifact=${artifactSha256} gate=${gateResultSha256} policy=${policyDigest} nonce=${nonce}`;
+
+// The policy file lives in the builder-writable repo, so the line binds its
+// digest: the approver attests the exact policy version the approval was
+// granted under, and a builder-tampered registry produces a digest the
+// approver will refuse to post. (Server-held policy is the T-96 closure.)
+export const policyDigestOf = root => createHash('sha256').update(readFileSync(join(root, 'scripts', 'release-approvers.json'))).digest('hex');
 
 const baseName = name => (name ?? '').trim().replace(/ \(\d+\)$/, '');
 
-export function parseApproval(messages, { fullSha, artifactSha256, gateResultSha256, nonce, registry, participants }) {
-  const expected = approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce });
+export function parseApproval(messages, { fullSha, artifactSha256, gateResultSha256, nonce, policyDigest, registry, participants }) {
+  const expected = approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce, policyDigest });
   const builderBases = new Set((registry.builderLineages ?? []).flatMap(l => l.baseNames));
   for (const msg of [...messages].reverse()) {
     const text = (msg.text ?? '').trim();
@@ -451,9 +479,10 @@ export function issueChallenge(root, dir) {
   const existing = readPhase(dir, 'challenge');
   if (existing) return existing;
   const nonce = randomBytes(8).toString('hex');
-  const line = approvalLine({ fullSha: meta.fullSha, artifactSha256: meta.artifactSha256, gateResultSha256: gate.gateResultSha256, nonce });
-  writePhase(dir, 'challenge', { nonce, line });
-  return { nonce, line };
+  const policyDigest = policyDigestOf(root);
+  const line = approvalLine({ fullSha: meta.fullSha, artifactSha256: meta.artifactSha256, gateResultSha256: gate.gateResultSha256, nonce, policyDigest });
+  writePhase(dir, 'challenge', { nonce, policyDigest, line });
+  return { nonce, policyDigest, line };
 }
 
 export function loadRegistry(root) {
@@ -477,16 +506,21 @@ export async function fetchApproval(root, dir, { apiBase, roomCode, registry }) 
   const roomRes = await call({ action: 'get' });
   if (!roomRes.ok) throw new Error(`could not fetch room participants (${roomRes.status})`);
   const participants = (await roomRes.json()).room?.participants ?? [];
+  const livePolicyDigest = policyDigestOf(root);
+  if (livePolicyDigest !== challenge.policyDigest) {
+    throw new Error(`approver policy changed since the challenge was issued (${challenge.policyDigest.slice(0, 12)} -> ${livePolicyDigest.slice(0, 12)}) - re-ratify the policy and reissue the challenge`);
+  }
   const approval = parseApproval(messages, {
     fullSha: meta.fullSha,
     artifactSha256: meta.artifactSha256,
     gateResultSha256: gate?.gateResultSha256,
     nonce: challenge.nonce,
+    policyDigest: challenge.policyDigest,
     registry: registry ?? loadRegistry(root),
     participants,
   });
   if (!approval) return null;
-  writePhase(dir, 'approved', { ...approval, roomCode, nonce: challenge.nonce });
+  writePhase(dir, 'approved', { ...approval, roomCode, nonce: challenge.nonce, policyDigest: challenge.policyDigest });
   return approval;
 }
 
@@ -537,6 +571,40 @@ export const pointerTarget = linkPath => {
   }
 };
 
+// An atomic directory pointer is not an atomic PAGE LOAD: a client can fetch
+// the old index.html, the pointer flips, and its subsequent asset requests
+// would 404 in the new release. Each promotion therefore serves a derived
+// serve/ dir: the release's own dist plus hard links to the previous
+// release's content-hashed assets (retained asset union, additive only).
+// The immutable dist/ is untouched - the artifact digest covers it alone;
+// serve/ is derived, rebuildable, and recorded with its own digest.
+export function buildServeDir(dir, previousTarget) {
+  const serve = join(dir, 'serve');
+  rmSync(serve, { recursive: true, force: true });
+  cpSync(join(dir, 'dist'), serve, { recursive: true });
+  const walkAssets = base => {
+    const assets = join(base, 'assets');
+    return existsSync(assets) ? readdirSync(assets) : [];
+  };
+  let retained = 0;
+  if (previousTarget) {
+    const prevBase = existsSync(join(previousTarget, 'serve')) ? join(previousTarget, 'serve') : join(previousTarget, 'dist');
+    mkdirSync(join(serve, 'assets'), { recursive: true });
+    for (const name of walkAssets(prevBase)) {
+      const dest = join(serve, 'assets', name);
+      if (!existsSync(dest)) {
+        linkSync(join(prevBase, 'assets', name), dest);
+        retained++;
+      }
+    }
+  }
+  writeFileSync(
+    join(dir, 'serve-manifest.json'),
+    `${JSON.stringify({ serveSha256: hashDirectory(serve), retainedAssets: retained, unionFrom: previousTarget ?? null, builtAt: nowIso() }, null, 2)}\n`,
+  );
+  return serve;
+}
+
 // First promotion on a machine whose apps/web/dist is still a real directory:
 // preserve it - AND its dist.prev rollback sibling if one exists (the
 // pre-hotfix bundle) - as imported releases so neither state is orphaned.
@@ -568,6 +636,9 @@ export async function promote(root, fullSha, opts = {}) {
   const p = paths(root);
   const dir = releaseDir(root, fullSha);
   if (!hasPhase(dir, 'staged')) throw new Error(`release ${fullSha} is not staged`);
+  if (hasPhase(dir, 'promoted') && pointerTarget(p.current) === dir) {
+    return { dir, previousTarget: pointerTarget(p.previous), alreadyPromoted: true };
+  }
   const meta = readJson(join(dir, 'meta.json'));
 
   if (channel === 'normal') {
@@ -587,9 +658,11 @@ export async function promote(root, fullSha, opts = {}) {
   const legacy = importLegacyDist(root);
   const previousTarget = pointerTarget(p.current) ?? legacy?.liveDir ?? null;
   mkdirSync(p.releases, { recursive: true });
+  const serve = buildServeDir(dir, previousTarget);
   if (previousTarget) atomicPointSymlink(p.previous, previousTarget);
   atomicPointSymlink(p.current, dir);
-  atomicPointSymlink(p.liveLink, join(dir, 'dist'));
+  atomicPointSymlink(p.liveLink, serve);
+  if (process.env.RP_CRASH_POINT === 'after-pointer-flip') process.exit(137); // test hook: only ever makes runs FAIL
 
   if (liveUrl) {
     const healthy = await waitForHealth(`${liveUrl}/healthz`, { attempts: 10, delayMs: 300 });
@@ -604,7 +677,7 @@ export async function promote(root, fullSha, opts = {}) {
     }
     if (!healthy || !serving) {
       if (previousTarget) {
-        atomicPointSymlink(p.liveLink, join(previousTarget, 'dist'));
+        atomicPointSymlink(p.liveLink, buildServeDir(previousTarget, dir));
         atomicPointSymlink(p.current, previousTarget);
       } else {
         // First-ever promote with nothing to fall back to: restore the
@@ -641,7 +714,9 @@ export async function rollback(root, { liveUrl, by = 'unknown' } = {}) {
   const from = pointerTarget(p.current);
   const to = pointerTarget(p.previous);
   if (!to) throw new Error('no previous release pointer - nothing to roll back to');
-  atomicPointSymlink(p.liveLink, join(to, 'dist'));
+  // Union from the release being left, so in-flight pages loaded from it
+  // can still resolve their hashed assets after the flip.
+  atomicPointSymlink(p.liveLink, buildServeDir(to, from));
   atomicPointSymlink(p.current, to);
   if (from) atomicPointSymlink(p.previous, from);
   if (liveUrl) {
@@ -697,14 +772,14 @@ export async function reconcile(root, { liveUrl } = {}) {
       servingOk = false;
     }
   }
-  if (preconditions && artifactOk && servingOk && pointerTarget(p.liveLink) === join(dir, 'dist')) {
+  if (preconditions && artifactOk && servingOk && pointerTarget(p.liveLink) === join(dir, 'serve')) {
     writePhase(dir, 'promoted', { channel: meta.channel, by: 'reconcile', reason: 'completed after interrupted promote' });
     writeFileSync(p.releaseLog, `${readFileSafe(p.releaseLog)}${nowIso()} reconcile completed promote ${meta.fullSha}\n`);
     return { state: 'completed', release: meta.fullSha };
   }
   const previous = pointerTarget(p.previous);
   if (previous) {
-    atomicPointSymlink(p.liveLink, join(previous, 'dist'));
+    atomicPointSymlink(p.liveLink, buildServeDir(previous, dir));
     atomicPointSymlink(p.current, previous);
     // The failed release is not a valid rollback target, and the true
     // previous-previous is unknown: drop the pointer rather than leave a
@@ -755,6 +830,9 @@ async function main() {
   let release = () => {};
   try {
     if (MUTATING.includes(cmd)) release = acquireLock(root, cmd);
+    // Test hook for contention drills: hold the lock for a while. Can only
+    // slow a run down, never let one through.
+    if (process.env.RP_SLOW_MS) await new Promise(r => setTimeout(r, Number(process.env.RP_SLOW_MS)));
     if (cmd === 'verify') {
       const { fullSha, artifactSha256 } = verifyArtifact(root, args[0] ?? gitInfo(root).fullSha);
       console.log(`verified ${fullSha} artifact ${artifactSha256}`);
