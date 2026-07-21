@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { relativeTime } from '../lib/relativeTime.js';
-import { unreadCount } from '../lib/unread.js';
+import { RoomBadges } from './RoomBadges.js';
 
 // T-05 desktop room list (280px column between the rail and the chat).
 // Authenticated users get their active rooms with one-tap switching;
@@ -19,6 +19,9 @@ interface RoomSummary {
   // server-side) and message count; list arrives sorted recent-activity-first.
   lastActivityAt?: number;
   messageCount?: number;
+  // T-25: agent attachment + server health verdict for the card pill.
+  agentCount?: number;
+  agentsAllHealthy?: boolean;
 }
 
 export function RoomListPane({ activeCode, selfName }: { activeCode: string; selfName: string }) {
@@ -51,7 +54,6 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {rooms.map(r => {
           const active = r.code === activeCode;
-          const unread = unreadCount(r.code, r.messageCount, selfName);
           return (
             <Link
               key={r.code}
@@ -60,17 +62,17 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
             >
               <div className="flex items-baseline gap-2">
                 <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
-                {/* T-62: unread badge. The active room is by definition being read,
-                    so it never carries one — otherwise it would flash a count at
-                    the reader for messages sitting on screen in front of them. */}
-                {!active && unread > 0 && (
-                  <span
-                    className="flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-bold tabular-nums text-white"
-                    aria-label={`${unread} unread message${unread === 1 ? '' : 's'}`}
-                  >
-                    {unread > 99 ? '99+' : unread}
-                  </span>
-                )}
+                {/* T-62 badge, refined by T-18/T-20, plus the T-25 health pill.
+                    The active room never shows unread — it is being read. */}
+                <RoomBadges
+                  code={r.code}
+                  messageCount={r.messageCount}
+                  selfName={selfName}
+                  agentCount={r.agentCount}
+                  agentsAllHealthy={r.agentsAllHealthy}
+                  active={active}
+                  compact
+                />
                 {r.lastActivityAt != null && (
                   <span className="flex-shrink-0 text-[11px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
                     {relativeTime(r.lastActivityAt)}

@@ -4,7 +4,7 @@ import { isValidCode } from '@agent-room/shared';
 import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
-import { unreadCount } from '../lib/unread.js';
+import { RoomBadges } from '../components/RoomBadges.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -174,8 +174,6 @@ export function Home() {
           <section className="mt-5 space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Your rooms</h2>
             {activeRooms.map(r => {
-              // T-62: unread since this device last read to the bottom of the room.
-              const unread = unreadCount(r.code, r.messageCount, identity.name);
               // The card used to age off createdAt, so a room that had been busy
               // all day still read "21h ago" — that's the room's birthday, not its
               // last update. lastActivityAt is the one the host actually wants.
@@ -194,14 +192,15 @@ export function Home() {
                       {r.participants} here · updated {timeAgo(updatedAt)}
                     </div>
                   </div>
-                  {unread > 0 && (
-                    <span
-                      className="flex h-6 min-w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[13px] font-bold tabular-nums text-white"
-                      aria-label={`${unread} unread message${unread === 1 ? '' : 's'}`}
-                    >
-                      {unread > 99 ? '99+' : unread}
-                    </span>
-                  )}
+                  {/* T-18/T-20/T-25: shared badge cluster — refined unread,
+                      amber @mentions, and the agent health pill. */}
+                  <RoomBadges
+                    code={r.code}
+                    messageCount={r.messageCount}
+                    selfName={identity.name}
+                    agentCount={r.agentCount}
+                    agentsAllHealthy={r.agentsAllHealthy}
+                  />
                   <span className="flex-shrink-0 text-sm font-semibold text-accent">Enter →</span>
                 </button>
               );

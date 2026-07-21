@@ -21,6 +21,9 @@ export interface RoomSummary {
   lastActivityAt?: number;
   /** Server's absolute message counter — the currency the unread badge uses. */
   messageCount?: number;
+  /** T-25: agent (cc) participants and the server's health verdict over them. */
+  agentCount?: number;
+  agentsAllHealthy?: boolean;
 }
 
 export interface RoomPage {

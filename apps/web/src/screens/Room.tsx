@@ -151,6 +151,21 @@ export function Room() {
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+
+  // T-25: room-card health pills deep-link to /r/CODE?panel=people so the host
+  // lands directly on the diagnosis view. Desktop gets the People peer tab,
+  // mobile the inspector sheet; the param is then stripped so refreshes and
+  // back-navigation return to plain chat.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('panel') !== 'people') return;
+    setMainTab('people');
+    setInspectorOpen(true);
+    params.delete('panel');
+    const query = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
   // T-68: the SERVER's listen-loop verdict (T-66 `health`). The web no longer
