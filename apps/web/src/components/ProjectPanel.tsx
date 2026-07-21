@@ -115,7 +115,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
   if (!room.projectId) {
     return (
       <div className="p-4">
-        <div className="mb-2 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Project</div>
+        <div className="mb-2 text-xs font-semibold uppercase text-ink-faint">Project</div>
         <p className="mb-3 text-sm leading-relaxed text-ink-soft lg:text-xs">
           This room is not attached to a project yet. Attaching one gives its
           task board a durable Markdown ledger in the project repository.
@@ -155,15 +155,15 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
 
   return (
     <div className="p-4">
-      <div className="mb-1 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Project</div>
+      <div className="mb-1 text-xs font-semibold uppercase text-ink-faint">Project</div>
       <div className="mb-3">
         <div className="text-sm font-semibold">{project?.name ?? room.projectId}</div>
-        <div className="text-xs text-ink-faint lg:text-[11px]">id: {room.projectId} · tasks sync to the repo ledger on every board change</div>
+        <div className="text-xs text-ink-faint">id: {room.projectId} · tasks sync to the repo ledger on every board change</div>
       </div>
 
       {project && project.docs.length > 0 && (
         <div className="mb-4">
-          <div className="mb-1.5 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Documents</div>
+          <div className="mb-1.5 text-xs font-semibold uppercase text-ink-faint">Documents</div>
           <div className="flex flex-wrap gap-1.5">
             {project.docs.map(role => (
               <button
@@ -177,15 +177,15 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
           </div>
           {docRole && doc && (
             <div className="mt-2 rounded-lg border border-border-faint bg-surface-sunken p-3">
-              <div className="mb-1.5 text-xs text-ink-faint lg:text-[10px]">{doc.rel}{doc.truncated ? ' · truncated preview' : ''} · read-only</div>
-              <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-muted lg:text-[11px]">{doc.content || '(empty)'}</pre>
+              <div className="mb-1.5 text-xs text-ink-faint">{doc.rel}{doc.truncated ? ' · truncated preview' : ''} · read-only</div>
+              <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-muted">{doc.content || '(empty)'}</pre>
             </div>
           )}
         </div>
       )}
 
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Tasks {tasks ? `· ${visible.length}/${tasks.length}` : ''}</div>
+        <div className="text-xs font-semibold uppercase text-ink-faint">Tasks {tasks ? `· ${visible.length}/${tasks.length}` : ''}</div>
       </div>
       <div className="mb-2 flex gap-1.5">
         <select
@@ -209,21 +209,27 @@ export function ProjectPanel({ room, isHost, selfName, onAttached }: Props) {
       </div>
 
       <div className="space-y-2">
-        {tasks === null && <div className="text-sm text-ink-soft lg:text-xs">Loading…</div>}
+        {tasks === null && (
+          // T-30: an intentional loading state, not a bare tiny string.
+          <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-lg border border-border-faint bg-surface-softer px-3 py-2.5 text-sm text-ink-soft">
+            <span className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
+            Loading the task board…
+          </div>
+        )}
         {tasks !== null && visible.length === 0 && (
           <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm text-ink-soft lg:text-xs">No tasks match.</div>
         )}
         {visible.map(t => (
           <div key={t.id} className="rounded-lg border border-border-faint bg-surface-softer p-3">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
-              <span className="font-mono text-xs font-bold text-ink lg:text-[11px]">{t.id}</span>
-              <span className={`rounded border px-1.5 py-px text-[11px] font-semibold lg:text-[9px] ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
+              <span className="font-mono text-xs font-bold text-ink">{t.id}</span>
+              <span className={`rounded border px-1.5 py-px text-[11px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
             </div>
             <div className="text-sm font-semibold leading-snug lg:text-xs">{t.title}</div>
-            <div className="mt-1 text-xs text-ink-faint lg:text-[10px]">
+            <div className="mt-1 text-xs text-ink-faint">
               {t.owner ? `owner ${t.owner}` : 'unowned'}{t.verifier ? ` · verifier ${t.verifier}` : ''}
             </div>
-            {t.note && <div className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink-soft lg:text-[10px]">{t.note}</div>}
+            {t.note && <div className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink-soft">{t.note}</div>}
           </div>
         ))}
       </div>

@@ -180,8 +180,9 @@ export function Room() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('panel') !== 'people') return;
+    // T-30: the tab bar exists at every width now, so the People PEER TAB is
+    // the single deep-link target — opening the sheet too double-presented it.
     setMainTab('people');
-    setInspectorOpen(true);
     params.delete('panel');
     const query = params.toString();
     window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
@@ -1092,7 +1093,7 @@ export function Room() {
   // columns + mobile tab bar became one toggleable Inspector).
   const roomInfoPanel = (
             <div className="p-4 border-b border-border-faint">
-              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Room</div>
+              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint">Room</div>
               <h2 className="text-[15px] font-semibold leading-snug lg:text-sm">{room.topic}</h2>
               <RenameRoomControl room={room} isHost={isHost} onRenamed={() => { void refreshRoom(); }} />
               <div className="mt-3">
@@ -1100,14 +1101,14 @@ export function Room() {
               </div>
               <button
                 onClick={() => copyText(joinUrl, 'Invite link copied')}
-                className="mt-3 min-h-11 w-full rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20 lg:min-h-0 lg:text-[11px]"
+                className="mt-3 min-h-11 w-full rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20 lg:min-h-0"
               >
                 Copy invite link
               </button>
               <div className="mt-3 rounded-lg border border-border-faint bg-surface-softer p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Reply mode</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft lg:text-[9px]">
+                  <span className="text-xs font-semibold uppercase text-ink-faint">Reply mode</span>
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft">
                     {modeLabel(replyMode)}
                   </span>
                 </div>
@@ -1157,10 +1158,10 @@ export function Room() {
                       <div className="rounded-md border border-border-faint bg-surface px-2 py-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-ink lg:text-[11px]">
+                            <div className="truncate text-sm font-semibold text-ink">
                               {currentSpeaker ? `Now: ${currentSpeaker.name}` : 'No active turn'}
                             </div>
-                            <div className="text-xs text-ink-soft lg:text-[9px]">
+                            <div className="text-xs text-ink-soft">
                               {currentSpeaker && currentDeadlineMs !== null
                                 ? `${Math.ceil(currentDeadlineMs / 1000)}s left`
                                 : 'Waiting'}
@@ -1171,7 +1172,7 @@ export function Room() {
                               type="button"
                               onClick={() => { void handleSkipCurrent(); }}
                               disabled={modeBusy}
-                              className="min-h-11 rounded-md border border-amber-400/30 bg-amber-500/10 px-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-60 lg:min-h-7 lg:px-2 lg:text-[10px]"
+                              className="min-h-11 rounded-md border border-amber-400/30 bg-amber-500/10 px-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-60 lg:min-h-7 lg:px-2"
                             >
                               Skip
                             </button>
@@ -1194,8 +1195,8 @@ export function Room() {
 
   const peoplePanel = (
             <div className="p-4">
-              <div className="mb-1 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Participants</div>
-              <p className="mb-3 text-sm leading-relaxed text-ink-soft lg:text-[10px]">
+              <div className="mb-1 text-xs font-semibold uppercase text-ink-faint">Participants</div>
+              <p className="mb-3 text-sm leading-relaxed text-ink-soft">
                 Listening = inside an active listen window. Disconnected = no heartbeat for 5+ min, likely the CLI session was killed without leaving cleanly — host can remove with the × button.
               </p>
               <div className="space-y-2">
@@ -1225,10 +1226,10 @@ export function Room() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1 truncate text-sm font-semibold lg:text-xs">
                           {p.name}
-                          {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[11px] font-semibold text-accent lg:text-[9px]">host</span>}
-                          {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[11px] font-semibold text-amber-300 lg:text-[9px]">muted</span>}
+                          {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[11px] font-semibold text-accent">host</span>}
+                          {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[11px] font-semibold text-amber-300">muted</span>}
                         </div>
-                        <div className="truncate text-xs text-ink-soft lg:text-[10px]">
+                        <div className="truncate text-xs text-ink-soft">
                           {[p.role, p.client].filter(Boolean).join(' · ')}
                         </div>
                         {/* T-68: the state is the SERVER's verdict (T-66), not a
@@ -1237,7 +1238,7 @@ export function Room() {
                             recently — they stay distinct, because collapsing them is
                             what let presence lie. */}
                         {presence && (
-                          <div className={`mt-0.5 flex items-center gap-1 text-[11px] font-medium lg:text-[9px] ${STATE_TONE_PRESENCE[presence.state].text}`}>
+                          <div className={`mt-0.5 flex items-center gap-1 text-[11px] font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${STATE_TONE_PRESENCE[presence.state].dot}`} />
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
@@ -1340,12 +1341,12 @@ export function Room() {
                 {!ended && room.createdBy === self.name && (
                   <button
                     onClick={handleEndMeeting}
-                    className="min-h-11 flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20 lg:min-h-0 lg:text-[11px]"
+                    className="min-h-11 flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20 lg:min-h-0"
                   >
                     End
                   </button>
                 )}
-                <button onClick={() => navigate('/')} className="min-h-11 flex-1 rounded-lg bg-surface-softer px-3 py-2 text-sm font-semibold text-ink-muted lg:min-h-0 lg:text-[11px]">
+                <button onClick={() => navigate('/')} className="min-h-11 flex-1 rounded-lg bg-surface-softer px-3 py-2 text-sm font-semibold text-ink-muted lg:min-h-0">
                   Home
                 </button>
               </div>
@@ -1384,13 +1385,13 @@ export function Room() {
           </div>
         )}
 
-        {/* T-64 (host: "instead of a sidebar with tabs, make all tabs peers of
-            the chat, so there's more space"). People/Project/Outputs/Room used to
-            live in a permanent 320px right column that squeezed the conversation
-            from both sides. They're now PEERS of Chat: pick one and it takes the
-            whole width. Chat gets the full pane back. Desktop only — the phone
-            keeps the slide-over sheet. */}
-        <div className="hidden flex-shrink-0 items-center gap-1 border-b border-border-faint px-3 lg:flex">
+        {/* T-64 (host: "make all tabs peers of the chat") + T-30 (host: room
+            navigation must be obvious on the PHONE too, with readable labels).
+            The Chat/People/Project/Outputs/Room bar now shows at every width —
+            text labels, horizontally scrollable when narrow, never icon-only.
+            The header people icon still opens the slide-over sheet as a
+            shortcut, but the tabs are the primary navigation everywhere. */}
+        <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-faint px-3">
           {MAIN_TABS.map(t => (
             <button
               key={t.key}
@@ -1407,14 +1408,14 @@ export function Room() {
           ))}
         </div>
 
-        {/* A non-chat tab owns the pane on desktop. */}
+        {/* T-30: a non-chat tab owns the pane at EVERY width now, not just lg. */}
         {mainTab !== 'chat' && (
-          <div className="hidden min-h-0 flex-1 overflow-y-auto lg:block">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-[860px]">{renderPanel(mainTab)}</div>
           </div>
         )}
 
-        <div className={`flex min-h-0 flex-1 flex-col ${mainTab === 'chat' ? '' : 'lg:hidden'}`}>
+        <div className={`min-h-0 flex-1 flex-col ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
 
             <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto py-4 relative">
               {/* T-21: cap the text column at a comfortable reading measure
@@ -1868,15 +1869,15 @@ export function Room() {
     return (
           <div>
             <div className="p-4 border-b border-border-faint">
-              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint lg:text-[10px]">Outputs</div>
+              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint">Outputs</div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
                   <div className="text-base font-semibold">{messages.length}</div>
-                  <div className="text-xs text-ink-soft lg:text-[10px]">Messages</div>
+                  <div className="text-xs text-ink-soft">Messages</div>
                 </div>
                 <div className="rounded-lg bg-surface-softer border border-border-faint p-2">
                   <div className="text-base font-semibold">{activeRoom.participants.length}</div>
-                  <div className="text-xs text-ink-soft lg:text-[10px]">People</div>
+                  <div className="text-xs text-ink-soft">People</div>
                 </div>
               </div>
             </div>
@@ -1884,11 +1885,11 @@ export function Room() {
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
               <div className="mb-5 rounded-xl border border-accent-tint-border bg-accent-tint p-4">
                 <h2 className="text-sm font-semibold text-accent-deep mb-2">Report</h2>
-                <p className="mb-3 text-sm leading-relaxed text-accent-deep/80 lg:text-[11px]">Freeze this room into a shareable delivery report.</p>
+                <p className="mb-3 text-sm leading-relaxed text-accent-deep/80">Freeze this room into a shareable delivery report.</p>
                 <button
                   onClick={handleExportReport}
                   disabled={reportBusy || messages.length === 0}
-                  className="min-h-11 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 lg:text-[11px]"
+                  className="min-h-11 w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0"
                 >
                   {reportBusy ? 'Saving…' : 'Save & Share'}
                 </button>
@@ -1897,7 +1898,7 @@ export function Room() {
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-semibold">Artifacts</h2>
-                  <span className="text-xs text-ink-soft lg:text-[10px]">{artifacts.length}</span>
+                  <span className="text-xs text-ink-soft">{artifacts.length}</span>
                 </div>
                 {artifacts.length ? (
                   <div className="space-y-2">
@@ -1906,7 +1907,7 @@ export function Room() {
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft lg:text-[11px]">
+                  <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft">
                     Use [DECISION], [TODO], [STATUS], or [RESULT] in messages to build the delivery log.
                   </div>
                 )}
@@ -1915,7 +1916,7 @@ export function Room() {
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold">Minutes</h2>
               </div>
-              <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft lg:text-[11px]">
+              <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-sm leading-relaxed text-ink-soft">
                 Ask an agent to generate minutes from the composer. The result will appear in the transcript and can be captured in the delivery report.
               </div>
             </div>
