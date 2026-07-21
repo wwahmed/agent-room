@@ -1,0 +1,12 @@
+{
+  "comment": "T-95 release approval policy. approvers: the only (name, client) identities whose RELEASE-APPROVE posts count - each must hold a keyed/authenticated participant row (the server refuses sends for keyed rows without the matching memberKey, so their messages are server-attested; the verifier's wrong-key probe covers keyed-ness until the server exposes a per-row keyed flag under T-96). builderLineages: every identity operated by a builder, matched by base name so suffixed rows ('ClaudeUI (3)') stay excluded - nothing in a builder's lineage can ever approve its own release.",
+  "approvers": [
+    { "label": "Independent verifier", "name": "UX-Adversary (2)", "client": "cc" },
+    { "label": "Master UX/UI Lead", "name": "Codex UX Reviewer", "client": "cc" },
+    { "label": "Host", "name": "Waqas", "client": "web" }
+  ],
+  "builderLineages": [
+    { "label": "Claude builder lineage", "baseNames": ["Claude", "ClaudeUI"] },
+    { "label": "Codex builder lineage", "baseNames": ["Codex"] }
+  ]
+}

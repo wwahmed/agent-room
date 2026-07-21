@@ -32,7 +32,7 @@
 // Plain node ESM, no deps. bin/deploy-web and bin/rollback-web are thin
 // wrappers over the CLI at the bottom.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync,
   closeSync,
@@ -129,28 +129,53 @@ export const writableTree = dir => {
   walk(dir);
 };
 
-// Concurrent-invocation lock (contract item 3): one pipeline mutation at a
-// time per repo. A lock whose pid is dead is stale and reclaimed with a log
-// line; a live pid fails closed.
+// Concurrent-invocation lock (contract item 3). Acquisition is an atomic
+// mkdir - exactly one of N simultaneous processes can create the directory.
+// The holder records pid AND process start time, so a recycled pid does not
+// impersonate the holder. Stale reclaim is serialized through an atomic
+// rename: only the process that wins the rename may retry the mkdir.
+const processStart = pid => {
+  const r = spawnSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : null; // null = no such process
+};
+
 export function acquireLock(root, cmd = 'pipeline') {
   const p = paths(root);
   mkdirSync(p.releases, { recursive: true });
-  const lockFile = join(p.releases, '.lock');
-  if (existsSync(lockFile)) {
-    const held = JSON.parse(readFileSync(lockFile, 'utf8'));
-    let alive = false;
+  const lockDir = join(p.releases, '.lock');
+  const metaFile = join(lockDir, 'holder.json');
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      process.kill(held.pid, 0);
-      alive = true;
-    } catch {
-      alive = false;
+      mkdirSync(lockDir); // atomic: exactly one creator
+      writeFileSync(metaFile, `${JSON.stringify({ pid: process.pid, start: processStart(process.pid), cmd, at: nowIso() }, null, 2)}\n`);
+      return () => rmSync(lockDir, { recursive: true, force: true });
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      let held = null;
+      try {
+        held = JSON.parse(readFileSync(metaFile, 'utf8'));
+      } catch {
+        held = null; // creator crashed between mkdir and write; treat as stale
+      }
+      const liveStart = held ? processStart(held.pid) : null;
+      const holderAlive = held && liveStart !== null && liveStart === held.start;
+      if (holderAlive) throw new Error(`another pipeline run holds the lock (pid ${held.pid}, cmd ${held.cmd}, since ${held.at})`);
+      // Stale (dead pid, or a recycled pid with a different start time).
+      // Serialize the reclaim: rename is atomic, only one process wins.
+      const tomb = join(p.releases, `.lock-reclaimed-${process.pid}-${attempt}`);
+      try {
+        renameSync(lockDir, tomb);
+      } catch {
+        continue; // another process won the reclaim; retry acquisition
+      }
+      rmSync(tomb, { recursive: true, force: true });
+      writeFileSync(
+        p.releaseLog,
+        `${readFileSafe(p.releaseLog)}${nowIso()} stale-lock reclaimed (pid ${held?.pid ?? 'unknown'} ${held ? (liveStart === null ? 'dead' : 'pid-reused') : 'no-holder-record'}, cmd ${held?.cmd ?? '?'})\n`,
+      );
     }
-    if (alive) throw new Error(`another pipeline run holds the lock (pid ${held.pid}, cmd ${held.cmd}, since ${held.at})`);
-    writeFileSync(p.releaseLog, `${readFileSafe(p.releaseLog)}${nowIso()} stale-lock reclaimed (dead pid ${held.pid}, cmd ${held.cmd})\n`);
-    rmSync(lockFile);
   }
-  writeFileSync(lockFile, `${JSON.stringify({ pid: process.pid, cmd, at: nowIso() }, null, 2)}\n`);
-  return () => rmSync(lockFile, { force: true });
+  throw new Error('could not acquire the pipeline lock after contended reclaim attempts');
 }
 
 // Recompute the artifact manifest and compare to the recorded hash (contract
@@ -166,14 +191,41 @@ export function verifyArtifact(root, fullSha) {
   return { fullSha, artifactSha256: actual };
 }
 
-// Hotfix debt clears only when the promoted release CONTAINS the hotfix
-// commit (contract item 7) - a green promote of unrelated work leaves the
-// debt standing. Unknown/unresolvable markers fail closed (debt survives).
-export function debtSettledBy(root, markerSha, promotedSha) {
+// Hotfix debt marker: JSON recording EVERY unaudited hotfix commit plus the
+// served-artifact digest at the time of recording. (The v1 marker was a bare
+// short SHA written only on the first hotfix - it under-recorded; legacy
+// bare-SHA markers are still parsed.) Debt settles only when the promoted
+// release contains ALL recorded commits AND its gate is fully green - a
+// green promote of unrelated work leaves the debt standing, and an
+// unresolvable commit fails closed (debt survives).
+export function readDebt(root) {
+  const p = paths(root);
+  if (!existsSync(p.hotfixPending)) return null;
+  const raw = readFileSync(p.hotfixPending, 'utf8').trim();
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { commits: [raw], legacy: true };
+  }
+}
+
+export function recordDebt(root, { fullSha, artifactSha256 }) {
+  const p = paths(root);
+  mkdirSync(p.gateState, { recursive: true });
+  const existing = readDebt(root) ?? { commits: [] };
+  const commits = [...new Set([...existing.commits, fullSha])];
+  writeFileSync(p.hotfixPending, `${JSON.stringify({ commits, artifactSha256, recordedAt: nowIso() }, null, 2)}\n`);
+}
+
+export function debtSettledBy(root, debt, promotedSha) {
   const run = args => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
-  const expanded = run(['rev-parse', '--verify', `${markerSha.trim()}^{commit}`]);
-  if (expanded.status !== 0) return false;
-  return run(['merge-base', '--is-ancestor', expanded.stdout.trim(), promotedSha]).status === 0;
+  const commits = debt?.commits ?? [];
+  if (!commits.length) return false;
+  return commits.every(commit => {
+    const expanded = run(['rev-parse', '--verify', `${commit.trim()}^{commit}`]);
+    if (expanded.status !== 0) return false;
+    return run(['merge-base', '--is-ancestor', expanded.stdout.trim(), promotedSha]).status === 0;
+  });
 }
 
 export const releaseDir = (root, fullSha) => join(paths(root).releases, fullSha);
@@ -190,13 +242,12 @@ export const readPhase = (dir, name) => (hasPhase(dir, name) ? readJson(phaseFil
 // ---------------------------------------------------------------- stage ----
 
 export async function stage(root, opts = {}) {
-  const { channel = 'normal', allowDirty = false, buildFn, fixtureFiles } = opts;
+  const { channel = 'normal', buildFn, fixtureFiles } = opts;
   const git = opts.gitInfo ?? gitInfo(root);
-  if (git.dirty.length && !allowDirty) {
-    throw new Error(
-      `working tree is dirty (${git.dirty.length} paths) - an immutable release must map to a commit. ` +
-        `Commit first, or set DEPLOY_ALLOW_DIRTY=1 to record the dirty list in the release meta.`,
-    );
+  if (git.dirty.length) {
+    // No bypass, no recorded-dirt escape hatch: a release keyed by full
+    // commit SHA must be reproducible from exactly that commit.
+    throw new Error(`working tree is dirty (${git.dirty.length} paths) - an immutable release must map to a commit. Commit first.`);
   }
   const dir = releaseDir(root, git.fullSha);
   if (hasPhase(dir, 'staged')) {
@@ -226,7 +277,6 @@ export async function stage(root, opts = {}) {
     shortSha: git.shortSha,
     channel,
     builder: git.builder,
-    dirty: git.dirty,
     bundle,
     artifactSha256: hashDirectory(dist),
     fixtureManifestSha256: hashFiles(fixtures.filter(existsSync)),
@@ -234,7 +284,7 @@ export async function stage(root, opts = {}) {
   };
   writeFileSync(join(dir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
   readOnlyTree(dist);
-  writePhase(dir, 'staged', { channel, bundle, artifactSha256: meta.artifactSha256, dirty: git.dirty });
+  writePhase(dir, 'staged', { channel, bundle, artifactSha256: meta.artifactSha256 });
   return { dir, meta, reused: false };
 }
 
@@ -252,10 +302,45 @@ export function stagingInfo(dir) {
   }
 }
 
-export function serveStaging(root, dir, { port, serverCmd } = {}) {
+export function killStaging(dir) {
+  const info = stagingInfo(dir);
+  if (!info) return false;
+  try {
+    process.kill(-info.pid);
+  } catch {
+    try {
+      process.kill(info.pid);
+    } catch {
+      /* already gone */
+    }
+  }
+  return true;
+}
+
+// Collision-safe port allocation: probe a bounded range and take the first
+// port nothing answers on. Anything answering - ours or not - is skipped.
+export async function allocStagingPort(base = 8220, span = 30) {
+  for (let port = base; port < base + span; port++) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(300) });
+    } catch {
+      return port; // connection refused/timeout = free
+    }
+  }
+  throw new Error(`no free staging port in ${base}..${base + span - 1}`);
+}
+
+// The preview is bound to the exact release: staging.json records the full
+// SHA and artifact digest, and verifyStagingServing proves the port is
+// serving THIS release's bundle - "still serving" something is not enough.
+export async function serveStaging(root, dir, { port, serverCmd } = {}) {
+  const meta = readJson(join(dir, 'meta.json'));
   const running = stagingInfo(dir);
-  if (running) return running;
-  const stagingPort = port ?? Number(process.env.STAGING_PORT ?? 8220);
+  if (running) {
+    if (await verifyStagingServing(dir, running)) return running;
+    killStaging(dir); // stale process serving the wrong thing: clean it up
+  }
+  const stagingPort = port ?? Number(process.env.STAGING_PORT ?? (await allocStagingPort()));
   const [cmd, ...args] = serverCmd ?? ['node', join(root, 'apps', 'server', 'dist', 'index.js')];
   const log = join(dir, 'staging-server.log');
   const logFd = openSync(log, 'a');
@@ -267,9 +352,20 @@ export function serveStaging(root, dir, { port, serverCmd } = {}) {
   });
   child.unref();
   closeSync(logFd);
-  const info = { pid: child.pid, port: stagingPort, startedAt: nowIso(), log };
+  const info = { pid: child.pid, port: stagingPort, fullSha: meta.fullSha, artifactSha256: meta.artifactSha256, startedAt: nowIso(), log };
   writeFileSync(join(dir, 'staging.json'), `${JSON.stringify(info, null, 2)}\n`);
   return info;
+}
+
+export async function verifyStagingServing(dir, info) {
+  const meta = readJson(join(dir, 'meta.json'));
+  const bundleHash = meta.bundle?.replace(/^index-|\.js$/g, '');
+  try {
+    const html = await (await fetch(`http://127.0.0.1:${info.port}/`, { signal: AbortSignal.timeout(2000) })).text();
+    return Boolean(bundleHash && html.includes(bundleHash));
+  } catch {
+    return false;
+  }
 }
 
 export async function waitForHealth(url, { attempts = 40, delayMs = 500 } = {}) {
@@ -306,31 +402,69 @@ export function recordGate(root, dir, { exitCode, acked = false, base }) {
 
 // ------------------------------------------------------------- approval ----
 
-// Approval is a room message "RELEASE-APPROVE <full-sha> ..." from someone
-// other than the builder. Sender identity is enforced by the SERVER's send
-// path (authenticateSender: a keyed row refuses any send without its
-// memberKey; a display name never authenticates), so a message in the log
-// from a keyed participant is server-attested. The pipeline additionally
-// refuses approvers whose participant row carries no credential hash at all
-// (legacy keyless rows are exactly the spoofable ones).
-export function parseApproval(messages, { fullSha, builder, participants }) {
-  const attested = name => {
-    if (!participants) return true; // caller vouches (tests exercise both paths)
-    const row = participants.find(p => (p.name ?? '').trim() === (name ?? '').trim());
-    return Boolean(row && (row.memberKeyHash || row.authIdHash));
-  };
+// Release approval model.
+//
+// Identity attestation is the SERVER's: authenticateSender refuses any send
+// for a keyed row without that row's memberKey ("a display name alone cannot
+// authenticate"), and it throws BEFORE the message is stored. So a message
+// in the log from a keyed participant was necessarily posted by the key
+// holder. What the pipeline enforces on top:
+//   - the approval text must bind the FULL SHA, the artifact digest, the
+//     gate-result digest, and a per-release challenge nonce - so an approval
+//     can never be replayed against a rebuilt, tampered, or different
+//     release, and a stale approval from last week matches nothing;
+//   - the approver must be a (name, client) pair from the committed
+//     approvers registry (scripts/release-approvers.json) with a live
+//     participant row - an impostor joining under a taken name gets a
+//     suffixed row and matches nothing;
+//   - no identity in the builder's registered lineage (base-name match, so
+//     "ClaudeUI (3)" is still the builder's operator) can approve.
+// Residual gap, held openly: the public room payload strips credential
+// hashes, so the pipeline cannot itself see whether a row is keyed. The
+// verifier's live wrong-key probe covers that today; a server-exposed
+// per-row `keyed` flag is the T-96 closure.
+export const approvalLine = ({ fullSha, artifactSha256, gateResultSha256, nonce }) =>
+  `${APPROVAL_PREFIX} ${fullSha} artifact=${artifactSha256} gate=${gateResultSha256} nonce=${nonce}`;
+
+const baseName = name => (name ?? '').trim().replace(/ \(\d+\)$/, '');
+
+export function parseApproval(messages, { fullSha, artifactSha256, gateResultSha256, nonce, registry, participants }) {
+  const expected = approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce });
+  const builderBases = new Set((registry.builderLineages ?? []).flatMap(l => l.baseNames));
   for (const msg of [...messages].reverse()) {
     const text = (msg.text ?? '').trim();
-    if (!text.startsWith(`${APPROVAL_PREFIX} ${fullSha}`)) continue;
-    if ((msg.name ?? '').trim() === builder) continue; // self-approval never counts
-    if (!attested(msg.name)) continue; // keyless identity cannot approve
-    return { approver: msg.name, messageId: msg.id, messageTime: msg.time, text };
+    if (!(text === expected || text.startsWith(`${expected} `))) continue;
+    const name = (msg.name ?? '').trim();
+    if (builderBases.has(baseName(name))) continue; // builder lineage can never approve
+    const entry = (registry.approvers ?? []).find(a => a.name === name);
+    if (!entry) continue; // not an authorized approver
+    if (participants && !participants.some(p => (p.name ?? '').trim() === name && p.client === entry.client)) continue;
+    return { approver: name, client: entry.client, messageId: msg.id, messageTime: msg.time, text };
   }
   return null;
 }
 
-export async function fetchApproval(root, dir, { apiBase, roomCode }) {
+export function issueChallenge(root, dir) {
   const meta = readJson(join(dir, 'meta.json'));
+  const gate = readPhase(dir, 'gate');
+  if (!gate?.gateResultSha256) throw new Error('challenge refused: run the gate first (approval binds the gate-result digest)');
+  const existing = readPhase(dir, 'challenge');
+  if (existing) return existing;
+  const nonce = randomBytes(8).toString('hex');
+  const line = approvalLine({ fullSha: meta.fullSha, artifactSha256: meta.artifactSha256, gateResultSha256: gate.gateResultSha256, nonce });
+  writePhase(dir, 'challenge', { nonce, line });
+  return { nonce, line };
+}
+
+export function loadRegistry(root) {
+  return readJson(join(root, 'scripts', 'release-approvers.json'));
+}
+
+export async function fetchApproval(root, dir, { apiBase, roomCode, registry }) {
+  const meta = readJson(join(dir, 'meta.json'));
+  const gate = readPhase(dir, 'gate');
+  const challenge = readPhase(dir, 'challenge');
+  if (!challenge) throw new Error('no challenge issued for this release - run challenge first and post its line for the approver');
   const call = body =>
     fetch(`${apiBase}/api/room`, {
       method: 'POST',
@@ -343,27 +477,47 @@ export async function fetchApproval(root, dir, { apiBase, roomCode }) {
   const roomRes = await call({ action: 'get' });
   if (!roomRes.ok) throw new Error(`could not fetch room participants (${roomRes.status})`);
   const participants = (await roomRes.json()).room?.participants ?? [];
-  const approval = parseApproval(messages, { fullSha: meta.fullSha, builder: meta.builder, participants });
+  const approval = parseApproval(messages, {
+    fullSha: meta.fullSha,
+    artifactSha256: meta.artifactSha256,
+    gateResultSha256: gate?.gateResultSha256,
+    nonce: challenge.nonce,
+    registry: registry ?? loadRegistry(root),
+    participants,
+  });
   if (!approval) return null;
-  writePhase(dir, 'approved', { ...approval, roomCode });
+  writePhase(dir, 'approved', { ...approval, roomCode, nonce: challenge.nonce });
   return approval;
 }
 
 // ------------------------------------------------------------ walkthrough --
 
-export async function recordWalkthrough(root, dir, { receiptPath, skipReason }) {
-  if (skipReason) {
-    writePhase(dir, 'walkthrough', { skipped: true, reason: skipReason });
-    return { skipped: true };
-  }
+// No skip path: a normal promote requires a schema-valid receipt whose
+// digests match THIS release - a receipt written against any other artifact,
+// fixture set, or gate result refuses mechanically.
+export async function recordWalkthrough(root, dir, { receiptPath }) {
+  if (!receiptPath) throw new Error('walkthrough receipt required (WALKTHROUGH_RECEIPT=path) - there is no skip');
   const { validateWalkthrough } = await import('./validate-ux-walkthrough.mjs');
   const receipt = readJson(receiptPath);
   const findings = validateWalkthrough(receipt);
   if (findings.length) throw new Error(`walkthrough receipt invalid:\n  ${findings.join('\n  ')}`);
+  const meta = readJson(join(dir, 'meta.json'));
+  const gate = readPhase(dir, 'gate');
+  const mismatches = [
+    ['fullSha', meta.fullSha],
+    ['artifactSha256', meta.artifactSha256],
+    ['fixtureManifestSha256', meta.fixtureManifestSha256],
+    ['gateResultSha256', gate?.gateResultSha256],
+  ].filter(([field, expected]) => receipt.release?.[field] !== expected);
+  if (mismatches.length) {
+    throw new Error(
+      `walkthrough receipt does not match this release: ${mismatches.map(([f, e]) => `${f} (expected ${e ?? 'unset-gate'})`).join(', ')}`,
+    );
+  }
   const copy = join(dir, 'walkthrough-receipt.json');
   writeFileSync(copy, readFileSync(receiptPath));
   writePhase(dir, 'walkthrough', { receiptSha256: createHash('sha256').update(readFileSync(copy)).digest('hex') });
-  return { skipped: false };
+  return { bound: true };
 }
 
 // -------------------------------------------------------------- promote ----
@@ -420,10 +574,9 @@ export async function promote(root, fullSha, opts = {}) {
     const gate = readPhase(dir, 'gate');
     if (!gate) throw new Error('promote refused: no gate phase (run the visual gate against staging first)');
     if (!hasPhase(dir, 'approved')) throw new Error(`promote refused: no approval - a non-builder must post "${APPROVAL_PREFIX} ${fullSha}" in the room`);
-    if (!hasPhase(dir, 'walkthrough')) throw new Error('promote refused: no walkthrough phase (validate a receipt or record an explicit skip with a reason)');
+    if (!hasPhase(dir, 'walkthrough')) throw new Error('promote refused: no walkthrough phase (a digest-matching T-89 receipt is required; there is no skip)');
   } else if (channel === 'hotfix') {
-    mkdirSync(p.gateState, { recursive: true });
-    writeFileSync(p.hotfixPending, `${fullSha}\n`);
+    recordDebt(root, { fullSha, artifactSha256: meta.artifactSha256 });
     writeFileSync(p.hotfixLog, `${readFileSafe(p.hotfixLog)}${nowIso()} ${fullSha} by=${by} reason=${reason ?? 'unspecified'}\n`);
   } else {
     throw new Error(`unknown channel: ${channel}`);
@@ -464,11 +617,15 @@ export async function promote(root, fullSha, opts = {}) {
   }
 
   // Hotfix debt settles ONLY when a fully-green normal promote ships a
-  // release that contains the hotfix commit (gap 6 + contract item 7).
-  if (channel === 'normal' && readPhase(dir, 'gate')?.exitCode === 0 && existsSync(p.hotfixPending)) {
-    const marker = readFileSync(p.hotfixPending, 'utf8').trim();
-    if (debtSettledBy(root, marker, fullSha)) rmSync(p.hotfixPending);
-    else writeFileSync(p.releaseLog, `${readFileSafe(p.releaseLog)}${nowIso()} hotfix debt ${marker} NOT settled by ${fullSha} (not an ancestor)\n`);
+  // release containing EVERY recorded hotfix commit (gap 6 + contract 7).
+  const debt = channel === 'normal' && readPhase(dir, 'gate')?.exitCode === 0 ? readDebt(root) : null;
+  if (debt) {
+    if (debtSettledBy(root, debt, fullSha)) rmSync(p.hotfixPending);
+    else
+      writeFileSync(
+        p.releaseLog,
+        `${readFileSafe(p.releaseLog)}${nowIso()} hotfix debt [${debt.commits.join(', ')}] NOT settled by ${fullSha} (not all ancestors)\n`,
+      );
   }
   writePhase(dir, 'promoted', { channel, by, reason });
   writeFileSync(p.releaseLog, `${readFileSafe(p.releaseLog)}${nowIso()} promote ${fullSha} channel=${channel} by=${by}\n`);
@@ -502,6 +659,68 @@ export async function rollback(root, { liveUrl, by = 'unknown' } = {}) {
   return { from, to };
 }
 
+// -------------------------------------------------------------- reconcile --
+
+// Crash repair for the dangerous window between the pointer rename and the
+// promoted-phase write (and during automatic restore). Reads the actual
+// pointer, the phase journal, and - when a live URL is given - the served
+// bundle, then either completes the interrupted promote (only if every
+// precondition still verifies) or restores the previous pointer. Never
+// guesses, never double-flips.
+export async function reconcile(root, { liveUrl } = {}) {
+  const p = paths(root);
+  const target = pointerTarget(p.current);
+  if (!target) return { state: 'clean', detail: 'no current pointer' };
+  const dir = target;
+  const meta = readJson(join(dir, 'meta.json'));
+  if (hasPhase(dir, 'promoted')) return { state: 'consistent', release: meta.fullSha };
+
+  // Pointer moved but the promote never finished. Re-verify everything the
+  // promote itself would have demanded.
+  const preconditions =
+    meta.channel === 'hotfix' || meta.channel === 'imported'
+      ? hasPhase(dir, 'staged')
+      : hasPhase(dir, 'staged') && hasPhase(dir, 'gate') && hasPhase(dir, 'approved') && hasPhase(dir, 'walkthrough');
+  let artifactOk = false;
+  try {
+    verifyArtifact(root, meta.fullSha);
+    artifactOk = true;
+  } catch {
+    artifactOk = false;
+  }
+  let servingOk = true;
+  if (liveUrl) {
+    const bundleHash = meta.bundle?.replace(/^index-|\.js$/g, '');
+    try {
+      servingOk = Boolean(bundleHash) && (await (await fetch(`${liveUrl}/`)).text()).includes(bundleHash);
+    } catch {
+      servingOk = false;
+    }
+  }
+  if (preconditions && artifactOk && servingOk && pointerTarget(p.liveLink) === join(dir, 'dist')) {
+    writePhase(dir, 'promoted', { channel: meta.channel, by: 'reconcile', reason: 'completed after interrupted promote' });
+    writeFileSync(p.releaseLog, `${readFileSafe(p.releaseLog)}${nowIso()} reconcile completed promote ${meta.fullSha}\n`);
+    return { state: 'completed', release: meta.fullSha };
+  }
+  const previous = pointerTarget(p.previous);
+  if (previous) {
+    atomicPointSymlink(p.liveLink, join(previous, 'dist'));
+    atomicPointSymlink(p.current, previous);
+    // The failed release is not a valid rollback target, and the true
+    // previous-previous is unknown: drop the pointer rather than leave a
+    // degenerate current==previous pair that makes rollback a no-op.
+    rmSync(p.previous, { force: true });
+  } else {
+    rmSync(p.liveLink, { force: true });
+    rmSync(p.current, { force: true });
+  }
+  writeFileSync(
+    p.releaseLog,
+    `${readFileSafe(p.releaseLog)}${nowIso()} reconcile restored ${previous ?? '(absence)'} - interrupted promote of ${meta.fullSha} failed verification (preconditions=${preconditions} artifact=${artifactOk} serving=${servingOk})\n`,
+  );
+  return { state: 'restored', release: meta.fullSha, to: previous ?? null };
+}
+
 // ---------------------------------------------------------------- status ---
 
 export function status(root) {
@@ -510,7 +729,7 @@ export function status(root) {
     current: pointerTarget(p.current),
     previous: pointerTarget(p.previous),
     liveLink: pointerTarget(p.liveLink),
-    hotfixPending: existsSync(p.hotfixPending) ? readFileSync(p.hotfixPending, 'utf8').trim() : null,
+    hotfixPending: readDebt(root),
     releases: [],
   };
   if (existsSync(p.releases)) {
@@ -532,7 +751,7 @@ async function main() {
   const [cmd, ...args] = process.argv.slice(2);
   const root = resolve(process.env.RP_ROOT ?? process.cwd());
   const liveUrl = process.env.RP_LIVE_URL ?? 'http://127.0.0.1:8210';
-  const MUTATING = ['stage', 'gate', 'walkthrough', 'promote', 'rollback'];
+  const MUTATING = ['stage', 'serve', 'gate', 'challenge', 'walkthrough', 'promote', 'rollback', 'reconcile'];
   let release = () => {};
   try {
     if (MUTATING.includes(cmd)) release = acquireLock(root, cmd);
@@ -542,10 +761,26 @@ async function main() {
     } else if (cmd === 'stage') {
       const { meta, reused } = await stage(root, {
         channel: process.env.DEPLOY_HOTFIX === '1' ? 'hotfix' : 'normal',
-        allowDirty: process.env.DEPLOY_ALLOW_DIRTY === '1',
         reuse: true,
       });
       console.log(`${reused ? 'reusing staged' : 'staged'} ${meta.fullSha} bundle=${meta.bundle} artifact=${meta.artifactSha256.slice(0, 12)}`);
+    } else if (cmd === 'serve') {
+      const sha = args[0] ?? gitInfo(root).fullSha;
+      const dir = releaseDir(root, sha);
+      const info = await serveStaging(root, dir);
+      const healthy = await waitForHealth(`http://127.0.0.1:${info.port}/healthz`);
+      const bound = healthy && (await verifyStagingServing(dir, info));
+      if (!bound) {
+        console.error(`ERROR: staging not serving release ${sha} (healthy=${healthy}; log ${info.log})`);
+        process.exitCode = 1;
+      } else console.log(`staging: ${sha} on http://127.0.0.1:${info.port} (pid ${info.pid}, artifact ${info.artifactSha256.slice(0, 12)}, persists until ruling)`);
+    } else if (cmd === 'challenge') {
+      const sha = args[0] ?? gitInfo(root).fullSha;
+      const { line } = issueChallenge(root, releaseDir(root, sha));
+      console.log(`approval line for a registered approver to post verbatim:\n${line}`);
+    } else if (cmd === 'reconcile') {
+      const result = await reconcile(root, { liveUrl });
+      console.log(`reconcile: ${result.state}${result.release ? ` (${result.release})` : ''}`);
     } else if (cmd === 'gate') {
       const sha = args[0] ?? gitInfo(root).fullSha;
       const dir = releaseDir(root, sha);
@@ -562,15 +797,12 @@ async function main() {
         roomCode: process.env.RELEASE_ROOM ?? readFileSafe(join(root, '.visual-gate', 'release-room.txt')).trim(),
       });
       if (!approval) {
-        console.log(`no approval yet: a non-builder must post "${APPROVAL_PREFIX} ${sha}" in the room`);
+        console.log(`no approval yet: a REGISTERED approver must post the challenge line verbatim (run: release-pipeline challenge ${sha})`);
         process.exitCode = 6;
-      } else console.log(`approved by ${approval.approver} (msg ${approval.messageId})`);
+      } else console.log(`approved by ${approval.approver} (${approval.client}, msg ${approval.messageId})`);
     } else if (cmd === 'walkthrough') {
       const sha = args[0] ?? gitInfo(root).fullSha;
-      await recordWalkthrough(root, releaseDir(root, sha), {
-        receiptPath: process.env.WALKTHROUGH_RECEIPT,
-        skipReason: process.env.WALKTHROUGH_SKIP_REASON,
-      });
+      await recordWalkthrough(root, releaseDir(root, sha), { receiptPath: process.env.WALKTHROUGH_RECEIPT });
       console.log(`walkthrough recorded for ${sha}`);
     } else if (cmd === 'promote') {
       const sha = args[0] ?? gitInfo(root).fullSha;
@@ -587,7 +819,7 @@ async function main() {
     } else if (cmd === 'status') {
       console.log(JSON.stringify(status(root), null, 2));
     } else {
-      console.error('usage: release-pipeline.mjs <stage|gate|approve-check|walkthrough|verify|promote|rollback|status> [sha]');
+      console.error('usage: release-pipeline.mjs <stage|serve|gate|challenge|approve-check|walkthrough|verify|promote|rollback|reconcile|status> [sha]');
       process.exitCode = 2;
     }
   } catch (err) {

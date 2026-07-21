@@ -18,6 +18,7 @@ import test from 'node:test';
 import {
   APPROVAL_PREFIX,
   acquireLock,
+  approvalLine,
   atomicPointSymlink,
   debtSettledBy,
   hashDirectory,
@@ -27,8 +28,11 @@ import {
   paths,
   pointerTarget,
   promote,
+  readDebt,
   readPhase,
+  reconcile,
   recordGate,
+  recordWalkthrough,
   releaseDir,
   rollback,
   stage,
@@ -85,12 +89,11 @@ test('stage produces an immutable, hashed, phase-marked release', async () => {
   await assert.rejects(() => stage(repo.root, stageOpts(repo)), /immutable/);
 });
 
-test('stage refuses a dirty tree unless the dirt is recorded explicitly', async () => {
+test('stage refuses a dirty tree - no bypass exists', async () => {
   const repo = makeRepo();
   writeFileSync(join(repo.root, 'wip.txt'), 'uncommitted\n');
   await assert.rejects(() => stage(repo.root, stageOpts(repo)), /dirty/);
-  const { meta } = await stage(repo.root, stageOpts(repo, { allowDirty: true }));
-  assert.deepEqual(meta.dirty, ['wip.txt']);
+  await assert.rejects(() => stage(repo.root, stageOpts(repo, { allowDirty: true })), /dirty/, 'the removed escape hatch must stay removed');
 });
 
 test('normal promote demands gate, approval, and walkthrough phases', async () => {
@@ -120,18 +123,38 @@ test('gate recording enforces the exit-code policy', () => {
   assert.equal(readPhase(dir, 'gate').acked, true);
 });
 
-test('approval parsing requires the exact SHA and a non-builder sender', () => {
+test('approval binds digests + nonce, and only registered non-lineage identities count', () => {
   const fullSha = 'a'.repeat(40);
-  const messages = [
-    { id: 1, name: 'Builder', text: `${APPROVAL_PREFIX} ${fullSha}` }, // self-approval
-    { id: 2, name: 'Reviewer', text: `${APPROVAL_PREFIX} ${'b'.repeat(40)}` }, // wrong SHA
-    { id: 3, name: 'Reviewer', text: 'looks good to me' }, // prose is not approval
+  const artifactSha256 = 'b'.repeat(64);
+  const gateResultSha256 = 'c'.repeat(64);
+  const nonce = 'deadbeefdeadbeef';
+  const registry = {
+    approvers: [{ label: 'Verifier', name: 'UX-Adversary (2)', client: 'cc' }],
+    builderLineages: [{ label: 'Claude', baseNames: ['Claude', 'ClaudeUI'] }],
+  };
+  const participants = [
+    { name: 'Claude', client: 'cc' },
+    { name: 'ClaudeUI (3)', client: 'web' },
+    { name: 'UX-Adversary (2)', client: 'cc' },
   ];
-  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder' }), null);
-  messages.push({ id: 4, name: 'Reviewer', text: `${APPROVAL_PREFIX} ${fullSha} frames reviewed on staging` });
-  const approval = parseApproval(messages, { fullSha, builder: 'Builder' });
-  assert.equal(approval.approver, 'Reviewer');
-  assert.equal(approval.messageId, 4);
+  const bind = { fullSha, artifactSha256, gateResultSha256, nonce, registry, participants };
+  const line = approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce });
+
+  // Builder and suffixed builder-lineage identities can never approve.
+  assert.equal(parseApproval([{ id: 1, name: 'Claude', text: line }], bind), null);
+  assert.equal(parseApproval([{ id: 2, name: 'ClaudeUI (3)', text: line }], bind), null);
+  // An unregistered identity - even posting the exact line - is refused.
+  assert.equal(parseApproval([{ id: 3, name: 'Random Agent', text: line }], bind), null);
+  // A registered name with no live participant row of the registered client is refused.
+  assert.equal(parseApproval([{ id: 4, name: 'UX-Adversary (2)', text: line }], { ...bind, participants: [] }), null);
+  // Wrong nonce, wrong artifact digest, plain-SHA approvals: all replay-dead.
+  assert.equal(parseApproval([{ id: 5, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256, gateResultSha256, nonce: 'ffffffffffffffff' }) }], bind), null);
+  assert.equal(parseApproval([{ id: 6, name: 'UX-Adversary (2)', text: approvalLine({ fullSha, artifactSha256: 'd'.repeat(64), gateResultSha256, nonce }) }], bind), null);
+  assert.equal(parseApproval([{ id: 7, name: 'UX-Adversary (2)', text: `${APPROVAL_PREFIX} ${fullSha}` }], bind), null);
+  // The registered verifier posting the exact challenge line passes.
+  const ok = parseApproval([{ id: 8, name: 'UX-Adversary (2)', text: `${line} staging reviewed` }], bind);
+  assert.equal(ok.approver, 'UX-Adversary (2)');
+  assert.equal(ok.messageId, 8);
 });
 
 test('hotfix promote records debt; only a green normal promote clears it', async () => {
@@ -139,7 +162,9 @@ test('hotfix promote records debt; only a green normal promote clears it', async
   const { dir } = await stage(repo.root, stageOpts(repo, { channel: 'hotfix' }));
   await promote(repo.root, repo.fullSha, { channel: 'hotfix', by: 'Builder', reason: 'host-critical' });
   const p = paths(repo.root);
-  assert.equal(readFileSync(p.hotfixPending, 'utf8').trim(), repo.fullSha);
+  const debt = readDebt(repo.root);
+  assert.deepEqual(debt.commits, [repo.fullSha]);
+  assert.match(debt.artifactSha256, /^[a-f0-9]{64}$/, 'debt records the deployed artifact digest');
   assert.match(readFileSync(p.hotfixLog, 'utf8'), /host-critical/);
 
   // A second commit goes through the normal lane and settles the debt.
@@ -251,9 +276,13 @@ test('a green normal promote of an UNRELATED SHA leaves hotfix debt standing', a
     writePhase(dir, name, data);
   await promote(repo.root, repo.fullSha);
   assert.equal(existsSync(p.hotfixPending), true, 'unrelated green promote must not settle the debt');
-  assert.equal(debtSettledBy(repo.root, straySha, repo.fullSha), false);
-  assert.equal(debtSettledBy(repo.root, repo.fullSha, repo.fullSha), true, 'a release containing the marker settles it');
-  assert.equal(debtSettledBy(repo.root, 'not-a-sha', repo.fullSha), false, 'unresolvable markers fail closed');
+  assert.equal(debtSettledBy(repo.root, { commits: [straySha] }, repo.fullSha), false);
+  assert.equal(debtSettledBy(repo.root, { commits: [repo.fullSha] }, repo.fullSha), true, 'a release containing the commit settles it');
+  assert.equal(debtSettledBy(repo.root, { commits: ['not-a-sha'] }, repo.fullSha), false, 'unresolvable commits fail closed');
+  assert.equal(debtSettledBy(repo.root, { commits: [repo.fullSha, straySha] }, repo.fullSha), false, 'ALL commits must be contained');
+  // Legacy bare-SHA markers still parse.
+  writeFileSync(p.hotfixPending, 'cafebabe\n');
+  assert.deepEqual(readDebt(repo.root), { commits: ['cafebabe'], legacy: true });
 });
 
 test('promote refuses a mutated artifact (manifest re-verification)', async () => {
@@ -271,30 +300,77 @@ test('promote refuses a mutated artifact (manifest re-verification)', async () =
   assert.equal(pointerTarget(p.current), null, 'pointer never moved onto the tampered artifact');
 });
 
-test('keyless identities cannot approve; credentialed rows can', () => {
-  const fullSha = 'c'.repeat(40);
-  const messages = [{ id: 1, name: 'Reviewer', text: `${APPROVAL_PREFIX} ${fullSha}` }];
-  const keyless = [{ name: 'Reviewer' }];
-  const keyedCc = [{ name: 'Reviewer', memberKeyHash: 'h'.repeat(64) }];
-  const authedWeb = [{ name: 'Reviewer', authIdHash: 'h'.repeat(64) }];
-  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: keyless }), null);
-  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: [] }), null);
-  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: keyedCc }).approver, 'Reviewer');
-  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: authedWeb }).approver, 'Reviewer');
-});
-
-test('the pipeline lock is exclusive, and a dead-pid lock is reclaimed', () => {
+test('the atomic lock is exclusive; dead-pid and recycled-pid locks are reclaimed', () => {
   const repo = makeRepo();
+  const lockDir = join(paths(repo.root).releases, '.lock');
   const release = acquireLock(repo.root, 'promote');
   assert.throws(() => acquireLock(repo.root, 'stage'), /holds the lock/);
   release();
   const release2 = acquireLock(repo.root, 'stage'); // released lock reacquires
   release2();
-  // A lock held by a dead pid must be reclaimed, and the reclaim logged.
-  writeFileSync(join(paths(repo.root).releases, '.lock'), JSON.stringify({ pid: 999999999, cmd: 'gate', at: 'x' }));
-  const release3 = acquireLock(repo.root, 'rollback');
-  release3();
-  assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /stale-lock reclaimed/);
+  // Dead pid: reclaimed and logged.
+  mkdirSync(lockDir);
+  writeFileSync(join(lockDir, 'holder.json'), JSON.stringify({ pid: 999999999, start: 'gone', cmd: 'gate', at: 'x' }));
+  acquireLock(repo.root, 'rollback')();
+  assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /stale-lock reclaimed \(pid 999999999 dead/);
+  // Recycled pid: a LIVE pid whose start time differs from the record is
+  // not the holder - reclaimed, not honored.
+  mkdirSync(lockDir);
+  writeFileSync(join(lockDir, 'holder.json'), JSON.stringify({ pid: process.pid, start: 'Thu Jan  1 00:00:00 1970', cmd: 'gate', at: 'x' }));
+  acquireLock(repo.root, 'promote')();
+  assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /pid-reused/);
+  // A crashed creator (lock dir without holder.json) is treated as stale.
+  mkdirSync(lockDir);
+  acquireLock(repo.root, 'stage')();
+});
+
+test('a walkthrough receipt must digest-match the release, and there is no skip', async () => {
+  const repo = makeRepo();
+  const { dir, meta } = await stage(repo.root, stageOpts(repo));
+  writePhase(dir, 'gate', { exitCode: 0, gateResultSha256: 'e'.repeat(64) });
+  await assert.rejects(() => recordWalkthrough(repo.root, dir, {}), /no skip/);
+  // A receipt whose digests point at a different artifact refuses mechanically.
+  const receiptPath = join(repo.root, 'receipt.json');
+  const receipt = {
+    schemaVersion: 1,
+    release: { fullSha: meta.fullSha, artifactSha256: 'f'.repeat(64), fixtureManifestSha256: meta.fixtureManifestSha256, gateResultSha256: 'e'.repeat(64) },
+  };
+  writeFileSync(receiptPath, JSON.stringify(receipt));
+  await assert.rejects(() => recordWalkthrough(repo.root, dir, { receiptPath }), /invalid|does not match/);
+});
+
+test('reconcile completes a verified interrupted promote and restores an unverified one', async () => {
+  const repo = makeRepo();
+  const p = paths(repo.root);
+  // Simulate the crash window: all phases done, pointer flipped, but the
+  // promoted phase was never written.
+  const { dir } = await stage(repo.root, stageOpts(repo));
+  writePhase(dir, 'gate', { exitCode: 0 });
+  writePhase(dir, 'approved', { approver: 'UX-Adversary (2)' });
+  writePhase(dir, 'walkthrough', { receiptSha256: 'a'.repeat(64) });
+  mkdirSync(p.releases, { recursive: true });
+  atomicPointSymlink(p.current, dir);
+  atomicPointSymlink(p.liveLink, join(dir, 'dist'));
+  const completed = await reconcile(repo.root, {});
+  assert.equal(completed.state, 'completed');
+  assert.ok(hasPhase(dir, 'promoted'));
+  assert.match(readFileSync(p.releaseLog, 'utf8'), /reconcile completed promote/);
+  // Now a SECOND interrupted promote whose preconditions do NOT hold
+  // (no approval): reconcile must restore the previous pointer, not guess.
+  writeFileSync(join(repo.root, 'seed.txt'), 'v2\n');
+  repo.git(['commit', '-aqm', 'v2']);
+  const sha2 = repo.git(['rev-parse', 'HEAD']).trim();
+  const { dir: dir2 } = await stage(repo.root, { buildFn: fakeBuild('vtwo'), fixtureFiles: [repo.fixture] });
+  atomicPointSymlink(p.previous, dir);
+  atomicPointSymlink(p.current, dir2);
+  atomicPointSymlink(p.liveLink, join(dir2, 'dist'));
+  const restored = await reconcile(repo.root, {});
+  assert.equal(restored.state, 'restored');
+  assert.equal(pointerTarget(p.current), dir, 'pointer went back to the last verified release');
+  assert.equal(pointerTarget(p.liveLink), join(dir, 'dist'));
+  assert.equal(hasPhase(dir2, 'promoted'), false, 'the unverified release was never blessed');
+  // Idempotence: a second reconcile reports consistent and changes nothing.
+  assert.equal((await reconcile(repo.root, {})).state, 'consistent');
 });
 
 test('migration preserves BOTH the served hotfix dist and its dist.prev sibling', async () => {
