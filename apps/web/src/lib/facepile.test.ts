@@ -25,11 +25,18 @@ describe('facepileSeverity', () => {
 });
 
 describe('facepileWindow', () => {
-  it('shows at most three faces and overflows against the true count', () => {
+  it('caps at three circles total: 2 avatars + chip when overflowing (R1)', () => {
     const faces = [face('A', 'listening'), face('B', 'online'), face('C', 'online'), face('D', 'stale')];
     const { visible, overflow } = facepileWindow(faces, 6);
+    expect(visible).toHaveLength(2);
+    expect(overflow).toBe(4); // 6 real agents, 2 avatar circles + one "+4" chip
+  });
+
+  it('shows three plain avatars when exactly three agents', () => {
+    const faces = [face('A', 'listening'), face('B', 'online'), face('C', 'online')];
+    const { visible, overflow } = facepileWindow(faces, 3);
     expect(visible).toHaveLength(3);
-    expect(overflow).toBe(3); // 6 real agents, 3 shown
+    expect(overflow).toBe(0);
   });
 
   it('has no overflow when everyone fits', () => {

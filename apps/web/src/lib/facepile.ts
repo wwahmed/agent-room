@@ -12,6 +12,10 @@ export interface AgentFace {
   state: AgentPresence;
 }
 
+// R1 (T-34 rev2): the cluster must fit the FIXED 64px identity column, so at
+// most 3 circles render in total — 3 avatars when everyone fits, or 2 avatars
+// + the "+N" chip when there is overflow. 28px circles at 14px overlap steps:
+// 28 + 14 + 14 = 56px worst case, inside 64.
 export const FACEPILE_VISIBLE_MAX = 3;
 
 export type FacepileSeverity = 'healthy' | 'degraded' | 'down';
@@ -26,9 +30,12 @@ export function facepileSeverity(agentCount: number, staleCount: number): Facepi
 }
 
 /** Faces shown as avatars, and how many fold into the "+N" overflow chip.
- *  Overflow counts from the TRUE agent count, not the capped payload. */
+ *  Overflow counts from the TRUE agent count, not the capped payload. When
+ *  overflow exists the chip takes the third circle slot (R1: never more than
+ *  three circles total, so the cluster always fits the fixed column). */
 export function facepileWindow(faces: AgentFace[], agentCount: number): { visible: AgentFace[]; overflow: number } {
-  const visible = faces.slice(0, FACEPILE_VISIBLE_MAX);
+  const avatarSlots = agentCount > FACEPILE_VISIBLE_MAX ? FACEPILE_VISIBLE_MAX - 1 : FACEPILE_VISIBLE_MAX;
+  const visible = faces.slice(0, avatarSlots);
   return { visible, overflow: Math.max(0, agentCount - visible.length) };
 }
 

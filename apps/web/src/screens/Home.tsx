@@ -254,16 +254,20 @@ export function Home() {
                     aria-label={`Open ${r.topic}`}
                     className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint"
                   />
-                  {agentCount > 0 ? (
-                    <AgentFacepile
-                      code={r.code}
-                      agentCount={agentCount}
-                      agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? agentCount : 0)}
-                      agents={r.agents ?? []}
-                    />
-                  ) : (
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent" aria-hidden="true">◇</div>
-                  )}
+                  {/* R1 (T-34 rev2): fixed 64px identity column — every title
+                      starts at the same x no matter what the slot contains. */}
+                  <div className="flex w-16 flex-shrink-0 items-center">
+                    {agentCount > 0 ? (
+                      <AgentFacepile
+                        code={r.code}
+                        agentCount={agentCount}
+                        agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? agentCount : 0)}
+                        agents={r.agents ?? []}
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-tint text-accent" aria-hidden="true">◇</div>
+                    )}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold">{r.topic}</div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
