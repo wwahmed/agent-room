@@ -56,10 +56,13 @@ if [ -f "$CFG" ] && [ ! -L "$CFG" ]; then
 fi
 
 export AGENT_ROOM_BASE_URL="$URL"
-# Pin the REGISTRY package explicitly: a bare `npx -y agent-room-mcp` run from
-# inside the agent-room monorepo resolves the local workspace package of the
-# same name (no bin link) and fails "command not found". --package forces the
-# published package + version regardless of cwd.
+# Prefer the locally installed, version-bounded patched runtime. The registry
+# 0.25.4 bundle hard-codes the retired 3x3-only validator for attachment
+# uploads; deploy/install-agent-room-mcp-runtime.sh preserves that runtime's
+# closed-package features while aligning only this validator with word codes.
+# Fall back to the exact registry pin if the local runtime is absent/unpatched.
+RUNTIME_ROOT=${AGENT_ROOM_MCP_RUNTIME_ROOT:-"$HOME/.local/share/wakichat/agent-room-mcp"}
+RUNTIME_FILE="$RUNTIME_ROOT/node_modules/agent-room-mcp/dist/index.js"
 #
 # Defense-in-depth token redaction: the closed 0.25.x client echoes
 # AGENT_ROOM_BASE_URL (which carries /t/<token>) inside fetch-error messages,
@@ -67,5 +70,12 @@ export AGENT_ROOM_BASE_URL="$URL"
 # client's stdout, rewriting any /t/<32-hex> to /t/<32 x 'X'> — length
 # preserving, and MCP stdio is newline-delimited JSON-RPC (verified), so
 # per-line redaction cannot corrupt message framing. stdin is left untouched.
+if [ -f "$RUNTIME_FILE" ] && grep -q 'WAKICHAT_WORD_CODE_ATTACHMENT_PATCH' "$RUNTIME_FILE"; then
+  exec node "$RUNTIME_FILE" "$@" \
+    | /usr/bin/perl -pe 'BEGIN{$|=1} s{(/t/)[0-9a-f]{32}}{$1.("X"x32)}ge'
+fi
+
+# A bare `npx -y agent-room-mcp` inside the monorepo resolves the local
+# workspace package (with no bin link), so force the registry package/version.
 exec npx -y --package=agent-room-mcp@0.25.4 agent-room-mcp "$@" \
   | /usr/bin/perl -pe 'BEGIN{$|=1} s{(/t/)[0-9a-f]{32}}{$1.("X"x32)}ge'
