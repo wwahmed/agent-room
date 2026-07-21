@@ -1,9 +1,21 @@
 #!/bin/sh
-# Build + deploy the web UI in place. The bundle HARD-REQUIRES the KV token
-# at build time (env.ts must()) - building without it ships a blank site,
-# which happened once on 2026-07-13. Always deploy through this script.
+# T-86: STAGE -> GATE -> APPROVE -> PROMOTE. The previous script built INTO
+# the live dist and only then ran the gate, so every verdict arrived after
+# users already had the bundle — the root of every deploy-then-inspect
+# incident on 2026-07-21. The candidate now builds into an isolated staging
+# dist, is served on a private staging port for the gate AND for reviewer
+# eyes, and reaches live only via an atomic swap after (a) the full visual
+# gate is green against STAGING and (b) a second-person approval artifact
+# names this exact git SHA. A red gate leaves live untouched, always.
 #
-# Usage: bin/deploy-web
+# Channels:
+#   normal : bin/deploy-web            (requires green gate + approval file)
+#   hotfix : DEPLOY_HOTFIX=1 DEPLOY_REASON="..." bin/deploy-web
+#            Host-declared critical/urgent ONLY. Smallest repair or rollback,
+#            no feature work. Logged; leaves a pending marker that only a
+#            subsequent fully-green normal deploy clears.
+#
+# Rollback: bin/rollback-web (restores the previous live dist atomically).
 set -eu
 cd "$(dirname "$0")/.."
 if [ ! -f .env ]; then
@@ -11,35 +23,83 @@ if [ ! -f .env ]; then
 fi
 set -a; . ./.env; set +a
 export PATH="$HOME/.local/node/bin:$PATH"
-# T-12: no credential is baked into the bundle. The server authenticates
-# /kv via validated Access identity; KV_TOKEN stays server-side only.
-npm -w apps/web run build
-# Smoke: server must be healthy and serving the fresh bundle hash.
-HASH=$(ls apps/web/dist/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js//')
-curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "ERROR: server unhealthy"; exit 1; }
-curl -sf http://127.0.0.1:8210/ | grep -q "$HASH" || { echo "ERROR: served index.html does not reference fresh bundle $HASH"; exit 1; }
-echo "OK: deployed bundle index-$HASH.js and server is serving it."
-# T-61: the visual gate. Captures the fixed state matrix, diffs against the
-# last deploy, and FAILS this script when frames changed (exit 2) or lack a
-# baseline (exit 3). Review .visual-gate/diff, then promote deliberately with
-# `npm run visual-gate:baseline`. After a human has reviewed, re-run with
-# VISUAL_GATE_ACK=1 to acknowledge and pass.
-# set -eu is active above: capture the exit WITHOUT letting -e kill the
-# script before the case (rev3 review finding — the case was unreachable).
-GATE_EXIT=0
-npm run visual-gate --silent || GATE_EXIT=$?
-case "$GATE_EXIT" in
-  0) : ;;
-  2|3)
-    if [ "${VISUAL_GATE_ACK:-}" = "1" ]; then
-      echo "visual-gate: pixel/baseline differences ACKNOWLEDGED by deployer (VISUAL_GATE_ACK=1)"
-    else
-      echo "visual-gate FAILED (exit $GATE_EXIT): review .visual-gate/diff, then promote or re-run with VISUAL_GATE_ACK=1"
-      exit "$GATE_EXIT"
-    fi ;;
-  *)
-    # Geometry defects (4) and incomplete captures (5) are NEVER acknowledgeable:
-    # they are deterministic product/tooling failures, not review judgment calls.
-    echo "visual-gate HARD FAIL (exit $GATE_EXIT): geometry defects or incomplete capture — fix before deploying"
-    exit "$GATE_EXIT" ;;
-esac
+
+SHA=$(git rev-parse --short HEAD)
+STAGING_DIST="apps/web/dist-staging"
+LIVE_DIST="apps/web/dist"
+STAGING_PORT="${STAGING_PORT:-8220}"
+mkdir -p .visual-gate/approvals
+
+# Hotfix debt check: a prior hotfix must be cleared by a green normal deploy.
+if [ "${DEPLOY_HOTFIX:-}" != "1" ] && [ -f .visual-gate/hotfix-pending ]; then
+  echo "NOTE: clearing hotfix debt requires this deploy to pass the FULL gate (marker: $(cat .visual-gate/hotfix-pending))"
+fi
+
+# 1. Build the candidate into the isolated staging dist. Live is untouched.
+rm -rf "$STAGING_DIST"
+npm -w apps/web run build -- --outDir dist-staging --emptyOutDir
+HASH=$(ls $STAGING_DIST/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js//')
+
+# 2. Serve the candidate on the private staging port (same Redis/API).
+WEB_DIST="$PWD/$STAGING_DIST" PORT="$STAGING_PORT" node apps/server/dist/index.js > .visual-gate/staging-server.log 2>&1 &
+STAGING_PID=$!
+trap 'kill $STAGING_PID 2>/dev/null || true' EXIT
+i=0
+until curl -sf "http://127.0.0.1:$STAGING_PORT/healthz" > /dev/null 2>&1; do
+  i=$((i+1)); [ "$i" -gt 40 ] && { echo "ERROR: staging server failed to start (see .visual-gate/staging-server.log)"; exit 1; }
+  sleep 0.5
+done
+curl -sf "http://127.0.0.1:$STAGING_PORT/" | grep -q "$HASH" || { echo "ERROR: staging serves the wrong bundle"; exit 1; }
+echo "staging: SHA $SHA bundle index-$HASH.js on http://127.0.0.1:$STAGING_PORT (reviewer preview)"
+
+if [ "${DEPLOY_HOTFIX:-}" = "1" ]; then
+  # Hotfix lane: restore service first, full gate afterward (still against
+  # staging, but promotion is not blocked on it). Every use is logged and
+  # leaves debt that only a green normal deploy clears.
+  echo "$(date -u +%FT%TZ) $SHA by=${DEPLOY_BY:-unknown} reason=${DEPLOY_REASON:-unspecified}" >> .visual-gate/hotfix-log.txt
+  echo "$SHA" > .visual-gate/hotfix-pending
+  echo "HOTFIX LANE: promoting $SHA without gate; post-hotfix gate debt recorded"
+else
+  # 3. Full visual gate against STAGING. Red = stop, live untouched.
+  GATE_EXIT=0
+  VISUAL_GATE_BASE="http://127.0.0.1:$STAGING_PORT" npm run visual-gate --silent || GATE_EXIT=$?
+  case "$GATE_EXIT" in
+    0) : ;;
+    2|3)
+      if [ "${VISUAL_GATE_ACK:-}" = "1" ]; then
+        echo "visual-gate: pixel/baseline diffs ACKNOWLEDGED by deployer (VISUAL_GATE_ACK=1)"
+      else
+        echo "visual-gate: pixel diffs (exit $GATE_EXIT) — review .visual-gate/diff, then re-run with VISUAL_GATE_ACK=1. LIVE IS UNCHANGED."
+        exit "$GATE_EXIT"
+      fi ;;
+    *)
+      # Geometry defects (4) and incomplete captures (5) are NEVER
+      # acknowledgeable, and now they also never reach users.
+      echo "visual-gate HARD FAIL (exit $GATE_EXIT): geometry defects or incomplete capture. LIVE IS UNCHANGED."
+      exit "$GATE_EXIT" ;;
+  esac
+
+  # 4. Second-person approval artifact tied to this SHA (T-86): a reviewer
+  # who is not the builder inspects the staging preview/frames and writes
+  # .visual-gate/approvals/<sha>.txt (free text: who/what was reviewed).
+  APPROVAL=".visual-gate/approvals/$SHA.txt"
+  if [ ! -f "$APPROVAL" ]; then
+    echo "BLOCKED: no reviewer approval artifact at $APPROVAL."
+    echo "A second person must review the staging preview (http://127.0.0.1:$STAGING_PORT) and frames, then write that file. LIVE IS UNCHANGED."
+    exit 6
+  fi
+  echo "approval: $(head -1 "$APPROVAL")"
+  rm -f .visual-gate/hotfix-pending
+fi
+
+# 5. Atomic promotion: swap staging into live, keep a rollback pointer.
+rm -rf "$LIVE_DIST.prev"
+[ -d "$LIVE_DIST" ] && mv "$LIVE_DIST" "$LIVE_DIST.prev"
+mv "$STAGING_DIST" "$LIVE_DIST"
+curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "ERROR: live server unhealthy after swap"; exit 1; }
+if ! curl -sf http://127.0.0.1:8210/ | grep -q "$HASH"; then
+  echo "ERROR: live not serving the promoted bundle — swapping back"
+  mv "$LIVE_DIST" "$STAGING_DIST"; mv "$LIVE_DIST.prev" "$LIVE_DIST"
+  exit 1
+fi
+echo "OK: promoted index-$HASH.js ($SHA) to live. Rollback available via bin/rollback-web."
