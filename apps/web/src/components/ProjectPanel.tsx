@@ -13,6 +13,7 @@ import {
   type ProjectCandidate,
   type ProjectSummary,
 } from '../lib/api.js';
+import { boardCountsView, taskLinkKey } from '../lib/projectView.js';
 import {
   PENDING_TASK_STATES,
   projectTaskCounts,
@@ -34,12 +35,15 @@ const STATE_LABEL: Record<BoardTask['state'], string> = {
   rejected: 'Rejected',
 };
 
+// Theme-aware semantic tokens (VA-0044: dark-optimized *-300 classes
+// measured 1.45-2.40:1 on light surfaces; --success/--warning/--danger flip
+// per theme and clear the floors in both).
 const STATE_TONE: Record<BoardTask['state'], string> = {
   todo: 'text-ink-soft bg-surface-softer border-border-faint',
-  in_progress: 'text-blue-300 bg-blue-500/10 border-blue-400/30',
-  awaiting_review: 'text-amber-300 bg-amber-500/10 border-amber-400/30',
-  done: 'text-emerald-300 bg-emerald-500/10 border-emerald-400/30',
-  rejected: 'text-red-300 bg-red-500/10 border-red-400/30',
+  in_progress: 'text-accent bg-accent-tint border-accent/30',
+  awaiting_review: 'text-warning bg-warning-tint border-warning/40',
+  done: 'text-success bg-success-tint border-success/40',
+  rejected: 'text-danger bg-danger-tint border-danger/40',
 };
 
 const COMPLETED_PAGE_SIZE = 40;
@@ -150,10 +154,18 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
   // switch to the Project tab. Reveal the correct segment and move focus to it.
   useEffect(() => {
     const taskId = new URLSearchParams(location.search).get('task');
-    if (!taskId || !tasks || handledTaskLinkRef.current === taskId) return;
+    if (!taskId) {
+      // Query cleared: reset the one-shot so re-opening the SAME task (or
+      // the same id in another room) focuses again (review item 3).
+      handledTaskLinkRef.current = null;
+      return;
+    }
+    if (!tasks) return;
+    const linkKey = taskLinkKey(room.code, taskId);
+    if (handledTaskLinkRef.current === linkKey) return;
     const target = tasks.find(task => task.id === taskId);
     if (!target) return;
-    handledTaskLinkRef.current = taskId;
+    handledTaskLinkRef.current = linkKey;
     setTaskPreferences({
       roomCode: room.code,
       segment: target.state === 'done' ? 'completed' : 'pending',
@@ -161,14 +173,17 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
       assignee: 'all',
     });
     setCompletedLimit(Math.max(COMPLETED_PAGE_SIZE, tasks.length));
-    window.setTimeout(() => {
+    let flashTimer: number | undefined;
+    const landTimer = window.setTimeout(() => {
       const el = document.getElementById(`task-${taskId}`);
       if (!el) return;
       el.scrollIntoView({ block: 'center' });
       el.focus();
       el.classList.add('reply-flash');
-      window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
+      flashTimer = window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
     }, 50);
+    // Cleanup on room/navigation change: no timer may act on the next state.
+    return () => { window.clearTimeout(landTimer); if (flashTimer != null) window.clearTimeout(flashTimer); };
   }, [location.search, room.code, tasks]);
 
   const project = projects.find(p => p.id === room.projectId);
@@ -178,7 +193,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
     return [...names].sort();
   }, [tasks]);
   const preferences = taskPreferences.roomCode === room.code ? taskPreferences : loadTaskPreferences(room.code);
-  const counts = projectTaskCounts(tasks ?? []);
+  const countsView = boardCountsView(tasks);
+  const counts = { pending: countsView.pending, completed: countsView.completed };
   const matchingTasks = projectTasksForView(tasks ?? [], preferences.segment, preferences.status, preferences.assignee);
   const visible = preferences.segment === 'completed' ? matchingTasks.slice(0, completedLimit) : matchingTasks;
 
@@ -270,13 +286,18 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
             role="tab"
             aria-selected={preferences.segment === segment}
             aria-controls="project-task-list"
+            disabled={tasks === null}
             onClick={() => { updateTaskPreferences({ segment }); setCompletedLimit(COMPLETED_PAGE_SIZE); }}
             className={`min-h-11 rounded-lg px-3 text-[15px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-[14px] ${preferences.segment === segment ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft hover:text-ink'}`}
           >
             {segment === 'pending' ? 'Pending' : 'Completed'}
-            <span className={`ml-2 rounded-full px-2 py-0.5 text-[13px] ${preferences.segment === segment ? 'bg-accent-tint text-accent' : 'bg-surface-softer text-ink-faint'}`}>
-              {counts[segment]}
-            </span>
+            {/* Unknown is UNKNOWN: no count pill until the board loads —
+                a zero from null is a false empty (review item 1). */}
+            {tasks !== null && (
+              <span className={`ml-2 rounded-full px-2 py-0.5 text-[13px] ${preferences.segment === segment ? 'bg-accent-tint text-accent' : 'bg-surface-softer text-ink-faint'}`}>
+                {counts[segment]}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -286,7 +307,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
             value={preferences.status}
             onChange={event => updateTaskPreferences({ status: event.target.value as TaskPreferences['status'] })}
             aria-label="Filter pending tasks by status"
-            className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
+            disabled={tasks === null}
+            className="disabled:opacity-50 h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
           >
             <option value="all">All pending stages</option>
             {PENDING_TASK_STATES.map(state => <option key={state} value={state}>{STATE_LABEL[state]}</option>)}
@@ -296,7 +318,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
           value={preferences.assignee}
           onChange={event => updateTaskPreferences({ assignee: event.target.value })}
           aria-label="Filter by assignee"
-          className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
+          disabled={tasks === null}
+          className="disabled:opacity-50 h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
         >
           <option value="all">All assignees</option>
           {assignees.map(a => <option key={a} value={a}>{a}</option>)}
@@ -358,7 +381,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
             </div>
             {evidenceLine(t) && (
               <div className="mt-0.5 text-[15px] font-medium sm:text-[14px]">
-                <span className={t.state === 'rejected' ? 'text-red-400' : t.state === 'done' ? 'text-emerald-400' : 'text-amber-400'}>{evidenceLine(t)}</span>
+                <span className={t.state === 'rejected' ? 'text-danger' : t.state === 'done' ? 'text-success' : 'text-warning'}>{evidenceLine(t)}</span>
               </div>
             )}
             {t.note && <div className="mt-1.5 line-clamp-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">{t.note}</div>}

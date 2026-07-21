@@ -232,6 +232,7 @@ export function Room() {
   // the rail is a summary, ProjectPanel owns the live board).
   const [taskPulse, setTaskPulse] = useState<BoardTask[] | null>(null);
   const [boardErrorRoom, setBoardErrorRoom] = useState<string | null>(null);
+  const [boardNonce, setBoardNonce] = useState(0);
   // T-71 durable produced work: Outputs and the rail read the room-wide
   // server index, NEVER the paged transcript window (review-found
   // regression: old Decisions vanished as pagination advanced).
@@ -381,12 +382,22 @@ export function Room() {
   }, [sourceSeekId, messages, hasOlder, loadingOlder]);
 
   // T-71: poll the board lightly for the rail's project pulse.
+  // Board and artifacts refresh INDEPENDENTLY (review item 2): a Project
+  // retry must never churn Outputs state, and vice versa.
   useEffect(() => {
     let cancelled = false;
     const pull = () => {
       getTaskBoard(createClient(), code)
         .then(b => { if (!cancelled) { setTaskPulse(b.tasks); setBoardErrorRoom(null); } })
         .catch(() => { if (!cancelled) { setTaskPulse(null); setBoardErrorRoom(code); } });
+    };
+    pull();
+    const id = window.setInterval(pull, 60_000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [code, boardNonce]);
+  useEffect(() => {
+    let cancelled = false;
+    const pull = () => {
       getRoomArtifacts(createClient(), code)
         .then(r => {
           if (cancelled) return;
@@ -1807,7 +1818,7 @@ export function Room() {
           selfName={me.name}
           board={taskPulse}
           boardError={boardErrorRoom === code}
-          onRetryBoard={() => setArtifactsNonce(n => n + 1)}
+          onRetryBoard={() => setBoardNonce(n => n + 1)}
           onAttached={() => { void refreshRoom(); }}
         />
       </PageScaffold>
