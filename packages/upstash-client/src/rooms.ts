@@ -244,20 +244,47 @@ export type JoinRoomResult = Room & {
 // Returns the matched row (an actual element of current.participants), or
 // undefined for a genuinely new identity. `reclaimMemberKeyHash` and
 // `authIdHash` are resolved by joinRoom (hashed outside the CAS mutator).
+// T-32: a row that spoke/listened within this window counts as a LIVE sibling
+// session; anchor reclaim may not displace it under a different name. Matches
+// the server's PRESENCE_STALE_MS so "live" means the People panel would show
+// the row as listening/online.
+const ANCHOR_RECLAIM_LIVE_MS = 60_000;
+
 interface ReclaimAnchors {
   agentIdHash?: string;
   reclaimMemberKeyHash?: string;
   authIdHash?: string;
   priorIdentity?: JoinRoomOptions['priorIdentity'];
+  /** T-32: the joining participant's display name and clock for the live-row guard. */
+  joinerName?: string;
+  now?: number;
 }
 function findReclaimRow(current: Room, anchors: ReclaimAnchors): Participant | undefined {
   // T-66 anchor (0): the agent's DURABLE anchor, tried before the member key.
   // It outranks the key precisely because it does not rotate — it is the only
   // anchor that still resolves after the agent's key store is lost, which is
   // the case this whole mechanism exists to recover.
+  //
+  // T-32 guard: multiple live sessions on one machine can share this anchor
+  // (Codex's fixed-file launcher config gives EVERY session the same agentId).
+  // Anchor-reclaiming a row that is ACTIVELY PRESENT under a DIFFERENT name is
+  // therefore not recovery — it silently renames a living participant out of
+  // the room (the glue-vow-soap "the room removed me" kicks). Reclaim by
+  // anchor only when the row has the same name (a true re-join) or has gone
+  // quiet long enough to plausibly be the lost session this mechanism exists
+  // to bring home.
   if (anchors.agentIdHash) {
     const byAgent = current.participants.find(p => p.agentIdHash === anchors.agentIdHash);
-    if (byAgent) return byAgent;
+    if (byAgent) {
+      const sameName = anchors.joinerName !== undefined && byAgent.name === anchors.joinerName;
+      const now = anchors.now ?? Date.now();
+      const listening = Number(byAgent.listenUntil || 0) > now;
+      const heardRecently = now - Number(byAgent.lastSeenAt || 0) <= ANCHOR_RECLAIM_LIVE_MS;
+      const live = listening || heardRecently;
+      if (sameName || !live) return byAgent;
+      // Live row, different name: a sibling session owns it. Fall through to
+      // the remaining anchors so this join lands as its own identity.
+    }
   }
   if (anchors.reclaimMemberKeyHash) {
     const byKey = current.participants.find(p => p.memberKeyHash === anchors.reclaimMemberKeyHash);
@@ -348,6 +375,8 @@ export async function joinRoom(
       reclaimMemberKeyHash,
       authIdHash,
       priorIdentity: options.priorIdentity,
+      joinerName: participant.name,
+      now: Date.now(),
     });
 
     // T-66: decide whether this join may BIND its agent anchor to the reclaimed
@@ -403,7 +432,12 @@ export async function joinRoom(
         } else throw new AgentAnchorConflictError(reclaim.name);
       }
     } else if (agentIdHash && !reclaim) {
-      bindAgentAnchor = true; // brand-new row: nothing to take over, nothing to audit
+      // T-32: when a sibling row already carries this anchor (the live-row
+      // guard above declined to reclaim it), the new row stays UNANCHORED —
+      // two rows sharing one anchor would make every future recovery lookup
+      // ambiguous, and the sibling keeps its recovery rights. A genuinely new
+      // anchor still binds.
+      bindAgentAnchor = !current.participants.some(p => p.agentIdHash === agentIdHash);
     }
 
     // Never trust a client-supplied hash on the incoming participant row.

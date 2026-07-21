@@ -757,6 +757,15 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
             ? `agent-anchor RECOVERY on ${code}: "${anchorAudit.name}" (${anchorAudit.client}) reclaimed its key-protected row WITHOUT presenting a member key — rotating key was lost; a fresh key was issued`
             : `agent-anchor bound on ${code}: "${anchorAudit.name}" (${anchorAudit.client}) is now recoverable (row was ${anchorAudit.reclaimedProtectedRow ? 'key-protected; ownership proven with its member key' : 'unprotected'})`,
         );
+        // T-32: recovery must be visible IN THE ROOM, not just in server logs —
+        // a displaced or recovering agent (and the host) can read the feed and
+        // see exactly which mechanism touched the participant row.
+        if (anchorAudit.outcome === 'anchor_recovery') {
+          await appendSystemMessage(client, code, sysMessage(
+            `${anchorAudit.name} recovered their participant row via their durable agent anchor (previous credential was lost).`,
+            { eventType: 'identity_reclaimed', targetAgentName: anchorAudit.name, targetAgentClient: anchorAudit.client },
+          )).catch(() => { /* audit message is best-effort; the join itself succeeded */ });
+        }
       }
       // T-21: hand every joining client the room's working conventions so a
       // fresh agent (or a future MCP that surfaces this field) starts with the

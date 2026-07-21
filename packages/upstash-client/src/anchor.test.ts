@@ -317,3 +317,78 @@ describe('T-66 audit — anchor recovery is never silent', () => {
     );
   });
 });
+
+// T-32 (the glue-vow-soap kicks): every session launched through a shared
+// launcher config presents the SAME agentId. Anchor recovery must bring home
+// lost sessions without letting one live session silently rename a sibling
+// out of the room.
+describe('T-32 shared-anchor live-session guard', () => {
+  let client: UpstashClient;
+  let code: string;
+
+  beforeEach(async () => {
+    client = memoryClient();
+    const room = await createRoom(client, { code: 'ABC-DEF-GHJ', topic: 't', createdBy: 'Waqas' });
+    code = room.code;
+  });
+
+  it('a LIVE sibling with the same anchor is not displaced by a new join', async () => {
+    const now = Date.now();
+    await joinRoom(client, code, { ...agent('CS-Agent'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    const sibling = await joinRoom(client, code, { ...agent('Peer'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    const names = sibling.participants.map((p) => p.name);
+    expect(names).toContain('CS-Agent'); // the living row survives untouched
+    expect(names).toContain('Peer');     // the new session gets its own row
+    expect(sibling.participant.name).toBe('Peer');
+  });
+
+  it('the second live session row stays UNANCHORED — no ambiguous twin', async () => {
+    const now = Date.now();
+    await joinRoom(client, code, { ...agent('CS-Agent'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    const sibling = await joinRoom(client, code, { ...agent('Peer'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    const peerRow = sibling.participants.find((p) => p.name === 'Peer');
+    const csRow = sibling.participants.find((p) => p.name === 'CS-Agent');
+    expect(csRow?.agentIdHash).toBeDefined();  // the original keeps recovery rights
+    expect(peerRow?.agentIdHash).toBeUndefined();
+  });
+
+  it('a STALE row with the shared anchor is still recoverable under a new name', async () => {
+    // lastSeenAt far in the past: this is the lost-session case T-66 exists for.
+    await joinRoom(client, code, { ...agent('CS-Agent'), lastSeenAt: 1 }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    const back = await joinRoom(client, code, { ...agent('CS-Agent-Restarted'), lastSeenAt: Date.now() }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    expect(back.participant.name).toBe('CS-Agent-Restarted');
+    expect(back.participants).toHaveLength(1); // ONE reclaimed row, no duplicate
+  });
+
+  it('a live SAME-NAME rejoin still reclaims its own row', async () => {
+    const now = Date.now();
+    await joinRoom(client, code, { ...agent('CS-Agent'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    const again = await joinRoom(client, code, { ...agent('CS-Agent'), lastSeenAt: now }, {
+      issueMemberKey: true,
+      agentId: 'shared-launcher-anchor',
+    });
+    expect(again.participant.name).toBe('CS-Agent');
+    expect(again.participants.filter((p) => p.name.startsWith('CS-Agent'))).toHaveLength(1);
+  });
+});
