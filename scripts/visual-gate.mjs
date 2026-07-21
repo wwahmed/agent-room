@@ -100,8 +100,8 @@ for (const name of readdirSync(CURRENT).filter(f => f.endsWith('.png'))) {
   const currentPng = PNG.sync.read(readFileSync(join(CURRENT, name)));
   const basePath = join(BASELINE, name);
   if (!existsSync(basePath)) {
+    // No implicit seeding: baseline creation is ONLY --update-baseline.
     verdicts.push({ ...frameVerdict(name, 0, currentPng.width * currentPng.height), baselineMissing: true });
-    copyFileSync(join(CURRENT, name), basePath);
     continue;
   }
   const basePng = PNG.sync.read(readFileSync(basePath));
@@ -118,6 +118,8 @@ for (const name of readdirSync(CURRENT).filter(f => f.endsWith('.png'))) {
 
 const summary = gateSummary(verdicts);
 console.log(summary.text);
+if (summary.exitCode === 2) console.log('review .visual-gate/diff, then promote deliberately: npm run visual-gate:baseline');
+if (summary.exitCode === 3) console.log('no baseline for the NEW frames — create it deliberately: npm run visual-gate:baseline');
 writeFileSync(join(WORK, 'last-report.txt'), summary.text);
 
 if (updateBaseline) {

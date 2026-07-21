@@ -23,9 +23,17 @@ describe('gateSummary', () => {
     expect(dirty.text).toContain('CHANGED a 50.00%');
   });
 
-  it('lists frames with no baseline as NEW without failing the gate', () => {
+  it('NEW frames demand explicit baseline creation: exit 3', () => {
     const s = gateSummary([{ ...frameVerdict('b', 0, 100), baselineMissing: true }]);
-    expect(s.exitCode).toBe(0);
+    expect(s.exitCode).toBe(3);
     expect(s.text).toContain('NEW     b');
+  });
+
+  it('changed outranks new in the exit code', () => {
+    const s = gateSummary([
+      frameVerdict('a', 50, 100),
+      { ...frameVerdict('b', 0, 100), baselineMissing: true },
+    ]);
+    expect(s.exitCode).toBe(2);
   });
 });

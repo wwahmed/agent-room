@@ -24,9 +24,13 @@ export function gateSummary(verdicts) {
     ...changed.map(v => `  CHANGED ${v.name} ${v.pct}`),
     ...fresh.map(v => `  NEW     ${v.name}`),
   ];
+  // Changed frames exit 2; frames with no baseline exit 3 — both demand a
+  // human action (review diffs, or explicitly create/promote the baseline).
+  const exitCode = changed.length > 0 ? 2 : fresh.length > 0 ? 3 : 0;
   return {
     text: lines.join('\n'),
-    exitCode: changed.length > 0 ? 2 : 0,
+    exitCode,
     changed,
+    fresh,
   };
 }
