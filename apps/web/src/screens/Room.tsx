@@ -1675,9 +1675,7 @@ export function Room() {
       <PageScaffold
         title="Outputs"
         purpose="Deliverables, artifacts, and minutes this room has produced."
-        summary={producedWork.length === 0 ? (
-          <SummaryChip tone="quiet">Nothing produced yet</SummaryChip>
-        ) : (
+        summary={producedWork.length === 0 ? undefined : (
           <>
             <SummaryChip tone="quiet">{producedWork.length} artifact{producedWork.length === 1 ? '' : 's'}</SummaryChip>
             {producedWork.filter(a => a.kind === 'decision').length > 0 && (
@@ -2487,8 +2485,8 @@ export function Room() {
         ) : (
           <div className="rounded-xl border border-border-faint bg-surface-softer p-4 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
             {outputsFilter === 'all'
-              ? 'Nothing captured yet. Use [DECISION], [TODO], or [RESULT] in messages to build the delivery log.'
-              : `No ${kinds.find(k => k.key === outputsFilter)?.label.toLowerCase()} captured yet — switch to All to see everything the room has produced.`}
+              ? 'Nothing produced yet. Use [DECISION], [TODO], or [RESULT] in messages to build the delivery log.'
+              : `No ${kinds.find(k => k.key === outputsFilter)?.label.toLowerCase()} produced yet — switch to All to see everything the room has produced.`}
           </div>
         )}
         <div className="mt-6">
@@ -2519,15 +2517,17 @@ export function Room() {
 // below it (shared T-72 endpoint disclosure).
 export function artifactParts(text: string): { title: string; summary: string } {
   const trimmed = text.trim();
+  if (!trimmed) return { title: '', summary: '' };
   const nl = trimmed.indexOf('\n');
   if (nl > 0 && nl <= 90) return { title: trimmed.slice(0, nl).trim(), summary: trimmed.slice(nl + 1).trim() };
-  const sentence = trimmed.match(/^([^.!?]{10,140}[.!?])(?:\s|$)/);
+  const sentence = trimmed.match(/^([^.!?\n]{10,90}[.!?])(?:\s|$)/);
   if (sentence) return { title: sentence[1]!, summary: trimmed.slice(sentence[0].length).trim() };
-  if (trimmed.length <= 140) return { title: trimmed, summary: '' };
-  // No sentence boundary in reach: cut the title at a word and continue the
-  // remainder in the summary — never duplicate the same text twice.
-  const cut = trimmed.lastIndexOf(' ', 120);
-  return { title: `${trimmed.slice(0, cut > 40 ? cut : 120).trimEnd()}…`, summary: `…${trimmed.slice(cut > 40 ? cut : 120).trimStart()}` };
+  if (trimmed.length <= 90) return { title: trimmed, summary: '' };
+  // No sentence boundary in reach: cut the title at a word and CONTINUE the
+  // remainder as the summary — never the same text twice, no double ellipsis.
+  const cut = trimmed.lastIndexOf(' ', 88);
+  const at = cut > 40 ? cut : 88;
+  return { title: `${trimmed.slice(0, at).trimEnd()}…`, summary: trimmed.slice(at).trimStart() };
 }
 
 function ArtifactCard({ artifact, now }: { artifact: RoomArtifact; now?: number }) {

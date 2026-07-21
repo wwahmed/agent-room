@@ -126,6 +126,10 @@ async function ensureFixtureRoom() {
   await msg('GateB', '[DECISION] Ship the two-row Activity Note as the deterministic status object for all fixture runs.', id++);
   await msg('GateA', '[RESULT] Fixture room seeded: 21-line report, six rapid messages, a mention, a status run, and produced work objects.', id++);
   await msg('GateB', '[TODO] Verify the populated Outputs hierarchy shows Decision, Action, and Result cards with derived titles.', id++);
+  // The artifact extractor captures one line per marker, so the clamp hard
+  // case is a LONG single-line decision: sentence title + a summary long
+  // enough to clamp at 390 with the endpoint disclosure visible.
+  await msg('GateA', '[DECISION] Adopt the reading-endpoint disclosure as the single grammar for every clamped surface. The product shipped two disclosure dialects during the redesign and the reviewers ruled that exactly one grammar must win, so this deliberately long decision body exists to make the populated Outputs frame photograph the derived-title split, the three-line clamp, and the Show more endpoint on a real work object every single gate run.', id++);
   // T-72: a same-sender heartbeat RUN, so the collapsed "3 updates" Activity
   // Note is photographed and measured every run. Review finding: the NEWEST
   // member (the one the note displays) must be the LONG body — the ribbon
