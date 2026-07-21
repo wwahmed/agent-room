@@ -254,7 +254,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // T-41 acceptance sheet: stay on the deliberate token scale. Perceived
   // shouting is solved by flat peer rows and hierarchy, not off-scale thin
   // glyphs that become harder to read on a dark canvas.
-  const bodyText = 'text-[15px] font-normal leading-[1.6] [&_strong]:font-semibold';
+  const bodyText = 'text-[15px] font-normal leading-[1.65] tracking-normal text-ink-muted [&_strong]:font-semibold [&_strong]:text-ink';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.

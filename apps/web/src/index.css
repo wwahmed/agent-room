@@ -173,7 +173,7 @@ body {
     rgb(var(--surface-1, var(--surface)));
 }
 
-/* T-46: shared single-run entry motions for transient system surfaces. */
+/* T-46: shared single-run entry motions for transient system surfaces.
    150ms ease-out per the charter; nothing loops; reduced motion disables. */
 @keyframes surface-rise {
   from { transform: translateY(8px); opacity: 0; }

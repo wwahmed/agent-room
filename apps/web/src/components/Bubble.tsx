@@ -112,18 +112,44 @@ export function AttachmentList({ attachments }: { attachments: MessageAttachment
 
 function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment; onOpen: () => void }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-black/10 bg-black/5">
-      <button type="button" onClick={onOpen} className="block w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" aria-label={`Open ${attachment.name} in image viewer`}>
-        <img src={attachment.url} alt={attachment.name} className="max-h-64 w-full object-contain" />
+    <figure
+      className="w-[min(520px,78vw)] max-w-full overflow-hidden rounded-xl border border-border bg-surface shadow-card"
+      data-image-preview="compact"
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group relative block h-44 w-full cursor-zoom-in overflow-hidden bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-56"
+        aria-label={`Open ${attachment.name} full size`}
+      >
+        <img
+          src={attachment.url}
+          alt={attachment.name}
+          className="h-full w-full object-cover object-top transition-transform duration-200 group-hover:scale-[1.015]"
+        />
+        <span className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/60 text-white shadow-sm" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 3H3v3M10 3h3v3M6 13H3v-3M10 13h3v-3" />
+          </svg>
+        </span>
       </button>
-      <div className="flex items-center justify-between gap-2 border-t border-black/10 px-2 py-1.5 text-[12px]">
-        <div className="min-w-0">
-          <div className="truncate font-semibold">{attachment.name}</div>
-          <div className="opacity-60">{formatBytes(attachment.size)} · {fileTypeLabel(attachment)}</div>
-        </div>
-        <AttachmentActions attachment={attachment} onOpen={onOpen} />
-      </div>
-    </div>
+      <figcaption className="flex min-h-11 items-center gap-1.5 border-t border-border-faint px-3 text-[11px] font-normal leading-none tracking-normal text-ink-faint">
+        <span className="min-w-0 truncate">{attachment.name}</span>
+        <span aria-hidden="true">·</span>
+        <span className="shrink-0">{formatBytes(attachment.size)}</span>
+        <a
+          href={attachment.url}
+          download={attachment.name}
+          className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-softer hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          aria-label={`Download ${attachment.name}`}
+          title="Download"
+        >
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 2v8m-3-3 3 3 3-3M3 13h10" />
+          </svg>
+        </a>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -142,14 +168,10 @@ function FileAttachment({ attachment }: { attachment: MessageAttachment }) {
   );
 }
 
-function AttachmentActions({ attachment, onOpen }: { attachment: MessageAttachment; onOpen?: () => void }) {
+function AttachmentActions({ attachment }: { attachment: MessageAttachment }) {
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      {onOpen ? (
-        <button type="button" onClick={onOpen} className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface">View</button>
-      ) : (
-        <a href={attachment.url} target="_blank" rel="noreferrer" className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface">Open</a>
-      )}
+      <a href={attachment.url} target="_blank" rel="noreferrer" className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface">Open</a>
       <a
         href={attachment.url}
         download={attachment.name}
