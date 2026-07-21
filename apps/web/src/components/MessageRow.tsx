@@ -261,7 +261,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     return (
       <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-2`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
-        <div className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
+        <div data-gate="msg-content" className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -274,7 +274,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   return (
     <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-6`}>
       <SwipeReplyIndicator progress={swipe.progress} />
-      <div className={bubbleShape} style={swipe.style}>
+      <div data-gate="msg-content" className={bubbleShape} style={swipe.style}>
         {/* T-58 (host: "others on the left", "can barely read the name"): the
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
             top corner, and is legible-sized. */}

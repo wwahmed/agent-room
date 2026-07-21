@@ -95,7 +95,17 @@ export function ruleFloatingVsComposer(m) {
     .map(f => `floating control overlaps composer: "${f.label}"`);
 }
 
-const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer];
+/** Scrollable-x containers may hide overflow, but not the MAJORITY of their
+ *  content — a tab bar hiding most tabs at a width is a reachability defect,
+ *  which the clipped-rule exemption alone would mask. */
+export function ruleScrollReach(m) {
+  return (m.scrollContainers ?? [])
+    .filter(c => c.clientWidth > 40 && c.scrollWidth > c.clientWidth * 1.6)
+    .slice(0, 3)
+    .map(c => `scroll container hides majority of content: ${Math.round(c.clientWidth)}px shows ${Math.round(c.scrollWidth)}px ("${c.label}")`);
+}
+
+const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach];
 
 export function evaluateAssertions(measurement) {
   return RULES.flatMap(rule => rule(measurement));

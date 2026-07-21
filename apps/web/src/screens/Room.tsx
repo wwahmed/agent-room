@@ -1610,7 +1610,7 @@ export function Room() {
 
         <div className={`min-h-0 flex-1 flex-col ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
 
-            <div ref={feedRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto py-4 relative">
+            <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="flex-1 overflow-y-auto py-4 relative">
               {/* T-48: center a generous conversation rail on wide desktops.
                   MessageRow caps prose at 80ch while images/artifacts can use
                   the extra canvas without creating edge-to-edge text. */}
@@ -1694,7 +1694,7 @@ export function Room() {
                   arrived while he was away, so reading back through history left
                   him to scroll all the way down by hand. */}
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
-                <div className="sticky bottom-4 z-20 flex w-full items-center justify-center gap-2">
+                <div data-gate="floating" className="sticky bottom-4 z-20 flex w-full items-center justify-center gap-2">
                   {(unseenCount > 0 || !atBottom) && (
                     <button
                       type="button"
@@ -1896,7 +1896,7 @@ export function Room() {
                     the input keeps its full width; the tools live on their own
                     compact row below it inside the same bordered surface, so the
                     typing area is never squeezed by active buttons on mobile. */}
-                <div className="relative rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
+                <div data-gate="composer" className="relative rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
                 {/* T-09: Slack/Teams-style in-place participant picker. Opens
                     while the caret sits in an @token; mouse uses onMouseDown so
                     the textarea never blurs before the pick lands. */}

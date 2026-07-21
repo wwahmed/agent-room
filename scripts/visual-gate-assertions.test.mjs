@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateAssertions,
+  ruleScrollReach,
   ruleClipped,
   ruleFloatingVsComposer,
   ruleMixedTheme,
@@ -77,5 +78,15 @@ describe('visual gate geometry assertions', () => {
       floating: [{ label: 'Latest', x: 400, y: 810, w: 120, h: 40 }],
     });
     expect(fails[0]).toContain('floating control overlaps composer: "Latest"');
+  });
+});
+
+describe('ruleScrollReach (T-63 review: reachability, not blanket exemption)', () => {
+  it('BROKEN: a container hiding most of its content fails', () => {
+    const fails = ruleScrollReach({ scrollContainers: [{ label: 'tabs', clientWidth: 300, scrollWidth: 600 }] });
+    expect(fails[0]).toContain('hides majority of content');
+  });
+  it('minor overflow within the 1.6x budget passes', () => {
+    expect(ruleScrollReach({ scrollContainers: [{ label: 'tabs', clientWidth: 300, scrollWidth: 400 }] })).toEqual([]);
   });
 });

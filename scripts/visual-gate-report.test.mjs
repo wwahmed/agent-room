@@ -37,3 +37,21 @@ describe('gateSummary', () => {
     expect(s.exitCode).toBe(2);
   });
 });
+
+describe('exit precedence integration (T-63 review)', () => {
+  it('geometry (4) outranks changed (2), fresh (3), clean (0)', () => {
+    const changedV = frameVerdict('a', 50, 100);
+    const freshV = { ...frameVerdict('b', 0, 100), baselineMissing: true };
+    const geo = [{ frame: 'a', failure: 'target under 44px' }];
+    expect(gateSummary([changedV, freshV], geo).exitCode).toBe(4);
+    expect(gateSummary([changedV, freshV], []).exitCode).toBe(2);
+    expect(gateSummary([freshV], []).exitCode).toBe(3);
+    expect(gateSummary([frameVerdict('c', 0, 100)], []).exitCode).toBe(0);
+  });
+
+  it('incomplete capture (5) outranks everything and is named in the report', () => {
+    const s = gateSummary([frameVerdict('a', 50, 100)], [{ frame: 'a', failure: 'x' }], { expected: 40, captured: 12 });
+    expect(s.exitCode).toBe(5);
+    expect(s.text).toContain('CAPTURE-INCOMPLETE 12/40');
+  });
+});

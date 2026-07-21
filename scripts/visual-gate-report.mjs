@@ -16,24 +16,30 @@ export function frameVerdict(name, diffPixels, totalPixels) {
   };
 }
 
-export function gateSummary(verdicts, geometryFailures = []) {
+export function gateSummary(verdicts, geometryFailures = [], capture = null) {
   const changed = verdicts.filter(v => v.changed);
   const fresh = verdicts.filter(v => v.baselineMissing);
+  const incomplete = capture != null && capture.captured < capture.expected;
   const lines = [
     `visual-gate: ${verdicts.length} frames, ${changed.length} changed, ${fresh.length} new (no baseline), ${geometryFailures.length} geometry findings`,
+    ...(incomplete ? [`  CAPTURE-INCOMPLETE ${capture.captured}/${capture.expected} frames captured — results untrustworthy`] : []),
     ...geometryFailures.map(g => `  GEOMETRY ${g.frame}: ${g.failure}`),
     ...changed.map(v => `  CHANGED ${v.name} ${v.pct}`),
     ...fresh.map(v => `  NEW     ${v.name}`),
   ];
-  // T-63: geometry failures are deterministic defects — highest priority
-  // (exit 4). Changed frames exit 2; missing baselines exit 3. All demand a
-  // human action before the deploy passes.
-  const exitCode = geometryFailures.length > 0 ? 4 : changed.length > 0 ? 2 : fresh.length > 0 ? 3 : 0;
+  // Exit precedence: incomplete capture (5) makes every other verdict
+  // untrustworthy; then geometry (4), changed frames (2), missing baselines
+  // (3 — below changed because changed already forces the same review).
+  const exitCode = incomplete ? 5
+    : geometryFailures.length > 0 ? 4
+    : changed.length > 0 ? 2
+    : fresh.length > 0 ? 3 : 0;
   return {
     text: lines.join('\n'),
     exitCode,
     changed,
     fresh,
     geometryFailures,
+    incomplete,
   };
 }
