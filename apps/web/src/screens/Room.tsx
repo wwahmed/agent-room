@@ -16,6 +16,7 @@ import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
+import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
@@ -264,6 +265,7 @@ export function Room() {
     }
   }, [messageTotal, code, self?.name]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
 
@@ -944,7 +946,8 @@ export function Room() {
 
   async function send() {
     const body = text.trim();
-    if ((!body && attachments.length === 0) || ended) return;
+    if ((!body && attachments.length === 0) || ended || sendingRef.current) return;
+    sendingRef.current = true;
     const msg: Message = {
       id: Date.now(),
       type: 'msg',
@@ -974,6 +977,8 @@ export function Room() {
       showToast(e instanceof Error ? `Send failed: ${e.message}` : 'Send failed');
       setText(body); // restore draft
       setAttachments(attachments);
+    } finally {
+      sendingRef.current = false;
     }
   }
 
@@ -1739,6 +1744,10 @@ export function Room() {
                   onBlur={() => { window.setTimeout(() => setMention(null), 150); }}
                   onPaste={e => { void handlePaste(e); }}
                   onKeyDown={e => {
+                    // Confirming an IME candidate is text entry, never a send
+                    // or mention-pick command. WebKit may expose it as 229.
+                    const isComposing = e.nativeEvent.isComposing || e.keyCode === 229;
+                    if (isComposing) return;
                     // T-09: while the mention picker is open it owns the keys.
                     if (mention && mentionCandidates.length > 0) {
                       if (e.key === 'ArrowDown') { e.preventDefault(); setMention(m => m && { ...m, index: (m.index + 1) % mentionCandidates.length }); return; }
@@ -1746,14 +1755,21 @@ export function Room() {
                       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionCandidates[mention.index % mentionCandidates.length]!); return; }
                       if (e.key === 'Escape') { e.preventDefault(); setMention(null); return; }
                     }
-                    // Enter is always a newline (host direction, 2026-07-13).
-                    // Cmd/Ctrl+Enter sends on hardware keyboards.
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    const enterAction = composerEnterAction({
+                      key: e.key,
+                      shiftKey: e.shiftKey,
+                      ctrlKey: e.ctrlKey,
+                      metaKey: e.metaKey,
+                      altKey: e.altKey,
+                      isComposing,
+                    });
+                    if (enterAction === 'send') {
                       e.preventDefault();
-                      send();
+                      void send();
                     }
                   }}
-                  placeholder={IS_TOUCH ? 'Message the room…' : 'Message the room… (⌘/Ctrl+Enter to send)'}
+                  aria-label="Message the room. Enter sends; Shift or Control plus Enter adds a new line."
+                  placeholder={IS_TOUCH ? 'Message the room… Enter sends' : 'Message the room… (Enter sends · Shift/Ctrl+Enter adds line)'}
                   rows={1}
                   style={{
                     height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
