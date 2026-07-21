@@ -17,7 +17,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   APPROVAL_PREFIX,
+  acquireLock,
   atomicPointSymlink,
+  debtSettledBy,
   hashDirectory,
   hasPhase,
   importLegacyDist,
@@ -31,6 +33,7 @@ import {
   rollback,
   stage,
   status,
+  verifyArtifact,
   writePhase,
 } from './release-pipeline.mjs';
 
@@ -228,6 +231,95 @@ test('atomicPointSymlink replaces an existing pointer in place', () => {
   assert.equal(pointerTarget(link), join(root, 'a'));
   atomicPointSymlink(link, join(root, 'b'));
   assert.equal(pointerTarget(link), join(root, 'b'));
+});
+
+test('a green normal promote of an UNRELATED SHA leaves hotfix debt standing', async () => {
+  const repo = makeRepo();
+  const p = paths(repo.root);
+  mkdirSync(p.gateState, { recursive: true });
+  // Marker points at a commit that is NOT an ancestor of HEAD (an orphan).
+  repo.git(['checkout', '-q', '--orphan', 'stray']);
+  writeFileSync(join(repo.root, 'stray.txt'), 'stray\n');
+  repo.git(['add', 'stray.txt']);
+  repo.git(['commit', '-qm', 'stray']);
+  const straySha = repo.git(['rev-parse', 'HEAD']).trim();
+  repo.git(['checkout', '-qf', 'main']);
+  writeFileSync(p.hotfixPending, `${straySha}\n`);
+
+  const { dir } = await stage(repo.root, stageOpts(repo));
+  for (const [name, data] of [['gate', { exitCode: 0 }], ['approved', {}], ['walkthrough', { skipped: true, reason: 'drill' }]])
+    writePhase(dir, name, data);
+  await promote(repo.root, repo.fullSha);
+  assert.equal(existsSync(p.hotfixPending), true, 'unrelated green promote must not settle the debt');
+  assert.equal(debtSettledBy(repo.root, straySha, repo.fullSha), false);
+  assert.equal(debtSettledBy(repo.root, repo.fullSha, repo.fullSha), true, 'a release containing the marker settles it');
+  assert.equal(debtSettledBy(repo.root, 'not-a-sha', repo.fullSha), false, 'unresolvable markers fail closed');
+});
+
+test('promote refuses a mutated artifact (manifest re-verification)', async () => {
+  const repo = makeRepo();
+  const { dir } = await stage(repo.root, stageOpts(repo));
+  for (const [name, data] of [['gate', { exitCode: 0 }], ['approved', {}], ['walkthrough', { skipped: true, reason: 'drill' }]])
+    writePhase(dir, name, data);
+  verifyArtifact(repo.root, repo.fullSha); // clean artifact verifies
+  // Tamper past the read-only bits the way an attacker (or stray build) would.
+  execFileSync('chmod', ['-R', 'u+rwX', join(dir, 'dist')]);
+  writeFileSync(join(dir, 'dist', 'index.html'), 'tampered\n');
+  assert.throws(() => verifyArtifact(repo.root, repo.fullSha), /mutated/);
+  await assert.rejects(() => promote(repo.root, repo.fullSha), /mutated/);
+  const p = paths(repo.root);
+  assert.equal(pointerTarget(p.current), null, 'pointer never moved onto the tampered artifact');
+});
+
+test('keyless identities cannot approve; credentialed rows can', () => {
+  const fullSha = 'c'.repeat(40);
+  const messages = [{ id: 1, name: 'Reviewer', text: `${APPROVAL_PREFIX} ${fullSha}` }];
+  const keyless = [{ name: 'Reviewer' }];
+  const keyedCc = [{ name: 'Reviewer', memberKeyHash: 'h'.repeat(64) }];
+  const authedWeb = [{ name: 'Reviewer', authIdHash: 'h'.repeat(64) }];
+  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: keyless }), null);
+  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: [] }), null);
+  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: keyedCc }).approver, 'Reviewer');
+  assert.equal(parseApproval(messages, { fullSha, builder: 'Builder', participants: authedWeb }).approver, 'Reviewer');
+});
+
+test('the pipeline lock is exclusive, and a dead-pid lock is reclaimed', () => {
+  const repo = makeRepo();
+  const release = acquireLock(repo.root, 'promote');
+  assert.throws(() => acquireLock(repo.root, 'stage'), /holds the lock/);
+  release();
+  const release2 = acquireLock(repo.root, 'stage'); // released lock reacquires
+  release2();
+  // A lock held by a dead pid must be reclaimed, and the reclaim logged.
+  writeFileSync(join(paths(repo.root).releases, '.lock'), JSON.stringify({ pid: 999999999, cmd: 'gate', at: 'x' }));
+  const release3 = acquireLock(repo.root, 'rollback');
+  release3();
+  assert.match(readFileSync(paths(repo.root).releaseLog, 'utf8'), /stale-lock reclaimed/);
+});
+
+test('migration preserves BOTH the served hotfix dist and its dist.prev sibling', async () => {
+  const repo = makeRepo();
+  const p = paths(repo.root);
+  mkdirSync(join(p.liveLink, 'assets'), { recursive: true });
+  writeFileSync(join(p.liveLink, 'assets', 'index-hotfix77.js'), 'hotfix\n');
+  mkdirSync(join(`${p.liveLink}.prev`, 'assets'), { recursive: true });
+  writeFileSync(join(`${p.liveLink}.prev`, 'assets', 'index-prehot66.js'), 'prehotfix\n');
+
+  const { dir } = await stage(repo.root, stageOpts(repo));
+  for (const [name, data] of [['gate', { exitCode: 0 }], ['approved', {}], ['walkthrough', { skipped: true, reason: 'drill' }]])
+    writePhase(dir, name, data);
+  await promote(repo.root, repo.fullSha);
+
+  const names = status(repo.root).releases.map(r => r.name);
+  const imported = names.find(n => /^imported-\d+$/.test(n));
+  const importedPrev = names.find(n => /^imported-prev-/.test(n));
+  assert.ok(imported && importedPrev, `both legacy dists imported (got ${names.join(', ')})`);
+  assert.ok(existsSync(join(p.releases, imported, 'dist', 'assets', 'index-hotfix77.js')));
+  assert.ok(existsSync(join(p.releases, importedPrev, 'dist', 'assets', 'index-prehot66.js')));
+  // previous points at the displaced LIVE bundle (the hotfix), so one
+  // rollback restores exactly what users had before this promote.
+  assert.equal(pointerTarget(p.previous), join(p.releases, imported));
+  assert.equal(JSON.parse(readFileSync(join(p.releases, imported, 'meta.json'))).bundle, 'index-hotfix77.js');
 });
 
 test('status reports pointers, phases, and hotfix debt truthfully', async () => {
