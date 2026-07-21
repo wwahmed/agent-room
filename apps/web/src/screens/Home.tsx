@@ -100,6 +100,10 @@ export function Home() {
   const activeRooms = sections.active;
   const endedRooms = sections.ended;
   const testRooms = view === 'active' ? sections.activeTest : sections.endedTest;
+  // T-40 R2: a segment whose rows are ALL collapsed must say so explicitly —
+  // "Ended 6" showing an empty list reads as broken, not filtered.
+  const realRowCount = view === 'active' ? activeRooms.length : endedRooms.length;
+  const allCollapsed = realRowCount === 0 && testRooms.length > 0;
 
   return (
     <div className="min-h-screen bg-surface-sunken text-ink">
@@ -280,14 +284,18 @@ export function Home() {
                     messageCount={r.messageCount}
                     selfName={identity.name}
                   />
-                  <span className="flex-shrink-0 text-sm font-semibold text-accent">Enter →</span>
+                  {/* T-40 R1: the whole card is the link; a quiet chevron is the
+                      only affordance. Accent stays reserved for attention. */}
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0 text-ink-faint">
+                    <path d="m6 3.5 5 4.5-5 4.5" />
+                  </svg>
                 </div>
               );
             })}
           </section>
         )}
 
-        {identity && view === 'active' && !roomsLoading && activeRooms.length === 0 && (
+        {identity && view === 'active' && !roomsLoading && activeRooms.length === 0 && sections.activeTest.length === 0 && (
           <div className="mt-3 rounded-xl border border-border-faint bg-surface p-5 text-sm text-ink-soft">
             No active rooms. Start one with <span className="font-semibold text-ink">+ New room</span>.
           </div>
@@ -314,9 +322,27 @@ export function Home() {
           </section>
         )}
 
+        {/* T-40 R2: when EVERY row in the segment is a collapsed test room, say
+            so explicitly — the count promised items, so the screen must explain
+            where they are and offer them in one tap. */}
+        {identity && allCollapsed && !showTestRooms && (
+          <div className="mt-3 flex min-h-14 items-center justify-between gap-3 rounded-xl border border-border-faint bg-surface p-4">
+            <span className="text-sm text-ink-soft">
+              All {testRooms.length} {view} room{testRooms.length === 1 ? ' is an' : 's are'} auto-test room{testRooms.length === 1 ? '' : 's'}.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowTestRooms(true)}
+              className="min-h-11 flex-shrink-0 rounded-lg px-3 text-sm font-semibold text-ink-soft transition hover:bg-surface-softer hover:text-ink"
+            >
+              Show them
+            </button>
+          </div>
+        )}
+
         {/* T-40: convention-named auto-test rooms collapse into one quiet row
             per segment instead of burying real work. */}
-        {identity && testRooms.length > 0 && (
+        {identity && testRooms.length > 0 && !(allCollapsed && !showTestRooms) && (
           <div className="mt-2">
             <button
               type="button"
