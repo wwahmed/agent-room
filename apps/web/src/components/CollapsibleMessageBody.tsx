@@ -24,7 +24,11 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
   }, [text]);
 
   return (
-    <div>
+    // T-48 rev2: cap the markdown container itself. Capping only the parsed
+    // paragraph/list children let the live MessageText path inherit the wider
+    // bubble measure in practice. Attachments remain outside this component,
+    // so images and other artifacts can still use the wider conversation pane.
+    <div className="w-full max-w-[68ch]" data-message-prose-measure="68ch">
       <div
         className="overflow-hidden"
         style={{
