@@ -19,3 +19,7 @@ HASH=$(ls apps/web/dist/assets/index-*.js | head -1 | sed 's/.*index-//; s/\.js/
 curl -sf http://127.0.0.1:8210/healthz > /dev/null || { echo "ERROR: server unhealthy"; exit 1; }
 curl -sf http://127.0.0.1:8210/ | grep -q "$HASH" || { echo "ERROR: served index.html does not reference fresh bundle $HASH"; exit 1; }
 echo "OK: deployed bundle index-$HASH.js and server is serving it."
+# T-61: the visual gate. Captures the fixed state matrix, diffs against the
+# last deploy, and exits 2 when frames changed - LOOK at .visual-gate/diff
+# before announcing, then promote with: npm run visual-gate:baseline
+npm run visual-gate --silent || echo "visual-gate: frames changed - review .visual-gate/diff before announcing"

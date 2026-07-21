@@ -10,10 +10,15 @@
     "test": "npm -ws run test --if-present && node --test scripts/room-health.test.mjs deploy/memberkey-proxy.test.mjs",
     "build": "npm -ws run build --if-present",
     "dev:web": "npm -w apps/web run dev",
-    "room:health": "node scripts/room-health.mjs"
+    "room:health": "node scripts/room-health.mjs",
+    "visual-gate": "node scripts/visual-gate.mjs",
+    "visual-gate:baseline": "node scripts/visual-gate.mjs --update-baseline"
   },
   "devDependencies": {
     "@vercel/node": "^5.7.13",
+    "pixelmatch": "^7.2.0",
+    "playwright-core": "^1.61.1",
+    "pngjs": "^7.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.5.0"
   },

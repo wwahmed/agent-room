@@ -41,3 +41,4 @@ deploy/.memberkey-tokens
 deploy/.memberkey-store.json
 deploy/mkproxy-*.log
 .env.bak-*
+.visual-gate/
