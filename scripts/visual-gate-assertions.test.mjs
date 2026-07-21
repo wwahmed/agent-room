@@ -5,6 +5,7 @@ import {
   ruleTypeFloors,
   ruleStatusNoteWidth,
   ruleFloatingVsStatusNote,
+  ruleDisclosureClearance,
   ruleClipped,
   ruleFloatingVsComposer,
   ruleMixedTheme,
@@ -149,5 +150,30 @@ describe('ruleFloatingVsStatusNote (T-72: Latest pill cannot sit on a note)', ()
       floating: [{ label: 'Latest', x: 150, y: 700, w: 90, h: 44 }],
       statusNotes: [{ left: 20, right: 370, top: 100, bottom: 180, w: 350, bodyW: 326 }],
     })).toEqual([]);
+  });
+});
+
+describe('ruleDisclosureClearance (T-72 rev4: auditable pointer boxes)', () => {
+  const card = { left: 10, top: 100, right: 370, bottom: 260, w: 360, bodyW: 336 };
+  it('BROKEN: a Show-more box escaping its card fails', () => {
+    const fails = ruleDisclosureClearance({ statusNotes: [{ ...card, snippet: 'x', showMore: { left: 250, top: 200, right: 370, bottom: 290 } }] });
+    expect(fails[0]).toContain('disclosure target escapes its card');
+  });
+  it('BROKEN: a Show-more box on the updates control fails', () => {
+    const fails = ruleDisclosureClearance({ statusNotes: [{ ...card, showMore: { left: 250, top: 180, right: 368, bottom: 224 }, updates: { left: 270, top: 216, right: 368, bottom: 258 } }] });
+    expect(fails[0]).toContain('overlaps the updates control');
+  });
+  it('BROKEN: a Show-more box reaching the next card fails', () => {
+    const fails = ruleDisclosureClearance({ statusNotes: [
+      { ...card, showMore: { left: 250, top: 240, right: 368, bottom: 300 } },
+      { ...card, top: 270, bottom: 400 },
+    ] });
+    expect(fails.some(f => f.includes('escapes its card') || f.includes('neighbouring card'))).toBe(true);
+  });
+  it('a contained, clear box passes', () => {
+    expect(ruleDisclosureClearance({ statusNotes: [
+      { ...card, showMore: { left: 250, top: 170, right: 368, bottom: 214 }, updates: { left: 270, top: 216, right: 368, bottom: 258 } },
+      { ...card, top: 270, bottom: 400 },
+    ] })).toEqual([]);
   });
 });

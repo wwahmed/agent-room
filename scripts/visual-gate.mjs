@@ -296,10 +296,14 @@ for (const vp of VIEWPORTS) {
             statusNotes: [...document.querySelectorAll('[data-gate="status-note"]')].slice(-6).map(el => {
               const body = el.querySelector('[data-gate="status-body"]');
               const note = el.getBoundingClientRect();
+              const rect = x => x ? (r => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom }))(x.getBoundingClientRect()) : null;
               return {
                 w: note.width, top: note.top, bottom: note.bottom, left: note.left, right: note.right,
                 bodyW: body ? body.getBoundingClientRect().width : null,
                 snippet: (body?.textContent || '').trim().slice(0, 40),
+                // T-72 rev4: auditable pointer boxes for the disclosure rule.
+                showMore: rect(el.querySelector('[data-gate="disclosure-more"]')),
+                updates: rect(el.querySelector('[data-gate="disclosure-updates"]')),
               };
             }),
             composer: composerEl ? box(composerEl) : null,

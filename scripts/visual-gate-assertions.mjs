@@ -89,6 +89,33 @@ export function ruleStatusNoteWidth(m) {
   return out.slice(0, 4);
 }
 
+/** T-72 rev4 (design lead): the Show-more pointer box is auditable and
+ *  strictly contained — inside its own Activity Note, intersecting neither
+ *  the updates control nor any OTHER note (the next card). A hit target that
+ *  can steal a neighbour's taps is a geometry failure. */
+export function ruleDisclosureClearance(m) {
+  const out = [];
+  const notes = m.statusNotes ?? [];
+  const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  notes.forEach((n, i) => {
+    const sm = n.showMore;
+    if (!sm) return;
+    const card = { left: n.left, top: n.top, right: n.right, bottom: n.bottom };
+    if (!(sm.left >= card.left - 1 && sm.right <= card.right + 1 && sm.top >= card.top - 1 && sm.bottom <= card.bottom + 1)) {
+      out.push(`disclosure target escapes its card${n.snippet ? ` ("${n.snippet}")` : ''}`);
+    }
+    if (n.updates && overlaps(sm, n.updates)) {
+      out.push(`disclosure target overlaps the updates control${n.snippet ? ` ("${n.snippet}")` : ''}`);
+    }
+    notes.forEach((other, j) => {
+      if (j !== i && overlaps(sm, { left: other.left, top: other.top, right: other.right, bottom: other.bottom })) {
+        out.push(`disclosure target intersects a neighbouring card${n.snippet ? ` ("${n.snippet}")` : ''}`);
+      }
+    });
+  });
+  return out.slice(0, 4);
+}
+
 /** T-72 acceptance: the jump-to-latest pill must never sit ON an Activity
  *  Note at the captured scroll position (the ribbon screenshot's second
  *  failure — the pill floating mid-column over squeezed text). */
@@ -164,7 +191,7 @@ export function ruleTypeFloors(m) {
   return out.slice(0, 6);
 }
 
-const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote];
+const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote, ruleDisclosureClearance];
 
 export function evaluateAssertions(measurement) {
   return RULES.flatMap(rule => rule(measurement));

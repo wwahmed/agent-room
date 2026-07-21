@@ -37,20 +37,28 @@ function ClampedNoteBody({ text }: { text: string }) {
   if (!text.trim()) return null;
   return (
     <div data-gate="status-body" className="mt-1 min-w-0">
-      {/* pb-8 reserves in-card dead space under the clamp so the 44px+ hit
-          target never sits on readable text — only on the gradient-faded tail
-          of line 3 and the reserved gap. */}
-      <div className={`relative ${clamped && !expanded ? 'pb-8' : ''}`}>
+      {/* pb-5 reserves ~20px of IN-FLOW clearance inside the card, so the
+          44px hit box (anchored to this wrapper's bottom) stays entirely
+          within the Activity Note: it covers only the masked tail of line 3
+          plus this reserved strip, contributes real height to the card, and
+          can never steal taps from the updates control or the next card.
+          The gate's disclosure-clearance rule audits exactly these rects. */}
+      <div className={`relative ${clamped && !expanded ? 'pb-5' : ''}`}>
         <div ref={ref} className={`msg-note [overflow-wrap:anywhere] ${expanded ? '' : 'line-clamp-3'}`}>{text}</div>
         {clamped && !expanded && (
           <button
             type="button"
             onClick={() => setExpanded(true)}
             aria-label="Show the full status update"
-            className="absolute bottom-0 right-0 flex h-14 items-start justify-end"
+            data-gate="disclosure-more"
+            className="absolute bottom-0 right-0 flex h-11 items-start justify-end"
           >
-            <span className="msg-disclosure bg-gradient-to-l from-surface-softer from-55% to-transparent pl-10 text-accent">
-              Show more
+            {/* Deliberate '… Show more' with an opaque tail mask — the
+                clamped text must END, not concatenate into the label. */}
+            <span className="msg-disclosure flex items-start text-accent">
+              <span aria-hidden="true" className="h-full w-8 bg-gradient-to-l from-surface-softer to-transparent" />
+              <span className="bg-surface-softer pr-0.5 text-ink-faint">…&nbsp;</span>
+              <span className="bg-surface-softer">Show more</span>
             </span>
           </button>
         )}
@@ -105,6 +113,7 @@ export function ActivityNote({ message, run, now }: Props) {
                 type="button"
                 onClick={() => setShowEarlier(v => !v)}
                 aria-expanded={showEarlier}
+                data-gate="disclosure-updates"
                 className="msg-disclosure -mr-2 flex h-11 items-center gap-1 px-2 text-ink-soft transition hover:text-ink"
               >
                 <span aria-hidden="true" className={`transition-transform ${showEarlier ? 'rotate-90' : ''}`}>›</span>
