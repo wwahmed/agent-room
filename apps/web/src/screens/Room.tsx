@@ -2576,13 +2576,16 @@ export function artifactParts(text: string): { title: string; summary: string } 
   let cutAt = -1;
   let cutLen = 0;
   let keepPunct = false;
-  const clause = /[:;,](?=\s)|\s[—–-](?=\s)/g;
+  // Comma removed as a boundary (design lead: '…Decision, Action,' /
+  // 'and Result…' is a broken list split, not a clause). Colon, semicolon,
+  // and spaced dash only; otherwise the word-cut fallback rules.
+  const clause = /[:;](?=\s)|\s[—–-](?=\s)/g;
   let m: RegExpExecArray | null;
   while ((m = clause.exec(head))) {
     if (m.index >= 24 && m.index <= 79) {
       cutAt = m.index;
       cutLen = m[0].length + 1;
-      keepPunct = /[:;,]/.test(m[0]![0]!);
+      keepPunct = /[:;]/.test(m[0]![0]!);
     }
   }
   if (cutAt > 0) {
