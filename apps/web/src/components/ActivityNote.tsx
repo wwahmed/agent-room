@@ -37,7 +37,7 @@ function ClampedNoteBody({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setExpanded(v => !v)}
-          className="flex min-h-11 items-center text-[13px] font-semibold text-accent transition hover:opacity-80"
+          className="msg-disclosure -mx-2 flex min-h-11 items-center px-2 text-accent transition hover:opacity-80"
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>
@@ -79,7 +79,7 @@ export function ActivityNote({ message, run, now }: Props) {
               type="button"
               onClick={() => setShowEarlier(v => !v)}
               aria-expanded={showEarlier}
-              className="flex min-h-11 items-center gap-1 text-[13px] font-semibold text-ink-soft transition hover:text-ink"
+              className="msg-disclosure -mx-2 flex min-h-11 items-center gap-1 px-2 text-ink-soft transition hover:text-ink"
             >
               <span aria-hidden="true" className={`transition-transform ${showEarlier ? 'rotate-90' : ''}`}>›</span>
               {run!.length} updates

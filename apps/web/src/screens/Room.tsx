@@ -713,6 +713,24 @@ export function Room() {
     prevLastIdRef.current = len > 0 ? messages[len - 1]!.id : null;
   }, [messages]);
 
+  // T-72: content that measures itself in AFTER the initial scroll (clamp
+  // toggles, fonts, previews) grows the feed below the landed position,
+  // stranding the view short of bottom with the Latest pill covering the
+  // newest note. While the reader is at bottom, stay pinned through late
+  // layout growth; the moment they scroll up, atBottomRef releases the pin.
+  useEffect(() => {
+    const el = feedRef.current;
+    const content = el?.firstElementChild;
+    if (!el || !content || !('ResizeObserver' in window)) return;
+    const ro = new ResizeObserver(() => {
+      if (atBottomRef.current && el.scrollHeight - el.scrollTop - el.clientHeight > 1) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [room != null]);
+
   // --- T-18: mentions of the signed-in user among loaded messages (IDs are
   // stable across older-page prepends, unlike positions). Hook lives ABOVE the
   // early returns; gotoMention below the guards drives it. ---

@@ -42,6 +42,9 @@ const updateBaseline = process.argv.includes('--update-baseline');
 
 const VIEWPORTS = [
   { w: 390, h: 844, tag: '390' },
+  // T-72 acceptance: 430 is the review's second required phone width — large
+  // Android/iPhone-Pro class. Every geometry rule runs here too.
+  { w: 430, h: 932, tag: '430' },
   { w: 768, h: 1024, tag: '768' },
   { w: 1440, h: 900, tag: '1440' },
   { w: 2100, h: 1100, tag: '2100' },
@@ -124,6 +127,10 @@ async function ensureFixtureRoom() {
   // member (the one the note displays) must be the LONG body — the ribbon
   // regression's exact trigger — so the gate measures the hard state, clamped
   // with Show more, not a harmless two-word fixture.
+  // Very-long-token case (T-72 DoD): an unbroken 96-char token from a second
+  // sender renders as its OWN visible note — it must wrap inside the column,
+  // never widen it (ruleOverflow + ruleStatusNoteWidth watch this frame).
+  await msg('GateB', `deploy sha ${'a1b2c3d4e5f6'.repeat(8)}`, id++, 'status');
   await msg('GateA', 'status ping fixture', id++, 'status');
   await msg('GateA', 'status run fixture, older member', id++, 'status');
   await msg('GateA', 'Deterministic heartbeat: the build finished green and the deploy step is proceeding to verification now. Full report: the bundle hash matched the source tree, the visual gate ran every frame of the matrix, and no geometry findings remain outstanding on this deploy candidate.', id++, 'status');
@@ -157,6 +164,16 @@ STATES.push({
     await p.waitForSelector('textarea', { timeout: 15000 });
     await p.getByText('Rapid fixture message 6').first().waitFor({ timeout: 8000 });
     await p.waitForTimeout(1200);
+    // T-72: photograph the caught-up REST state. The viewer identity has
+    // unread fixture pings, so the app deliberately lands at first-unread
+    // with the jump pill floating mid-feed — a legitimate reading state, but
+    // the rest-state invariant the gate enforces is: at bottom, the pill
+    // must be gone and can never cover an Activity Note.
+    await p.evaluate(() => {
+      const el = document.querySelector('[data-gate="feed"]');
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+    await p.waitForTimeout(600);
   },
 });
 
@@ -285,6 +302,7 @@ for (const vp of VIEWPORTS) {
               grab('.msg-author', 'author');
               grab('[role="tab"]', 'tab');
               grab('.msg-meta', 'meta');
+              grab('.msg-disclosure', 'disclosure');
               const ta = document.querySelector('textarea');
               if (ta && ta.value) {
                 const c = getComputedStyle(ta);

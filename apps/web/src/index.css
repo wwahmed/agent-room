@@ -128,6 +128,13 @@ body {
     line-height: 1.5;
     color: rgb(var(--ink-soft));
   }
+  /* T-72 rev2: disclosure labels (N updates, Show more) are interactive text,
+     held to the metadata ramp, never sliver type. */
+  .msg-disclosure {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
   .msg-composer {
     font-size: 16px;
     line-height: 1.5;
@@ -144,6 +151,7 @@ body {
     .msg-author { font-size: 18px; font-weight: 700; }
     .msg-meta { font-size: 15px; }
     .msg-note { font-size: 17px; }
+    .msg-disclosure { font-size: 15px; }
     .msg-composer { font-size: 20px; }
     .room-tab-label { font-size: 17px; }
   }
