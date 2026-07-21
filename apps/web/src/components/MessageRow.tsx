@@ -282,7 +282,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           <SenderAvatar message={message} brand={senderBrand} sizeClass="h-7 w-7" textClass="text-[12px]" />
         </div>
         <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
-          <span className="text-[12px] font-medium" style={{ color: message.color }}>{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
+          <span className="msg-author" style={{ color: message.color }}>{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
           {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
           <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
