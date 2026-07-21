@@ -203,9 +203,25 @@ if (!skipHistory) {
     baselineRaw = readFileSync(baselinePath, "utf8");
     baselineDesc = baselinePath;
   } else if (ledgerPath === join(root, CANONICAL_REL) || ledgerPath === CANONICAL_REL) {
+    // In a clean tree the working file IS HEAD's version, so comparing against
+    // HEAD proves nothing. When they match, step back to the parent commit so
+    // CI still catches a rewrite that was already committed.
     try {
-      baselineRaw = execFileSync("git", ["-C", root, "show", `HEAD:${CANONICAL_REL}`], { stdio: ["pipe", "pipe", "pipe"] }).toString();
-      baselineDesc = `HEAD:${CANONICAL_REL}`;
+      const headRaw = execFileSync("git", ["-C", root, "show", `HEAD:${CANONICAL_REL}`], { stdio: ["pipe", "pipe", "pipe"] }).toString();
+      let rev = "HEAD";
+      if (headRaw === raw) {
+        try {
+          execFileSync("git", ["-C", root, "cat-file", "-e", `HEAD^:${CANONICAL_REL}`], { stdio: "pipe" });
+          rev = "HEAD^";
+        } catch {
+          rev = null; // first commit of the ledger: HEAD version is the only history
+        }
+      }
+      if (rev !== null) {
+        baselineRaw = rev === "HEAD" ? headRaw
+          : execFileSync("git", ["-C", root, "show", `${rev}:${CANONICAL_REL}`], { stdio: ["pipe", "pipe", "pipe"] }).toString();
+        baselineDesc = `${rev}:${CANONICAL_REL}`;
+      }
     } catch {
       baselineRaw = null; // no committed version yet: nothing to protect
     }
