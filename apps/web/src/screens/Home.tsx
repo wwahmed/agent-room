@@ -6,6 +6,7 @@ import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAm
 import { initialsFor, colorForName } from '../lib/colors.js';
 import { RoomBadges } from '../components/RoomBadges.js';
 import { AgentFacepile } from '../components/AgentFacepile.js';
+import { splitRooms } from '../lib/roomSections.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -37,6 +38,9 @@ export function Home() {
   const loadingMoreRef = useRef(false);
   const roomListEndRef = useRef<HTMLDivElement>(null);
   const [checked, setChecked] = useState(false);
+  // T-40: Active is the default view; Ended renders only when selected.
+  const [view, setView] = useState<'active' | 'ended'>('active');
+  const [showTestRooms, setShowTestRooms] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,8 +95,11 @@ export function Home() {
     }
   }
 
-  const activeRooms = rooms.filter(r => r.status === 'active');
-  const endedRooms = rooms.filter(r => r.status !== 'active');
+  // T-40: Active/Ended sections with auto-test rooms collapsed out of the way.
+  const sections = splitRooms(rooms);
+  const activeRooms = sections.active;
+  const endedRooms = sections.ended;
+  const testRooms = view === 'active' ? sections.activeTest : sections.endedTest;
 
   return (
     <div className="min-h-screen bg-surface-sunken text-ink">
@@ -133,7 +140,8 @@ export function Home() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+      {/* T-40: bottom padding clears the mobile sticky action bar. */}
+      <main className="mx-auto max-w-3xl px-4 py-6 pb-28 sm:px-6 sm:py-10">
         {identity ? (
           <p className="text-sm text-ink-soft">
             Welcome back, <span className="font-semibold text-ink">{identity.name}</span>.
@@ -171,9 +179,60 @@ export function Home() {
           </div>
         )}
 
-        {identity && activeRooms.length > 0 && (
-          <section className="mt-5 space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Your rooms</h2>
+        {/* T-40: primary actions live at the top on desktop (this block) and in
+            the sticky thumb-zone bar on mobile (below). One markup source each;
+            visibility is width-gated. */}
+        {identity && !roomsLoading && (
+          <section className="mt-5 hidden gap-3 sm:grid sm:grid-cols-2">
+            <Link
+              to="/new"
+              className="flex min-h-12 items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-semibold text-white shadow-sm transition hover:opacity-90"
+            >
+              + New room
+            </Link>
+            <div className="flex gap-2">
+              <input
+                value={code}
+                onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
+                placeholder="Join with code…"
+                aria-label="Join with code"
+                className="min-h-12 min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 font-mono text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+              />
+              <button
+                onClick={go}
+                className="min-h-12 rounded-xl bg-ink px-4 text-sm font-semibold text-surface-sunken transition hover:opacity-90"
+              >
+                Join
+              </button>
+            </div>
+            {err && <div className="col-span-full text-xs text-red-400">{err}</div>}
+          </section>
+        )}
+
+        {/* T-40: Active/Ended segmented control with counts. Ended is lazy —
+            its cards only render when the segment is selected. */}
+        {identity && !roomsLoading && rooms.length > 0 && (
+          <div role="tablist" aria-label="Room lists" className="mt-5 flex rounded-xl bg-surface-softer p-1">
+            {([['active', 'Active', activeRooms.length + sections.activeTest.length], ['ended', 'Ended', endedRooms.length + sections.endedTest.length]] as const).map(([key, label, count]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={view === key}
+                onClick={() => { setView(key); setShowTestRooms(false); }}
+                className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition ${
+                  view === key ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
+                }`}
+              >
+                {label}
+                <span className="tabular-nums text-ink-faint">{count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {identity && view === 'active' && activeRooms.length > 0 && (
+          <section className="mt-3 space-y-2">
             {activeRooms.map(r => {
               // The card used to age off createdAt, so a room that had been busy
               // all day still read "21h ago" — that's the room's birthday, not its
@@ -224,9 +283,17 @@ export function Home() {
           </section>
         )}
 
-        {identity && endedRooms.length > 0 && (
-          <section className="mt-4 space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Recently ended</h2>
+        {identity && view === 'active' && !roomsLoading && activeRooms.length === 0 && (
+          <div className="mt-3 rounded-xl border border-border-faint bg-surface p-5 text-sm text-ink-soft">
+            No active rooms. Start one with <span className="font-semibold text-ink">+ New room</span>.
+          </div>
+        )}
+
+        {identity && view === 'ended' && (
+          <section className="mt-3 space-y-2">
+            {endedRooms.length === 0 && sections.endedTest.length === 0 && (
+              <div className="rounded-xl border border-border-faint bg-surface p-5 text-sm text-ink-soft">Nothing has ended yet.</div>
+            )}
             {endedRooms.map(r => (
               <button
                 key={r.code}
@@ -241,6 +308,34 @@ export function Home() {
               </button>
             ))}
           </section>
+        )}
+
+        {/* T-40: convention-named auto-test rooms collapse into one quiet row
+            per segment instead of burying real work. */}
+        {identity && testRooms.length > 0 && (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowTestRooms(v => !v)}
+              aria-expanded={showTestRooms}
+              className="flex min-h-11 w-full items-center justify-between rounded-xl px-4 text-xs font-semibold text-ink-faint transition hover:bg-surface-softer hover:text-ink-soft"
+            >
+              <span>{testRooms.length} test room{testRooms.length === 1 ? '' : 's'} hidden</span>
+              <span>{showTestRooms ? 'Hide' : 'Show'}</span>
+            </button>
+            {showTestRooms && testRooms.map(r => (
+              <button
+                key={r.code}
+                onClick={() => navigate(`/r/${r.code}`)}
+                className="mt-1 flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface-softer px-4 py-2 text-left opacity-60 transition hover:opacity-100"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm">{r.topic}</div>
+                  <div className="text-xs text-ink-faint">{r.status === 'active' ? `${r.participants} here` : 'ended'} · {timeAgo(r.lastActivityAt ?? r.createdAt)}</div>
+                </div>
+              </button>
+            ))}
+          </div>
         )}
 
         {identity && nextRoomCursor && (
@@ -261,36 +356,37 @@ export function Home() {
           </div>
         )}
 
-        {identity && (
-          <section className="mt-6 grid gap-3 sm:grid-cols-2">
-            <Link
-              to="/new"
-              className="flex min-h-14 items-center justify-center rounded-xl bg-accent px-5 text-base font-semibold text-white shadow-sm transition hover:opacity-90"
-            >
-              + New room
-            </Link>
-            <div className="rounded-xl border border-border-faint bg-surface p-3 shadow-card">
-              <div className="flex gap-2">
-                <input
-                  value={code}
-                  onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
-                  placeholder="Join with code…"
-                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface-softer px-3 font-mono text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
-                />
-                <button
-                  onClick={go}
-                  className="min-h-11 rounded-lg bg-ink px-4 text-sm font-semibold text-surface-sunken transition hover:opacity-90"
-                >
-                  Join
-                </button>
-              </div>
-              {err && <div className="mt-2 text-xs text-red-400">{err}</div>}
-            </div>
-          </section>
-        )}
-
         <InstallPrompt />
+
+        {/* T-40: mobile sticky action bar in the thumb zone. Desktop gets the
+            same actions at the top of the list instead. */}
+        {identity && (
+          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-faint bg-surface p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:hidden">
+            <div className="mx-auto flex max-w-3xl gap-2">
+              <Link
+                to="/new"
+                className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-accent px-4 text-[15px] font-semibold text-white shadow-sm transition hover:opacity-90"
+              >
+                + New room
+              </Link>
+              <input
+                value={code}
+                onChange={e => { setCode(e.target.value.toUpperCase()); if (err) setErr(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }}
+                placeholder="Join code…"
+                aria-label="Join with code"
+                className="min-h-12 w-32 min-w-0 rounded-xl border border-border bg-surface-softer px-3 font-mono text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+              />
+              <button
+                onClick={go}
+                className="min-h-12 rounded-xl bg-ink px-4 text-sm font-semibold text-surface-sunken transition hover:opacity-90"
+              >
+                Join
+              </button>
+            </div>
+            {err && <div className="mx-auto mt-1.5 max-w-3xl text-xs text-red-400">{err}</div>}
+          </div>
+        )}
       </main>
     </div>
   );

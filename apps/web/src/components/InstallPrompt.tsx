@@ -27,10 +27,17 @@ function isIos(): boolean {
   return /iPhone|iPad|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document);
 }
 
+// T-40: one-time dismissible. "Not now" hides the card durably; the app stays
+// installable any time from the browser menu, so this needs no re-entry point.
+const DISMISS_KEY = 'wakichat:installPromptDismissed';
+
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(() => isStandalone());
   const [showGuide, setShowGuide] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; }
+  });
   const ios = isIos();
 
   useEffect(() => {
@@ -48,7 +55,7 @@ export function InstallPrompt() {
     };
   }, [installed]);
 
-  if (installed) return null;
+  if (installed || dismissed) return null;
 
   const guide = ios
     ? <>In Safari, tap <span className="font-semibold text-ink">Share</span>, then <span className="font-semibold text-ink">Add to Home Screen</span>.</>
@@ -69,19 +76,30 @@ export function InstallPrompt() {
             {guide}
           </div>
         )}
-        <button
-          onClick={() => {
-            if (deferred) {
-              void deferred.prompt();
-              void deferred.userChoice.finally(() => setDeferred(null));
-            } else {
-              setShowGuide(value => !value);
-            }
-          }}
-          className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          {deferred ? 'Install' : showGuide ? 'Hide instructions' : 'Install'}
-        </button>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            onClick={() => {
+              if (deferred) {
+                void deferred.prompt();
+                void deferred.userChoice.finally(() => setDeferred(null));
+              } else {
+                setShowGuide(value => !value);
+              }
+            }}
+            className="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            {deferred ? 'Install' : showGuide ? 'Hide instructions' : 'Install'}
+          </button>
+          <button
+            onClick={() => {
+              try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* private mode: session-only dismiss */ }
+              setDismissed(true);
+            }}
+            className="inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition hover:bg-surface-softer hover:text-ink"
+          >
+            Not now
+          </button>
+        </div>
       </div>
     </div>
   );
