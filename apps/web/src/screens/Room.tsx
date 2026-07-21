@@ -1515,31 +1515,36 @@ export function Room() {
                 ? `${selfMentionIds.length} mention${selfMentionIds.length === 1 ? '' : 's'}`
                 : `${pos + 1}/${selfMentionIds.length} mentions`;
               return (
-                <span role="group" aria-label="Step through mentions of you" className="flex flex-shrink-0 items-center">
+                // Waqas's crowding capture: inside the T-58 right cluster the
+                // long "@ 14/14 mentions" label jammed the agents object, and
+                // the steppers' bare title tooltips broke the no-bare-title
+                // rule. The counter is now compact everywhere ("@ 14/14"), the
+                // full wording lives on the group's accessible name, and the
+                // cluster keeps an 8px gap to its neighbors.
+                <span
+                  role="group"
+                  aria-label={`Mentions of you: ${counter}`}
+                  className="mx-1 flex flex-shrink-0 items-center gap-0.5"
+                >
                   <button
                     type="button"
                     onClick={() => gotoMention(-1)}
                     disabled={mentionSeeking}
                     aria-label="Previous mention of you"
-                    title="Previous mention of you"
                     className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
                   >
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m3.5 10 4.5-5 4.5 5" />
                     </svg>
                   </button>
-                  {/* Narrow screens shorten to "@ N" so the room title keeps
-                      its floor; the full wording returns at sm+. */}
                   <span className={`whitespace-nowrap text-[12px] font-semibold tabular-nums ${tone}`} aria-hidden="true">
-                    <span className="sm:hidden">@ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}</span>
-                    <span className="hidden sm:inline">@ {counter}</span>
+                    @ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
                   </span>
                   <button
                     type="button"
                     onClick={() => gotoMention(1)}
                     disabled={mentionSeeking}
                     aria-label="Next mention of you"
-                    title="Next mention of you"
                     className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
                   >
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
