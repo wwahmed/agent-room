@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brandFor } from './agentBrand.js';
+import { brandFor, participantKindLabel } from './agentBrand.js';
 
 describe('brandFor', () => {
   it('never brands humans', () => {
@@ -11,6 +11,13 @@ describe('brandFor', () => {
     expect(brandFor({ client: 'cc', harness: 'claude-code' })?.mark).toBe('claude');
     expect(brandFor({ client: 'cc', harness: 'claude-desktop' })?.mark).toBe('claude');
     expect(brandFor({ client: 'cc', harness: 'codex' })).toEqual({ mark: 'codex', label: 'Codex' });
+  });
+
+  it('labels unverified web rows as "web session", never asserting "human"', () => {
+    expect(participantKindLabel({ client: 'web' })).toBe('web session');
+    expect(participantKindLabel({ client: 'web', harness: undefined })).toBe('web session');
+    expect(participantKindLabel({ client: 'cc', harness: 'codex' })).toBe('Codex');
+    expect(participantKindLabel({ client: 'cc' })).toBe('Agent');
   });
 
   it('falls back to the generic agent mark, never the name', () => {

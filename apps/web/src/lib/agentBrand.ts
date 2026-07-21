@@ -19,3 +19,10 @@ export function brandFor(p: { client: string; harness?: string }): AgentBrand | 
   // humans and agents stay distinguishable even without provider info.
   return { mark: 'generic', label: 'Agent' };
 }
+
+/** The kind string shown beside a participant. UX rule: never ASSERT
+ *  humanity — a web row may be a person or an agent driving a browser, so
+ *  the unbranded label is the neutral "web session", not "human". */
+export function participantKindLabel(p: { client: string; harness?: string }): string {
+  return brandFor(p)?.label ?? 'web session';
+}

@@ -16,7 +16,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { AgentAvatar } from '../components/AgentAvatar.js';
-import { brandFor } from '../lib/agentBrand.js';
+import { participantKindLabel } from '../lib/agentBrand.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
@@ -1294,8 +1294,10 @@ export function Room() {
                       : '';
                   // T-44: full identity + state for assistive tech in ONE
                   // accessible name — avatar color and glyphs are decoration.
-                  const brand = brandFor(p);
-                  const kindLabel = brand ? brand.label : 'human';
+                  // "web session", never "human": a browser row could be an
+                  // agent driving automation; the panel must not assert what
+                  // it cannot verify (UX reject 2 on T-44 rev1).
+                  const kindLabel = participantKindLabel(p);
                   const rowLabel = [
                     p.name,
                     kindLabel,
@@ -1373,9 +1375,11 @@ export function Room() {
                               title={`Ask ${p.name}`}
                               aria-label={`Ask ${p.name}`}
                               disabled={modeBusy}
-                              className="flex h-9 min-w-9 items-center justify-center rounded-md border border-accent-tint-border bg-accent-tint px-1.5 text-[12px] font-semibold text-accent transition hover:bg-accent-tint-border disabled:opacity-60 lg:h-7 lg:min-w-7"
+                              className="flex min-h-11 min-w-11 items-center justify-center disabled:opacity-60"
                             >
-                              Ask
+                              <span className="flex h-9 min-w-9 items-center justify-center rounded-md border border-accent-tint-border bg-accent-tint px-1.5 text-[12px] font-semibold text-accent transition hover:bg-accent-tint-border lg:h-7 lg:min-w-7">
+                                Ask
+                              </span>
                             </button>
                           )}
                           {canMuteToggle && (
@@ -1383,10 +1387,11 @@ export function Room() {
                               onClick={() => handleToggleMute({ name: p.name, client: p.client, canSpeak: p.canSpeak })}
                               title={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
                               aria-label={isMuted ? `Unmute ${p.name}` : `Mute ${p.name}`}
-                              className={`flex h-9 w-9 items-center justify-center rounded-md border text-[12px] transition lg:h-7 lg:w-7 ${isMuted
-                                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                                : 'border-border-faint bg-surface text-ink-soft hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-300'}`}
+                              className="flex min-h-11 min-w-11 items-center justify-center"
                             >
+                              <span className={`flex h-9 w-9 items-center justify-center rounded-md border text-[12px] transition lg:h-7 lg:w-7 ${isMuted
+                                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                                : 'border-border-faint bg-surface text-ink-soft hover:border-amber-400/40 hover:bg-amber-500/10 hover:text-amber-300'}`}>
                               {/* Speaker glyph: solid when can speak, slashed when muted. */}
                               {isMuted ? (
                                 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1399,6 +1404,7 @@ export function Room() {
                                   <path d="M11 5.75c.75.6 1.25 1.4 1.25 2.25s-.5 1.65-1.25 2.25" />
                                 </svg>
                               )}
+                              </span>
                             </button>
                           )}
                           {canKick && (
@@ -1406,11 +1412,13 @@ export function Room() {
                               onClick={() => handleKick({ name: p.name, client: p.client })}
                               title={`Remove ${p.name} (asks to confirm)`}
                               aria-label={`Remove ${p.name} from the room`}
-                              className="ml-1.5 flex h-9 w-9 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300 lg:h-7 lg:w-7"
+                              className="ml-1 flex min-h-11 min-w-11 items-center justify-center"
                             >
-                              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
-                                <path d="m4 4 8 8M12 4l-8 8" />
-                              </svg>
+                              <span className="flex h-9 w-9 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300 lg:h-7 lg:w-7">
+                                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+                                  <path d="m4 4 8 8M12 4l-8 8" />
+                                </svg>
+                              </span>
                             </button>
                           )}
                         </div>
