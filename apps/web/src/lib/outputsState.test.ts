@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -27,5 +27,20 @@ describe('outputs view state (rev15 failure modes)', () => {
     expect(hasLineMarker(['[DECISION] ship it'])).toBe(true);
     expect(hasLineMarker(['note: the [TODO] tag inline'])).toBe(false);
     expect(hasLineMarker(['first\n[RESULT] later line'])).toBe(true);
+  });
+});
+
+describe('seekStep (rev17: bounded source seek)', () => {
+  it('finds, waits, and pages in the normal path', () => {
+    expect(seekStep(true, true, false, 3)).toBe('found');
+    expect(seekStep(false, true, true, 3)).toBe('wait');
+    expect(seekStep(false, true, false, 3)).toBe('load-more');
+  });
+  it('a trimmed source gives up honestly', () => {
+    expect(seekStep(false, false, false, 3)).toBe('give-up-trimmed');
+  });
+  it('repeated failures are BOUNDED: attempts exhaust into an explicit error', () => {
+    expect(seekStep(false, true, false, 60)).toBe('give-up-error');
+    expect(seekStep(false, true, true, 999)).toBe('give-up-error');
   });
 });

@@ -39,7 +39,7 @@ describe('appendMessage', () => {
     const cmds = JSON.parse((init as any).body);
     // T-71: +1 for the always-present artifact-index TTL refresh.
     expect(cmds).toHaveLength(6);
-    expect(cmds.some((c: string[]) => c[0] === 'EXPIRE' && String(c[1]).startsWith('room-artifacts:'))).toBe(true);
+    expect(cmds.some((c: string[]) => c[0] === 'EXPIRE' && String(c[1]).startsWith('room-artifacts-v2:'))).toBe(true);
     expect(cmds[0][0]).toBe('RPUSH');
     expect(cmds[0][1]).toBe('room-msgs:ABC-DEF-GHJ');
     // appendMessage enriches every message with reply-mode metadata. In an
@@ -61,7 +61,7 @@ describe('appendMessage', () => {
     expect(cmds[2][3]).toBe(-1);
     // Order after LTRIM: artifact-index TTL (T-71), then list + counter TTLs.
     expect(cmds[3][0]).toBe('EXPIRE');
-    expect(cmds[3][1]).toBe('room-artifacts:ABC-DEF-GHJ');
+    expect(cmds[3][1]).toBe('room-artifacts-v2:ABC-DEF-GHJ');
     expect(cmds[4][0]).toBe('EXPIRE');
     expect(cmds[4][1]).toBe('room-msgs:ABC-DEF-GHJ');
     expect(cmds[4][2]).toBe(ROOM_TTL_SECONDS);

@@ -5,7 +5,7 @@ import type { UpstashClient } from './client.js';
 import { createRoom, joinRoom } from './rooms.js';
 import { appendMessage, listMessages, getMessageTotalCount } from './messages.js';
 import { backfillRoomArtifacts, ensureArtifactIndex, listRoomArtifacts, artifactsKey, ARTIFACT_INDEX_VERSION } from './artifactIndex.js';
-import { artifactAppendCommands, artifactBackfillKey } from './artifactStore.js';
+import { artifactAppendCommands, artifactBackfillKey, legacyArtifactsKey } from './artifactStore.js';
 
 // T-71 durability proof: the exact regression the review found — produced
 // work must survive transcript truncation (client pagination AND Redis
@@ -37,6 +37,14 @@ function listMemoryClient(): UpstashClient {
         if (start < 0) start = Math.max(0, arr.length + start);
         if (stop < 0) stop = arr.length + stop;
         return arr.slice(start, stop + 1) as T;
+      }
+      if (op === 'EVAL') {
+        // The atomic compare-and-delete release script: KEYS[1]=parts[3],
+        // ARGV[1]=parts[4]. Executed as ONE step — no interleave window.
+        const k = parts[3] ?? '';
+        const tok = parts[4] ?? '';
+        if (kv.get(k) === tok) { kv.delete(k); return 1 as T; }
+        return 0 as T;
       }
       if (op === 'LTRIM') {
         const arr = list(key);
@@ -122,7 +130,7 @@ describe('T-71 durable index — review failure modes', () => {
 
   it('backfill MERGES legacy work even when a post-deploy artifact already exists', async () => {
     await appendMessage(client, code, msg(1, '[DECISION] Legacy decision from before the index.'));
-    await client.command(['DEL', artifactsKey(code)]); // simulate pre-index world
+    await client.command(['DEL', artifactsKey(code)]); // simulate pre-v2 world
     await appendMessage(client, code, msg(2, '[RESULT] Fresh post-deploy result.'));
     expect(await listRoomArtifacts(client, code)).toHaveLength(1);
     await backfillRoomArtifacts(client, code);
@@ -175,7 +183,7 @@ describe('T-71 durable index — lock correctness (rev15 review)', () => {
     } as UpstashClient;
     await expect(backfillRoomArtifacts(failing, code)).rejects.toThrow('boom');
     // version key must NOT be set; retry with a healthy client recovers.
-    expect(await client.command(['GET', `room-artifacts-version:${code}`])).toBeNull();
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBeNull();
     await backfillRoomArtifacts(client, code);
     expect(await listRoomArtifacts(client, code)).toHaveLength(1);
   });
@@ -230,27 +238,29 @@ describe('T-71 durable index — rev16 review items', () => {
     } as UpstashClient;
     const a = ensureArtifactIndex(slow, code);
     // Simulate the 30s TTL expiring while A is still mid-rebuild, then B takes over.
-    await client.command(['DEL', `room-artifacts-backfill-lock:${code}`]);
+    await client.command(['DEL', `room-artifacts-merge-lock:${code}`]);
     const b = await ensureArtifactIndex(client, code);
     expect(b.pending).toBe(false);
-    const bLockGone = await client.command(['GET', `room-artifacts-backfill-lock:${code}`]);
+    const bLockGone = await client.command(['GET', `room-artifacts-merge-lock:${code}`]);
     expect(bLockGone).toBeNull(); // B released its own lock after finishing
     release();
     await a; // A finishes; its compare-and-delete must NOT touch anything it no longer owns
     expect(await listRoomArtifacts(client, code)).toHaveLength(1);
-    expect(await client.command(['GET', `room-artifacts-version:${code}`])).toBe(ARTIFACT_INDEX_VERSION);
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBe(ARTIFACT_INDEX_VERSION);
   });
 
   it('migrates a pre-rev16 index: truncated legacy rows upgrade, trimmed-source rows survive', async () => {
     const client = listMemoryClient();
     await fresh(client);
-    // A retained multiline decision whose legacy row was truncated + globally numbered.
+    // A retained multiline decision whose LEGACY (v1) row was truncated and
+    // globally numbered; wipe the v2 index the store hook just wrote so the
+    // merge does the upgrading.
     await appendMessage(client, code, msg(1, '[DECISION] Locked:\n1. one\n2. two'));
     await client.command(['DEL', artifactsKey(code)]);
-    await client.command(['RPUSH', artifactsKey(code), JSON.stringify({ id: '1-7', kind: 'decision', text: 'Locked:', sourceMessageId: 1, author: 'GateA', time: 1 })]);
+    await client.command(['RPUSH', legacyArtifactsKey(code), JSON.stringify({ id: '1-7', kind: 'decision', text: 'Locked:', sourceMessageId: 1, author: 'GateA', time: 1 })]);
     // A legacy row whose source message no longer exists anywhere.
-    await client.command(['RPUSH', artifactsKey(code), JSON.stringify({ id: '999-3', kind: 'result', text: 'Ancient result.', sourceMessageId: 999, author: 'GateA', time: 0 })]);
-    // Simulate the rev15 done key that would have skipped migration forever.
+    await client.command(['RPUSH', legacyArtifactsKey(code), JSON.stringify({ id: '999-3', kind: 'result', text: 'Ancient result.', sourceMessageId: 999, author: 'GateA', time: 0 })]);
+    // The rev15 done key is INERT by design now (different marker name).
     await client.command(['SET', `room-artifacts-backfilled:${code}`, '1']);
 
     const r = await ensureArtifactIndex(client, code);
@@ -264,5 +274,50 @@ describe('T-71 durable index — rev16 review items', () => {
     // Idempotent: a second ensure changes nothing.
     await ensureArtifactIndex(client, code);
     expect(await listRoomArtifacts(client, code)).toHaveLength(2);
+  });
+});
+
+describe('T-71 durable index — rev17 review items', () => {
+  const code = 'dur-fix-five';
+
+  it('a marker message stored MID-MERGE survives: the merge never deletes the live target', async () => {
+    const client = listMemoryClient();
+    await createRoom(client, { code, topic: 'Mid-merge fixture', createdBy: 'GateA' });
+    await joinRoom(client, code, { name: 'GateA', role: '', color: '#000', initials: 'GA', client: 'cc', joinedAt: 1, lastSeenAt: 1 });
+    await appendMessage(client, code, msg(1, '[DECISION] Pre-merge decision.'));
+    await client.command(['DEL', artifactsKey(code)]); // pre-v2 world
+
+    // Interleave: after ensure() takes its retained-history snapshot
+    // (LRANGE on room-msgs), a NEW marker message lands via the store hook.
+    let injected = false;
+    const interleaved: UpstashClient = {
+      command: async (c: readonly (string | number)[]) => {
+        const res = await client.command(c as never);
+        if (!injected && String(c[0]).toUpperCase() === 'LRANGE' && String(c[1]).startsWith('room-msgs:')) {
+          injected = true;
+          await appendMessage(client, code, msg(2, '[RESULT] Landed during the merge.'));
+        }
+        return res;
+      },
+      pipeline: async (cs: readonly (readonly (string | number)[])[]) => client.pipeline(cs as never),
+    } as UpstashClient;
+
+    const r = await ensureArtifactIndex(interleaved, code);
+    expect(r.pending).toBe(false);
+    const rows = await listRoomArtifacts(client, code);
+    expect(rows.map(a => a.kind).sort()).toEqual(['decision', 'result']);
+    // And a repeat merge changes nothing.
+    await client.command(['DEL', artifactBackfillKey(code)]);
+    await ensureArtifactIndex(client, code);
+    expect(await listRoomArtifacts(client, code)).toHaveLength(2);
+  });
+
+  it('the lock release is one atomic EVAL — a stale holder cannot delete a successor lock', async () => {
+    const client = listMemoryClient();
+    const key = 'room-artifacts-merge-lock:x';
+    await client.command(['SET', key, 'successor-token']);
+    const res = await client.command(['EVAL', "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end", 1, key, 'stale-token']);
+    expect(res).toBe(0);
+    expect(await client.command(['GET', key])).toBe('successor-token');
   });
 });

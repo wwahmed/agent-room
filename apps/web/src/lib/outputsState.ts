@@ -40,3 +40,15 @@ export function railSectionCount(agentCount: number, taskCount: number, artifact
 export function hasLineMarker(texts: Array<string | undefined>): boolean {
   return texts.some(t => /^ {0,3}\[(DECISION|TODO|STATUS|RESULT)\]/im.test(t ?? ''));
 }
+
+export type SeekAction = 'found' | 'load-more' | 'wait' | 'give-up-trimmed' | 'give-up-error';
+
+/** One decision step of the source-seek loop (rev17 item 5: the loop must
+ *  be BOUNDED — repeated loadOlder failures with hasOlder stuck true would
+ *  otherwise retry forever). */
+export function seekStep(found: boolean, hasOlder: boolean, loadingOlder: boolean, attempts: number, maxAttempts = 60): SeekAction {
+  if (found) return 'found';
+  if (attempts >= maxAttempts) return 'give-up-error';
+  if (!hasOlder) return 'give-up-trimmed';
+  return loadingOlder ? 'wait' : 'load-more';
+}

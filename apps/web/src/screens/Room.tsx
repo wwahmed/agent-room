@@ -41,7 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, outputsViewState, railSectionCount, type ArtifactFetchState } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, railSectionCount, seekStep, type ArtifactFetchState } from '../lib/outputsState.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
@@ -299,10 +299,18 @@ export function Room() {
   // source message is loaded, then scroll AND flash it; if Redis has
   // trimmed the source, say so honestly instead of doing nothing.
   const [sourceSeekId, setSourceSeekId] = useState<number | null>(null);
+  const seekAttemptsRef = useRef(0);
   useEffect(() => {
     if (sourceSeekId == null) return;
-    if (messages.some(m => m.id === sourceSeekId)) {
+    const action = seekStep(
+      messages.some(m => m.id === sourceSeekId),
+      hasOlder,
+      loadingOlder,
+      seekAttemptsRef.current,
+    );
+    if (action === 'found') {
       setSourceSeekId(null);
+      seekAttemptsRef.current = 0;
       window.setTimeout(() => {
         const el = document.getElementById(`msg-${sourceSeekId}`);
         if (el) {
@@ -311,13 +319,17 @@ export function Room() {
           window.setTimeout(() => el.classList.remove('reply-flash'), 1200);
         }
       }, 60);
-    } else if (!hasOlder) {
+    } else if (action === 'give-up-trimmed' || action === 'give-up-error') {
       setSourceSeekId(null);
+      seekAttemptsRef.current = 0;
       void import('../components/Toast.js').then(({ showToast }) =>
-        showToast('The source message is no longer available in this room\u2019s history.', 'error'));
-    } else if (!loadingOlder) {
+        showToast(action === 'give-up-trimmed'
+          ? 'The source message is no longer available in this room\u2019s history.'
+          : 'Couldn\u2019t load enough history to reach the source message. Try again.', 'error'));
+    } else if (action === 'load-more') {
+      seekAttemptsRef.current += 1;
       void loadOlder();
-    }
+    } // 'wait': a page is already in flight
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceSeekId, messages, hasOlder, loadingOlder]);
 
