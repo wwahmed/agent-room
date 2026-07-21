@@ -13,6 +13,7 @@ import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
+import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken } from '../lib/mentions.js';
 import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
@@ -123,6 +124,9 @@ export function Room() {
   }, [self, code, navigate]);
   const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal, hasOlder, loadingOlder, loadOlder } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
+  // T-09: active @mention query in the composer — where the token starts, what
+  // has been typed so far, and which candidate is keyboard-highlighted.
+  const [mention, setMention] = useState<{ start: number; query: string; index: number } | null>(null);
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
   const dictationBaseRef = useRef<string | null>(null);
@@ -227,6 +231,36 @@ export function Room() {
     const interval = setInterval(() => setNow(Date.now()), 10_000);
     return () => clearInterval(interval);
   }, []);
+
+  // --- T-09: @mention autocomplete ---
+  // Re-derive the active query from the REAL textarea value + caret (state can
+  // lag the DOM by a keystroke). Keeps the highlight index across keystrokes
+  // within the same token, resets it when a new token starts.
+  function syncMention() {
+    const el = textareaRef.current;
+    if (!el) { setMention(null); return; }
+    const q = mentionQueryAt(el.value, el.selectionStart ?? el.value.length);
+    setMention(prev => q
+      ? { start: q.start, query: q.query, index: prev && prev.start === q.start ? prev.index : 0 }
+      : null);
+  }
+
+  const mentionCandidates = mention
+    ? filterMentionCandidates((room?.participants ?? []).map(p => p.name), mention.query).slice(0, 6)
+    : [];
+
+  function pickMention(name: string) {
+    if (!mention) return;
+    const el = textareaRef.current;
+    const caret = el?.selectionStart ?? text.length;
+    const out = insertMention(el?.value ?? text, caret, mention.start, name);
+    setText(out.text);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const el2 = textareaRef.current;
+      if (el2) { el2.focus(); el2.setSelectionRange(out.caret, out.caret); autoGrow(el2); }
+    });
+  }
 
   // --- Share ---
   const joinUrl = `${window.location.origin}/j/${code}`;
@@ -1470,6 +1504,34 @@ export function Room() {
                     compact row below it inside the same bordered surface, so the
                     typing area is never squeezed by active buttons on mobile. */}
                 <div className="relative rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
+                {/* T-09: Slack/Teams-style in-place participant picker. Opens
+                    while the caret sits in an @token; mouse uses onMouseDown so
+                    the textarea never blurs before the pick lands. */}
+                {mention && mentionCandidates.length > 0 && (
+                  <div
+                    role="listbox"
+                    aria-label="Mention a participant"
+                    className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+                  >
+                    {mentionCandidates.map((name, i) => {
+                      const active = i === mention.index % mentionCandidates.length;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onMouseDown={e => { e.preventDefault(); pickMention(name); }}
+                          className={`flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold transition ${active ? 'bg-accent-tint text-accent' : 'text-ink hover:bg-surface-softer'}`}
+                        >
+                          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: colorForName(name) }}>{initialsFor(name)}</span>
+                          <span className="truncate">{name}</span>
+                          <span className="ml-auto flex-shrink-0 text-[11px] font-normal text-ink-faint">@{mentionToken(name)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {dictationDraft && text.trim() && (
                   <div className="mx-1 mt-1 flex items-center gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-[11px]">
                     <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft — editable. Type to revise, then Send.</span>
@@ -1492,9 +1554,18 @@ export function Room() {
                 <textarea
                   ref={textareaRef}
                   value={text}
-                  onChange={e => setText(e.target.value)}
+                  onChange={e => { setText(e.target.value); syncMention(); }}
+                  onSelect={syncMention}
+                  onBlur={() => { window.setTimeout(() => setMention(null), 150); }}
                   onPaste={e => { void handlePaste(e); }}
                   onKeyDown={e => {
+                    // T-09: while the mention picker is open it owns the keys.
+                    if (mention && mentionCandidates.length > 0) {
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setMention(m => m && { ...m, index: (m.index + 1) % mentionCandidates.length }); return; }
+                      if (e.key === 'ArrowUp') { e.preventDefault(); setMention(m => m && { ...m, index: (m.index - 1 + mentionCandidates.length) % mentionCandidates.length }); return; }
+                      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionCandidates[mention.index % mentionCandidates.length]!); return; }
+                      if (e.key === 'Escape') { e.preventDefault(); setMention(null); return; }
+                    }
                     // Enter is always a newline (host direction, 2026-07-13).
                     // Cmd/Ctrl+Enter sends on hardware keyboards.
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {

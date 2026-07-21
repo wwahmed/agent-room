@@ -23,3 +23,53 @@ export function isSelfMention(token: string, selfName: string | undefined | null
   const firstWord = self.split(/[\s(]+/, 1)[0];
   return firstWord === target;
 }
+
+// ---------- T-09: composer autocomplete ----------
+
+/** The single-word token the mention grammar inserts for a display name:
+ *  "ClaudeUI (2)" -> "ClaudeUI". */
+export function mentionToken(displayName: string): string {
+  return (displayName.trim().split(/[\s(]+/, 1)[0] ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+/**
+ * Is the caret inside an active mention query? Looks backward from the caret:
+ * an `@` at the start of a word with only name characters between it and the
+ * caret. Returns the index of the `@` and the typed query (may be empty,
+ * i.e. the user just typed `@`).
+ */
+export function mentionQueryAt(text: string, caret: number): { start: number; query: string } | null {
+  const upto = text.slice(0, caret);
+  const match = /(^|[\s(])@([A-Za-z0-9_-]*)$/.exec(upto);
+  if (!match) return null;
+  const start = caret - (match[2]?.length ?? 0) - 1;
+  return { start, query: match[2] ?? '' };
+}
+
+/** Participants whose display name matches the typed query (prefix first). */
+export function filterMentionCandidates(names: string[], query: string): string[] {
+  const q = query.toLowerCase();
+  const seen = new Set<string>();
+  const unique = names.filter(n => {
+    const k = n.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  if (!q) return unique;
+  const prefix = unique.filter(n => n.toLowerCase().startsWith(q));
+  const infix = unique.filter(n => !n.toLowerCase().startsWith(q) && n.toLowerCase().includes(q));
+  return [...prefix, ...infix];
+}
+
+/** Replace the active query with the chosen mention plus a trailing space. */
+export function insertMention(
+  text: string,
+  caret: number,
+  start: number,
+  displayName: string,
+): { text: string; caret: number } {
+  const token = `@${mentionToken(displayName)} `;
+  const next = text.slice(0, start) + token + text.slice(caret);
+  return { text: next, caret: start + token.length };
+}
