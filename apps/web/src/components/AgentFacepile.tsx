@@ -134,7 +134,9 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
         onFocus={showTip}
         onBlur={hideTip}
         aria-label={label}
-        className={`relative z-10 -m-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-xl p-1.5 transition hover:bg-surface-softer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint ${compact ? 'min-h-9 min-w-9' : ''}`}
+        // T-63's own gate caught the compact variant at 36px: the hit box holds
+        // the 44px floor at every density; -m-1.5 keeps the layout tight.
+        className="relative z-10 -m-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-xl p-1.5 transition hover:bg-surface-softer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-tint"
       >
         <span className="relative flex items-center">
           {visible.map((agent, i) => {
