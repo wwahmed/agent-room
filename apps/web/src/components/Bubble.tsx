@@ -314,13 +314,15 @@ const INLINE_PATTERN = new RegExp(
   'gi',
 );
 
-// Dark-theme tones: translucent tint + light text, so the chips read on a dark
-// bubble instead of glaring as light blocks.
+// T-14: use an opaque light swatch with very dark text. The old translucent
+// tint + `*-300` text was acceptable on dark bubbles but nearly disappeared on
+// pale sender bubbles in light mode. These pairings keep strong contrast no
+// matter which theme or participant color sits behind the chip.
 const ARTIFACT_TONE: Record<string, string> = {
-  DECISION: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30',
-  TODO:     'bg-amber-500/15 text-amber-300 ring-amber-400/30',
-  STATUS:   'bg-blue-500/15 text-blue-300 ring-blue-400/30',
-  RESULT:   'bg-violet-500/15 text-violet-300 ring-violet-400/30',
+  DECISION: 'bg-emerald-300 text-emerald-950 ring-emerald-700/40',
+  TODO:     'bg-amber-300 text-amber-950 ring-amber-700/40',
+  STATUS:   'bg-blue-300 text-blue-950 ring-blue-700/40',
+  RESULT:   'bg-violet-300 text-violet-950 ring-violet-700/40',
 };
 
 function renderInline(text: string, selfName?: string): ReactNode[] {
