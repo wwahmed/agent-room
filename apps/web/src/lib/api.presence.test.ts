@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createClient, updatePresence, appendMessage } from './api.js';
+import { createClient, updatePresence, appendMessage, removeParticipant } from './api.js';
 import type { Message, Participant } from '@agent-room/shared';
 
 // T-37: the web client must present the current memberKey on presence AND send,
@@ -133,5 +133,45 @@ describe('appendMessage — send self-heals the same way (T-37)', () => {
     expect(calls.filter(c => c.action === 'join')).toHaveLength(1);
     const sends = calls.filter(c => c.action === 'send');
     expect(sends[sends.length - 1].memberKey).toBe('FRESH');
+  });
+});
+
+describe('removeParticipant — exact authority is presented (T-06)', () => {
+  it('presents both host and member credentials for host or self removal', async () => {
+    store.set(`room:${CODE}:hostKey`, 'HOSTKEY');
+    store.set(`room:${CODE}:memberKey`, 'MEMBERKEY');
+    const { calls } = installFetch({
+      removeParticipant: () => ({ json: { room: { code: CODE } } }),
+    });
+
+    await removeParticipant(client, CODE, 'Waqas', 'Stale Agent', 'cc');
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      action: 'removeParticipant',
+      code: CODE,
+      requesterName: 'Waqas',
+      targetName: 'Stale Agent',
+      targetClient: 'cc',
+      hostKey: 'HOSTKEY',
+      memberKey: 'MEMBERKEY',
+    });
+  });
+
+  it('re-mints a stale member credential once for self-removal', async () => {
+    store.set(`room:${CODE}:memberKey`, 'STALE');
+    store.set(`room:${CODE}:self`, JSON.stringify(SELF));
+    let removeCalls = 0;
+    const { calls } = installFetch({
+      removeParticipant: () => (++removeCalls === 1 ? memberAuth : { json: { room: { code: CODE } } }),
+      join: () => ({ json: { room: {}, participant: SELF, memberKey: 'FRESH' } }),
+    });
+
+    await removeParticipant(client, CODE, 'Waqas', 'Waqas', 'web');
+
+    expect(calls.filter(c => c.action === 'join')).toHaveLength(1);
+    const removals = calls.filter(c => c.action === 'removeParticipant');
+    expect(removals).toHaveLength(2);
+    expect(removals[1].memberKey).toBe('FRESH');
   });
 });

@@ -377,13 +377,18 @@ export async function removeParticipant(
   targetName: string,
   targetClient: ClientKind,
 ): Promise<Room> {
-  const out = await call<{ room: Room }>({
+  // Host removal requires the room's host proof; self-removal requires the
+  // caller's member proof. Send both through the keyed path so either branch
+  // authenticates correctly and a stale self credential is repaired once.
+  const out = await keyedCall<{ room: Room }>((memberKey) => ({
     action: 'removeParticipant',
     code,
     requesterName,
     targetName,
     targetClient,
-  });
+    hostKey: storedHostKey(code),
+    memberKey,
+  }), code);
   return out.room;
 }
 
