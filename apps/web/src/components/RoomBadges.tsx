@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { unreadCount } from '../lib/unread.js';
 import { unreadWindowStats, type UnreadWindowStats } from '../lib/unreadWindow.js';
 
@@ -23,43 +22,32 @@ interface Props {
 }
 
 /**
- * T-25 rev2 (host: red health next to red unread reads as more unread): agent
- * health is NOT an attention badge, so it lives apart from the unread/mention
- * cluster — in the card's metadata row, with an explicit agents icon, a text
- * label, and its own muted treatment. Tapping opens the room's People panel.
+ * T-25 rev3 (host: the chip "hijacks the click on the row" and is confusing):
+ * a PASSIVE, corner-tucked indicator only. No handlers, no role, no tab stop —
+ * the row's own click always opens the chat. The word "agents" is spelled out
+ * so the count cannot be mistaken for messages, and the dot alone carries the
+ * health verdict. Diagnosis path: open the room, then the People tab.
  */
-export function AgentHealthChip({ code, agentCount = 0, agentsAllHealthy = true }: { code: string; agentCount?: number; agentsAllHealthy?: boolean }) {
-  const navigate = useNavigate();
+export function AgentHealthChip({ agentCount = 0, agentsAllHealthy = true }: { agentCount?: number; agentsAllHealthy?: boolean }) {
   if (agentCount <= 0) return null;
   const label = agentsAllHealthy
     ? `${agentCount} agent${agentCount === 1 ? '' : 's'}, all healthy`
-    : `${agentCount} agent${agentCount === 1 ? '' : 's'}, attention needed`;
+    : `${agentCount} agent${agentCount === 1 ? '' : 's'}, attention needed — check People`;
   return (
     <span
-      role="button"
-      tabIndex={0}
-      title={`${label} — tap to open People`}
-      aria-label={`${label} — open People panel`}
-      onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/r/${code}?panel=people`); }}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); navigate(`/r/${code}?panel=people`); } }}
-      className={`inline-flex flex-shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition hover:opacity-80 ${
-        agentsAllHealthy
-          ? 'border-emerald-600/30 bg-emerald-500/10 text-emerald-600'
-          : 'border-red-600/40 bg-red-500/10 text-red-600'
+      title={label}
+      aria-label={label}
+      className={`pointer-events-none ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide ${
+        agentsAllHealthy ? 'text-emerald-600/80' : 'text-red-500'
       }`}
     >
-      {/* two-heads agents glyph — clearly people, not a message count */}
-      <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
-        <path d="M6 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm5.5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM1.5 13.2c0-2.1 2-3.7 4.5-3.7s4.5 1.6 4.5 3.7v.8h-9v-.8Zm10.1.8h2.9v-.7c0-1.6-1.3-2.8-3.1-3 .7.7 1.1 1.7 1.1 2.9v.8Z" />
-      </svg>
-      {agentCount}
       <span className={`h-1.5 w-1.5 rounded-full ${agentsAllHealthy ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} aria-hidden="true" />
+      {agentCount} agent{agentCount === 1 ? '' : 's'}
     </span>
   );
 }
 
 export function RoomBadges({ code, messageCount, selfName, active = false, compact = false }: Props) {
-  const navigate = useNavigate();
   const raw = active ? 0 : unreadCount(code, messageCount, selfName);
   const [stats, setStats] = useState<UnreadWindowStats | null>(null);
 

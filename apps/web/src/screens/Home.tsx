@@ -192,7 +192,7 @@ export function Home() {
                       <span className="truncate">{r.participants} here · updated {timeAgo(updatedAt)}</span>
                       {/* T-25 rev2: health lives HERE with the room facts, not
                           in the attention cluster, so red never reads as unread. */}
-                      <AgentHealthChip code={r.code} agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
+                      <AgentHealthChip agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
                     </div>
                   </div>
                   {/* T-18/T-20: attention badges only — @mentions + refined unread. */}

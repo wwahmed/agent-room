@@ -85,7 +85,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                 </span>
                 {/* T-25 rev2: agent health sits with the room facts, visually
                     apart from the attention badges above. */}
-                <AgentHealthChip code={r.code} agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
+                <AgentHealthChip agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
               </div>
             </Link>
           );
