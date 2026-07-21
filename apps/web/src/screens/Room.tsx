@@ -2625,7 +2625,12 @@ export function Room() {
                      wrapper owns the border and focus ring. */
                   className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0 max-sm:min-w-0 max-sm:flex-1"
                 />
-                <div className="relative flex items-center gap-0.5 max-sm:flex-shrink-0">
+                {/* T-85 hotfix: NOT position:relative - the recording overlay
+                    inside VoiceButton is absolute inset-x-0 and must anchor to
+                    the full-width composer wrapper above, not this 44px tool
+                    cluster. A relative here collapsed the recorder onto the
+                    mic button and pushed its send control off-screen. */}
+                <div className="flex items-center gap-0.5 max-sm:flex-shrink-0">
                   <input
                     ref={imageInputRef}
                     type="file"

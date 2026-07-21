@@ -140,7 +140,10 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
                 here: Web Speech owns the microphone for this session. The old
                 analyser could show live bars while starving recognition on some
                 browser/device combinations. */}
-            <span className="flex h-8 flex-1 items-center justify-center gap-[3px] overflow-hidden" aria-hidden="true">
+            {/* T-85 hotfix: min-w-0 lets the waveform shrink below its bars'
+                min-content width - without it the flex row can never fit a
+                narrow viewport and the Use-draft control gets pushed out. */}
+            <span className="flex h-8 min-w-0 flex-1 items-center justify-center gap-[3px] overflow-hidden" aria-hidden="true">
               {Array.from({ length: BARS }, (_, i) => {
                 const amp = 11;
                 const h = 3 + Math.abs(Math.sin(tick * 0.6 + i * 0.7)) * amp;
