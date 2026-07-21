@@ -24,7 +24,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type BoardTask, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -72,13 +72,50 @@ function readStoredSelf(code: string): SelfIdentity | null {
 type MainTab = 'chat' | InspectorTab;
 // T-42: every tab is icon + text label — the 16px/1.5-stroke line set from the
 // T-38 charter. Icons disambiguate at a glance; the label is never dropped.
+// T-71: the switcher holds FOUR workspace destinations. Room is now Settings,
+// reached through the header overflow (and still addressable via ?panel=room)
+// — a settings page is not a sibling of the work surfaces.
 const MAIN_TABS: Array<{ key: MainTab; label: string; icon: React.ReactNode }> = [
   { key: 'chat', label: 'Chat', icon: <path d="M2 3.5h12v8H8.5L5 14v-2.5H2v-8Z" /> },
-  { key: 'people', label: 'People', icon: <><circle cx="5.5" cy="5" r="2.25" /><path d="M1.75 13c.5-2.2 2-3.5 3.75-3.5S8.75 10.8 9.25 13" /><circle cx="11.5" cy="5.5" r="1.75" /><path d="M10.9 9.6c1.6.2 2.8 1.4 3.2 3.4" /></> },
   { key: 'project', label: 'Project', icon: <><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M2 6h12" /></> },
+  { key: 'people', label: 'People', icon: <><circle cx="5.5" cy="5" r="2.25" /><path d="M1.75 13c.5-2.2 2-3.5 3.75-3.5S8.75 10.8 9.25 13" /><circle cx="11.5" cy="5.5" r="1.75" /><path d="M10.9 9.6c1.6.2 2.8 1.4 3.2 3.4" /></> },
   { key: 'outputs', label: 'Outputs', icon: <><path d="M8 1.75 14 4.5v7L8 14.25 2 11.5v-7L8 1.75Z" /><path d="M2 4.5 8 7.25l6-2.75M8 7.25v7" /></> },
-  { key: 'room', label: 'Room', icon: <><circle cx="8" cy="8" r="6" /><path d="M8 5.25v.1M8 7.5V11" /></> },
 ];
+
+// T-71 page anatomy (Notion-borrowed): every workspace destination is a PAGE
+// — title, one-sentence purpose, compact live summary, one primary action —
+// never a bare pane of rows.
+function PageScaffold({ title, purpose, summary, action, children }: {
+  title: string;
+  purpose: string;
+  summary?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="px-4 pb-8 pt-5 sm:px-6">
+      <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold tracking-tight text-ink">{title}</h2>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">{purpose}</p>
+        </div>
+        {action}
+      </header>
+      {summary && <div className="mb-4 flex flex-wrap items-center gap-2">{summary}</div>}
+      {children}
+    </section>
+  );
+}
+
+const CHIP_TONES = {
+  ok: 'border-success/30 bg-success/10 text-success',
+  warn: 'border-warning/40 bg-warning/10 text-warning',
+  quiet: 'border-border-faint bg-surface-softer text-ink-soft',
+} as const;
+
+function SummaryChip({ tone, children }: { tone: keyof typeof CHIP_TONES; children: React.ReactNode }) {
+  return <span className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${CHIP_TONES[tone]}`}>{children}</span>;
+}
 
 // T-44: People shares the facepile's presence vocabulary — green = healthy
 // (solid dot while a listen loop is armed, ring when merely heard recently),
@@ -186,6 +223,11 @@ export function Room() {
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // T-71: Offline people are collapsed out of the way by default.
+  const [showOffline, setShowOffline] = useState(false);
+  // T-71: light task pulse for the desktop contextual rail (60s cadence —
+  // the rail is a summary, ProjectPanel owns the live board).
+  const [taskPulse, setTaskPulse] = useState<BoardTask[] | null>(null);
   // Sweep 2 (T-46): Outputs artifact list can expand past the newest 8.
   const [showAllArtifacts, setShowAllArtifacts] = useState(false);
   const [ownerQuestions, setOwnerQuestions] = useState<RoomQuestion[]>([]);
@@ -217,7 +259,9 @@ export function Room() {
   const location = useLocation();
   useEffect(() => {
     const panel = new URLSearchParams(window.location.search).get('panel');
-    if (panel && MAIN_TABS.some(t => t.key === panel)) setMainTab(panel as MainTab);
+    // T-71: ?panel=room stays a durable address even though Settings left the
+    // switcher — it now opens the Settings page.
+    if (panel && (panel === 'room' || MAIN_TABS.some(t => t.key === panel))) setMainTab(panel as MainTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, location.search]);
   const selectTab = (tab: MainTab) => {
@@ -228,6 +272,18 @@ export function Room() {
     const query = params.toString();
     window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
   };
+  // T-71: poll the board lightly for the rail's project pulse.
+  useEffect(() => {
+    let cancelled = false;
+    const pull = () => {
+      getTaskBoard(createClient(), code)
+        .then(b => { if (!cancelled) setTaskPulse(b.tasks); })
+        .catch(() => { if (!cancelled) setTaskPulse(null); });
+    };
+    pull();
+    const id = window.setInterval(pull, 60_000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [code]);
   // T-64: on desktop the panels are peers of the chat rather than a side column.
   const [mainTab, setMainTab] = useState<MainTab>('chat');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1302,14 +1358,9 @@ export function Room() {
   // temporal dead zone and crashed rooms with participants in production.
   const healthById = indexHealth(health);
 
-  const peoplePanel = (
-            <div className="p-4">
-              <div className="mb-1 text-xs font-semibold uppercase text-ink-faint">Participants</div>
-              <p className="mb-3 text-sm leading-relaxed text-ink-soft">
-                Listening = inside an active listen window. Disconnected = no heartbeat for 5+ min, likely the CLI session was killed without leaving cleanly — host can remove with the × button.
-              </p>
-              <div className="space-y-2">
-                {room.participants.map(p => {
+  // T-71: People rows grouped by liveness — Active first, Needs attention
+  // (stale) next, Offline (disconnected) collapsed behind a disclosure.
+  const renderPersonRow = (p: (typeof room.participants)[number]) => {
                   const isMeHost = room.createdBy === self.name;
                   const isSelf = p.name === self.name && p.client === 'web';
                   const canKick = isMeHost && !isSelf && !ended;
@@ -1459,9 +1510,47 @@ export function Room() {
                       )}
                     </div>
                   );
-                })}
-              </div>
-            </div>
+  };
+
+  const personGroupOf = (p: (typeof room.participants)[number]) => {
+    const h = healthById.get(healthKey(p.name, p.client));
+    const s = h ? presenceView(h).state : null;
+    return s === 'stale' ? 'attention' as const : s === 'disconnected' ? 'offline' as const : 'active' as const;
+  };
+  const peopleGroups = {
+    active: room.participants.filter(p => personGroupOf(p) === 'active'),
+    attention: room.participants.filter(p => personGroupOf(p) === 'attention'),
+    offline: room.participants.filter(p => personGroupOf(p) === 'offline'),
+  };
+  const peoplePanel = (
+    <div>
+      {peopleGroups.active.length > 0 && (
+        <section aria-label="Active participants" className="mb-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Active · {peopleGroups.active.length}</h3>
+          <div className="space-y-2">{peopleGroups.active.map(renderPersonRow)}</div>
+        </section>
+      )}
+      {peopleGroups.attention.length > 0 && (
+        <section aria-label="Participants needing attention" className="mb-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-warning">Needs attention · {peopleGroups.attention.length}</h3>
+          <div className="space-y-2">{peopleGroups.attention.map(renderPersonRow)}</div>
+        </section>
+      )}
+      {peopleGroups.offline.length > 0 && (
+        <section aria-label="Offline participants">
+          <button
+            type="button"
+            onClick={() => setShowOffline(v => !v)}
+            aria-expanded={showOffline}
+            className="mb-2 flex min-h-11 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint transition hover:text-ink"
+          >
+            <span aria-hidden="true" className={`transition-transform ${showOffline ? 'rotate-90' : ''}`}>›</span>
+            Offline · {peopleGroups.offline.length}
+          </button>
+          {showOffline && <div className="space-y-2">{peopleGroups.offline.map(renderPersonRow)}</div>}
+        </section>
+      )}
+    </div>
   );
 
   const roomFooterPanel = (
@@ -1487,11 +1576,43 @@ export function Room() {
             </div>
   );
 
+  // T-71: every destination renders through the shared page anatomy.
   const renderPanel = (tab: InspectorTab) =>
-    tab === 'people' ? peoplePanel
-      : tab === 'project' ? <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
-      : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
-      : renderOutputs();
+    tab === 'people' ? (
+      <PageScaffold
+        title="People"
+        purpose="Everyone in the room and how alive their connection is."
+        summary={<>
+          <SummaryChip tone="ok">{peopleGroups.active.length} active</SummaryChip>
+          {peopleGroups.attention.length > 0 && <SummaryChip tone="warn">{peopleGroups.attention.length} need attention</SummaryChip>}
+          {peopleGroups.offline.length > 0 && <SummaryChip tone="quiet">{peopleGroups.offline.length} offline</SummaryChip>}
+        </>}
+        action={(
+          <button
+            type="button"
+            onClick={() => copyText(joinUrl, 'Invite link copied')}
+            className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90"
+          >
+            Invite
+          </button>
+        )}
+      >
+        {peoplePanel}
+      </PageScaffold>
+    ) : tab === 'project' ? (
+      <PageScaffold title="Project" purpose="The evidence-gated task board: claimed, built, submitted, verified.">
+        <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
+      </PageScaffold>
+    ) : tab === 'room' ? (
+      <PageScaffold title="Settings" purpose="Room identity, access, reply mode, and lifecycle.">
+        {roomInfoPanel}
+        {roomFooterPanel}
+      </PageScaffold>
+    ) : (
+      <PageScaffold title="Outputs" purpose="Deliverables, artifacts, and minutes this room has produced.">
+        {renderOutputs()}
+      </PageScaffold>
+    );
 
   const headerAgents = activeRoom.participants
     .filter(participant => participant.client === 'cc')
@@ -1592,27 +1713,22 @@ export function Room() {
           </div>
         )}
 
-        {/* T-64 (host: "make all tabs peers of the chat") + T-30 (host: room
-            navigation must be obvious on the PHONE too, with readable labels).
-            The Chat/People/Project/Outputs/Room bar now shows at every width —
-            text labels, horizontally scrollable when narrow, never icon-only.
-            The header people icon still opens the slide-over sheet as a
-            shortcut, but the tabs are the primary navigation everywhere. */}
-        {/* T-42: proper tablist semantics + icon-and-label tabs; selecting a
-            tab rewrites ?panel= so every panel is a durable address. */}
-        <div role="tablist" aria-label="Room sections" className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-faint bg-surface px-3 sm:px-5">
+        {/* T-71 (design lead ruling): the thin underlined tab band is replaced
+            by a compact WORKSPACE SWITCHER — four destinations as filled
+            44px segments, no fifth tab, no horizontal scroll, no sliver.
+            Settings (formerly the Room tab) lives in the header overflow.
+            T-42's durable ?panel= addresses are unchanged. */}
+        <div role="tablist" aria-label="Workspace sections" className="flex flex-shrink-0 items-center gap-1 border-b border-border-faint bg-surface px-3 py-1.5 sm:px-5">
           {MAIN_TABS.map(t => (
             <button
               key={t.key}
               role="tab"
               aria-selected={mainTab === t.key}
               onClick={() => selectTab(t.key)}
-              // Gate finding (the Waqas screenshot): five tabs must FIT 390px
-              // — icons yield below sm and padding tightens so no tab clips.
-              className={`room-tab-label -mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-1.5 font-semibold transition sm:px-3 ${
+              className={`room-tab-label flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-semibold transition sm:flex-none sm:px-4 ${
                 mainTab === t.key
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-ink-soft hover:text-ink'
+                  ? 'bg-accent-tint text-accent'
+                  : 'text-ink-soft hover:bg-surface-softer hover:text-ink'
               }`}
             >
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="hidden sm:block">
@@ -1621,6 +1737,11 @@ export function Room() {
               {t.label}
             </button>
           ))}
+          {mainTab === 'room' && (
+            <span role="tab" aria-selected="true" className="room-tab-label flex min-h-11 items-center gap-1.5 rounded-lg bg-accent-tint px-3 font-semibold text-accent sm:px-4">
+              Settings
+            </span>
+          )}
         </div>
 
         {/* T-30: a non-chat tab owns the pane at EVERY width now, not just lg. */}
@@ -1630,7 +1751,10 @@ export function Room() {
           </div>
         )}
 
-        <div className={`min-h-0 flex-1 flex-col ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
+        {/* T-71: on xl+ the chat pairs with a contextual rail — the reading
+            measure stays deliberate while the canvas carries live context. */}
+        <div className={`min-h-0 flex-1 ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
 
             <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="flex-1 overflow-y-auto py-4 relative">
               {/* T-48: center a generous conversation rail on wide desktops.
@@ -2124,6 +2248,58 @@ export function Room() {
                 </div>
               </div>
             )}
+        </div>
+        <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 overflow-y-auto border-l border-border-faint bg-surface px-4 py-5 xl:flex">
+          <section aria-label="Active agents">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
+            <div className="space-y-2">
+              {headerAgents.slice(0, 6).map(a => (
+                <div key={a.name} className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-bold text-white" style={{ backgroundColor: a.color }} aria-hidden="true">{a.initials}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{a.name}</span>
+                  <span className={`flex flex-shrink-0 items-center ${STATE_TONE_PRESENCE[a.state].text}`} title={a.state}>{presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}</span>
+                </div>
+              ))}
+              {headerAgents.length === 0 && <p className="text-[13px] text-ink-soft">No agents connected yet.</p>}
+            </div>
+          </section>
+          {taskPulse && taskPulse.length > 0 && (() => {
+            const doneCount = taskPulse.filter(t => t.state === 'done').length;
+            const reviewCount = taskPulse.filter(t => t.state === 'awaiting_review').length;
+            return (
+              <section aria-label="Project pulse">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
+                <div className="rounded-lg border border-border-faint bg-surface-softer p-3">
+                  <div className="text-sm font-semibold text-ink">{doneCount} of {taskPulse.length} verified</div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border-faint">
+                    <div className="h-full rounded-full bg-success transition-all" style={{ width: `${Math.round((doneCount / taskPulse.length) * 100)}%` }} />
+                  </div>
+                  <p className="mt-2 text-[12px] text-ink-soft">{taskPulse.length - doneCount} open · {reviewCount} awaiting review</p>
+                  <button type="button" onClick={() => selectTab('project')} className="mt-1 flex min-h-11 items-center text-[13px] font-semibold text-accent transition hover:opacity-80">
+                    Open Project
+                  </button>
+                </div>
+              </section>
+            );
+          })()}
+          <section aria-label="Recent outputs">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
+            {artifacts.length > 0 ? (
+              <ul className="space-y-1.5">
+                {artifacts.slice(-3).reverse().map(a => (
+                  <li key={a.id} className="truncate text-[13px] text-ink-soft" title={a.text}>
+                    <span className="font-semibold text-ink">{a.author}</span> · {a.text.slice(0, 60)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-ink-soft">Nothing produced yet.</p>
+            )}
+            <button type="button" onClick={() => selectTab('outputs')} className="mt-1 flex min-h-11 items-center text-[13px] font-semibold text-accent transition hover:opacity-80">
+              Open Outputs
+            </button>
+          </section>
+        </aside>
         </div>
       </main>
 
