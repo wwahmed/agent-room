@@ -95,10 +95,8 @@ body {
 /* T-39 foundation primitives. Feature tasks may compose these with layout
    utilities, but the product's control/card/sheet geometry stays consistent. */
 @layer components {
-  /* T-70: THE message prose class — one semantic owner for transcript body
-     type instead of per-callsite pixel utilities (the placebo-fix lesson:
-     a global clamp missed the real 13px path entirely). Desktop 15px, phones
-     step to 17px; full-ink for contrast; strong at 600 stays subordinate. */
+  /* T-74: semantic reading roles own the mobile scale. These are deliberately
+     comfortable defaults, not minimum browser-zoom workarounds. */
   .msg-prose {
     font-size: 15px;
     font-weight: 400;
@@ -108,26 +106,37 @@ body {
   }
   .msg-prose strong { font-weight: 600; color: rgb(var(--ink)); }
   @media (max-width: 639px) {
-    .msg-prose { font-size: 18px; line-height: 1.55; }
+    .msg-prose { font-size: 20px; line-height: 1.55; }
   }
-  /* T-70 (TechLead's locked ramp): the author line is the identity anchor —
-     13px/600 desktop, 16px/600 on phones. In dark mode names render FULL
-     NEUTRAL INK, never the raw sender color: chromatic small text on
-     near-black is a legibility lottery; identity color lives in the avatar.
-     The !important is deliberate — it must beat the inline sender-color
-     style, which stays for light mode where the darker variants pass AA. */
+  /* Identity is text, not decoration. Sender color lives in the avatar. */
   .msg-author {
     font-size: 13px;
     font-weight: 600;
     line-height: 1.3;
+    color: rgb(var(--ink));
   }
-  /* Both themes: light-mode sender purple measured 4.23:1 on white at
-     16px/600 — under the 4.5 bar. One rule, no lottery. */
-  .msg-author {
-    color: rgb(var(--ink)) !important;
+  .msg-meta {
+    font-size: 12px;
+    line-height: 1.3;
+    color: rgb(var(--ink-faint));
+  }
+  .msg-composer {
+    font-size: 16px;
+    line-height: 1.5;
+    color: rgb(var(--ink));
+  }
+  .msg-composer::placeholder {
+    color: rgb(var(--ink-soft));
+    opacity: 1;
+  }
+  .room-tab-label {
+    font-size: 14px;
   }
   @media (max-width: 639px) {
-    .msg-author { font-size: 16px; }
+    .msg-author { font-size: 18px; font-weight: 700; }
+    .msg-meta { font-size: 15px; }
+    .msg-composer { font-size: 20px; }
+    .room-tab-label { font-size: 17px; }
   }
 
   .ui-control {

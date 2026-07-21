@@ -1589,7 +1589,7 @@ export function Room() {
               onClick={() => selectTab(t.key)}
               // Gate finding (the Waqas screenshot): five tabs must FIT 390px
               // — icons yield below sm and padding tightens so no tab clips.
-              className={`-mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-2 text-[16px] font-semibold transition sm:px-3 sm:text-[14px] ${
+              className={`room-tab-label -mb-px flex min-h-11 items-center gap-1.5 border-b-2 px-1.5 font-semibold transition sm:px-3 ${
                 mainTab === t.key
                   ? 'border-accent text-accent'
                   : 'border-transparent text-ink-soft hover:text-ink'
@@ -1979,15 +1979,16 @@ export function Room() {
                     }
                   }}
                   aria-label="Message the room. Enter sends; Shift or Control plus Enter adds a new line."
-                  placeholder={IS_TOUCH ? 'Message the room… Enter sends' : 'Message the room… (Enter sends · Shift/Ctrl+Enter adds line)'}
+                  placeholder="Message…"
                   rows={1}
                   style={{
                     height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
                     maxHeight: composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT,
                   }}
-                  /* text-base = 16px: anything smaller makes iOS Safari zoom in on focus.
-                     Borderless — the wrapper owns the border and focus ring now. */
-                  className="w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 text-base leading-relaxed outline-none focus:ring-0"
+                  /* T-74: the semantic composer role keeps typed and placeholder
+                     text readable at physical phone scale. Borderless — the
+                     wrapper owns the border and focus ring. */
+                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0"
                 />
                 <div className="relative flex items-center gap-0.5">
                   <input

@@ -41,3 +41,18 @@ describe(`type floor — no arbitrary text size below ${FLOOR_PX}px`, () => {
     expect(offenders, `sub-${FLOOR_PX}px type found:\n${offenders.join('\n')}`).toEqual([]);
   });
 });
+
+describe('T-74 mobile reading contract', () => {
+  const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+  const room = readFileSync(new URL('../screens/Room.tsx', import.meta.url), 'utf8');
+
+  it('pins the readable phone roles and the real typed composer path', () => {
+    expect(css).toContain('.msg-prose { font-size: 20px; line-height: 1.55; }');
+    expect(css).toContain('.msg-author { font-size: 18px; font-weight: 700; }');
+    expect(css).toContain('.msg-meta { font-size: 15px; }');
+    expect(css).toContain('.msg-composer { font-size: 20px; }');
+    expect(css).toContain('.room-tab-label { font-size: 17px; }');
+    expect(room).toContain('className="msg-composer w-full');
+    expect(room).toContain('placeholder="Message…"');
+  });
+});

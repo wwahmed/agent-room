@@ -232,7 +232,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
-          <div className="mt-1 text-right text-[12px] leading-none text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
+          <div className="msg-meta mt-1 text-right leading-none" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
         </div>
       </div>
     );
@@ -279,13 +279,13 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
             top corner, and is legible-sized. */}
         <div className={`absolute -top-1 -left-2 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-lg' : 'rounded-full'}`}>
-          <SenderAvatar message={message} brand={senderBrand} sizeClass="h-7 w-7" textClass="text-[12px]" />
+          <SenderAvatar message={message} brand={senderBrand} sizeClass="h-8 w-8 sm:h-7 sm:w-7" textClass="text-[13px] sm:text-[12px]" />
         </div>
-        <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
-          <span className="msg-author" style={{ color: message.color }}>{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
-          {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
-          {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
-          <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
+        <div className="flex items-start gap-x-2 pl-10 pr-3 pt-2">
+          <span className="msg-author min-w-0 flex-1 break-words">{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
+          {ambiguous && <span className="msg-meta shrink-0">{message.client}</span>}
+          {message.role && <span className="msg-meta hidden truncate sm:inline">{message.role}</span>}
+          <span className="msg-meta shrink-0 whitespace-nowrap" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
           <MessageMenu message={message} onReply={onReply} />
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
