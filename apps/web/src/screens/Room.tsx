@@ -1715,15 +1715,16 @@ export function Room() {
               )}
               </div>
 
-              {/* T-48: pinned jump-to-latest pill; only while scrolled up with
-                  unseen arrivals, so the reader never loses their reading spot. */}
-              {/* T-65 (host: "an easy way to go to bottom"): whenever he's scrolled
-                  up, getting back to live is always one tap — with the count on it
-                  when there's something new. The old pill only appeared if messages
-                  arrived while he was away, so reading back through history left
-                  him to scroll all the way down by hand. */}
+            </div>
+
+              {/* T-48/T-65: jump-to-latest, one tap back to live whenever he's
+                  scrolled up, with the count when there's something new. */}
+              {/* T-72 ruling: this is a dedicated layout LANE between feed and
+                  composer, not a sticky overlay — an Activity Note (or any
+                  message) structurally cannot exist behind these controls in
+                  any scroll state. */}
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
-                <div data-gate="floating" className="sticky bottom-4 z-20 flex w-full items-center justify-center gap-2">
+                <div data-gate="floating" className="flex w-full items-center justify-center gap-2 px-4 py-1.5">
                   {(unseenCount > 0 || !atBottom) && (
                     <button
                       type="button"
@@ -1769,7 +1770,6 @@ export function Room() {
                   )}
                 </div>
               )}
-            </div>
 
             {ended ? (
               // A1: ended-room CTA pivots from "Reactivate-only" to a primary

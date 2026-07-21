@@ -176,6 +176,25 @@ STATES.push({
     await p.waitForTimeout(600);
   },
 });
+// T-72 ruling: the scrolled-up reading state — the jump-to-latest lane VISIBLE
+// — is a required capture. The lane is layout, not overlay, so every geometry
+// rule (notably floating-vs-status-note and floating-vs-composer) must hold
+// here too. Review finding: asserting only the rest state where the pill is
+// gone was a false negative.
+STATES.push({
+  name: 'fixture-up',
+  path: FIXTURE_ROOM ? `/r/${FIXTURE_ROOM}` : '/r/NON-EXI-STENT',
+  ready: async p => {
+    await p.waitForSelector('textarea', { timeout: 15000 });
+    await p.getByText('Rapid fixture message 6').first().waitFor({ timeout: 8000 });
+    await p.waitForTimeout(1200);
+    await p.evaluate(() => {
+      const el = document.querySelector('[data-gate="feed"]');
+      if (el) el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 400);
+    });
+    await p.waitForTimeout(600);
+  },
+});
 
 const EXPECTED = enumerateFrames(STATES.map(s => s.name), VIEWPORTS.map(v => v.tag), THEMES);
 let capturedFrames = 0;
