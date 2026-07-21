@@ -50,8 +50,17 @@ export function createClient(env: UpstashEnv): UpstashClient {
       return out.result;
     },
     async pipeline<T>(cmds: readonly (readonly (string | number)[])[]): Promise<T[]> {
-      const out = (await post('/pipeline', cmds)) as Array<{ result: T }>;
-      return out.map(x => x.result);
+      const out = (await post('/pipeline', cmds)) as Array<{ result?: T; error?: string }>;
+      // A pipeline response can carry a PER-COMMAND {error} while the HTTP
+      // call succeeds. Swallowing those (mapping only .result) let a failed
+      // write pass silently — surface the first item error as a real throw.
+      for (let i = 0; i < out.length; i++) {
+        const item = out[i];
+        if (item && typeof item === 'object' && 'error' in item && item.error) {
+          throw new UpstashError(`pipeline[${i}] ${String(cmds[i]?.[0] ?? '?')}: ${item.error}`);
+        }
+      }
+      return out.map(x => x.result as T);
     },
   };
 }

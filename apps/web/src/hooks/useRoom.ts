@@ -261,9 +261,11 @@ export function useRoom(code: string, selfName: string) {
       });
       return older.length;
     } catch {
-      // Non-fatal: the reader keeps the window they have; scrolling retries.
+      // Non-fatal for scrolling (the reader keeps their window and retries),
+      // but callers that page programmatically (the source seek) need to
+      // SEE the failure: -1 = the fetch failed, distinct from "no page".
       setState(s => ({ ...s, loadingOlder: false }));
-      return 0;
+      return -1;
     } finally {
       loadingOlderRef.current = false;
     }

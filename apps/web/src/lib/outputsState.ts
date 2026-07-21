@@ -46,9 +46,15 @@ export type SeekAction = 'found' | 'load-more' | 'wait' | 'give-up-trimmed' | 'g
 /** One decision step of the source-seek loop (rev17 item 5: the loop must
  *  be BOUNDED — repeated loadOlder failures with hasOlder stuck true would
  *  otherwise retry forever). */
-export function seekStep(found: boolean, hasOlder: boolean, loadingOlder: boolean, attempts: number, maxAttempts = 60): SeekAction {
+export function seekStep(found: boolean, hasOlder: boolean, loadingOlder: boolean, attempts: number, maxAttempts: number): SeekAction {
   if (found) return 'found';
   if (attempts >= maxAttempts) return 'give-up-error';
   if (!hasOlder) return 'give-up-trimmed';
   return loadingOlder ? 'wait' : 'load-more';
+}
+
+/** The seek's page budget is the room's ACTUAL retained history, not a
+ *  blind retry count: total messages over the page size, plus slack. */
+export function seekPageBudget(messageTotal: number, pageSize: number): number {
+  return Math.ceil(Math.max(1, messageTotal) / Math.max(1, pageSize)) + 2;
 }

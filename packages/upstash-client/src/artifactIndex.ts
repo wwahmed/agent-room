@@ -76,10 +76,12 @@ export async function ensureArtifactIndex(client: UpstashClient, code: string): 
     const fresh = extractArtifacts(retained).filter(a => !existing.has(a.id));
     const kept = legacy.filter(a => !retainedIds.has(a.sourceMessageId) && !existing.has(a.id));
     const additions = [...kept, ...fresh];
-    await client.pipeline([
-      ...(additions.length ? artifactAppendCommands(code, additions) : []),
-      ['SET', artifactBackfillKey(code), ARTIFACT_INDEX_VERSION, 'EX', ROOM_TTL_SECONDS],
-    ]);
+    // Additions FIRST, marker SECOND, in separate steps: a failed addition
+    // throws (the client surfaces per-command pipeline errors), the marker
+    // stays absent, and the next ensure repairs the merge. The marker can
+    // never record a completion the additions didn't earn.
+    if (additions.length) await client.pipeline(artifactAppendCommands(code, additions));
+    await client.command(['SET', artifactBackfillKey(code), ARTIFACT_INDEX_VERSION, 'EX', ROOM_TTL_SECONDS]);
     return { pending: false };
   } finally {
     // Atomic compare-and-delete: one EVAL, no GET/DEL window.

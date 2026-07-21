@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ClipboardEvent, type DragEvent } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useRoom } from '../hooks/useRoom.js';
+import { OLDER_PAGE_SIZE, useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
@@ -41,7 +41,7 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, outputsViewState, railSectionCount, seekStep, type ArtifactFetchState } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, railSectionCount, seekPageBudget, seekStep, type ArtifactFetchState } from '../lib/outputsState.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
@@ -300,6 +300,9 @@ export function Room() {
   // trimmed the source, say so honestly instead of doing nothing.
   const [sourceSeekId, setSourceSeekId] = useState<number | null>(null);
   const seekAttemptsRef = useRef(0);
+  // Room change must not spill an interrupted seek's paging state into the
+  // next room (rev18 review).
+  useEffect(() => { setSourceSeekId(null); seekAttemptsRef.current = 0; }, [code]);
   useEffect(() => {
     if (sourceSeekId == null) return;
     const action = seekStep(
@@ -307,6 +310,7 @@ export function Room() {
       hasOlder,
       loadingOlder,
       seekAttemptsRef.current,
+      seekPageBudget(messageTotal, OLDER_PAGE_SIZE),
     );
     if (action === 'found') {
       setSourceSeekId(null);
@@ -338,7 +342,17 @@ export function Room() {
           : 'Couldn\u2019t load enough history to reach the source message. Try again.', 'error'));
     } else if (action === 'load-more') {
       seekAttemptsRef.current += 1;
-      void loadOlder();
+      void loadOlder().then(result => {
+        // A FAILED page (-1, distinct from an empty one) stops the seek on
+        // the spot with the honest toast — no blind network retries; the
+        // user retries from the card (rev18 review).
+        if (result === -1) {
+          setSourceSeekId(null);
+          seekAttemptsRef.current = 0;
+          void import('../components/Toast.js').then(({ showToast }) =>
+            showToast('Couldn\u2019t load older history to reach the source. Tap View in chat to retry.', 'error'));
+        }
+      });
     } // 'wait': a page is already in flight
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceSeekId, messages, hasOlder, loadingOlder]);
@@ -2596,6 +2610,7 @@ export function Room() {
                 now={now}
                 onOpenSource={messageId => {
                   selectTab('chat');
+                  seekAttemptsRef.current = 0;
                   setSourceSeekId(messageId);
                 }}
               />

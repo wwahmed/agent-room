@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, seekStep } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, seekPageBudget, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -30,17 +30,18 @@ describe('outputs view state (rev15 failure modes)', () => {
   });
 });
 
-describe('seekStep (rev17: bounded source seek)', () => {
+describe('seekStep (rev17/18: bounded, budgeted source seek)', () => {
   it('finds, waits, and pages in the normal path', () => {
-    expect(seekStep(true, true, false, 3)).toBe('found');
-    expect(seekStep(false, true, true, 3)).toBe('wait');
-    expect(seekStep(false, true, false, 3)).toBe('load-more');
+    expect(seekStep(true, true, false, 3, 10)).toBe('found');
+    expect(seekStep(false, true, true, 3, 10)).toBe('wait');
+    expect(seekStep(false, true, false, 3, 10)).toBe('load-more');
   });
   it('a trimmed source gives up honestly', () => {
-    expect(seekStep(false, false, false, 3)).toBe('give-up-trimmed');
+    expect(seekStep(false, false, false, 3, 10)).toBe('give-up-trimmed');
   });
-  it('repeated failures are BOUNDED: attempts exhaust into an explicit error', () => {
-    expect(seekStep(false, true, false, 60)).toBe('give-up-error');
-    expect(seekStep(false, true, true, 999)).toBe('give-up-error');
+  it('the budget is the room\u2019s real page count, and exhausting it is an explicit error', () => {
+    expect(seekPageBudget(500, 80)).toBe(9);
+    expect(seekPageBudget(0, 80)).toBe(3);
+    expect(seekStep(false, true, false, 9, seekPageBudget(500, 80))).toBe('give-up-error');
   });
 });

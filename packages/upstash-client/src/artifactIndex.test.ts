@@ -321,3 +321,36 @@ describe('T-71 durable index — rev17 review items', () => {
     expect(await client.command(['GET', key])).toBe('successor-token');
   });
 });
+
+describe('T-71 durable index — rev18 review items', () => {
+  it('a failed addition NEVER records completion: marker absent, retry repairs', async () => {
+    const client = listMemoryClient();
+    const code = 'dur-fix-six';
+    await createRoom(client, { code, topic: 'Marker fixture', createdBy: 'GateA' });
+    await joinRoom(client, code, { name: 'GateA', role: '', color: '#000', initials: 'GA', client: 'cc', joinedAt: 1, lastSeenAt: 1 });
+    await appendMessage(client, code, msg(1, '[DECISION] Must survive a failed merge write.'));
+    await client.command(['DEL', artifactsKey(code)]); // pre-v2 world
+
+    let failNextArtifactWrite = true;
+    const flaky: UpstashClient = {
+      command: (c: readonly (string | number)[]) => client.command(c as never),
+      pipeline: async (cs: readonly (readonly (string | number)[])[]) => {
+        // Simulate a per-command {error} on the artifact RPUSH surfaced as a
+        // throw (the real client now throws on pipeline item errors).
+        if (failNextArtifactWrite && cs.some(c => String(c[0]).toUpperCase() === 'RPUSH' && String(c[1]).startsWith('room-artifacts-v2:'))) {
+          failNextArtifactWrite = false;
+          throw new Error('pipeline[0] RPUSH: WRONGTYPE simulated');
+        }
+        return client.pipeline(cs as never);
+      },
+    } as UpstashClient;
+
+    await expect(ensureArtifactIndex(flaky, code)).rejects.toThrow('WRONGTYPE');
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBeNull();
+    // Healthy retry repairs the merge and only then records completion.
+    const r = await ensureArtifactIndex(client, code);
+    expect(r.pending).toBe(false);
+    expect(await listRoomArtifacts(client, code)).toHaveLength(1);
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBe(ARTIFACT_INDEX_VERSION);
+  });
+});
