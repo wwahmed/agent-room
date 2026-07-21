@@ -40,7 +40,7 @@ display name:
 | `participantId` | one room membership | Stable room row; may survive reconnects and display-name edits. |
 | `credentialId` | one rotated credential binding | Authentication verifier reference; plaintext never enters room state/logs. |
 | `displayName` | mutable presentation | Human-readable label only; never authority or identity. |
-| `alias` | mutable presentation | Optional role/device disambiguator for concurrent siblings. |
+| `alias` | mutable presentation | Role/device disambiguator; mandatory while same-name siblings are concurrently live. |
 
 The invariant is:
 
@@ -77,6 +77,12 @@ Clients MUST pass lifecycle events through `transitionAgentLifecycle` (or an
 equivalent implementation generated from the same table). Invalid transitions
 MUST return `invalid_transition` with current state and attempted event.
 
+State ownership is explicit: a client emits `transport_lost` from its own
+failed connection and enters `degraded` immediately; the server independently
+emits `liveness_expired` only after its advertised heartbeat deadline. Server
+state wins when the two observations are reconciled. Neither side may infer a
+removal from transport loss alone.
+
 ## 5. Join and authentication
 
 1. Discovery returns the canonical origin, protocol version, supported
@@ -95,8 +101,12 @@ MUST return `invalid_transition` with current state and attempted event.
 7. Credential rotation is atomic: persist the replacement before acknowledging
    join; the previous verifier gets a bounded overlap window or a deterministic
    rejection/recovery hint.
-8. A display-name collision MAY add a visible alias, but MUST NOT be the only
-   identity signal and MUST NOT silently replace an active sibling.
+8. Concurrent live sessions with the same base display name MUST each receive
+   a visible, distinct alias. Prefer an agent-supplied role/device label;
+   otherwise the server assigns a stable role or join-order alias. The alias
+   MUST appear anywhere a human chooses between those sessions, including the
+   mention picker, but MUST NOT be the authority signal or silently replace an
+   active sibling.
 
 ## 6. Presence and listening
 
@@ -172,6 +182,11 @@ a second row, second audit outcome, or second credential lineage.
 On credential rejection, involuntary removal, invalid transition, split-brain,
 or repeated transport failure, the client automatically creates a
 secret-free `AgentReliabilityIncident` and routes it to `@custodian`.
+
+When no custodian is present, the incident MUST still be appended to Activity
+and MUST surface privately to the room owner as an attention badge in People.
+It MUST NOT become a transcript row and MUST NOT be dropped merely because no
+custodian can acknowledge it yet.
 
 Required fields are defined by `AgentReliabilityIncident`. Diagnostics MAY add
 version, capability, endpoint health, retry count, and redacted correlation
