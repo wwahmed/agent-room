@@ -203,13 +203,15 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   if (isStatusPing(message)) {
     return (
       <div id={`msg-${message.id}`} className="flex justify-center px-4 py-0.5" title={exactTime(message.time)}>
-        {/* T-30 fix: the tag and name are flex-shrink-0/nowrap — without that,
-            long ping text squeezed them into letter-per-line columns
-            ("ST/AT/US") on wide desktop views. 12px floor per the UX spec. */}
-        <div className="flex max-w-[90%] items-baseline gap-1.5 rounded-md border border-border-faint bg-surface-softer px-2.5 py-1 text-[12px] leading-snug text-ink-faint [overflow-wrap:anywhere]">
-          <span className="flex-shrink-0 whitespace-nowrap rounded bg-black/10 px-1 py-0.5 text-[12px] font-bold text-ink-soft" aria-label="Status update">Status</span>
+        {/* T-20 rev2 per the UX review: one quiet line — labels are
+            shrink-proof/nowrap, overflow-wrap lives ONLY on the wrapping text
+            span, chip uses real theme tokens (bg-black/10 vanished on dark),
+            relative time closes the line. */}
+        <div className="flex max-w-[90%] items-baseline gap-1.5 rounded-md border border-border-faint bg-surface-softer px-2.5 py-1 text-[12px] leading-snug text-ink-soft">
+          <span className="flex-shrink-0 whitespace-nowrap rounded border border-border-faint bg-surface px-1 py-0.5 text-[12px] font-semibold text-ink-soft" aria-label="Status update">Status</span>
           <span className="flex-shrink-0 whitespace-nowrap font-semibold" style={{ color: message.color }}>{message.name}</span>
-          <span className="min-w-0">{message.text}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">{message.text}</span>
+          <span className="flex-shrink-0 whitespace-nowrap text-ink-faint">{messageTime(message.time, now)}</span>
         </div>
       </div>
     );
@@ -224,11 +226,10 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} onDark />}
-          {/* T-30 (host: desktop text "SHOUTING"): 16px is a phone reading
-              size; desktop settles at 14px, Slack-adjacent, above the 12px
-              floor. */}
+          {/* T-30 rev3 per UX: the SHOUTING was the measure, not the glyphs —
+              cap the line length at ~68ch and keep 15-16px type. */}
           {body.trim() && (
-            <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75] lg:text-[14px]">
+            <div className="max-w-[68ch] text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
               <MessageText text={body} selfName={selfName} />
             </div>
           )}
@@ -255,9 +256,9 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // mobile.
   const rowClass = 'group relative pl-4 pr-10 sm:pr-16';
   const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-2xl border sm:max-w-[86%] [overflow-wrap:anywhere]';
-  // T-30: 16px mobile, 15px tablet, 14px desktop (host: bigger desktop type
-  // read as shouting). All comfortably above the UX-mandated 12px floor.
-  const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6] lg:text-[14px]';
+  // T-30 rev3 per UX: keep 15-16px glyphs; the readability lever is the
+  // MEASURE — text columns cap at ~68ch (45-75ch optimum) below.
+  const bodyText = 'max-w-[68ch] text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.

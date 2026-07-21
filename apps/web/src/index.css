@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* T-30 rev3 (UX: bold-on-dark glare). Dark is the :root default, where pure
+   weight-700 strong text blooms against dark surfaces — agent posts lean hard
+   on bold lead-ins. Strong drops to 600 on dark and keeps 700 in light. */
+@layer base {
+  strong { font-weight: 600; }
+  :root[data-theme='light'] strong { font-weight: 700; }
+}
+
 /* T-43 theme palette. Tokens are space-separated RGB channels so Tailwind's
    alpha modifiers keep working via rgb(var(--x) / <alpha-value>) in the config.
    Dark is the default (:root); light is a [data-theme='light'] override. The

@@ -15,9 +15,12 @@ interface Props {
   inspectorOpen: boolean;
   onShare: () => void;
   onToggleInspector: () => void;
+  /** T-18 rev2 (UX: "park the entry point in the header next to the room
+   *  title"): the mention navigation cluster, rendered after the title. */
+  mentionNav?: React.ReactNode;
 }
 
-export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare, onToggleInspector }: Props) {
+export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare, onToggleInspector, mentionNav }: Props) {
   const presence = ended
     ? 'Meeting ended'
     : `${room.participants.length} here${listeningCount > 0 ? ` · ${listeningCount} listening` : ''}`;
@@ -38,7 +41,10 @@ export function RoomHeader({ room, ended, listeningCount, inspectorOpen, onShare
         </svg>
       </Link>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[17px] font-semibold leading-tight">{room.topic}</div>
+        <div className="flex items-center gap-2">
+          <div className="truncate text-[17px] font-semibold leading-tight">{room.topic}</div>
+          {mentionNav}
+        </div>
         <div className={`truncate text-[12px] leading-tight ${ended ? 'font-semibold text-red-400' : 'text-ink-faint'}`}>{presence}</div>
       </div>
       <ThemeToggle className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-softer hover:text-ink" />

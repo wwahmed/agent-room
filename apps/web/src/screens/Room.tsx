@@ -224,6 +224,9 @@ export function Room() {
   const prevLastIdRef = useRef<number | null>(null);
   const prependAnchorRef = useRef<{ heightBefore: number; topBefore: number } | null>(null);
   const [unseenCount, setUnseenCount] = useState(0);
+  // T-18 rev2 (UX): the navigator earns screen space only for UNSEEN mentions
+  // that arrived while scrolled up — never a lifetime count.
+  const [unseenMentions, setUnseenMentions] = useState(0);
   // T-65: is the reader parked at the bottom? (ref drives logic, state drives the
   // jump-to-bottom button's visibility.)
   const [atBottom, setAtBottom] = useState(true);
@@ -568,6 +571,7 @@ export function Room() {
     if (el) el.scrollTo({ top: el.scrollHeight });
     markRoomRead(code, messageTotal, self?.name);
     setUnseenCount(0);
+    setUnseenMentions(0);
   }
 
   function onFeedScroll() {
@@ -581,6 +585,7 @@ export function Room() {
       // above cannot observe this transition. Persist it here immediately.
       markRoomRead(code, messageTotal, self?.name);
       setUnseenCount(0);
+      setUnseenMentions(0);
     }
     // T-04: nearing the top pulls the previous history page. Anchor the current
     // scroll geometry first so the prepend adjustment below can hold the
@@ -626,9 +631,12 @@ export function Room() {
 
     // T-16 excludes your own messages; T-20 also excludes stamped status pings
     // so heartbeat noise never inflates the "N new messages" pill.
-    const appendedUnread = appended > 0
-      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name) && !isStatusPing(message)).length
-      : 0;
+    const appendedTail = appended > 0
+      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name) && !isStatusPing(message))
+      : [];
+    const appendedUnread = appendedTail.length;
+    // T-18 rev2: mentions among the unseen tail drive the navigator.
+    const appendedMentions = appendedTail.filter(message => textMentionsSelf(message.text ?? '', self?.name)).length;
 
     if (prevLenRef.current === 0 && len > 0) {
       const target = firstUnreadIdRef.current;
@@ -645,8 +653,10 @@ export function Room() {
     } else if (appended > 0 && atBottomRef.current) {
       feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
       setUnseenCount(0);
+      setUnseenMentions(0);
     } else if (appendedUnread > 0) {
       setUnseenCount((n) => n + appendedUnread);
+      if (appendedMentions > 0) setUnseenMentions((n) => n + appendedMentions);
     }
     prevLenRef.current = len;
     prevLastIdRef.current = len > 0 ? messages[len - 1]!.id : null;
@@ -1376,6 +1386,42 @@ export function Room() {
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}
           onToggleInspector={() => setInspectorOpen(v => !v)}
+          mentionNav={selfMentionIds.length > 0 ? (
+            // T-18 rev2: the standing prev/next entry point, parked by the
+            // title per the UX spec. Quiet by default; amber only while unseen
+            // mentions exist. 44px targets, explicit labels.
+            (() => {
+              const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
+              const tone = unseenMentions > 0 ? 'text-amber-500' : 'text-ink-soft';
+              return (
+                <span role="group" aria-label="Step through mentions of you" className="flex flex-shrink-0 items-center">
+                  <button
+                    type="button"
+                    onClick={() => gotoMention(-1)}
+                    disabled={mentionSeeking}
+                    aria-label="Previous mention of you"
+                    title="Previous mention of you"
+                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[13px] font-bold transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
+                  >
+                    @↑
+                  </button>
+                  <span className={`text-[12px] font-semibold tabular-nums ${tone}`} aria-hidden="true">
+                    {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => gotoMention(1)}
+                    disabled={mentionSeeking}
+                    aria-label="Next mention of you"
+                    title="Next mention of you"
+                    className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[13px] font-bold transition hover:bg-surface-softer disabled:opacity-50 ${tone}`}
+                  >
+                    @↓
+                  </button>
+                </span>
+              );
+            })()
+          ) : undefined}
         />
 
         {/* T-07: mid-session poll failures surface as this quiet strip while the
@@ -1519,40 +1565,36 @@ export function Room() {
                         : 'Latest'}
                     </button>
                   )}
-                  {/* T-18: step through messages that mention YOU. Amber to
-                      match the in-bubble self-mention highlight. */}
-                  {selfMentionIds.length > 0 && (() => {
-                    const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
-                    return (
-                      <div role="group" aria-label="Mentions of you" className="flex items-center gap-0.5 rounded-full border border-amber-400/50 bg-surface px-1.5 py-1 shadow-lg">
-                        <button
-                          type="button"
-                          onClick={() => gotoMention(-1)}
-                          disabled={mentionSeeking}
-                          aria-label="Previous mention of you"
-                          title="Previous mention of you"
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 disabled:opacity-50"
-                        >
-                          {mentionSeeking
-                            ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-400/40 border-t-amber-500" aria-hidden="true" />
-                            : <span aria-hidden="true">↑</span>}
-                        </button>
-                        <span className="px-0.5 text-[12px] font-bold tabular-nums text-amber-500">
-                          @ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
+                  {/* T-18 rev2 per UX: the mention pill appears ONLY when
+                      unseen mentions exist or a seek is running, labels its
+                      count as "new", uses 44px targets, and removes itself the
+                      moment the reader catches up. The standing entry point
+                      lives in the header next to the room title. */}
+                  {(unseenMentions > 0 || mentionSeeking) && (
+                    <div role="group" aria-label="Unseen mentions of you" className="flex items-center gap-1 rounded-full border border-amber-400/50 bg-surface px-2 py-0.5 shadow-lg">
+                      {mentionSeeking ? (
+                        <span className="flex min-h-11 items-center gap-2 px-1.5 text-[12px] font-semibold text-ink-soft">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400/40 border-t-amber-500 motion-reduce:animate-none" aria-hidden="true" />
+                          Finding earlier mention…
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => gotoMention(1)}
-                          disabled={mentionSeeking}
-                          aria-label="Next mention of you"
-                          title="Next mention of you"
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 disabled:opacity-50"
-                        >
-                          <span aria-hidden="true">↓</span>
-                        </button>
-                      </div>
-                    );
-                  })()}
+                      ) : (
+                        <>
+                          <span className="px-1 text-[12px] font-bold tabular-nums text-amber-500">
+                            @ {unseenMentions} new
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => { gotoMention(1); setUnseenMentions(0); }}
+                            aria-label={`Jump to ${unseenMentions} new mention${unseenMentions === 1 ? '' : 's'} of you`}
+                            title="Jump to the new mention of you"
+                            className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-[12px] font-semibold text-amber-500 transition hover:bg-amber-500/10"
+                          >
+                            Go
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
