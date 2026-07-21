@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DictationController, type RecognizerLike, type DictationSnapshot } from './dictation.js';
+import { DictationController, mergeTranscript, type RecognizerLike, type DictationSnapshot } from './dictation.js';
 
 // Fake SpeechRecognition: the test drives onresult/onend/onerror. stop()/abort()
 // fire onend synchronously, mirroring how the browser ends a session. An
@@ -84,6 +84,31 @@ describe('DictationController', () => {
     h.cur().emit([{ final: false, text: 'this is my text' }]);
     h.c.stop();
     expect(h.finals).toEqual(['this is my text']);
+  });
+
+  it('collapses Android cumulative final results instead of concatenating every hypothesis', () => {
+    const h = harness();
+    h.c.start();
+    h.cur().emit([
+      { final: true, text: 'this' },
+      { final: true, text: 'this is' },
+      { final: true, text: 'this is a test' },
+    ]);
+    expect(h.snap().finalText).toBe('this is a test');
+    h.c.stop();
+    expect(h.finals).toEqual(['this is a test']);
+  });
+
+  it('collapses a cumulative final phrase replayed after an automatic restart', () => {
+    const h = harness();
+    h.c.start();
+    h.cur().emit([{ final: true, text: 'this is' }]);
+    h.cur().onend?.();
+    h.flushRestarts();
+    h.cur().emit([{ final: true, text: 'this is a test of the mic' }]);
+    expect(h.snap().finalText).toBe('this is a test of the mic');
+    h.c.stop();
+    expect(h.finals).toEqual(['this is a test of the mic']);
   });
 
   it('explicit pause PRESERVES interim (not just final) and does not finalize; resume continues', () => {
@@ -209,5 +234,16 @@ describe('DictationController', () => {
     h.c.resume();
     h.tick(2000);
     expect(h.c.snapshot().elapsedMs).toBe(5000);
+  });
+});
+
+describe('mergeTranscript', () => {
+  it('prefers longer cumulative hypotheses and removes word-boundary overlap', () => {
+    expect(mergeTranscript('this is', 'this is a test')).toBe('this is a test');
+    expect(mergeTranscript('this is a test', 'a test of the mic')).toBe('this is a test of the mic');
+  });
+
+  it('still appends unrelated sequential phrases', () => {
+    expect(mergeTranscript('hello there', 'general kenobi')).toBe('hello there general kenobi');
   });
 });

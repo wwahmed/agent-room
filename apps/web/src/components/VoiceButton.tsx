@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DictationController, type DictationSnapshot, type RecognizerLike } from '../lib/dictation.js';
+import { DictationController, mergeTranscript, type DictationSnapshot, type RecognizerLike } from '../lib/dictation.js';
 
 interface Props {
   /** Called once with the final transcript when the user Stops (accepts). */
@@ -17,7 +17,7 @@ interface Props {
 
 // The live transcript = committed words plus the not-yet-final interim tail.
 function liveText(s: DictationSnapshot): string {
-  return (s.finalText + (s.interim ? ` ${s.interim}` : '')).trim();
+  return mergeTranscript(s.finalText, s.interim);
 }
 
 // Browser SpeechRecognition is non-standard; `any` avoids pulling a lib in for

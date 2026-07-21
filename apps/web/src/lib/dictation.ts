@@ -49,6 +49,42 @@ export interface DictationOptions {
 const DEFAULT_MAX_MS = 5 * 60 * 1000;
 const FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
 
+/**
+ * Merge a new recognition hypothesis into the transcript already shown.
+ *
+ * Chrome on Android can report progressive *cumulative* hypotheses as separate
+ * results ("this", "this is", "this is a test") and can replay the same
+ * cumulative phrase after an automatic recognizer restart. A plain append turns
+ * that stream into "this this is this is a test". Prefer the longer cumulative
+ * form and otherwise remove only a word-boundary suffix/prefix overlap.
+ */
+export function mergeTranscript(base: string, incoming: string): string {
+  const left = base.replace(/\s+/g, ' ').trim();
+  const right = incoming.replace(/\s+/g, ' ').trim();
+  if (!left) return right;
+  if (!right) return left;
+
+  const leftLower = left.toLocaleLowerCase();
+  const rightLower = right.toLocaleLowerCase();
+  if (leftLower === rightLower) return left;
+  if (rightLower.startsWith(`${leftLower} `)) return right;
+  if (leftLower.startsWith(`${rightLower} `)) return left;
+
+  const leftWords = left.split(' ');
+  const rightWords = right.split(' ');
+  const maxOverlap = Math.min(leftWords.length, rightWords.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap--) {
+    const suffix = leftWords.slice(-overlap).join(' ').toLocaleLowerCase();
+    const prefix = rightWords.slice(0, overlap).join(' ').toLocaleLowerCase();
+    if (suffix === prefix) return [...leftWords, ...rightWords.slice(overlap)].join(' ');
+  }
+  return `${left} ${right}`;
+}
+
+function collapseRecognitionSegments(parts: string[]): string {
+  return parts.reduce((text, part) => mergeTranscript(text, part), '');
+}
+
 export class DictationController {
   private state: DictationState = 'idle';
   private finalText = '';
@@ -85,7 +121,7 @@ export class DictationController {
   snapshot(): DictationSnapshot {
     return {
       state: this.state,
-      finalText: DictationController.join(this.finalText, this.liveFinal).trim(),
+      finalText: mergeTranscript(this.finalText, this.liveFinal),
       interim: this.interim,
       elapsedMs: this.elapsed(),
       error: this.error,
@@ -109,16 +145,16 @@ export class DictationController {
 
     rec.onresult = (e) => {
       if (!isCurrent()) return;
-      let sf = '';
-      let si = '';
+      const finalParts: string[] = [];
+      const interimParts: string[] = [];
       for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
         if (!r) continue;
-        if (r.isFinal) sf += r[0].transcript;
-        else si += r[0].transcript;
+        if (r.isFinal) finalParts.push(r[0].transcript);
+        else interimParts.push(r[0].transcript);
       }
-      this.liveFinal = sf;
-      this.interim = si;
+      this.liveFinal = collapseRecognitionSegments(finalParts);
+      this.interim = collapseRecognitionSegments(interimParts);
       this.emit();
     };
     rec.onerror = (e) => {
@@ -172,19 +208,11 @@ export class DictationController {
     }
   }
 
-  // Join two text runs with exactly one separating space when neither side
-  // already provides whitespace (browsers are inconsistent about trailing
-  // spaces on final results).
-  private static join(a: string, b: string): string {
-    if (!a) return b;
-    if (!b) return a;
-    return /\s$/.test(a) || /^\s/.test(b) ? a + b : `${a} ${b}`;
-  }
   private commitLive() {
-    if (this.liveFinal) { this.finalText = DictationController.join(this.finalText, this.liveFinal); this.liveFinal = ''; }
+    if (this.liveFinal) { this.finalText = mergeTranscript(this.finalText, this.liveFinal); this.liveFinal = ''; }
   }
   private commitInterim() {
-    if (this.interim) { this.finalText = DictationController.join(this.finalText, this.interim); this.interim = ''; }
+    if (this.interim) { this.finalText = mergeTranscript(this.finalText, this.interim); this.interim = ''; }
   }
 
   private scheduleRestart() {
@@ -281,7 +309,7 @@ export class DictationController {
   }
 
   private finish() {
-    const text = (this.finalText + (this.interim ? ` ${this.interim}` : '')).replace(/\s+/g, ' ').trim();
+    const text = mergeTranscript(this.finalText, this.interim);
     this.clearRestart();
     this.clearDeadline();
     this.hardReset('idle');
