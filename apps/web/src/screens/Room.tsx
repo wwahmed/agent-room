@@ -1510,7 +1510,10 @@ export function Room() {
             // default; amber only while unseen mentions exist. 44px targets.
             (() => {
               const pos = mentionCursorId != null ? selfMentionIds.indexOf(mentionCursorId) : -1;
-              const tone = unseenMentions > 0 ? 'text-amber-500' : 'text-ink-soft';
+              // UX T-60 review item 3: the n/m fraction carries information
+              // only MID-SEEK; caught up collapses to a quiet "@ N".
+              const seeking = mentionSeeking || (pos !== -1 && pos < selfMentionIds.length - 1) || unseenMentions > 0;
+              const tone = unseenMentions > 0 ? 'text-amber-500' : seeking ? 'text-ink-soft' : 'text-ink-faint';
               const counter = pos === -1
                 ? `${selfMentionIds.length} mention${selfMentionIds.length === 1 ? '' : 's'}`
                 : `${pos + 1}/${selfMentionIds.length} mentions`;
@@ -1538,7 +1541,7 @@ export function Room() {
                     </svg>
                   </button>
                   <span className={`whitespace-nowrap text-[12px] font-semibold tabular-nums ${tone}`} aria-hidden="true">
-                    @ {pos === -1 ? selfMentionIds.length : `${pos + 1}/${selfMentionIds.length}`}
+                    @ {seeking && pos !== -1 ? `${pos + 1}/${selfMentionIds.length}` : selfMentionIds.length}
                   </span>
                   <button
                     type="button"
