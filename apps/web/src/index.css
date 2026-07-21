@@ -202,6 +202,51 @@ body {
     :root[data-reading-scale='compact'] .msg-meta { font-size: 14px; }
   }
 
+  /* T-82: contextual phone chrome. The command bar slides above the
+     viewport and the bottom chrome (composer/CTA) below it while reading
+     deeper; a deliberate reverse gesture restores both. The floating
+     Latest pill rides above the measured composer (--composer-h on the
+     chat column) and drops to the safe-area edge when chrome hides. */
+  @media (max-width: 639px) {
+    .app-command-bar,
+    .room-bottom-chrome,
+    .room-latest-lane {
+      transition: transform 160ms ease-out, bottom 160ms ease-out;
+    }
+    .room-bottom-chrome {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+    }
+    .chrome-hidden .app-command-bar {
+      transform: translateY(-102%);
+    }
+    .chrome-hidden .room-bottom-chrome {
+      transform: translateY(102%);
+    }
+    .room-latest-lane {
+      position: absolute;
+      left: auto;
+      right: 12px;
+      bottom: calc(var(--composer-h, 0px) + 12px);
+      width: auto;
+      z-index: 25;
+      padding: 0;
+    }
+    .chrome-hidden .room-latest-lane {
+      bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-command-bar,
+    .room-bottom-chrome,
+    .room-latest-lane {
+      transition: none;
+    }
+  }
+
   /* T-80: native <dialog> attachment sheet. Phone shows a dimmed backdrop;
      desktop keeps the top layer's click-catching but stays visually quiet. */
   .attachment-sheet::backdrop {

@@ -5,6 +5,7 @@ import { MessageRow, isSameGroup } from '../components/MessageRow.js';
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
+import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { CommandSearch } from '../components/CommandSearch.js';
@@ -489,6 +490,36 @@ export function Room() {
   // jump-to-bottom button's visibility.)
   const [atBottom, setAtBottom] = useState(true);
 
+  // T-82: contextual phone chrome. Reading deeper slides the command bar and
+  // idle composer out of the viewport; a deliberate reverse gesture, the
+  // history top, the newest message, or any pinned state restores them.
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const chromeVisRef = useRef(initialChromeVis());
+  const chromeRafRef = useRef(0);
+  const chromePinnedRef = useRef(false);
+  const [composerFocused, setComposerFocused] = useState(false);
+  // Measured bottom-chrome height feeds the floating Latest pill offset and
+  // the feed's collision padding (CSS var --composer-h on the chat column).
+  const [composerH, setComposerH] = useState(0);
+  const composerWrapRef = useRef<HTMLDivElement>(null);
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => {
+    const el = composerWrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setComposerH(el.offsetHeight));
+    ro.observe(el);
+    setComposerH(el.offsetHeight);
+    return () => ro.disconnect();
+    // The wrapper element persists across ended/muted/composer swaps; the
+    // observer keys only on the tab remounting the chat column.
+  }, [mainTab]);
+
   // T-65: the read marker AS IT WAS when we arrived. The mark-read effect below
   // advances the stored marker the moment we're at the bottom, so we have to
   // snapshot it first or "first unread" would always resolve to "nothing".
@@ -849,6 +880,17 @@ export function Room() {
       setUnseenCount(0);
       setUnseenMentions(0);
     }
+    // T-82: one rAF per frame samples direction for the contextual chrome.
+    if (!chromeRafRef.current) {
+      chromeRafRef.current = requestAnimationFrame(() => {
+        chromeRafRef.current = 0;
+        const feed = feedRef.current;
+        if (!feed) return;
+        const next = chromeStep(chromeVisRef.current, feed.scrollTop, chromePinnedRef.current, atBottomRef.current);
+        chromeVisRef.current = next;
+        setChromeHidden(prev => (prev === next.hidden ? prev : next.hidden));
+      });
+    }
     // T-04: nearing the top pulls the previous history page. Anchor the current
     // scroll geometry first so the prepend adjustment below can hold the
     // reader's place instead of letting content jump down under them.
@@ -1023,6 +1065,21 @@ export function Room() {
   const isHost = room.createdBy === me.name;
   const myParticipant = room.participants.find(p => p.name === me.name && p.client === 'web');
   const myCanSpeak = isHost || myParticipant?.canSpeak !== false;
+
+  // T-82 pinning matrix: chrome may never hide while any of these exist. The
+  // ref feeds the rAF scroll sampler; the effect force-restores immediately
+  // when a pinned state appears mid-immersion (e.g. keyboard focus).
+  const chromePinned = Boolean(
+    text.trim() || composerFocused || replyingTo || attachments.length > 0 ||
+    attachmentJobs.length > 0 || attachmentMenuOpen || dictationDraft || ended || !myCanSpeak,
+  );
+  useEffect(() => {
+    chromePinnedRef.current = chromePinned;
+    if (chromePinned && chromeVisRef.current.hidden) {
+      chromeVisRef.current = { ...chromeVisRef.current, hidden: false, accum: 0 };
+      setChromeHidden(false);
+    }
+  }, [chromePinned]);
   const mutedCount = room.participants.filter(p => p.canSpeak === false).length;
   const replyMode = activeRoom.replyMode ?? 'open';
   const replyModeConfig = activeRoom.modeConfig;
@@ -1974,7 +2031,10 @@ export function Room() {
 
 
   return (
-    <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'room' ? 'pt-[52px]' : 'pt-[96px]'}`}>
+    // T-82: on phones the CHAT tab is full-bleed (pt-0) — the feed's top
+    // clearance lives inside its scroll content, so hiding chrome reveals
+    // feed pixels instead of a blank placeholder strip.
+    <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'room' ? 'pt-[52px]' : mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'} ${chromeHidden && mainTab === 'chat' ? 'chrome-hidden' : ''}`}>
       <WorkspaceRail />
       <RoomListPane activeCode={code} selfName={me.name} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
@@ -2088,13 +2148,22 @@ export function Room() {
         {/* T-71: on xl+ the chat pairs with a contextual rail — the reading
             measure stays deliberate while the canvas carries live context. */}
         <div className={`min-h-0 flex-1 ${mainTab === 'chat' ? 'flex' : 'hidden'}`}>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+          style={{ '--composer-h': `${composerH}px` } as React.CSSProperties}
+        >
 
-            <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="flex-1 overflow-y-auto py-4 relative">
+            <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="relative flex-1 overflow-y-auto max-sm:py-0 sm:py-4">
               {/* T-48: center a generous conversation rail on wide desktops.
                   MessageRow caps prose at 80ch while images/artifacts can use
-                  the extra canvas without creating edge-to-edge text. */}
-              <div className="mx-auto w-full max-w-[1280px]">
+                  the extra canvas without creating edge-to-edge text.
+                  T-82: on phones the top/bottom clearances are CONTENT
+                  padding — the fixed bar and overlay composer sit above feed
+                  pixels, and hiding them exposes reading canvas, no reflow. */}
+              <div
+                className="mx-auto w-full max-w-[1280px]"
+                style={isPhone ? { paddingTop: 104, paddingBottom: composerH + 16 + (unseenCount > 0 || !atBottom || unseenMentions > 0 || mentionSeeking ? 56 : 0) } : undefined}
+              >
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
               {hasOlder && (
@@ -2177,12 +2246,15 @@ export function Room() {
 
               {/* T-48/T-65: jump-to-latest, one tap back to live whenever he's
                   scrolled up, with the count when there's something new. */}
-              {/* T-72 ruling: this is a dedicated layout LANE between feed and
-                  composer, not a sticky overlay — an Activity Note (or any
-                  message) structurally cannot exist behind these controls in
-                  any scroll state. */}
+              {/* T-72 ruling (>=sm): a dedicated layout LANE between feed and
+                  composer — a message structurally cannot sit behind these
+                  controls. T-82 (phone): the lane leaves the layout and the
+                  pill floats bottom-right above the measured composer, with
+                  the feed reserving collision padding only while it exists;
+                  it stays visible as the way back to now even with chrome
+                  hidden (it drops to the safe-area edge). */}
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
-                <div data-gate="floating" className="flex w-full items-center justify-center gap-2 px-4 py-1.5">
+                <div data-gate="floating" className="room-latest-lane flex w-full items-center justify-center gap-2 px-4 py-1.5">
                   {(unseenCount > 0 || !atBottom) && (
                     <button
                       type="button"
@@ -2229,6 +2301,10 @@ export function Room() {
                 </div>
               )}
 
+            {/* T-82: the whole bottom block overlays the feed on phones and
+                slides below the viewport in immersive reading (pinned states
+                keep it up); >=sm it stays in flow exactly as before. */}
+            <div ref={composerWrapRef} className="room-bottom-chrome">
             {ended ? (
               // A1: ended-room CTA pivots from "Reactivate-only" to a primary
               // "Save & Share" call-to-action. Once the meeting wraps, the most
@@ -2286,7 +2362,7 @@ export function Room() {
               </div>
             ) : (
               <div
-                className={`relative border-t border-border-faint p-3 bg-surface transition ${dragActive ? 'ring-2 ring-inset ring-accent bg-accent-tint/40' : ''}`}
+                className={`relative border-t border-border-faint p-3 max-sm:p-2 bg-surface transition ${dragActive ? 'ring-2 ring-inset ring-accent bg-accent-tint/40' : ''}`}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -2431,12 +2507,17 @@ export function Room() {
                     </button>
                   </div>
                 )}
+                {/* T-82: phone resting composer is ONE row — field, clip, mic,
+                    send — growing only with a real draft; >=sm keeps the
+                    field-above-tools layout from the earlier host ruling. */}
+                <div className="max-sm:flex max-sm:items-end">
                 <textarea
                   ref={textareaRef}
                   value={text}
                   onChange={e => { setText(e.target.value); syncMention(); }}
                   onSelect={syncMention}
-                  onBlur={() => { window.setTimeout(() => setMention(null), 150); }}
+                  onFocus={() => setComposerFocused(true)}
+                  onBlur={() => { setComposerFocused(false); window.setTimeout(() => setMention(null), 150); }}
                   onPaste={e => { void handlePaste(e); }}
                   onKeyDown={e => {
                     // Confirming an IME candidate is text entry, never a send
@@ -2473,9 +2554,9 @@ export function Room() {
                   /* T-74: the semantic composer role keeps typed and placeholder
                      text readable at physical phone scale. Borderless — the
                      wrapper owns the border and focus ring. */
-                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0"
+                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0 max-sm:min-w-0 max-sm:flex-1"
                 />
-                <div className="relative flex items-center gap-0.5">
+                <div className="relative flex items-center gap-0.5 max-sm:flex-shrink-0">
                   <input
                     ref={imageInputRef}
                     type="file"
@@ -2546,7 +2627,7 @@ export function Room() {
                     }}
                     disabled={ended}
                   />
-                  <span className="flex-1" aria-hidden="true" />
+                  <span className="flex-1 max-sm:hidden" aria-hidden="true" />
                   <button
                     onClick={() => setComposerExpanded(v => !v)}
                     title={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
@@ -2575,8 +2656,10 @@ export function Room() {
                 </div>
                 </div>
                 </div>
+                </div>
               </div>
             )}
+            </div>
         </div>
         {/* T-71 rail rules (locked): preview only, ONE shared board source
             (Room owns the poll, ProjectPanel consumes the same data), every
