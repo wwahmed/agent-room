@@ -78,6 +78,8 @@ interface Props {
   onReply?: (m: Message) => void;
   /** T-54: jump to a quoted original by id. */
   onJumpToQuote?: (id: number) => void;
+  /** T-12: the VIEWER's display name, for the you-were-mentioned highlight. */
+  selfName?: string;
 }
 
 // Exact clock for the hover/title tooltip — precise time behind the relative label.
@@ -179,7 +181,7 @@ function SwipeReplyIndicator({ progress }: { progress: number }) {
   );
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote }: Props) {
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, selfName }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
 
@@ -204,7 +206,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} onDark />}
           {body.trim() && (
             <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
-              <MessageText text={body} />
+              <MessageText text={body} selfName={selfName} />
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -239,7 +241,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className={`${bubbleShape} px-3.5 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <MessageText text={body} />}
+          {body.trim() && <MessageText text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
         <div className="absolute right-3 top-1"><MessageMenu message={message} onReply={onReply} /></div>
@@ -266,7 +268,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         </div>
         <div className={`px-3.5 pb-2 pt-0.5 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <MessageText text={body} />}
+          {body.trim() && <MessageText text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
       </div>

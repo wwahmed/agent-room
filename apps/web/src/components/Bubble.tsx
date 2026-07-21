@@ -2,6 +2,7 @@ import { Avatar } from './Avatar.js';
 import { useMemo, type ReactNode } from 'react';
 import type { Message, MessageAttachment } from '@agent-room/shared';
 import { normalizeEscapedWhitespace } from '@agent-room/shared';
+import { MENTION_SOURCE, isSelfMention } from '../lib/mentions.js';
 
 interface Props {
   message: Message;
@@ -10,9 +11,11 @@ interface Props {
   // "Robin · web" and "Robin · cc"), the parent passes the set of ambiguous
   // names so we can disambiguate by suffixing with the client kind.
   ambiguousNames?: Set<string>;
+  // T-12: the VIEWER's display name, for the stronger you-were-mentioned highlight.
+  selfName?: string;
 }
 
-export function Bubble({ message, self, ambiguousNames }: Props) {
+export function Bubble({ message, self, ambiguousNames, selfName }: Props) {
   if (message.type === 'sys') {
     return (
       <div className="mx-auto max-w-[min(620px,92%)] rounded-full border border-border-faint bg-surface px-3 py-1.5 text-center text-[12px] font-semibold text-ink-soft shadow-sm">
@@ -50,7 +53,7 @@ export function Bubble({ message, self, ambiguousNames }: Props) {
           </div>
         )}
         <div className="text-[17px] leading-relaxed">
-          {body.trim() && <MessageText text={body} />}
+          {body.trim() && <MessageText text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
         <div className={`mt-1 text-[12px] leading-none text-right ${self ? 'text-white/70' : 'text-ink-faint'}`}>
@@ -170,7 +173,9 @@ function formatBytes(size: number): string {
 }
 
 // Exported for MessageRow (T-05 editorial rows).
-export function MessageText({ text }: { text: string }) {
+// T-12: selfName is the VIEWER's display name (not the sender's) so mentions
+// of the signed-in user can render with the stronger highlight.
+export function MessageText({ text, selfName }: { text: string; selfName?: string }) {
   // Defensively unescape literal `\n` / `\t` sequences before parsing —
   // some agent clients (Cursor's Composer is the documented offender)
   // double-escape multi-line bodies before passing them as the `text` arg
@@ -197,7 +202,7 @@ export function MessageText({ text }: { text: string }) {
           return (
             <ListTag key={index} className={`${ordered ? 'list-decimal' : 'list-disc'} pl-5 space-y-1`}>
               {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInline(item.replace(/^(\d+[.)]|[-*•])\s+/, ''))}</li>
+                <li key={itemIndex}>{renderInline(item.replace(/^(\d+[.)]|[-*•])\s+/, ''), selfName)}</li>
               ))}
             </ListTag>
           );
@@ -206,14 +211,14 @@ export function MessageText({ text }: { text: string }) {
         if (block.type === 'heading') {
           return (
             <div key={index} className="font-semibold text-[13px] text-current">
-              {renderInline(block.text.replace(/^#{1,3}\s*/, ''))}
+              {renderInline(block.text.replace(/^#{1,3}\s*/, ''), selfName)}
             </div>
           );
         }
 
         return (
           <p key={index} className="whitespace-pre-wrap">
-            {renderInline(block.text)}
+            {renderInline(block.text, selfName)}
           </p>
         );
       })}
@@ -302,7 +307,12 @@ function parseBlocks(text: string): TextBlock[] {
 //   [DECISION] x     — chip-style artifact marker (also TODO / STATUS / RESULT)
 // The artifact marker chip mirrors extractArtifacts, which recognizes markers
 // anywhere on a message line.
-const INLINE_PATTERN = /(\[(?:DECISION|TODO|STATUS|RESULT)\])|(`[^`]+`|\*\*[^*]+\*\*|https?:\/\/[^\s]+)/gi;
+// T-12: mentions join the inline grammar. Built from MENTION_SOURCE so the
+// renderer and the (upcoming T-09) composer autocomplete share one rule.
+const INLINE_PATTERN = new RegExp(
+  `(\\[(?:DECISION|TODO|STATUS|RESULT)\\])|(${MENTION_SOURCE})|(\`[^\`]+\`|\\*\\*[^*]+\\*\\*|https?:\\/\\/[^\\s]+)`,
+  'gi',
+);
 
 // Dark-theme tones: translucent tint + light text, so the chips read on a dark
 // bubble instead of glaring as light blocks.
@@ -313,7 +323,7 @@ const ARTIFACT_TONE: Record<string, string> = {
   RESULT:   'bg-violet-500/15 text-violet-300 ring-violet-400/30',
 };
 
-function renderInline(text: string): ReactNode[] {
+function renderInline(text: string, selfName?: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -323,9 +333,30 @@ function renderInline(text: string): ReactNode[] {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
 
     const artifactMarker = match[1];
-    const value = match[2] ?? artifactMarker ?? match[0];
+    const mention = match[2];
+    const value = match[3] ?? mention ?? artifactMarker ?? match[0];
 
-    if (artifactMarker) {
+    if (mention && match.index > 0 && /[A-Za-z0-9]/.test(text[match.index - 1] ?? '')) {
+      // Mid-word @ (an email's domain part, "user@host") is not a mention.
+      nodes.push(mention);
+    } else if (mention) {
+      const forMe = isSelfMention(mention, selfName);
+      // Generic mentions inherit the bubble's text color over a translucent
+      // wash (readable on any sender tint or the solid self bubble). A mention
+      // of the signed-in viewer gets the classic amber "that's you" highlight —
+      // black-on-amber holds contrast in both themes.
+      nodes.push(
+        <span
+          key={nodes.length}
+          title={forMe ? 'Mentions you' : undefined}
+          className={`rounded-md px-1 py-0.5 font-bold ${
+            forMe ? 'bg-amber-400 text-black ring-1 ring-amber-500/60' : 'bg-black/15'
+          }`}
+        >
+          {mention}
+        </span>,
+      );
+    } else if (artifactMarker) {
       const kind = artifactMarker.slice(1, -1).toUpperCase();
       const tone = ARTIFACT_TONE[kind] ?? 'bg-black/10 text-current ring-black/10';
       nodes.push(

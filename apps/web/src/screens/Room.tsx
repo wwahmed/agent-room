@@ -1251,6 +1251,7 @@ export function Room() {
                     now={now}
                     onReply={startReply}
                     onJumpToQuote={jumpToMessage}
+                    selfName={self.name}
                   />
                   </Fragment>
                 ));
