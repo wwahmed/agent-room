@@ -232,6 +232,9 @@ export function RoomHeader({
                   Copy invite link
                 </button>
                 <div className="my-1 h-px bg-border-faint" />
+                {/* Truthful label (design lead): this NAVIGATES; it does not
+                    mutate participation. A real Leave lands with the T-06
+                    identity-lifecycle work. */}
                 <Link
                   to="/"
                   role="menuitem"
@@ -239,7 +242,7 @@ export function RoomHeader({
                   className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink"
                 >
                   <span className="flex w-5 justify-center" aria-hidden="true">←</span>
-                  Leave room
+                  Back to rooms
                 </Link>
                 {canEndRoom && (
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEndRoom(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-red-400 transition hover:bg-red-500/10">

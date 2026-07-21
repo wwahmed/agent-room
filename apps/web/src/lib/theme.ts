@@ -9,10 +9,25 @@
 
 export type Theme = 'light' | 'dark';
 
+/** T-26/T-27 ruling: theme is an explicit three-way CHOICE. 'system' follows
+ *  the device live (the default for new users); 'light'/'dark' are persisted
+ *  overrides. The resolved Theme stays two-valued — CSS knows only the pair. */
+export type ThemeSetting = 'system' | Theme;
+
 export const THEME_STORAGE_KEY = 'wakichat:theme';
 
 export function isTheme(v: unknown): v is Theme {
   return v === 'light' || v === 'dark';
+}
+
+export function isThemeSetting(v: unknown): v is ThemeSetting {
+  return v === 'system' || isTheme(v);
+}
+
+/** Absence and junk both mean 'system' — the app never fights the device
+ *  unless the person explicitly chose a side. */
+export function resolveThemeSetting(stored: string | null): ThemeSetting {
+  return isThemeSetting(stored) ? stored : 'system';
 }
 
 /**
@@ -95,4 +110,33 @@ export function applyTheme(theme: Theme): void {
 export function setTheme(theme: Theme): void {
   safeStorageSet(THEME_STORAGE_KEY, theme);
   applyTheme(theme);
+}
+
+/** The stored three-way setting (what the CONTROL shows; currentTheme() is
+ *  what the SCREEN shows). */
+export function storedThemeSetting(): ThemeSetting {
+  return resolveThemeSetting(safeStorageGet(THEME_STORAGE_KEY));
+}
+
+/** Persist a three-way choice and apply its resolution immediately.
+ *  'system' is stored explicitly so choosing it back is itself an action. */
+export function setThemeSetting(setting: ThemeSetting): void {
+  safeStorageSet(THEME_STORAGE_KEY, setting);
+  applyTheme(setting === 'system' ? (prefersLight() ? 'light' : 'dark') : setting);
+}
+
+/** Follow the OS live while the stored setting is 'system'. Installed once at
+ *  boot (main.tsx); returns the unsubscribe for tests. */
+export function watchSystemTheme(): () => void {
+  try {
+    if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const onChange = () => {
+      if (storedThemeSetting() === 'system') applyTheme(mq.matches ? 'light' : 'dark');
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  } catch {
+    return () => {};
+  }
 }

@@ -1,6 +1,7 @@
 import { createBrowserRouter, useParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Home } from './screens/Home.js';
+import { Settings } from './screens/Settings.js';
 import { CreateMeeting } from './screens/CreateMeeting.js';
 import { Lobby } from './screens/Lobby.js';
 import { Room } from './screens/Room.js';
@@ -34,6 +35,7 @@ function ReportByParam() {
 
 export const router = createBrowserRouter([
   { path: '/', element: <Layout><Home /></Layout> },
+  { path: '/settings', element: <Layout><Settings /></Layout> },
   { path: '/new', element: <Layout><CreateMeeting /></Layout> },
   { path: '/r/:code/lobby', element: <Layout><LobbyByParam /></Layout> },
   { path: '/r/:code', element: <Layout><RoomByParam /></Layout> },

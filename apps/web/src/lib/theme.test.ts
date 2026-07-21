@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTheme, resolveTheme, nextTheme, themeColor, THEME_STORAGE_KEY } from './theme.js';
+import { isTheme, resolveTheme, resolveThemeSetting, nextTheme, themeColor, THEME_STORAGE_KEY } from './theme.js';
 
 describe('theme resolution', () => {
   it('recognizes only valid theme strings', () => {
@@ -39,5 +39,15 @@ describe('theme resolution', () => {
 
   it('uses a stable storage key', () => {
     expect(THEME_STORAGE_KEY).toBe('wakichat:theme');
+  });
+
+  // T-26/T-27: three-way setting. 'system' is the default for new users and
+  // for junk; explicit light/dark stored choices survive as overrides.
+  it('resolves the three-way setting with system as default', () => {
+    expect(resolveThemeSetting(null)).toBe('system');
+    expect(resolveThemeSetting('purple')).toBe('system');
+    expect(resolveThemeSetting('system')).toBe('system');
+    expect(resolveThemeSetting('light')).toBe('light');
+    expect(resolveThemeSetting('dark')).toBe('dark');
   });
 });

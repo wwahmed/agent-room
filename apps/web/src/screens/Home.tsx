@@ -129,8 +129,9 @@ export function Home() {
           </div>
           {identity ? (
             /* T-26/T-27: the avatar IS the account surface — identity, theme,
-               reading scale, and Log out live in its menu, not loose chrome. */
-            <AccountMenu name={identity.name} email={identity.email} />
+               reading scale, and Log out live in its menu, not loose chrome.
+               Settings routes to the app-level /settings page. */
+            <AccountMenu name={identity.name} email={identity.email} onOpenSettings={() => navigate('/settings')} />
           ) : checked ? (
             <a
               href="/login"

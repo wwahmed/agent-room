@@ -1,35 +1,49 @@
 import { useEffect, useRef, useState } from 'react';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { currentTheme, nextTheme, setTheme, type Theme } from '../lib/theme.js';
+import { storedThemeSetting } from '../lib/theme.js';
+import { currentReadingScale } from '../lib/readingScale.js';
 import {
-  READING_SCALES,
-  currentReadingScale,
-  setReadingScale,
-  type ReadingScale,
-} from '../lib/readingScale.js';
+  AppearanceChoices,
+  ReadingScaleChoices,
+  readingScaleLabel,
+  themeSettingLabel,
+} from './PreferenceControls.js';
 
-// T-26/T-27 account menu (design lead direction): the profile avatar owns
-// every PERSONAL action — identity, Settings, theme, reading scale, and Log
-// out with destructive separation. Room-scoped actions (Leave room, End
-// room, invite) stay in the room overflow; neither menu duplicates the other.
+// T-26/T-27 account menu (design lead direction, rev2): the profile avatar
+// owns every PERSONAL action. The popover is a DIALOG with natural Tab
+// order, not a menu wrapping radios. Preferences are compact disclosure
+// rows ("Appearance · System ›") that open an in-popover subpanel — the
+// resting surface pays only for what it earns. Log out sits alone below a
+// rule with a real exit-door icon. Room-scoped actions stay in the room
+// overflow; neither surface duplicates the other.
 
 interface Props {
   name: string;
   email?: string;
-  /** Present in room context: routes to the Settings workspace surface. */
-  onOpenSettings?: () => void;
+  /** Settings row destination — the Settings workspace surface in a room,
+   *  the /settings page from Home. Always provided; the row is mandatory. */
+  onOpenSettings: () => void;
 }
+
+type Panel = 'main' | 'appearance' | 'scale';
 
 const ROW =
   'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[15px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink';
 
+function Chevron() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0 text-ink-faint">
+      <path d="m6 3.5 4.5 4.5L6 12.5" />
+    </svg>
+  );
+}
+
 export function AccountMenu({ name, email, onOpenSettings }: Props) {
   const [open, setOpen] = useState(false);
-  const [theme, setThemeState] = useState<Theme>(() => currentTheme());
-  const [scale, setScaleState] = useState<ReadingScale>(() => currentReadingScale());
+  const [panel, setPanel] = useState<Panel>('main');
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -40,18 +54,6 @@ export function AccountMenu({ name, email, onOpenSettings }: Props) {
       if (event.key === 'Escape') {
         setOpen(false);
         triggerRef.current?.focus(); // focus returns to the avatar
-        return;
-      }
-      // Conventional menu traversal: arrows cycle the interactive rows.
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[data-menu-row]') ?? [])];
-        if (!items.length) return;
-        event.preventDefault();
-        const at = items.indexOf(document.activeElement as HTMLElement);
-        const next = event.key === 'ArrowDown'
-          ? items[(at + 1) % items.length]
-          : items[(at - 1 + items.length) % items.length];
-        next?.focus();
       }
     };
     document.addEventListener('mousedown', onPointer);
@@ -62,16 +64,25 @@ export function AccountMenu({ name, email, onOpenSettings }: Props) {
     };
   }, [open]);
 
-  const isLight = theme === 'light';
+  // Entering a subpanel moves focus to its Back control; the subpanel's
+  // natural Tab order then covers the choice rows.
+  useEffect(() => {
+    if (open && panel !== 'main') backRef.current?.focus();
+  }, [open, panel]);
+
+  const openPopover = () => {
+    setPanel('main');
+    setOpen(v => !v);
+  };
 
   return (
     <div ref={rootRef} className="relative">
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={openPopover}
         aria-label={`Account: ${name}`}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         className={`header-glass-control flex h-11 w-11 items-center justify-center rounded-xl transition ${open ? 'header-glass-control-active' : ''}`}
       >
@@ -85,89 +96,77 @@ export function AccountMenu({ name, email, onOpenSettings }: Props) {
       </button>
       {open && (
         <div
-          ref={menuRef}
-          role="menu"
+          role="dialog"
           aria-label="Account"
           className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-2xl pb-[max(0.375rem,env(safe-area-inset-bottom))]"
         >
-          {/* Identity block: who this menu belongs to. Not interactive. */}
-          <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
-            <span
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-              style={{ backgroundColor: colorForName(name) }}
-              aria-hidden="true"
-            >
-              {initialsFor(name)}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-[15px] font-semibold text-ink">{name}</span>
-              {email && <span className="block truncate text-[13px] text-ink-faint">{email}</span>}
-            </span>
-          </div>
-          <div className="my-1 h-px bg-border-faint" aria-hidden="true" />
-          {onOpenSettings && (
-            <button
-              type="button"
-              role="menuitem"
-              data-menu-row
-              onClick={() => { setOpen(false); onOpenSettings(); }}
-              className={ROW}
-            >
-              <span className="flex w-5 justify-center" aria-hidden="true">⚙</span>
-              Settings
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={isLight}
-            data-menu-row
-            onClick={() => {
-              const to = nextTheme(theme);
-              setTheme(to);
-              setThemeState(to);
-            }}
-            className={ROW}
-          >
-            <span className="flex w-5 justify-center" aria-hidden="true">{isLight ? '☾' : '☀'}</span>
-            {isLight ? 'Dark mode' : 'Light mode'}
-          </button>
-          {/* Reading scale: phone message-text size, Comfortable default. */}
-          <div className="rounded-lg px-3 pb-2 pt-1.5">
-            <div id="reading-scale-label" className="text-[13px] font-semibold text-ink-faint">Reading scale</div>
-            <div role="radiogroup" aria-labelledby="reading-scale-label" className="mt-1.5 flex rounded-lg bg-surface-softer p-0.5">
-              {READING_SCALES.map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={scale === option.value}
-                  data-menu-row
-                  title={option.hint}
-                  onClick={() => {
-                    setReadingScale(option.value);
-                    setScaleState(option.value);
-                  }}
-                  className={`min-h-11 flex-1 rounded-md px-1 text-[15px] font-semibold sm:text-[13px] transition ${
-                    scale === option.value ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
-                  }`}
+          {panel === 'main' && (
+            <>
+              {/* Identity block: who this popover belongs to. Not interactive. */}
+              <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
+                <span
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                  style={{ backgroundColor: colorForName(name) }}
+                  aria-hidden="true"
                 >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Destructive separation: Log out sits alone below its own rule. */}
-          <div className="my-1 h-px bg-border-faint" aria-hidden="true" />
-          <a
-            href="/cdn-cgi/access/logout"
-            role="menuitem"
-            data-menu-row
-            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[15px] font-medium text-red-400 transition hover:bg-red-500/10"
-          >
-            <span className="flex w-5 justify-center" aria-hidden="true">⎋</span>
-            Log out
-          </a>
+                  {initialsFor(name)}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] font-semibold text-ink">{name}</span>
+                  {email && <span className="block truncate text-[13px] text-ink-faint">{email}</span>}
+                </span>
+              </div>
+              <div className="my-1 h-px bg-border-faint" aria-hidden="true" />
+              <button type="button" onClick={() => { setOpen(false); onOpenSettings(); }} className={ROW}>
+                <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
+                  <circle cx="8" cy="8" r="2.2" />
+                  <path d="M8 1.8v1.7M8 12.5v1.7M14.2 8h-1.7M3.5 8H1.8M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2M12.4 12.4l-1.2-1.2M4.8 4.8 3.6 3.6" />
+                </svg>
+                <span className="flex-1">Settings</span>
+                <Chevron />
+              </button>
+              <button type="button" onClick={() => setPanel('appearance')} className={ROW} aria-haspopup="true">
+                <span className="flex-1">Appearance</span>
+                <span className="text-[13px] text-ink-faint">{themeSettingLabel(storedThemeSetting())}</span>
+                <Chevron />
+              </button>
+              <button type="button" onClick={() => setPanel('scale')} className={ROW} aria-haspopup="true">
+                <span className="flex-1">Reading scale</span>
+                <span className="text-[13px] text-ink-faint">{readingScaleLabel(currentReadingScale())}</span>
+                <Chevron />
+              </button>
+              {/* Destructive separation: Log out alone below its own rule,
+                  with a real exit-door icon (a refresh glyph reads as reload). */}
+              <div className="my-1 h-px bg-border-faint" aria-hidden="true" />
+              <a
+                href="/cdn-cgi/access/logout"
+                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[15px] font-medium text-red-400 transition hover:bg-red-500/10"
+              >
+                <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
+                  <path d="M10 2.5H4.5A1 1 0 0 0 3.5 3.5v9a1 1 0 0 0 1 1H10" />
+                  <path d="M13.5 8H6.8M11 5.3 13.7 8 11 10.7" />
+                </svg>
+                Log out
+              </a>
+            </>
+          )}
+          {panel !== 'main' && (
+            <>
+              <button
+                ref={backRef}
+                type="button"
+                onClick={() => setPanel('main')}
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-[15px] font-semibold text-ink transition hover:bg-surface-softer"
+              >
+                <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10 3.5 5.5 8l4.5 4.5" />
+                </svg>
+                {panel === 'appearance' ? 'Appearance' : 'Reading scale'}
+              </button>
+              <div className="my-1 h-px bg-border-faint" aria-hidden="true" />
+              {panel === 'appearance' ? <AppearanceChoices /> : <ReadingScaleChoices />}
+            </>
+          )}
         </div>
       )}
     </div>
