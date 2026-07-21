@@ -62,8 +62,25 @@ function tokenOk(got) {
 const STORE_FILE = process.env.MEMBERKEY_STORE
   || join(homedir(), '.agent-room', `memberkey-proxy-${PORT}.json`);
 
-/** secret -> Map<roomCode, memberKey>. */
+/** secret -> Map<storageKey, memberKey>.
+ *
+ * T-32: storageKey is `${code}\n${participantName}` — keys are scoped per
+ * SESSION IDENTITY, not just per room. Multiple live sessions share one secret
+ * (Codex's fixed-file launcher config), and the old per-room slot meant every
+ * sibling join overwrote the previous sibling's credential: B joins, A's next
+ * authenticated send fails. Legacy per-room entries (`${code}` alone, from
+ * stores written before this change) are still READ as a fallback so existing
+ * single-session agents keep working, but are never written again. */
 const keyStore = new Map();
+
+function storageKey(code, name) {
+  return name ? `${code}\n${name}` : code;
+}
+
+function keyLookup(secret, code, name) {
+  const m = keysFor(secret);
+  return (name && m.get(storageKey(code, name))) || m.get(code);
+}
 
 function assertSecureStore(file) {
   const st = lstatSync(file);
@@ -215,8 +232,13 @@ const server = http.createServer(async (req, res) => {
         if (action === 'join') {
           payload.wantMemberKey = true;
           // Present the previous key so the server reclaims the canonical row,
-          // then capture the rotated key from the response below.
-          const k = keysFor(secret).get(code);
+          // then capture the rotated key from the response below. T-32: the
+          // key is looked up per (room, participant name) so a sibling session
+          // joining under a different name never presents THIS session's key.
+          const joinName = payload.participant && typeof payload.participant.name === 'string'
+            ? payload.participant.name
+            : undefined;
+          const k = keyLookup(secret, code, joinName);
           if (k) payload.memberKey = k;
           // T-66: also present the DURABLE anchor. The memberKey above rotates
           // and lives in a file — lose that file before the rotated key is
@@ -226,10 +248,13 @@ const server = http.createServer(async (req, res) => {
           // rather than merge, so an agent can never assert its own anchor.
           payload.agentId = agentAnchor(secret, code);
         } else if (action === 'send' || action === 'updatePresence') {
-          const k = keysFor(secret).get(code);
+          const actorName = action === 'send'
+            ? (payload.message && typeof payload.message.name === 'string' ? payload.message.name : undefined)
+            : (typeof payload.name === 'string' ? payload.name : undefined);
+          const k = keyLookup(secret, code, actorName);
           if (k) payload.memberKey = k;
         } else if (action === 'removeParticipant' && payload.requesterName && payload.requesterName === payload.targetName) {
-          const k = keysFor(secret).get(code);
+          const k = keyLookup(secret, code, String(payload.targetName));
           if (k) payload.memberKey = k;
         }
         outBody = Buffer.from(JSON.stringify(payload));
@@ -253,7 +278,12 @@ const server = http.createServer(async (req, res) => {
         if (j && typeof j === 'object' && typeof j.memberKey === 'string') {
           const code = String((j.room && j.room.code) || '');
           if (code) {
-            keysFor(secret).set(code, j.memberKey);
+            // T-32: store under the ASSIGNED name (the server may suffix), so
+            // sibling sessions on the same secret each keep their own key.
+            const assigned = j.participant && typeof j.participant.name === 'string'
+              ? j.participant.name
+              : undefined;
+            keysFor(secret).set(storageKey(code, assigned), j.memberKey);
             // Persist the rotated key before acknowledging the join. The key
             // remains in memory if persistence fails, and the request returns
             // 502 rather than falsely claiming durable recovery.

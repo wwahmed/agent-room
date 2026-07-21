@@ -219,3 +219,69 @@ test('a different agent secret derives a different anchor (no cross-agent takeov
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// T-32: sibling sessions share one secret (fixed-file launcher config). Keys
+// must be scoped per participant NAME so B's join can never overwrite A's
+// credential, and each session's send presents ITS OWN key.
+test('sibling sessions on one secret keep separate keys per name', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mkproxy-t32-'));
+  const seen = [];
+  const upstream = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const payload = JSON.parse(raw || '{}');
+      seen.push(payload);
+      if (payload.action === 'join') {
+        const name = payload.participant?.name ?? '';
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          room: { code: 'ABC-DEF-GHJ' },
+          participant: { name },
+          memberKey: `key-for-${name}`,
+        }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ result: { appended: true } }));
+    });
+  });
+
+  const token = '3'.repeat(32);
+  let child;
+  try {
+    const upstreamPort = await listen(upstream);
+    const probe = createServer();
+    const port = await listen(probe);
+    await stop(probe);
+    child = await startProxy({
+      port, token, upstream: `http://127.0.0.1:${upstreamPort}`,
+      store: join(dir, 'store.json'),
+    });
+
+    const joinAs = (name) => fetch(`http://127.0.0.1:${port}/t/${token}/api/room`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'join', code: 'ABC-DEF-GHJ', participant: { name, client: 'cc' } }),
+    });
+    const sendAs = (name) => fetch(`http://127.0.0.1:${port}/t/${token}/api/room`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'send', code: 'ABC-DEF-GHJ', message: { name, client: 'cc', text: 'hi' } }),
+    });
+
+    assert.equal((await joinAs('Agent-A')).status, 200);
+    assert.equal((await joinAs('Agent-B')).status, 200);
+    assert.equal((await sendAs('Agent-A')).status, 200);
+    assert.equal((await sendAs('Agent-B')).status, 200);
+
+    const sends = seen.filter((p) => p.action === 'send');
+    assert.equal(sends.length, 2);
+    assert.equal(sends[0].memberKey, 'key-for-Agent-A', "A's send must present A's key, not B's");
+    assert.equal(sends[1].memberKey, 'key-for-Agent-B', "B's send must present B's key");
+  } finally {
+    if (child) await stopChild(child);
+    await stop(upstream);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
