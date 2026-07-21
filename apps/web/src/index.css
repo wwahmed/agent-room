@@ -151,6 +151,13 @@ body {
       font-size: 14px;
       line-height: 1.55;
     }
+    /* Waqas (phone capture, urgent): 15px prose reads small on compact
+       high-density phones. Message prose steps to 16px on phones only —
+       the desktop scale is untouched. */
+    .text-\[15px\]:not(.text-fixed) {
+      font-size: 16px;
+      line-height: 1.6;
+    }
   }
 }
 

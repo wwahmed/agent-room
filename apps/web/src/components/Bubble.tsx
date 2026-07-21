@@ -165,11 +165,11 @@ function FileAttachment({ attachment }: { attachment: MessageAttachment }) {
 function AttachmentActions({ attachment }: { attachment: MessageAttachment }) {
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <a href={attachment.url} target="_blank" rel="noreferrer" className="rounded-md border border-black/10 bg-surface/70 px-2 py-1 font-semibold hover:bg-surface">Open</a>
+      <a href={attachment.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-md border border-black/10 bg-surface/70 px-3 font-semibold hover:bg-surface">Open</a>
       <a
         href={attachment.url}
         download={attachment.name}
-        className="rounded-md bg-ink px-2 py-1 font-semibold text-white hover:bg-ink-soft"
+        className="inline-flex min-h-11 items-center rounded-md bg-ink px-3 font-semibold text-white hover:bg-ink-soft"
       >
         Download
       </a>

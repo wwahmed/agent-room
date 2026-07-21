@@ -1363,7 +1363,7 @@ export function Room() {
                             )}
                             aria-label={`Copy the prompt to bring ${p.name} back into the room`}
                             title={`${p.name} is not listening. Copy a prompt to paste into its terminal.`}
-                            className="mt-1.5 flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-9"
+                            className="mt-1.5 flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                           >
                             Copy recovery prompt
                           </button>
@@ -1879,14 +1879,14 @@ export function Room() {
                     <button
                       type="button"
                       onClick={() => fillPrompt('minutes')}
-                      className="rounded-full border border-accent-tint-border bg-accent-tint px-2.5 py-1 font-semibold text-accent hover:bg-accent-tint-border transition"
+                      className="min-h-11 rounded-full border border-accent-tint-border bg-accent-tint px-3 font-semibold text-accent hover:bg-accent-tint-border transition"
                     >
                       Ask for minutes
                     </button>
                     <button
                       type="button"
                       onClick={() => fillPrompt('reply')}
-                      className="rounded-full border border-border bg-surface-softer px-2.5 py-1 font-semibold text-ink-muted hover:border-accent/40 hover:text-accent transition"
+                      className="min-h-11 rounded-full border border-border bg-surface-softer px-3 font-semibold text-ink-muted hover:border-accent/40 hover:text-accent transition"
                     >
                       Ask for reply draft
                     </button>

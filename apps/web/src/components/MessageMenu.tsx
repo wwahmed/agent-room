@@ -58,13 +58,16 @@ export function MessageMenu({ message, align = 'right', onReply }: { message: Me
         aria-label="Message actions"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`flex h-6 w-6 items-center justify-center rounded text-ink-faint transition hover:bg-surface-softer hover:text-ink focus:opacity-100 focus:outline-none ${open ? 'opacity-100' : 'opacity-60 group-hover:opacity-100 sm:opacity-0'}`}
+        // 44px hit box, quiet 24px visual inside (gate finding: 24x24).
+        className={`-m-2.5 flex min-h-11 min-w-11 items-center justify-center focus:opacity-100 focus:outline-none ${open ? 'opacity-100' : 'opacity-60 group-hover:opacity-100 sm:opacity-0'}`}
       >
-        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
-          <circle cx="3" cy="8" r="1.4" />
-          <circle cx="8" cy="8" r="1.4" />
-          <circle cx="13" cy="8" r="1.4" />
-        </svg>
+        <span className="flex h-6 w-6 items-center justify-center rounded text-ink-faint transition hover:bg-surface-softer hover:text-ink">
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
+            <circle cx="3" cy="8" r="1.4" />
+            <circle cx="8" cy="8" r="1.4" />
+            <circle cx="13" cy="8" r="1.4" />
+          </svg>
+        </span>
       </button>
       {open && (
         <div
