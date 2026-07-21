@@ -34,7 +34,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateRoomCode, canonicalizeCode, ROOM_TTL_SECONDS } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_TTL_SECONDS, roomTopicIssue } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 import { parseMultipart } from './multipart.js';
 import {
@@ -426,6 +426,13 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
 
   switch (action) {
     case 'create': {
+      const requestedTopic = String(payload.topic || '');
+      const topicIssue = roomTopicIssue(requestedTopic);
+      if (topicIssue) {
+        const err = new Error(topicIssue);
+        err.name = 'BadRequestError';
+        throw err;
+      }
       // T-47: generate a human-friendly word code (door-cat-hall) that isn't
       // in use. generateRoomCode skips embarrassing combos; the async loop here
       // owns collision detection against live rooms (redis is async, so it
@@ -446,7 +453,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       if (!newCode) throw new Error('could not allocate a room code');
       const created = await createRoom(client, {
         code: newCode,
-        topic: String(payload.topic || ''),
+        topic: normalizeRoomTopic(requestedTopic),
         createdBy: String(payload.createdBy || ''),
         hostAuthId: caller.kind === 'user' ? caller.email : undefined,
       });
@@ -467,6 +474,22 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     }
     case 'get': {
       return { room: await getRoom(client, code) };
+    }
+    case 'renameRoom': {
+      await requireHost(code, payload.hostKey as string | undefined, caller);
+      const requestedTopic = String(payload.topic || '');
+      const topicIssue = roomTopicIssue(requestedTopic);
+      if (topicIssue) {
+        const err = new Error(topicIssue);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      return {
+        room: await casRoom(client, code, current => ({
+          ...current,
+          topic: normalizeRoomTopic(requestedTopic),
+        })),
+      };
     }
     case 'verifyHostKey': {
       // Pre-flight for a web client about to claim the host slot. Throws

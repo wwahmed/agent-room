@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { createClient, createProject, createRoom, listProjectCandidates, listProjects, type ProjectCandidate, type ProjectSummary } from '../lib/api.js';
-import { ROLE_PRESETS } from '@agent-room/shared';
+import { normalizeRoomTopic, ROLE_PRESETS, roomTopicIssue } from '@agent-room/shared';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
 import { fetchIdentity, lastRole } from '../lib/identity.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
@@ -53,14 +53,13 @@ export function CreateMeeting() {
 
   function pickTemplate(id: string) {
     setTemplateId(id);
-    const t = templateById(id);
-    // Only autofill the topic if the user hasn't typed something yet.
-    if (t && !topic.trim()) setTopic(t.topicSeed);
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!topic.trim() || !name.trim()) return;
+    const topicIssue = roomTopicIssue(topic);
+    if (topicIssue) { setError(topicIssue); return; }
+    if (!name.trim()) return;
     if ((projects.length > 0 || candidates.length > 0) && !projectId) {
       setError('Pick a project — new rooms need a durable home for their task board.');
       return;
@@ -76,7 +75,7 @@ export function CreateMeeting() {
       // The server allocates the room code (it can check collisions
       // against Redis; the browser can't).
       const created = await createRoom(client, {
-        topic: topic.trim(),
+        topic: normalizeRoomTopic(topic),
         createdBy: name.trim(),
         projectId: resolvedProjectId || undefined,
       });
@@ -112,7 +111,7 @@ export function CreateMeeting() {
 
       <form onSubmit={submit} className="mx-auto w-full max-w-[720px] px-4 py-6">
         <h1 className="text-xl font-bold tracking-tight">Start a room</h1>
-        <p className="mt-1 mb-5 text-[13px] text-ink-soft">A topic, a project to keep its work in, and you're live.</p>
+        <p className="mt-1 mb-5 text-[13px] text-ink-soft">A clear room name, a project to keep its work in, and you're live.</p>
 
         {error && <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">{error}</div>}
 
@@ -140,13 +139,14 @@ export function CreateMeeting() {
         )}
 
         <label className="mb-4 block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Topic</span>
-          <input value={topic} onChange={e => setTopic(e.target.value)} required
+          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Room name</span>
+          <input value={topic} onChange={e => { setTopic(e.target.value); setError(null); }} required
+            aria-invalid={Boolean(topic && roomTopicIssue(topic))}
             placeholder={template?.topicSeed || 'What are we working on?'}
             className={fieldClass} />
           {template && template.id !== 'blank' && (
             <span className="mt-1 block text-[11px] text-ink-faint">
-              Replace <code className="rounded bg-surface-softer px-1">{'{...}'}</code> placeholders with the real subject.
+              The example stays placeholder text—type the specific name you want people to see.
             </span>
           )}
         </label>
@@ -217,7 +217,7 @@ export function CreateMeeting() {
           </div>
         )}
 
-        <button disabled={busy} type="submit" className="min-h-11 w-full rounded-xl bg-accent py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50">
+        <button disabled={busy || Boolean(roomTopicIssue(topic))} type="submit" className="min-h-11 w-full rounded-xl bg-accent py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50">
           {busy ? 'Creating…' : 'Create room →'}
         </button>
       </form>

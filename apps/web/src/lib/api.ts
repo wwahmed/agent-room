@@ -266,6 +266,16 @@ export async function getRoom(_client: ApiClient, code: string): Promise<Room> {
   return (await call<{ room: Room }>({ action: 'get', code })).room;
 }
 
+export async function renameRoom(_client: ApiClient, code: string, topic: string): Promise<Room> {
+  const out = await call<{ room: Room }>({
+    action: 'renameRoom',
+    code,
+    topic,
+    hostKey: storedHostKey(code),
+  });
+  return out.room;
+}
+
 export interface JoinRoomOptions {
   priorIdentity?: { name: string; client: ClientKind };
   hostKey?: string;
