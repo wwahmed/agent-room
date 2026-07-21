@@ -93,7 +93,9 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                   {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
                   {r.status === 'ended' ? ' · ended' : ''}
                 </span>
-                {(r.agentCount ?? 0) > 0 && (
+                {/* UX taste pass: presence is for LIVE rooms only — an ended
+                    room gets no facepile, no badge, nothing to alarm about. */}
+                {r.status !== 'ended' && (r.agentCount ?? 0) > 0 && (
                   <span className="ml-auto">
                     <AgentFacepile
                       code={r.code}
