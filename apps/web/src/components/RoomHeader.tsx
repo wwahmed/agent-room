@@ -26,6 +26,9 @@ interface Props {
   /** T-71: the workspace switcher. Centered inside the bar at lg+; rendered
    *  as the second row of the SAME header shell below lg (52 + 44 = 96px). */
   workspaceNav?: React.ReactNode;
+  /** T-71: full-screen mobile pages (Settings) drop the nav row — chrome
+   *  returns to 52px and the page provides its own title/Back orientation. */
+  mobileNavHidden?: boolean;
 }
 
 export function RoomHeader({
@@ -43,6 +46,7 @@ export function RoomHeader({
   agentStaleCount,
   mentionNav,
   workspaceNav,
+  mobileNavHidden,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -69,7 +73,7 @@ export function RoomHeader({
   }, [menuOpen]);
 
   return (
-    <header className={`app-command-bar fixed inset-x-0 top-0 z-40 flex flex-col ${workspaceNav ? 'h-[96px] lg:h-14' : 'h-[52px] items-center sm:h-14'}`}>
+    <header className={`app-command-bar fixed inset-x-0 top-0 z-40 flex flex-col ${workspaceNav ? (mobileNavHidden ? 'h-[52px] lg:h-14' : 'h-[96px] lg:h-14') : 'h-[52px] items-center sm:h-14'}`}>
       <div className={`relative z-10 flex min-w-0 items-center px-1.5 sm:px-3 ${workspaceNav ? 'h-[52px] flex-shrink-0 lg:h-full' : 'h-full flex-1 w-full'}`}>
         <div className="flex min-w-0 items-center">
           <Link
@@ -164,14 +168,11 @@ export function RoomHeader({
               aria-label={`${agentCount} agents, ${agentStatus}`}
             >
               <AgentFacepile code={room.code} agentCount={agentCount} agentStaleCount={agentStaleCount} agents={agents} />
-              <span className="hidden min-w-[62px] pr-1 leading-none xl:block">
-                <span className="block text-[13px] font-semibold tracking-[-0.01em] text-ink">
-                  {agentCount} {agentCount === 1 ? 'agent' : 'agents'}
-                </span>
-                <span className={`mt-1 flex items-center gap-1 text-[12px] font-medium ${agentStaleCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${agentStaleCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-hidden="true" />
-                  {agentStatus}
-                </span>
+              {/* T-71 pixel review 5: facepile + ONE human-readable status —
+                  details live in People, not a congested pill. */}
+              <span className={`hidden items-center gap-1.5 pr-1 text-[13px] font-semibold xl:flex ${agentStaleCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${agentStaleCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-hidden="true" />
+                {agentStatus}
               </span>
             </div>
           )}
@@ -229,7 +230,7 @@ export function RoomHeader({
           />
         </div>
       </div>
-      {workspaceNav && (
+      {workspaceNav && !mobileNavHidden && (
         <div className="flex h-11 flex-shrink-0 items-center px-2 lg:hidden">{workspaceNav}</div>
       )}
     </header>

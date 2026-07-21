@@ -1262,27 +1262,34 @@ export function Room() {
   // Inspector tab contents. These reuse the pre-T-05 side-panel blocks
   // verbatim; only the responsive chrome around them changed (permanent
   // columns + mobile tab bar became one toggleable Inspector).
+  // T-71 (design lead pixel review): Settings is a composed PAGE — Identity,
+  // Access, Collaboration, Lifecycle, and a separated Danger section. One
+  // primary action (Invite, in the page header); recovery is deliberately
+  // quiet and cannot visually equal it.
+  const settingsSectionHead = (label: string, tone = 'text-ink-faint') => (
+    <h3 className={`mb-3 text-[14px] font-semibold uppercase tracking-wide ${tone}`}>{label}</h3>
+  );
   const roomInfoPanel = (
-            <div className="p-4 border-b border-border-faint">
-              <div className="mb-2 text-xs font-semibold uppercase text-ink-faint">Room</div>
-              <h2 className="text-[15px] font-semibold leading-snug lg:text-sm">{room.topic}</h2>
-              <RenameRoomControl room={room} isHost={isHost} onRenamed={() => { void refreshRoom(); }} />
-              <div className="mt-3">
-                <MeetingCodePill code={code} />
-              </div>
-              <button
-                onClick={() => copyText(joinUrl, 'Invite link copied')}
-                className="mt-3 min-h-11 w-full rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20"
-              >
-                Copy invite link
-              </button>
-              <div className="mt-3 rounded-lg border border-border-faint bg-surface-softer p-2.5">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase text-ink-faint">Reply mode</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 text-[12px] font-semibold text-ink-soft">
-                    {modeLabel(replyMode)}
-                  </span>
-                </div>
+    <div className="flex flex-col gap-4">
+      <section aria-label="Identity" className="rounded-xl border border-border-faint bg-surface p-4">
+        {settingsSectionHead('Identity')}
+        <h4 className="text-[16px] font-semibold leading-snug text-ink">{room.topic}</h4>
+        <RenameRoomControl room={room} isHost={isHost} onRenamed={() => { void refreshRoom(); }} />
+      </section>
+      <section aria-label="Access" className="rounded-xl border border-border-faint bg-surface p-4">
+        {settingsSectionHead('Access')}
+        <MeetingCodePill code={code} />
+        <p className="mt-2 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+          Anyone with this code or the invite link can join. Invite lives at the top of this page.
+        </p>
+      </section>
+      <section aria-label="Collaboration" className="rounded-xl border border-border-faint bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          {settingsSectionHead('Reply mode')}
+          <span className="rounded bg-surface-softer px-1.5 py-0.5 text-[13px] font-semibold text-ink-soft">
+            {modeLabel(replyMode)}
+          </span>
+        </div>
                 {canConfigureReplyMode ? (
                   <div className="space-y-2">
                     <select
@@ -1355,8 +1362,36 @@ export function Room() {
                 ) : (
                   <div className="text-xs font-semibold text-ink-muted">{modeLabel(replyMode)}</div>
                 )}
-              </div>
-            </div>
+      </section>
+      <section aria-label="Lifecycle" className="rounded-xl border border-border-faint bg-surface p-4">
+        {settingsSectionHead('Lifecycle')}
+        <div className="flex flex-col gap-2">
+          <RecoverHostButton code={code} />
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex min-h-11 items-center justify-center rounded-lg border border-border px-3 text-sm font-semibold text-ink-soft transition hover:text-ink"
+          >
+            Leave to Home
+          </button>
+        </div>
+      </section>
+      {!ended && room.createdBy === self.name && (
+        <section aria-label="Danger zone" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
+          {settingsSectionHead('Danger', 'text-red-400')}
+          <p className="mb-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+            Ending the room stops the meeting for everyone. Agents are disconnected and the room moves to Ended.
+          </p>
+          <button
+            type="button"
+            onClick={handleEndMeeting}
+            className="flex min-h-11 items-center justify-center rounded-lg border border-red-400/40 px-4 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
+          >
+            End room
+          </button>
+        </section>
+      )}
+    </div>
   );
 
   // T-68: derive the lookup before constructing peoplePanel. Declaring this
@@ -1559,28 +1594,6 @@ export function Room() {
     </div>
   );
 
-  const roomFooterPanel = (
-            <div className="border-t border-border-faint">
-              {/* T-45: phone-friendly host recovery (no console). Safe to always
-                  show — the server 403s harmlessly when it isn't armed. */}
-              <div className="px-4 pt-4">
-                <RecoverHostButton code={code} />
-              </div>
-              <div className="p-4 flex gap-2">
-                {!ended && room.createdBy === self.name && (
-                  <button
-                    onClick={handleEndMeeting}
-                    className="min-h-11 flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20"
-                  >
-                    End
-                  </button>
-                )}
-                <button onClick={() => navigate('/')} className="min-h-11 flex-1 rounded-lg bg-surface-softer px-3 py-2 text-sm font-semibold text-ink-muted">
-                  Home
-                </button>
-              </div>
-            </div>
-  );
 
   // T-71: every destination renders through the shared page anatomy.
   const renderPanel = (tab: InspectorTab) =>
@@ -1614,17 +1627,25 @@ export function Room() {
         title="Settings"
         purpose="Room identity, access, reply mode, and lifecycle."
         action={(
-          <button
-            type="button"
-            onClick={() => selectTab(prevTabRef.current)}
-            className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:text-ink"
-          >
-            <span aria-hidden="true">←</span> Back
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => selectTab(prevTabRef.current)}
+              className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:text-ink"
+            >
+              <span aria-hidden="true">←</span> Back
+            </button>
+            <button
+              type="button"
+              onClick={() => copyText(joinUrl, 'Invite link copied')}
+              className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90"
+            >
+              Invite
+            </button>
+          </div>
         )}
       >
         {roomInfoPanel}
-        {roomFooterPanel}
       </PageScaffold>
     ) : (
       <PageScaffold title="Outputs" purpose="Deliverables, artifacts, and minutes this room has produced.">
@@ -1645,7 +1666,7 @@ export function Room() {
   const headerAgentStaleCount = headerAgents.filter(agent => agent.state === 'stale' || agent.state === 'disconnected').length;
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface-sunken pt-[96px] lg:pt-14">
+    <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'room' ? 'pt-[52px]' : 'pt-[96px]'}`}>
       <WorkspaceRail />
       <RoomListPane activeCode={code} selfName={me.name} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
@@ -1661,6 +1682,7 @@ export function Room() {
               onSelect={key => selectTab(key as MainTab)}
             />
           )}
+          mobileNavHidden={mainTab === 'room'}
           listeningCount={listeningCount}
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}
@@ -2249,6 +2271,10 @@ export function Room() {
             (Room owns the poll, ProjectPanel consumes the same data), every
             item deep-links to its owning page, no duplicate actions, no
             independent scroll, >=1440 only. */}
+        {/* Collapse rule (pixel review 3): the rail must EARN its 300px —
+            fewer than two populated preview sections and it folds away
+            (header presence already covers agents alone). */}
+        {[headerAgents.length > 0, (taskPulse?.length ?? 0) > 0, artifacts.length > 0].filter(Boolean).length >= 2 && (
         <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
           <section aria-label="Active agents">
             <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
@@ -2319,6 +2345,7 @@ export function Room() {
             )}
           </section>
         </aside>
+        )}
         </div>
       </main>
 

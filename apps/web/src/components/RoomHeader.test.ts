@@ -17,7 +17,9 @@ describe('room command bar composition', () => {
     expect(header).toContain('Search rooms, messages, tasks…');
     expect(header).toContain('AgentFacepile');
     expect(header).toContain('header-team-pill');
-    expect(header).toContain("agentCount === 1 ? 'agent' : 'agents'");
+    // T-71 pixel ruling 5: the pill is facepile + ONE human-readable status.
+    expect(header).toContain('{agentStatus}');
+    expect(header).not.toContain("agentCount === 1 ? 'agent' : 'agents'");
     expect(header).toContain('header-room-presence');
     expect(header).toContain('header-search-field');
     expect(header).toContain('header-glass-control');
@@ -26,9 +28,11 @@ describe('room command bar composition', () => {
     expect(rail).not.toContain('wakichat-icon-192.png');
     expect(pane).not.toContain('h-[60px]');
     // T-71: in-room mobile chrome is the 96px two-row header shell
-    // (52px identity + 44px workspace switcher), one row at lg+.
-    expect(room).toContain('bg-surface-sunken pt-[96px] lg:pt-14');
+    // (52px identity + 44px workspace switcher), one row at lg+; the
+    // full-screen mobile Settings page returns chrome to 52px.
+    expect(room).toContain("mainTab === 'room' ? 'pt-[52px]' : 'pt-[96px]'");
     expect(header).toContain('workspaceNav');
+    expect(header).toContain('mobileNavHidden');
   });
 
   it('keeps mobile navigation and touch-size header actions', () => {
