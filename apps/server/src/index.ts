@@ -22,6 +22,7 @@
 //   PORT            listen port                    (default 8210)
 //   REDIS_URL       redis connection string        (default redis://127.0.0.1:6379)
 //   KV_TOKEN        bearer token for /kv           (required)
+//   AGENT_ROOM_PUBLIC_ORIGIN lifecycle discovery origin (default https://chat.wakilabs.dev)
 //   WEB_DIST        path to built web UI           (default ../../web/dist relative to this file)
 //   ALLOW_LEGACY_NAME_AUTH  T-30 migration bridge  (default off = fully closed)
 //                   When on, keyless MCP 0.25.x rows may host/send by name
@@ -62,6 +63,7 @@ import {
 import { redactRoomPayload } from './redact.js';
 import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
+import { lifecycleDiscovery } from './lifecycle.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
 import {
@@ -96,6 +98,7 @@ import {
 const PORT = Number(process.env.PORT || 8210);
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const KV_TOKEN = process.env.KV_TOKEN || '';
+const PUBLIC_ORIGIN = process.env.AGENT_ROOM_PUBLIC_ORIGIN || 'https://chat.wakilabs.dev';
 // T-30 migration bridge. Default OFF = fully closed (F1/F2): host actions and
 // sends on keyless rows are denied. Set ON in an env that still runs
 // credential-unaware MCP 0.25.x clients (they cannot carry a memberKey), so
@@ -1614,7 +1617,8 @@ const server = createServer(async (req, res) => {
 
     if (path === '/healthz') {
       const pong = await redis.ping();
-      return sendJson(res, pong === 'PONG' ? 200 : 500, { ok: pong === 'PONG' });
+      const healthy = pong === 'PONG';
+      return sendJson(res, healthy ? 200 : 500, lifecycleDiscovery(PUBLIC_ORIGIN, healthy));
     }
 
     if (req.method === 'GET' || req.method === 'HEAD') {
