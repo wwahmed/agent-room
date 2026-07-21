@@ -313,10 +313,20 @@ export function Room() {
       seekAttemptsRef.current = 0;
       window.setTimeout(() => {
         const el = document.getElementById(`msg-${sourceSeekId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Flash AFTER the scroll lands, not during it — a long seek's smooth
+        // scroll outlives a flash fired at departure (assessor finding).
+        const flash = () => {
           el.classList.add('reply-flash');
-          window.setTimeout(() => el.classList.remove('reply-flash'), 1200);
+          window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
+        };
+        const feedEl = feedRef.current;
+        if (feedEl && 'onscrollend' in window) {
+          feedEl.addEventListener('scrollend', flash, { once: true });
+          window.setTimeout(flash, 2500); // fallback if scrollend never fires
+        } else {
+          window.setTimeout(flash, 800);
         }
       }, 60);
     } else if (action === 'give-up-trimmed' || action === 'give-up-error') {
