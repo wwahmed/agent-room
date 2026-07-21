@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import type { Message } from '@agent-room/shared';
-import { AttachmentList, MessageText, systemEventLabel } from './Bubble.js';
+import { AttachmentList, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
 import { isStatusPing } from '../lib/unread.js';
 import { MessageMenu } from './MessageMenu.js';
+import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 
 // T-05 editorial message rows. Sender identity is the primary visual
 // anchor (host feedback: "I am having a very hard time distinguishing
@@ -218,23 +219,24 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   }
 
   if (self) {
-    // Own messages: subtle right alignment, compact tinted block, no
-    // avatar/name (you know who you are). Timestamp inside, quiet.
+    // Own messages: keep the conversational right alignment, but use the
+    // quiet accent-tint surface. Saturated accent is reserved for actions and
+    // unread state so a long self-authored message never dominates the feed.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-0.5' : 'mt-3'}`}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-1' : 'mt-3 sm:mt-4'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
-        <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] sm:max-w-[70%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-white shadow-sm break-words [overflow-wrap:anywhere]">
-          {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} onDark />}
+        <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-2xl rounded-br-md border border-accent-tint-border bg-accent-tint px-4 py-2.5 text-ink shadow-card sm:max-w-[70%] [overflow-wrap:anywhere]">
+          {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {/* T-30 rev3 per UX: the SHOUTING was the measure, not the glyphs —
               cap the line length at ~68ch and keep 15-16px type. */}
           {body.trim() && (
-            <div className="max-w-[68ch] text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
-              <MessageText text={body} selfName={selfName} />
+            <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
+              <CollapsibleMessageBody text={body} selfName={selfName} />
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
-          <div className="mt-0.5 text-right text-[12px] leading-none text-white/60" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
+          <div className="mt-1 text-right text-[12px] leading-none text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
         </div>
       </div>
     );
@@ -258,16 +260,16 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-2xl border sm:max-w-[86%] [overflow-wrap:anywhere]';
   // T-30 rev3 per UX: keep 15-16px glyphs; the readability lever is the
   // MEASURE — text columns cap at ~68ch (45-75ch optimum) below.
-  const bodyText = 'max-w-[68ch] text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
+  const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-0.5`} title={exactTime(message.time)}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-1`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className={`${bubbleShape} px-3.5 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <MessageText text={body} selfName={selfName} />}
+          {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
         <div className="absolute right-3 top-1"><MessageMenu message={message} onReply={onReply} /></div>
@@ -276,7 +278,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   }
 
   return (
-    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-3`}>
+    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-3 sm:mt-4`}>
       <SwipeReplyIndicator progress={swipe.progress} />
       <div className={bubbleShape} style={{ ...bubble, ...swipe.style }}>
         {/* T-58 (host: "others on the left", "can barely read the name"): the
@@ -294,7 +296,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         </div>
         <div className={`px-3.5 pb-2 pt-0.5 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <MessageText text={body} selfName={selfName} />}
+          {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         </div>
       </div>

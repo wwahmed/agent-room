@@ -194,7 +194,7 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
       {blocks.map((block, index) => {
         if (block.type === 'code') {
           return (
-            <pre key={index} className="overflow-x-auto rounded-lg bg-ink text-white/90 px-3 py-2 text-[12px] leading-relaxed">
+            <pre key={index} className="w-full max-w-none overflow-x-auto rounded-lg bg-ink px-3 py-2 text-[12px] leading-relaxed text-white/90">
               <code>{block.lines.join('\n')}</code>
             </pre>
           );
@@ -204,7 +204,7 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
           const ordered = block.items.every(item => /^\d+[.)]\s+/.test(item));
           const ListTag = ordered ? 'ol' : 'ul';
           return (
-            <ListTag key={index} className={`${ordered ? 'list-decimal' : 'list-disc'} pl-5 space-y-1`}>
+            <ListTag key={index} className={`${ordered ? 'list-decimal' : 'list-disc'} max-w-[68ch] space-y-1 pl-5`}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>{renderInline(item.replace(/^(\d+[.)]|[-*•])\s+/, ''), selfName)}</li>
               ))}
@@ -214,14 +214,14 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
 
         if (block.type === 'heading') {
           return (
-            <div key={index} className="font-semibold text-[13px] text-current">
+            <div key={index} className="max-w-[68ch] text-[13px] font-semibold text-current">
               {renderInline(block.text.replace(/^#{1,3}\s*/, ''), selfName)}
             </div>
           );
         }
 
         return (
-          <p key={index} className="whitespace-pre-wrap">
+          <p key={index} className="max-w-[68ch] whitespace-pre-wrap">
             {renderInline(block.text, selfName)}
           </p>
         );
