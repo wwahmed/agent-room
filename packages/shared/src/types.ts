@@ -148,6 +148,22 @@ export interface ReplyModeConfig {
   leadGraceMs?: number;
 }
 
+// T-32: why a participant row was removed by the server. Every server-side
+// removal path stamps one of these so no agent is ever kicked without a
+// paper trail (the glue-vow-soap class of "the room removed me and nobody
+// can say why").
+export interface RemovalRecord {
+  mechanism: 'host_removal' | 'join_displacement' | 'anchor_recovery';
+  /** Who triggered it: the host's name, or the joining identity that displaced the row. */
+  byName?: string;
+  at: number;
+  /** The removed row's agentIdHash, when it had one. Binds the notice to the
+   *  identity that lost the row so a stranger joining under the same name
+   *  cannot pop someone else's removal record. SERVER-ONLY: stripped by
+   *  redactRoomPayload and never included in the removalNotice handed out. */
+  anchorHash?: string;
+}
+
 export interface Room {
   code: string;
   topic: string;
@@ -165,6 +181,13 @@ export interface Room {
   // they get HostNameTakenError. This stops trivial impersonation by anyone
   // who only knows the room code.
   hostKeyHash?: string;
+  // T-32 removal provenance: the last involuntary removal of each identity,
+  // keyed `${name}\n${client}`. Written by every server-side removal path
+  // (host kick, join displacement, anchor recovery) and handed back — then
+  // cleared — on that identity's next join, so a returning agent learns WHY
+  // it was removed and can dispute it in-room. Names + timestamps only;
+  // never credential material.
+  lastRemovals?: Record<string, RemovalRecord>;
   // SHA-256 of the server-VERIFIED authenticated identity that created the
   // room. This is the host equivalent of Participant.authIdHash: it lets the
   // same Google/Access account recover host authority on another device where

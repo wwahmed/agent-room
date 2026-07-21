@@ -750,7 +750,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // would look exactly like a quiet success. `anchorAudit` carries only
       // room-visible identity (name/client/outcome): no anchors, hashes or keys,
       // so it is safe to log verbatim.
-      const { participant: outParticipant, memberKey, anchorAudit, ...roomRest } = joined;
+      const { participant: outParticipant, memberKey, anchorAudit, displaced, removalNotice, ...roomRest } = joined;
       if (anchorAudit) {
         securityEvent(
           anchorAudit.outcome === 'anchor_recovery'
@@ -767,10 +767,25 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           )).catch(() => { /* audit message is best-effort; the join itself succeeded */ });
         }
       }
+      // T-32: displacement is NEVER silent. Every live row this join removed
+      // gets a room-visible system message naming the mechanism, so a kicked
+      // agent (and the host) can see exactly what touched the participant list.
+      for (const d of displaced ?? []) {
+        const how = d.mechanism === 'anchor_recovery'
+          ? 'its durable anchor recovered the row and rotated the credential'
+          : `a new join arrived under the same name ("${outParticipant.name}")`;
+        securityEvent(`participant displaced on ${code}: "${d.name}" (${d.client}) removed — ${how}`);
+        await appendSystemMessage(client, code, sysMessage(
+          `${d.name}'s previous session was removed: ${how} (mechanism: ${d.mechanism}). If that session was still yours, rejoin — the server will hand you this notice — and post a [RELIABILITY] report for the host.`,
+          { eventType: 'participant_displaced', targetAgentName: d.name, targetAgentClient: d.client, mechanism: d.mechanism },
+        )).catch(() => { /* best-effort; the join itself succeeded */ });
+      }
       // T-21: hand every joining client the room's working conventions so a
       // fresh agent (or a future MCP that surfaces this field) starts with the
       // marker/task/ping etiquette instead of learning it mid-meeting.
-      return { room: roomRest, participant: outParticipant, memberKey, conventions: ROOM_CONVENTIONS };
+      // T-32: `removalNotice` tells a REJOINING identity why its previous row
+      // was removed (popped from room.lastRemovals; delivered exactly once).
+      return { room: roomRest, participant: outParticipant, memberKey, conventions: ROOM_CONVENTIONS, removalNotice };
     }
     case 'messages': {
       // T-04: optional `limit` bounds the page; omitted keeps cursor-to-end.
@@ -863,15 +878,22 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         await requireHost(code, payload.hostKey as string | undefined, caller);
         effectiveRequester = (await getRoom(client, code)).createdBy;
       }
-      return {
-        room: await removeParticipant(
-          client,
-          code,
-          effectiveRequester,
-          targetName,
-          targetClient,
-        ),
-      };
+      const roomAfterRemove = await removeParticipant(
+        client,
+        code,
+        effectiveRequester,
+        targetName,
+        targetClient,
+      );
+      // T-32: host kicks are room-visible with provenance; self-leaves stay
+      // quiet (voluntary, and the MCP already narrates its own departures).
+      if (requesterName !== targetName) {
+        await appendSystemMessage(client, code, sysMessage(
+          `${targetName} was removed by the host (${effectiveRequester}) (mechanism: host_removal).`,
+          { eventType: 'participant_removed', targetAgentName: targetName, targetAgentClient: targetClient, mechanism: 'host_removal', byName: effectiveRequester },
+        )).catch(() => { /* best-effort; the removal itself succeeded */ });
+      }
+      return { room: roomAfterRemove };
     }
     case 'end': {
       await requireHost(code, payload.hostKey as string | undefined, caller);

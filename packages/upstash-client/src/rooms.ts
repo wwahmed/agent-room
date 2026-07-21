@@ -1,6 +1,7 @@
 import type {
   Room,
   Participant,
+  RemovalRecord,
   ReplyMode,
   ReplyModeConfig,
 } from '@agent-room/shared';
@@ -223,11 +224,35 @@ export interface AnchorAudit {
   reclaimedProtectedRow: boolean;
 }
 
+// T-32 removal provenance carried by joins.
+//   displaced      — live rows this join removed (same-name dedup or anchor
+//                    recovery). The server posts a system message for each so
+//                    a displacement is never silent.
+//   removalNotice  — why THIS identity's previous row was removed, popped
+//                    from room.lastRemovals; the MCP surfaces it to the agent
+//                    with dispute instructions on rejoin.
+export interface DisplacedRow {
+  name: string;
+  client: Participant['client'];
+  mechanism: RemovalRecord['mechanism'];
+}
+
 export type JoinRoomResult = Room & {
   participant: Participant;
   memberKey?: string;
   anchorAudit?: AnchorAudit;
+  displaced?: DisplacedRow[];
+  removalNotice?: RemovalRecord & { name: string };
 };
+
+const removalKey = (name: string, client: Participant['client']) => `${name}\n${client}`;
+
+// A row that spoke/listened inside this window is a LIVE session; removing it
+// is displacement, not cleanup. Matches ANCHOR_RECLAIM_LIVE_MS semantics.
+function rowIsLive(row: Participant, now: number): boolean {
+  return Number(row.listenUntil || 0) > now
+    || now - Number(row.lastSeenAt || 0) <= ANCHOR_RECLAIM_LIVE_MS;
+}
 
 // T-25: locate the caller's existing row to reclaim on (re)join, so a returning
 // participant updates their SAME row instead of proliferating "(2)", "(3)" …
@@ -354,6 +379,10 @@ export async function joinRoom(
   // T-66: set inside the CAS mutator (and reset on each retry) so the caller can
   // audit what the durable anchor did. See AnchorAudit.
   let anchorAudit: AnchorAudit | undefined;
+  // T-32: set inside the CAS mutator (reset per retry) — live rows this join
+  // displaced, and the popped provenance for this identity's prior removal.
+  let displaced: DisplacedRow[] = [];
+  let removalNotice: (RemovalRecord & { name: string }) | undefined;
   // T-30 (F2): mint the credential (async crypto) BEFORE the synchronous CAS
   // mutator, exactly like hostKey. The plaintext is returned once; only the
   // hash is stored on the row.
@@ -520,10 +549,57 @@ export async function joinRoom(
       return !(p.name === next.name && p.client === next.client);
     });
 
-    return { ...current, participants: [...keep, next] };
+    // T-32 provenance. Reset per CAS retry like anchorAudit.
+    displaced = [];
+    removalNotice = undefined;
+    const now = Date.now();
+    const removals: Record<string, RemovalRecord> = { ...current.lastRemovals };
+
+    // Pop this identity's pending removal notice. Try the DESIRED name first —
+    // a displaced session rejoining while its old name is retaken lands on a
+    // "(2)" suffix, but its notice was stamped under the original name. A
+    // record bound to an anchor is popped ONLY by a joiner presenting that
+    // anchor: a stranger squatting on the name cannot read someone else's
+    // removal record. The handed-out notice never includes the hash.
+    for (const key of [removalKey(participant.name, participant.client), removalKey(next.name, next.client)]) {
+      const entry = removals[key];
+      if (entry && (!entry.anchorHash || entry.anchorHash === agentIdHash)) {
+        const { anchorHash: _serverOnly, ...safe } = entry;
+        removalNotice = { ...safe, name: key.split('\n')[0]! };
+        delete removals[key];
+        break;
+      }
+    }
+
+    // Any LIVE row this join dropped was a session displaced mid-flight, not
+    // idle cleanup: record the mechanism so the server can announce it and the
+    // displaced session finds the provenance when it comes back.
+    for (const p of current.participants) {
+      const droppedByDedup = !(reclaim && p === reclaim)
+        && p.name === next.name && p.client === next.client;
+      const keyRotatedAway = Boolean(
+        reclaim && p === reclaim && anchorAudit?.outcome === 'anchor_recovery',
+      );
+      if ((droppedByDedup || keyRotatedAway) && rowIsLive(p, now)) {
+        const mechanism = keyRotatedAway ? 'anchor_recovery' as const : 'join_displacement' as const;
+        displaced.push({ name: p.name, client: p.client, mechanism });
+        removals[removalKey(p.name, p.client)] = {
+          mechanism,
+          byName: next.name,
+          at: now,
+          ...(p.agentIdHash ? { anchorHash: p.agentIdHash } : {}),
+        };
+      }
+    }
+
+    return {
+      ...current,
+      participants: [...keep, next],
+      ...(Object.keys(removals).length > 0 || current.lastRemovals ? { lastRemovals: removals } : {}),
+    };
   });
 
-  return { ...room, participant: outParticipant, memberKey, anchorAudit };
+  return { ...room, participant: outParticipant, memberKey, anchorAudit, displaced, removalNotice };
 }
 
 // Pre-flight check used by callers that intend to join with the host's name.
@@ -746,11 +822,29 @@ export async function removeParticipant(
     if (!isSelfRemoval && current.createdBy !== requesterName) {
       throw new NotHostError(requesterName, current.createdBy);
     }
+    // T-32: a host kick gets provenance the target can read on rejoin.
+    // Self-removal is voluntary — no notice. The record is bound to the
+    // removed row's anchor when it has one, so only that identity pops it.
+    const targetRow = current.participants.find(
+      p => p.name === targetName && p.client === targetClient,
+    );
+    const removals = isSelfRemoval
+      ? current.lastRemovals
+      : {
+          ...current.lastRemovals,
+          [removalKey(targetName, targetClient)]: {
+            mechanism: 'host_removal' as const,
+            byName: requesterName,
+            at: Date.now(),
+            ...(targetRow?.agentIdHash ? { anchorHash: targetRow.agentIdHash } : {}),
+          },
+        };
     return {
       ...current,
       participants: current.participants.filter(
         p => !(p.name === targetName && p.client === targetClient)
       ),
+      ...(removals ? { lastRemovals: removals } : {}),
     };
   });
 }

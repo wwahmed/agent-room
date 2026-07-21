@@ -15,6 +15,7 @@
 import type {
   Message,
   Participant,
+  RemovalRecord,
   ReplyMode,
   ReplyModeConfig,
   Room,
@@ -119,15 +120,24 @@ export async function joinRoom(
   code: string,
   participant: Participant,
   options: { hostKey?: string; priorIdentity?: { name: string; client: 'web' | 'cc' } } = {},
-): Promise<Room & { participant: Participant }> {
-  const body = await client.post<{ room: Room; participant: Participant }>({
+): Promise<Room & { participant: Participant; removalNotice?: RemovalRecord & { name: string } }> {
+  const body = await client.post<{
+    room: Room;
+    participant: Participant;
+    // T-32: why this identity's previous row was removed (delivered once).
+    removalNotice?: RemovalRecord & { name: string };
+  }>({
     action: 'join',
     code,
     participant,
     hostKey: options.hostKey,
     priorIdentity: options.priorIdentity,
   });
-  return { ...body.room, participant: body.participant };
+  return {
+    ...body.room,
+    participant: body.participant,
+    ...(body.removalNotice ? { removalNotice: body.removalNotice } : {}),
+  };
 }
 
 export async function listMessages(client: RoomApiClient, code: string, since: number): Promise<Message[]> {

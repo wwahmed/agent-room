@@ -35,6 +35,10 @@ export function redactRoomPayload<T>(result: T): T {
     const r = { ...(room as Record<string, unknown>) };
     delete r.hostKeyHash;
     delete r.hostAuthIdHash;
+    // T-32: server bookkeeping — RemovalRecord.anchorHash is an identity
+    // verifier. The sanctioned delivery path is the join response's
+    // `removalNotice`, which joinRoom builds without the hash.
+    delete r.lastRemovals;
     if (Array.isArray(r.participants)) r.participants = r.participants.map(redactParticipant);
     out.room = r;
   }

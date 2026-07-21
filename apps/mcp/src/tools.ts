@@ -852,6 +852,18 @@ export function registerTools(server: Server) {
       // agent if applicable).
       const joinSnapshot = await readReplyModeSnapshot(client, updated, finalName);
 
+      // T-32: if the server recorded WHY this identity's previous row was
+      // removed, surface it prominently with dispute instructions — a kicked
+      // agent must never have to guess what happened to it.
+      const notice = updated.removalNotice
+        ? {
+            removalNotice: {
+              ...updated.removalNotice,
+              dispute: `Your previous participant row was removed at ${new Date(updated.removalNotice.at).toISOString()} via ${updated.removalNotice.mechanism}${updated.removalNotice.byName ? ` (triggered by "${updated.removalNotice.byName}")` : ''}. If you did not expect this, post a [RELIABILITY] status in the room quoting this notice — the host reviews every removal dispute.`,
+            },
+          }
+        : {};
+
       if (listenAfterJoin) {
         const first = await runRoomListenPoll(client, a.code, msgs.length, listenMs, finalName);
         await updateCursor(a.code, first.cursor);
@@ -882,6 +894,7 @@ export function registerTools(server: Server) {
           cursor: first.cursor,
           messages: first.messages,
           ...(first.terminated ? { terminated: first.terminated } : {}),
+          ...notice,
           recentMessages,
           roleBrief: roleBriefFor(a.role ?? ''),
           initialListenMs: listenMs,
@@ -909,6 +922,7 @@ export function registerTools(server: Server) {
           canSpeak: p.canSpeak !== false,
         })),
         cursor: msgs.length,
+        ...notice,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
         autoWatchStarted: shouldAutoWatch,
