@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import type { Message } from '@agent-room/shared';
 import { AttachmentList, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
-import { isStatusPing } from '../lib/unread.js';
 import { MessageMenu } from './MessageMenu.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 import { BrandedLogoAvatar, GenericAgentBadge } from './AgentAvatar.js';
@@ -192,26 +191,9 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     );
   }
 
-  // T-20 (host: "special status chip ... so that I don't get distracted by
-  // noise"): stamped heartbeat/status pings render as a quiet centered row —
-  // sender-attributed but visually operational, not conversational. They are
-  // also excluded from every unread surface (see lib/unread.ts).
-  if (isStatusPing(message)) {
-    return (
-      <div id={`msg-${message.id}`} className="flex justify-center px-4 py-0.5" title={exactTime(message.time)}>
-        {/* T-20 rev2 per the UX review: one quiet line — labels are
-            shrink-proof/nowrap, overflow-wrap lives ONLY on the wrapping text
-            span, chip uses real theme tokens (bg-black/10 vanished on dark),
-            relative time closes the line. */}
-        <div className="flex max-w-[90%] items-baseline gap-1.5 rounded-md border border-border-faint bg-surface-softer px-2.5 py-1 text-[12px] leading-snug text-ink-soft">
-          <span className="flex-shrink-0 whitespace-nowrap rounded border border-border-faint bg-surface px-1 py-0.5 text-[12px] font-semibold text-ink-soft" aria-label="Status update">Status</span>
-          <span className="flex-shrink-0 whitespace-nowrap font-semibold" style={{ color: message.color }}>{message.name}</span>
-          <span className="min-w-0 [overflow-wrap:anywhere]">{message.text}</span>
-          <span className="flex-shrink-0 whitespace-nowrap text-ink-faint">{messageTime(message.time, now)}</span>
-        </div>
-      </div>
-    );
-  }
+  // T-72: heartbeat/status pings never reach this component anymore — Room
+  // routes them (run-collapsed) to ActivityNote, whose two-row anatomy cannot
+  // squeeze the update text into a vertical ribbon.
 
   if (self) {
     // Own messages: keep the conversational right alignment, but use the

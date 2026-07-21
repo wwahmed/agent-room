@@ -3,6 +3,8 @@ import {
   evaluateAssertions,
   ruleScrollReach,
   ruleTypeFloors,
+  ruleStatusNoteWidth,
+  ruleFloatingVsStatusNote,
   ruleClipped,
   ruleFloatingVsComposer,
   ruleMixedTheme,
@@ -116,5 +118,36 @@ describe('ruleTypeFloors (T-63 acceptance: mechanically gated type roles)', () =
   it('meeting or exceeding the floor passes; absent roles are skipped', () => {
     expect(ruleTypeFloors({ viewportW: 390, typeFloors: floors, typeRoles: { prose: { fontSize: 20, fontWeight: 400 } } })).toEqual([]);
     expect(ruleTypeFloors({ viewportW: 1440, typeFloors: floors, typeRoles: {} })).toEqual([]);
+  });
+});
+
+describe('ruleStatusNoteWidth (T-72: the vertical-ribbon killer)', () => {
+  it('BROKEN: a body caged to a strip inside a wide note fails', () => {
+    const fails = ruleStatusNoteWidth({ viewportW: 390, statusNotes: [{ w: 340, bodyW: 60, left: 20, right: 360, top: 100, bottom: 160, snippet: 'deploying now' }] });
+    expect(fails[0]).toContain('status body caged: 60px inside a 340px note');
+  });
+  it('BROKEN: a note squeezed under 80% of a phone viewport fails', () => {
+    const fails = ruleStatusNoteWidth({ viewportW: 390, statusNotes: [{ w: 200, bodyW: 180, left: 0, right: 200, top: 0, bottom: 40 }] });
+    expect(fails[0]).toContain('status note narrow: 200px < 80% of 390px viewport');
+  });
+  it('a full-width note whose body owns the column passes, desktop notes uncapped', () => {
+    expect(ruleStatusNoteWidth({ viewportW: 390, statusNotes: [{ w: 350, bodyW: 326, left: 20, right: 370, top: 0, bottom: 60 }] })).toEqual([]);
+    expect(ruleStatusNoteWidth({ viewportW: 1440, statusNotes: [{ w: 640, bodyW: 616, left: 400, right: 1040, top: 0, bottom: 60 }] })).toEqual([]);
+  });
+});
+
+describe('ruleFloatingVsStatusNote (T-72: Latest pill cannot sit on a note)', () => {
+  it('BROKEN: the jump-to-latest pill intersecting a note fails', () => {
+    const fails = ruleFloatingVsStatusNote({
+      floating: [{ label: 'Jump to latest messages', x: 150, y: 120, w: 90, h: 44 }],
+      statusNotes: [{ left: 20, right: 370, top: 100, bottom: 180, w: 350, bodyW: 326, snippet: 'build green' }],
+    });
+    expect(fails[0]).toContain('floating control overlaps status note');
+  });
+  it('a pill clear of every note passes', () => {
+    expect(ruleFloatingVsStatusNote({
+      floating: [{ label: 'Latest', x: 150, y: 700, w: 90, h: 44 }],
+      statusNotes: [{ left: 20, right: 370, top: 100, bottom: 180, w: 350, bodyW: 326 }],
+    })).toEqual([]);
   });
 });

@@ -69,7 +69,40 @@ export function ruleMobileBubbles(m) {
   return (m.bubbles ?? [])
     .filter(b => (typeof b === 'object' ? b.wrapped && b.w > 0 && b.w < MOBILE_BUBBLE_MIN : b > 0 && b < MOBILE_BUBBLE_MIN))
     .slice(0, 3)
-    .map(b => `message content collapsed: ${Math.round(typeof b === 'object' ? b.w : b)}px < ${MOBILE_BUBBLE_MIN}px minimum`);
+    .map(b => `message content collapsed: ${Math.round(typeof b === 'object' ? b.w : b)}px < ${MOBILE_BUBBLE_MIN}px minimum${typeof b === 'object' && b.snippet ? ` ("${b.snippet}")` : ''}`);
+}
+
+/** T-72: an Activity Note's body owns the note's full column — the one-line
+ *  ribbon failure (chip + name + time caging the text into a vertical strip)
+ *  is mechanically impossible to ship. On phones the note itself must hold a
+ *  humane column of the viewport. */
+export function ruleStatusNoteWidth(m) {
+  const out = [];
+  for (const n of (m.statusNotes ?? [])) {
+    if (n.bodyW != null && n.bodyW < n.w - 48) {
+      out.push(`status body caged: ${Math.round(n.bodyW)}px inside a ${Math.round(n.w)}px note${n.snippet ? ` ("${n.snippet}")` : ''}`);
+    }
+    if (m.viewportW < 640 && n.w > 0 && n.w < m.viewportW * 0.8) {
+      out.push(`status note narrow: ${Math.round(n.w)}px < 80% of ${m.viewportW}px viewport`);
+    }
+  }
+  return out.slice(0, 4);
+}
+
+/** T-72 acceptance: the jump-to-latest pill must never sit ON an Activity
+ *  Note at the captured scroll position (the ribbon screenshot's second
+ *  failure — the pill floating mid-column over squeezed text). */
+export function ruleFloatingVsStatusNote(m) {
+  const out = [];
+  for (const f of (m.floating ?? [])) {
+    if (!(f.w > 4 && f.h > 4)) continue;
+    for (const n of (m.statusNotes ?? [])) {
+      if (f.x < n.right && f.x + f.w > n.left && f.y < n.bottom && f.y + f.h > n.top) {
+        out.push(`floating control overlaps status note: "${f.label}"${n.snippet ? ` over ("${n.snippet}")` : ''}`);
+      }
+    }
+  }
+  return out.slice(0, 3);
 }
 
 /** Shell surfaces must agree on a theme: no dark header over a light canvas. */
@@ -131,7 +164,7 @@ export function ruleTypeFloors(m) {
   return out.slice(0, 6);
 }
 
-const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors];
+const RULES = [ruleOverflow, ruleTargets, ruleClipped, ruleOverlayPlacement, ruleMobileBubbles, ruleMixedTheme, ruleFloatingVsComposer, ruleScrollReach, ruleTypeFloors, ruleStatusNoteWidth, ruleFloatingVsStatusNote];
 
 export function evaluateAssertions(measurement) {
   return RULES.flatMap(rule => rule(measurement));

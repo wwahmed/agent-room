@@ -2,6 +2,8 @@ import { Fragment, useRef, useState, useEffect, useLayoutEffect, useMemo, useCal
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useRoom } from '../hooks/useRoom.js';
 import { MessageRow, isSameGroup } from '../components/MessageRow.js';
+import { ActivityNote } from '../components/ActivityNote.js';
+import { collapseStatusRuns } from '../lib/statusRuns.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { CommandSearch } from '../components/CommandSearch.js';
@@ -1635,6 +1637,9 @@ export function Room() {
                 }
                 const ambiguousNames = new Set<string>();
                 for (const [n, cs] of byName) if (cs.size > 1) ambiguousNames.add(n);
+                // T-72: consecutive same-agent heartbeats render as ONE
+                // Activity Note ("N updates") anchored at the newest ping.
+                const statusView = collapseStatusRuns(messages);
                 return messages.map((m, i) => (
                   <Fragment key={m.id}>
                   {startsMessageDay(messages[i - 1], m) && <MessageDayDivider time={m.time} now={now} />}
@@ -1654,6 +1659,10 @@ export function Room() {
                       isOwner={isHost}
                       onOpen={() => setOpenQuestionId(m.metadata!.questionId!)}
                     />
+                  ) : isStatusPing(m) ? (
+                    statusView.hidden.has(m.id)
+                      ? null
+                      : <ActivityNote message={m} run={statusView.runs.get(m.id)} now={now} />
                   ) : (
                     <MessageRow
                       key={m.id}

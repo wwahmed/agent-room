@@ -119,7 +119,12 @@ async function ensureFixtureRoom() {
   await msg('GateA', longReport, id++);
   for (let i = 0; i < 6; i++) await msg(i % 2 ? 'GateA' : 'GateB', `Rapid fixture message ${i + 1}.`, id++);
   await msg('GateB', '@GateA a deterministic mention for the highlight state.', id++);
+  // T-72: a same-sender heartbeat RUN, so the collapsed "3 updates" Activity
+  // Note (and its full-width body) is photographed and measured every run.
+  // One line is long enough to wrap at 390 — the ribbon regression's trigger.
   await msg('GateA', 'status ping fixture', id++, 'status');
+  await msg('GateA', 'Deterministic heartbeat: build finished green and the deploy step is proceeding to verification now.', id++, 'status');
+  await msg('GateA', 'status run fixture, newest member', id++, 'status');
   // rev4 (review finding): the VIEWER's own message, so the self-bubble
   // anatomy renders in fixture frames. Sent as ClaudeUI with the gate's key.
   if (memberKey) {
@@ -132,6 +137,10 @@ async function ensureFixtureRoom() {
 // rev3 (review finding): the fixture is REQUIRED. A failed seed no longer
 // shrinks the matrix — its frames simply fail capture and the STATIC expected
 // count reports CAPTURE-INCOMPLETE at exit 5.
+// The viewer identity key must exist BEFORE the seeder runs — the seeder
+// reads it for the self-authored fixture message, and a TDZ read here silently
+// killed every fixture frame on the reseed path.
+const memberKey = existsSync(KEY_FILE) ? readFileSync(KEY_FILE, 'utf8').trim() : '';
 let FIXTURE_ROOM = null;
 try {
   FIXTURE_ROOM = await ensureFixtureRoom();
@@ -157,7 +166,6 @@ let capturedFrames = 0;
 rmSync(CURRENT, { recursive: true, force: true });
 rmSync(DIFF, { recursive: true, force: true });
 for (const dir of [WORK, BASELINE, CURRENT, DIFF]) mkdirSync(dir, { recursive: true });
-const memberKey = existsSync(KEY_FILE) ? readFileSync(KEY_FILE, 'utf8').trim() : '';
 
 const browser = await chromium.launch({ executablePath: EXE });
 for (const vp of VIEWPORTS) {
@@ -242,8 +250,19 @@ for (const vp of VIEWPORTS) {
               const r = b.getBoundingClientRect();
               const lh = parseFloat(getComputedStyle(b).lineHeight) || 24;
               // Only WRAPPED content can be 'collapsed' — a short one-liner is
-              // intrinsically narrow and that is fine.
-              return { w: r.width, wrapped: r.height > lh * 1.8 };
+              // intrinsically narrow and that is fine. The snippet names the
+              // culprit in the finding instead of leaving a bare pixel count.
+              return { w: r.width, wrapped: r.height > lh * 1.8, snippet: (b.textContent || '').trim().slice(0, 40) };
+            }),
+            // T-72: Activity Note bodies must hold their full-width column.
+            statusNotes: [...document.querySelectorAll('[data-gate="status-note"]')].slice(-6).map(el => {
+              const body = el.querySelector('[data-gate="status-body"]');
+              const note = el.getBoundingClientRect();
+              return {
+                w: note.width, top: note.top, bottom: note.bottom, left: note.left, right: note.right,
+                bodyW: body ? body.getBoundingClientRect().width : null,
+                snippet: (body?.textContent || '').trim().slice(0, 40),
+              };
             }),
             composer: composerEl ? box(composerEl) : null,
             feed: feedEl ? box(feedEl) : null,
