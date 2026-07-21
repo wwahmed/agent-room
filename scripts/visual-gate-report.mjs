@@ -16,21 +16,24 @@ export function frameVerdict(name, diffPixels, totalPixels) {
   };
 }
 
-export function gateSummary(verdicts) {
+export function gateSummary(verdicts, geometryFailures = []) {
   const changed = verdicts.filter(v => v.changed);
   const fresh = verdicts.filter(v => v.baselineMissing);
   const lines = [
-    `visual-gate: ${verdicts.length} frames, ${changed.length} changed, ${fresh.length} new (no baseline)`,
+    `visual-gate: ${verdicts.length} frames, ${changed.length} changed, ${fresh.length} new (no baseline), ${geometryFailures.length} geometry findings`,
+    ...geometryFailures.map(g => `  GEOMETRY ${g.frame}: ${g.failure}`),
     ...changed.map(v => `  CHANGED ${v.name} ${v.pct}`),
     ...fresh.map(v => `  NEW     ${v.name}`),
   ];
-  // Changed frames exit 2; frames with no baseline exit 3 — both demand a
-  // human action (review diffs, or explicitly create/promote the baseline).
-  const exitCode = changed.length > 0 ? 2 : fresh.length > 0 ? 3 : 0;
+  // T-63: geometry failures are deterministic defects — highest priority
+  // (exit 4). Changed frames exit 2; missing baselines exit 3. All demand a
+  // human action before the deploy passes.
+  const exitCode = geometryFailures.length > 0 ? 4 : changed.length > 0 ? 2 : fresh.length > 0 ? 3 : 0;
   return {
     text: lines.join('\n'),
     exitCode,
     changed,
     fresh,
+    geometryFailures,
   };
 }
