@@ -354,3 +354,33 @@ describe('T-71 durable index — rev18 review items', () => {
     expect(await client.command(['GET', artifactBackfillKey(code)])).toBe(ARTIFACT_INDEX_VERSION);
   });
 });
+
+describe('T-71 durable index — rev19 item 5', () => {
+  it('a failed marker SET never records completion: ensure rejects, retry completes', async () => {
+    const client = listMemoryClient();
+    const code = 'dur-fix-seven';
+    await createRoom(client, { code, topic: 'Marker-SET fixture', createdBy: 'GateA' });
+    await joinRoom(client, code, { name: 'GateA', role: '', color: '#000', initials: 'GA', client: 'cc', joinedAt: 1, lastSeenAt: 1 });
+    await appendMessage(client, code, msg(1, '[DECISION] Completion must be earned.'));
+    await client.command(['DEL', artifactsKey(code)]);
+
+    let failMarkerSet = true;
+    const flaky: UpstashClient = {
+      command: async (c: readonly (string | number)[]) => {
+        if (failMarkerSet && String(c[0]).toUpperCase() === 'SET' && String(c[1]).startsWith('room-artifacts-v2-merged:')) {
+          failMarkerSet = false;
+          throw new Error('SET: ERR simulated redis-level error');
+        }
+        return client.command(c as never);
+      },
+      pipeline: (cs: readonly (readonly (string | number)[])[]) => client.pipeline(cs as never),
+    } as UpstashClient;
+
+    await expect(ensureArtifactIndex(flaky, code)).rejects.toThrow('simulated');
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBeNull();
+    const r = await ensureArtifactIndex(client, code);
+    expect(r.pending).toBe(false);
+    expect(await client.command(['GET', artifactBackfillKey(code)])).toBe(ARTIFACT_INDEX_VERSION);
+    expect(await listRoomArtifacts(client, code)).toHaveLength(1);
+  });
+});

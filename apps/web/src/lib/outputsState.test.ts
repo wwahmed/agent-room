@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoomArtifact } from '@agent-room/shared';
-import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, seekPageBudget, seekStep } from './outputsState.js';
+import { artifactsForRoom, hasLineMarker, outputsViewState, producedWorkOf, railSectionCount, isCurrentSeek, seekPageBudget, seekStep } from './outputsState.js';
 
 const art = (kind: RoomArtifact['kind']): RoomArtifact => ({ id: '1-0', kind, text: 'x', sourceMessageId: 1, author: 'A', time: 1 });
 
@@ -43,5 +43,17 @@ describe('seekStep (rev17/18: bounded, budgeted source seek)', () => {
     expect(seekPageBudget(500, 80)).toBe(9);
     expect(seekPageBudget(0, 80)).toBe(3);
     expect(seekStep(false, true, false, 9, seekPageBudget(500, 80))).toBe('give-up-error');
+  });
+});
+
+describe('isCurrentSeek (rev19: stale completions are inert)', () => {
+  const ticket = { generation: 3, code: 'AAA', target: 42 };
+  it('matches only the same generation, room, and target', () => {
+    expect(isCurrentSeek(ticket, { generation: 3, code: 'AAA', target: 42 })).toBe(true);
+  });
+  it('a room switch, a superseding seek, or a cleared seek all invalidate it', () => {
+    expect(isCurrentSeek(ticket, { generation: 3, code: 'BBB', target: 42 })).toBe(false);
+    expect(isCurrentSeek(ticket, { generation: 4, code: 'AAA', target: 42 })).toBe(false);
+    expect(isCurrentSeek(ticket, { generation: 3, code: 'AAA', target: null })).toBe(false);
   });
 });

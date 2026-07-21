@@ -58,3 +58,14 @@ export function seekStep(found: boolean, hasOlder: boolean, loadingOlder: boolea
 export function seekPageBudget(messageTotal: number, pageSize: number): number {
   return Math.ceil(Math.max(1, messageTotal) / Math.max(1, pageSize)) + 2;
 }
+
+export interface SeekTicket { generation: number; code: string; target: number }
+
+/** rev19 item 1: every async seek completion must prove it still speaks for
+ *  the CURRENT seek — same generation, same room, same target. State reset
+ *  is not cancellation; this is. */
+export function isCurrentSeek(ticket: SeekTicket, current: { generation: number; code: string; target: number | null }): boolean {
+  return ticket.generation === current.generation
+    && ticket.code === current.code
+    && ticket.target === current.target;
+}

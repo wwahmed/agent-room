@@ -41,7 +41,8 @@ import {
 } from '../lib/unread.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
-import { artifactsForRoom, hasLineMarker, outputsViewState, railSectionCount, seekPageBudget, seekStep, type ArtifactFetchState } from '../lib/outputsState.js';
+import { artifactsForRoom, hasLineMarker, isCurrentSeek, outputsViewState, railSectionCount, seekPageBudget, seekStep, type ArtifactFetchState } from '../lib/outputsState.js';
+import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
@@ -300,11 +301,18 @@ export function Room() {
   // trimmed the source, say so honestly instead of doing nothing.
   const [sourceSeekId, setSourceSeekId] = useState<number | null>(null);
   const seekAttemptsRef = useRef(0);
+  // rev19 item 1: a monotonically increasing seek generation. Every async
+  // completion carries its ticket and no-ops unless it still matches the
+  // current generation/room/target — state reset is not cancellation.
+  const seekGenRef = useRef(0);
+  const seekIdRef = useRef<number | null>(null);
+  seekIdRef.current = sourceSeekId;
   const codeRef = useRef(code);
   codeRef.current = code;
   // Room change must not spill an interrupted seek's paging state into the
-  // next room (rev18 review).
-  useEffect(() => { setSourceSeekId(null); seekAttemptsRef.current = 0; }, [code]);
+  // next room (rev18 review); bumping the generation makes any in-flight
+  // completion from the old room inert.
+  useEffect(() => { seekGenRef.current += 1; setSourceSeekId(null); seekAttemptsRef.current = 0; }, [code]);
   useEffect(() => {
     if (sourceSeekId == null) return;
     const action = seekStep(
@@ -321,22 +329,10 @@ export function Room() {
         const el = document.getElementById(`msg-${sourceSeekId}`);
         if (!el) return;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Flash AFTER the scroll lands, not during it — a long seek's smooth
-        // scroll outlives a flash fired at departure (assessor finding).
-        let flashed = false; // exactly once: scrollend OR the fallback (VA-0033)
-        const flash = () => {
-          if (flashed) return;
-          flashed = true;
-          el.classList.add('reply-flash');
-          window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
-        };
-        const feedEl = feedRef.current;
-        if (feedEl && 'onscrollend' in window) {
-          feedEl.addEventListener('scrollend', flash, { once: true });
-          window.setTimeout(flash, 2500); // fallback if scrollend never fires
-        } else {
-          window.setTimeout(flash, 800);
-        }
+        // Flash AFTER the scroll lands — exactly once: scrollend clears the
+        // fallback timer, the fallback removes the listener (rev19 item 2,
+        // proven with fake timers in lib/arrivalFlash.test.ts).
+        armArrivalFlash(el, feedRef.current, 'onscrollend' in window);
       }, 60);
     } else if (action === 'give-up-trimmed' || action === 'give-up-error') {
       setSourceSeekId(null);
@@ -347,21 +343,21 @@ export function Room() {
           : 'Couldn\u2019t load enough history to reach the source message. Try again.', 'error'));
     } else if (action === 'load-more') {
       seekAttemptsRef.current += 1;
-      const target = sourceSeekId;
-      const seekCode = code;
+      const ticket = { generation: seekGenRef.current, code, target: sourceSeekId };
       void loadOlder().then(result => {
         if (result !== -1) return;
-        // A FAILED page (-1, distinct from an empty one) stops the seek on
-        // the spot — but only the STILL-CURRENT seek in the STILL-CURRENT
-        // room (VA-0032: a stale resolution after a room switch or a
-        // superseding seek must not toast or null the wrong context).
-        setSourceSeekId(current => {
-          if (current !== target || codeRef.current !== seekCode) return current;
-          seekAttemptsRef.current = 0;
-          void import('../components/Toast.js').then(({ showToast }) =>
-            showToast('Couldn\u2019t load older history to reach the source message. You can retry from the Outputs page.', 'error'));
-          return null;
-        });
+        // A FAILED page stops the seek — but ONLY if this completion still
+        // speaks for the current seek (generation + room + target). A stale
+        // resolution after a room switch or superseding seek is inert.
+        if (!isCurrentSeek(ticket, { generation: seekGenRef.current, code: codeRef.current, target: seekIdRef.current })) return;
+        seekGenRef.current += 1;
+        seekAttemptsRef.current = 0;
+        setSourceSeekId(null);
+        // Actionable recovery (rev19 item 3): return the reader to the
+        // Outputs card whose View in chat IS the retry control.
+        selectTab('outputs');
+        void import('../components/Toast.js').then(({ showToast }) =>
+          showToast('Couldn\u2019t load older history to reach the source. Tap View in chat to retry.', 'error'));
       });
     } // 'wait': a page is already in flight
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2620,6 +2616,7 @@ export function Room() {
                 now={now}
                 onOpenSource={messageId => {
                   selectTab('chat');
+                  seekGenRef.current += 1;
                   seekAttemptsRef.current = 0;
                   setSourceSeekId(messageId);
                 }}

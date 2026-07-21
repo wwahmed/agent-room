@@ -46,8 +46,14 @@ export function createClient(env: UpstashEnv): UpstashClient {
 
   return {
     async command<T>(cmd: readonly (string | number)[]): Promise<T> {
-      const out = (await post('/', cmd)) as { result: T };
-      return out.result;
+      const out = (await post('/', cmd)) as { result?: T; error?: string };
+      // Same discipline as pipeline(): an HTTP-200 body can still carry a
+      // Redis-level {error}; trusting status alone let a failed single
+      // command pass as success.
+      if (out && typeof out === 'object' && 'error' in out && out.error) {
+        throw new UpstashError(`${String(cmd[0] ?? '?')}: ${out.error}`);
+      }
+      return out.result as T;
     },
     async pipeline<T>(cmds: readonly (readonly (string | number)[])[]): Promise<T[]> {
       const out = (await post('/pipeline', cmds)) as Array<{ result?: T; error?: string }>;
