@@ -27,6 +27,36 @@ function install(name: 'localStorage' | 'sessionStorage'): Storage {
 const local = install('localStorage');
 const session = install('sessionStorage');
 
+// jsdom ships neither matchMedia nor the observers; screen-level DOM tests
+// (Room bootstrap transitions) need inert, deterministic versions.
+if (typeof window !== 'undefined') {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        onchange: null,
+        dispatchEvent: () => false,
+      }),
+    });
+  }
+  for (const name of ['ResizeObserver', 'IntersectionObserver']) {
+    if (!(name in globalThis)) {
+      Object.defineProperty(globalThis, name, {
+        writable: true,
+        configurable: true,
+        value: class { observe() {} unobserve() {} disconnect() {} },
+      });
+    }
+  }
+}
+
 beforeEach(() => {
   local.clear();
   session.clear();
