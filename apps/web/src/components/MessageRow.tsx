@@ -223,7 +223,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     // quiet accent-tint surface. Saturated accent is reserved for actions and
     // unread state so a long self-authored message never dominates the feed.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-1' : 'mt-3 sm:mt-4'}`}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-5'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
         <div style={swipe.style} className="relative z-10 min-w-0 max-w-[88%] break-words rounded-2xl rounded-br-md border border-accent-tint-border bg-accent-tint px-4 py-2.5 text-ink shadow-card sm:max-w-[70%] [overflow-wrap:anywhere]">
@@ -231,7 +231,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {/* T-30 rev3 per UX: the SHOUTING was the measure, not the glyphs —
               cap the line length at ~68ch and keep 15-16px type. */}
           {body.trim() && (
-            <div className="text-[16px] leading-[1.7] sm:text-[15px] sm:leading-[1.75]">
+            <div className="text-[15px] font-normal leading-[1.65]">
               <CollapsibleMessageBody text={body} selfName={selfName} />
             </div>
           )}
@@ -244,28 +244,27 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
 
   const ambiguous = ambiguousNames?.has(message.name);
 
-  // Host feedback ("you guys have boxes, you should have bubbles too"): every
-  // incoming sender now gets a rounded chat bubble in their own identity color
-  // (soft tinted fill + faint colored border), left-aligned beside the avatar,
-  // separated by white space — mirroring the host's own message bubbles. The
-  // tint stays low-saturation so long technical text keeps full contrast.
-  const bubble = { backgroundColor: `${message.color}1f`, borderColor: `${message.color}3d` };
+  // T-41 host correction: identity color belongs to the avatar/name, not a
+  // giant saturated card behind every agent report. The incoming surface is
+  // deliberately near-neutral so long work updates read like a calm Slack/
+  // Teams transcript instead of a stack of alerts.
+  const bubble = { backgroundColor: `${message.color}08`, borderColor: `${message.color}1f` };
   const agentSender = message.client === 'cc';
   // T-56 (host: "wasting space at top", "empty margin on the right"): incoming
   // bubbles are capped-width and left-aligned (pr-* leaves a right margin for
   // the left/right rhythm); the top is tight — a small avatar overlaps the top
   // corner, name + time sit on ONE line (no divider, no wrap), role hidden on
   // mobile.
-  const rowClass = 'group relative pl-4 pr-10 sm:pr-16';
-  const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-2xl border sm:max-w-[86%] [overflow-wrap:anywhere]';
-  // T-30 rev3 per UX: keep 15-16px glyphs; the readability lever is the
-  // MEASURE — text columns cap at ~68ch (45-75ch optimum) below.
-  const bodyText = 'text-[16px] leading-[1.55] sm:text-[15px] sm:leading-[1.6]';
+  const rowClass = 'group relative pl-5 pr-12 sm:pl-6 sm:pr-20';
+  const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-xl border sm:max-w-[min(36rem,82%)] [overflow-wrap:anywhere]';
+  // Calm transcript type: stable 15px, explicitly normal weight, and enough
+  // leading to separate dense technical prose without enlarging it.
+  const bodyText = 'text-[15px] font-normal leading-[1.65]';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.
     return (
-      <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-1`} title={exactTime(message.time)}>
+      <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-2`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div className={`${bubbleShape} px-3.5 py-2 ${bodyText}`} style={{ ...bubble, ...swipe.style }}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
@@ -278,17 +277,17 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   }
 
   return (
-    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-3 sm:mt-4`}>
+    <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-5`}>
       <SwipeReplyIndicator progress={swipe.progress} />
       <div className={bubbleShape} style={{ ...bubble, ...swipe.style }}>
         {/* T-58 (host: "others on the left", "can barely read the name"): the
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
             top corner, and is legible-sized. */}
         <div className={`absolute -top-1 -left-2 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-lg' : 'rounded-full'}`}>
-          <SenderAvatar message={message} sizeClass="h-8 w-8" textClass="text-[12px]" />
+          <SenderAvatar message={message} sizeClass="h-7 w-7" textClass="text-[12px]" />
         </div>
-        <div className="flex items-center gap-x-2 pl-11 pr-3 pt-2">
-          <span className="text-[15px] font-bold" style={{ color: message.color }}>{message.name}</span>
+        <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
+          <span className="text-[13px] font-semibold" style={{ color: message.color }}>{message.name}</span>
           {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
           <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
