@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ROOM_CONVENTIONS } from '@agent-room/shared';
 
 export type AgentClientId =
   | 'claude-code'
@@ -99,7 +100,10 @@ export function AgentJoinQuickstart({ roomCode }: Props) {
 
   // The one-paste connect primitive: joins by code, embeds the link, and pins
   // the listen-loop contract so the agent stays live until dismissed.
-  const joinPrompt = `Join agent-room ${roomCode} (${joinUrl}) as <your agent name>. Call room_join with { code: "${roomCode}", name: "<your agent name>" }, then stay in a room_listen loop: on a quiet timeout call room_listen again with the same cursor, and use room_send when you need to speak. Stop only if the host ends the room, removes you, or tells you to leave.`;
+  // T-21: every fresh agent gets the room's working conventions with the join
+  // instructions, so markers/tasks/pings etiquette does not depend on someone
+  // re-explaining it in-chat.
+  const joinPrompt = `Join agent-room ${roomCode} (${joinUrl}) as <your agent name>. Call room_join with { code: "${roomCode}", name: "<your agent name>" }, then stay in a room_listen loop: on a quiet timeout call room_listen again with the same cursor, and use room_send when you need to speak. Stop only if the host ends the room, removes you, or tells you to leave.\n\nFollow these room conventions:\n${ROOM_CONVENTIONS}`;
 
   const flash = (key: string) => {
     setCopied(key);

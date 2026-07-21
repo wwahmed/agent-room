@@ -34,7 +34,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_TTL_SECONDS, roomTopicIssue } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TTL_SECONDS, roomTopicIssue } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 import { parseMultipart } from './multipart.js';
 import {
@@ -51,15 +51,22 @@ import { createProjectFromCandidate, getProject, listProjectCandidates, listProj
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { roomActivityAt } from './roomactivity.js';
+import {
+  listIndexedRoomPage,
+  roomListCursor,
+  roomListLimit,
+  type RoomIndexEntry,
+  type RoomListStore,
+} from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
 import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig } from '@agent-room/shared';
 import {
-  appendMessage,
-  appendSystemMessage,
+  appendMessage as appendStoredMessage,
+  appendSystemMessage as appendStoredSystemMessage,
   casRoom,
-  createRoom,
+  createRoom as createStoredRoom,
   createRoomReport,
   directInvoke,
   endRoom,
@@ -123,6 +130,128 @@ const client: UpstashClient = {
       if (err) throw err;
       return val as T;
     });
+  },
+};
+
+// T-15: room-list reads use a durable recent-activity ZSET instead of SCANning
+// every room and issuing sequential GET/LINDEX/GET calls on every request.
+// Existing installations are backfilled once; new rooms/messages maintain the
+// index on the write path. Expired room members are pruned while paging.
+const ROOM_ACTIVITY_INDEX_KEY = 'room-index:activity:v1';
+const ROOM_ACTIVITY_INDEX_READY_KEY = 'room-index:activity:v1:ready';
+let roomIndexBackfill: Promise<void> | null = null;
+
+async function touchRoomActivityIndex(code: string, at = Date.now()): Promise<void> {
+  await redis.zadd(ROOM_ACTIVITY_INDEX_KEY, at, code);
+}
+
+async function safelyTouchRoomActivityIndex(code: string, at = Date.now()): Promise<void> {
+  try {
+    await touchRoomActivityIndex(code, at);
+  } catch (error) {
+    // A room/message write has already succeeded. Never turn an index-refresh
+    // failure into a client retry that could duplicate the durable operation.
+    console.warn(`[room-index] could not update ${code}:`, error);
+    await redis.del(ROOM_ACTIVITY_INDEX_READY_KEY).catch(() => undefined);
+  }
+}
+
+const createRoom: typeof createStoredRoom = async (...args) => {
+  const created = await createStoredRoom(...args);
+  await safelyTouchRoomActivityIndex(created.code, created.createdAt);
+  return created;
+};
+
+const appendMessage: typeof appendStoredMessage = async (...args) => {
+  const result = await appendStoredMessage(...args);
+  if (result.appended) await safelyTouchRoomActivityIndex(args[1]);
+  return result;
+};
+
+const appendSystemMessage: typeof appendStoredSystemMessage = async (...args) => {
+  await appendStoredSystemMessage(...args);
+  await safelyTouchRoomActivityIndex(args[1]);
+};
+
+async function backfillRoomActivityIndex(): Promise<void> {
+  let cursor = '0';
+  do {
+    const [next, keys] = await redis.scan(cursor, 'MATCH', 'room:*', 'COUNT', 200);
+    cursor = next;
+    if (keys.length === 0) continue;
+    const reads = redis.pipeline();
+    for (const key of keys) {
+      reads.get(key);
+      const code = key.slice('room:'.length);
+      reads.lindex(`room-msgs:${code}`, -1);
+    }
+    const rows = await reads.exec();
+    if (!rows) throw new Error('room index backfill pipeline aborted');
+    const writes = redis.pipeline();
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]!;
+      const raw = rows[i * 2]?.[1];
+      const lastRaw = rows[i * 2 + 1]?.[1];
+      if (typeof raw !== 'string') continue;
+      try {
+        const room = JSON.parse(raw) as { code?: unknown; createdAt?: unknown };
+        const code = typeof room.code === 'string' ? room.code : '';
+        if (!code || key !== `room:${code}`) continue;
+        let lastMessageAt: number | undefined;
+        if (typeof lastRaw === 'string') {
+          const parsed = JSON.parse(lastRaw) as { time?: unknown };
+          const time = Number(parsed.time);
+          if (Number.isFinite(time)) lastMessageAt = time;
+        }
+        writes.zadd(
+          ROOM_ACTIVITY_INDEX_KEY,
+          roomActivityAt(Number(room.createdAt), lastMessageAt),
+          code,
+        );
+      } catch {
+        // Skip malformed/non-room keys just like the former list endpoint.
+      }
+    }
+    await writes.exec();
+  } while (cursor !== '0');
+  await redis.set(ROOM_ACTIVITY_INDEX_READY_KEY, '1');
+}
+
+async function ensureRoomActivityIndex(): Promise<void> {
+  if (await redis.get(ROOM_ACTIVITY_INDEX_READY_KEY)) return;
+  if (!roomIndexBackfill) {
+    roomIndexBackfill = backfillRoomActivityIndex().finally(() => { roomIndexBackfill = null; });
+  }
+  await roomIndexBackfill;
+}
+
+const roomListStore: RoomListStore = {
+  async count() {
+    return redis.zcard(ROOM_ACTIVITY_INDEX_KEY);
+  },
+  async range(start, stop) {
+    const flat = await redis.zrevrange(ROOM_ACTIVITY_INDEX_KEY, start, stop, 'WITHSCORES');
+    const entries: RoomIndexEntry[] = [];
+    for (let i = 0; i < flat.length; i += 2) {
+      entries.push({ code: flat[i]!, score: Number(flat[i + 1]) });
+    }
+    return entries;
+  },
+  async read(entries) {
+    const reads = redis.pipeline();
+    for (const entry of entries) {
+      reads.get(`room:${entry.code}`);
+      reads.get(`room-msg-count:${entry.code}`);
+    }
+    const rows = await reads.exec();
+    if (!rows) throw new Error('room list pipeline aborted');
+    return entries.map((_, i) => ({
+      raw: typeof rows[i * 2]?.[1] === 'string' ? rows[i * 2]![1] as string : null,
+      messageCountRaw: rows[i * 2 + 1]?.[1] as string | number | null,
+    }));
+  },
+  async remove(codes) {
+    if (codes.length > 0) await redis.zrem(ROOM_ACTIVITY_INDEX_KEY, ...codes);
   },
 };
 
@@ -627,7 +756,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
             : `agent-anchor bound on ${code}: "${anchorAudit.name}" (${anchorAudit.client}) is now recoverable (row was ${anchorAudit.reclaimedProtectedRow ? 'key-protected; ownership proven with its member key' : 'unprotected'})`,
         );
       }
-      return { room: roomRest, participant: outParticipant, memberKey };
+      // T-21: hand every joining client the room's working conventions so a
+      // fresh agent (or a future MCP that surfaces this field) starts with the
+      // marker/task/ping etiquette instead of learning it mid-meeting.
+      return { room: roomRest, participant: outParticipant, memberKey, conventions: ROOM_CONVENTIONS };
     }
     case 'messages': {
       // T-04: optional `limit` bounds the page; omitted keeps cursor-to-end.
