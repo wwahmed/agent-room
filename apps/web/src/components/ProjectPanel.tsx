@@ -290,7 +290,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
             onClick={() => { updateTaskPreferences({ segment }); setCompletedLimit(COMPLETED_PAGE_SIZE); }}
             className={`min-h-11 rounded-lg px-3 text-[15px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-[14px] ${preferences.segment === segment ? 'bg-surface text-ink shadow-sm' : 'text-ink-soft hover:text-ink'}`}
           >
-            {segment === 'pending' ? 'Pending' : 'Completed'}
+            {segment === 'pending' ? 'Open' : 'Completed'}
             {/* Unknown is UNKNOWN: no count pill until the board loads —
                 a zero from null is a false empty (review item 1). */}
             {tasks !== null && (
@@ -306,11 +306,11 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
           <select
             value={preferences.status}
             onChange={event => updateTaskPreferences({ status: event.target.value as TaskPreferences['status'] })}
-            aria-label="Filter pending tasks by status"
+            aria-label="Filter open tasks by status"
             disabled={tasks === null}
             className="disabled:opacity-50 h-11 min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 text-[15px] font-semibold text-ink outline-none focus:border-accent sm:text-[14px]"
           >
-            <option value="all">All pending stages</option>
+            <option value="all">All open stages</option>
             {PENDING_TASK_STATES.map(state => <option key={state} value={state}>{STATE_LABEL[state]}</option>)}
           </select>
         )}
@@ -357,7 +357,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
         {tasks !== null && tasks.length > 0 && matchingTasks.length === 0 && (
           <div className="rounded-lg border border-border-faint bg-surface-softer p-4">
             <p className="text-[15px] text-ink-soft sm:text-[14px]">
-              {preferences.segment === 'pending' ? 'No pending tasks match these filters.' : 'No completed tasks match this filter.'}
+              {preferences.segment === 'pending' ? 'No open tasks match these filters.' : 'No completed tasks match this filter.'}
             </p>
             <button
               type="button"

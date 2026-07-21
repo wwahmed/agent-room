@@ -1803,7 +1803,7 @@ export function Room() {
           const pending = taskPulse.length - done - review;
           return (
             <>
-              <SummaryChip tone="quiet">{pending} pending</SummaryChip>
+              <SummaryChip tone="quiet">{pending} active</SummaryChip>
               {review > 0 && <SummaryChip tone="warn">{review} awaiting review</SummaryChip>}
               {/* Done means VERIFIER-CONFIRMED only — the board's done state
                   is only reachable through room_task_verify. */}
