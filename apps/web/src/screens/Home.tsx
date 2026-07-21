@@ -4,7 +4,7 @@ import { isValidCode } from '@agent-room/shared';
 import { InstallPrompt } from '../components/InstallPrompt.js';
 import { fetchIdentity, fetchRooms, mergeRoomPages, type RoomSummary, type WhoAmI } from '../lib/identity.js';
 import { initialsFor, colorForName } from '../lib/colors.js';
-import { RoomBadges } from '../components/RoomBadges.js';
+import { AgentHealthChip, RoomBadges } from '../components/RoomBadges.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -188,18 +188,18 @@ export function Home() {
                   <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent">◇</div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-semibold">{r.topic}</div>
-                    <div className="mt-0.5 text-xs text-ink-soft">
-                      {r.participants} here · updated {timeAgo(updatedAt)}
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
+                      <span className="truncate">{r.participants} here · updated {timeAgo(updatedAt)}</span>
+                      {/* T-25 rev2: health lives HERE with the room facts, not
+                          in the attention cluster, so red never reads as unread. */}
+                      <AgentHealthChip code={r.code} agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
                     </div>
                   </div>
-                  {/* T-18/T-20/T-25: shared badge cluster — refined unread,
-                      amber @mentions, and the agent health pill. */}
+                  {/* T-18/T-20: attention badges only — @mentions + refined unread. */}
                   <RoomBadges
                     code={r.code}
                     messageCount={r.messageCount}
                     selfName={identity.name}
-                    agentCount={r.agentCount}
-                    agentsAllHealthy={r.agentsAllHealthy}
                   />
                   <span className="flex-shrink-0 text-sm font-semibold text-accent">Enter →</span>
                 </button>

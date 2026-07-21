@@ -16,15 +16,49 @@ interface Props {
   code: string;
   messageCount?: number;
   selfName: string;
-  agentCount?: number;
-  agentsAllHealthy?: boolean;
   /** The active room never shows unread badges (it is being read). */
   active?: boolean;
   /** Compact sizing for the dense desktop pane. */
   compact?: boolean;
 }
 
-export function RoomBadges({ code, messageCount, selfName, agentCount = 0, agentsAllHealthy = true, active = false, compact = false }: Props) {
+/**
+ * T-25 rev2 (host: red health next to red unread reads as more unread): agent
+ * health is NOT an attention badge, so it lives apart from the unread/mention
+ * cluster — in the card's metadata row, with an explicit agents icon, a text
+ * label, and its own muted treatment. Tapping opens the room's People panel.
+ */
+export function AgentHealthChip({ code, agentCount = 0, agentsAllHealthy = true }: { code: string; agentCount?: number; agentsAllHealthy?: boolean }) {
+  const navigate = useNavigate();
+  if (agentCount <= 0) return null;
+  const label = agentsAllHealthy
+    ? `${agentCount} agent${agentCount === 1 ? '' : 's'}, all healthy`
+    : `${agentCount} agent${agentCount === 1 ? '' : 's'}, attention needed`;
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title={`${label} — tap to open People`}
+      aria-label={`${label} — open People panel`}
+      onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/r/${code}?panel=people`); }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); navigate(`/r/${code}?panel=people`); } }}
+      className={`inline-flex flex-shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold transition hover:opacity-80 ${
+        agentsAllHealthy
+          ? 'border-emerald-600/30 bg-emerald-500/10 text-emerald-600'
+          : 'border-red-600/40 bg-red-500/10 text-red-600'
+      }`}
+    >
+      {/* two-heads agents glyph — clearly people, not a message count */}
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
+        <path d="M6 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm5.5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM1.5 13.2c0-2.1 2-3.7 4.5-3.7s4.5 1.6 4.5 3.7v.8h-9v-.8Zm10.1.8h2.9v-.7c0-1.6-1.3-2.8-3.1-3 .7.7 1.1 1.7 1.1 2.9v.8Z" />
+      </svg>
+      {agentCount}
+      <span className={`h-1.5 w-1.5 rounded-full ${agentsAllHealthy ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} aria-hidden="true" />
+    </span>
+  );
+}
+
+export function RoomBadges({ code, messageCount, selfName, active = false, compact = false }: Props) {
   const navigate = useNavigate();
   const raw = active ? 0 : unreadCount(code, messageCount, selfName);
   const [stats, setStats] = useState<UnreadWindowStats | null>(null);
@@ -44,24 +78,6 @@ export function RoomBadges({ code, messageCount, selfName, agentCount = 0, agent
 
   return (
     <>
-      {agentCount > 0 && (
-        <span
-          role="button"
-          tabIndex={0}
-          title={agentsAllHealthy ? `${agentCount} agent${agentCount === 1 ? '' : 's'}, all healthy` : `${agentCount} agent${agentCount === 1 ? '' : 's'} — at least one is not responding. Tap to diagnose.`}
-          aria-label={agentsAllHealthy ? `${agentCount} healthy agents` : `${agentCount} agents, attention needed — open People`}
-          onClick={e => { e.preventDefault(); e.stopPropagation(); navigate(`/r/${code}?panel=people`); }}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); navigate(`/r/${code}?panel=people`); } }}
-          className={`flex ${badgeSize} flex-shrink-0 items-center justify-center gap-1 rounded-full px-1.5 font-bold tabular-nums ring-1 ring-inset transition hover:opacity-80 ${
-            agentsAllHealthy
-              ? 'bg-emerald-300 text-emerald-950 ring-emerald-700/40'
-              : 'bg-red-300 text-red-950 ring-red-700/40'
-          }`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${agentsAllHealthy ? 'bg-emerald-700' : 'bg-red-700 animate-pulse'}`} aria-hidden="true" />
-          {agentCount}
-        </span>
-      )}
       {mentions > 0 && (
         <span
           className={`flex ${badgeSize} flex-shrink-0 items-center justify-center rounded-full bg-amber-400 px-1.5 font-bold tabular-nums text-black ring-1 ring-inset ring-amber-500/60`}

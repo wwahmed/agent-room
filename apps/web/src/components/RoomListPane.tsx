@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { relativeTime } from '../lib/relativeTime.js';
-import { RoomBadges } from './RoomBadges.js';
+import { AgentHealthChip, RoomBadges } from './RoomBadges.js';
 
 // T-05 desktop room list (280px column between the rail and the chat).
 // Authenticated users get their active rooms with one-tap switching;
@@ -62,14 +62,12 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
             >
               <div className="flex items-baseline gap-2">
                 <div className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
-                {/* T-62 badge, refined by T-18/T-20, plus the T-25 health pill.
+                {/* T-62 badge refined by T-18/T-20 — attention signals only.
                     The active room never shows unread — it is being read. */}
                 <RoomBadges
                   code={r.code}
                   messageCount={r.messageCount}
                   selfName={selfName}
-                  agentCount={r.agentCount}
-                  agentsAllHealthy={r.agentsAllHealthy}
                   active={active}
                   compact
                 />
@@ -79,10 +77,15 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                   </span>
                 )}
               </div>
-              <div className="truncate text-[12px] text-ink-faint">
-                {r.participants} here
-                {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
-                {r.status === 'ended' ? ' · ended' : ''}
+              <div className="flex items-center gap-1.5 text-[12px] text-ink-faint">
+                <span className="truncate">
+                  {r.participants} here
+                  {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
+                  {r.status === 'ended' ? ' · ended' : ''}
+                </span>
+                {/* T-25 rev2: agent health sits with the room facts, visually
+                    apart from the attention badges above. */}
+                <AgentHealthChip code={r.code} agentCount={r.agentCount} agentsAllHealthy={r.agentsAllHealthy} />
               </div>
             </Link>
           );
