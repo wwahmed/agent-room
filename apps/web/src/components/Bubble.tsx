@@ -211,7 +211,7 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
           const ordered = block.items.every(item => /^\d+[.)]\s+/.test(item));
           const ListTag = ordered ? 'ol' : 'ul';
           return (
-            <ListTag key={index} className={`${ordered ? 'list-decimal' : 'list-disc'} max-w-[68ch] space-y-1 pl-5`}>
+            <ListTag key={index} className={`${ordered ? 'list-decimal' : 'list-disc'} max-w-[80ch] space-y-1 pl-5`}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>{renderInline(item.replace(/^(\d+[.)]|[-*•])\s+/, ''), selfName)}</li>
               ))}
@@ -221,14 +221,14 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
 
         if (block.type === 'heading') {
           return (
-            <div key={index} className="max-w-[68ch] text-[13px] font-semibold text-current">
+            <div key={index} className="max-w-[80ch] text-[13px] font-semibold text-current">
               {renderInline(block.text.replace(/^#{1,3}\s*/, ''), selfName)}
             </div>
           );
         }
 
         return (
-          <p key={index} className="max-w-[68ch] whitespace-pre-wrap">
+          <p key={index} className="max-w-[80ch] whitespace-pre-wrap">
             {renderInline(block.text, selfName)}
           </p>
         );

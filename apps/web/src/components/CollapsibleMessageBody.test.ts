@@ -5,7 +5,7 @@ const source = readFileSync(new URL('./CollapsibleMessageBody.tsx', import.meta.
 
 describe('message prose measure', () => {
   it('caps the markdown container rather than relying on parsed child blocks', () => {
-    expect(source).toContain('data-message-prose-measure="68ch"');
-    expect(source).toContain('className="w-full max-w-[68ch]"');
+    expect(source).toContain('data-message-prose-measure="80ch"');
+    expect(source).toContain('className="w-full max-w-[80ch]"');
   });
 });
