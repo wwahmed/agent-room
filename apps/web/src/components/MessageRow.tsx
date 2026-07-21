@@ -227,7 +227,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
               80ch uses large desktop canvases without turning prose into an
               edge-to-edge scan. */}
           {body.trim() && (
-            <div className="text-[13px] font-normal leading-[1.6] tracking-normal [&_strong]:font-medium">
+            <div className="msg-prose">
               <CollapsibleMessageBody text={body} selfName={selfName} />
             </div>
           )}
@@ -254,7 +254,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // T-41 acceptance sheet: stay on the deliberate token scale. Perceived
   // shouting is solved by flat peer rows and hierarchy, not off-scale thin
   // glyphs that become harder to read on a dark canvas.
-  const bodyText = 'text-[13px] font-normal leading-[1.6] tracking-normal text-ink-muted [&_strong]:font-medium [&_strong]:text-ink';
+  const bodyText = 'msg-prose';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.

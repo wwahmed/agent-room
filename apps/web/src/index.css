@@ -95,6 +95,22 @@ body {
 /* T-39 foundation primitives. Feature tasks may compose these with layout
    utilities, but the product's control/card/sheet geometry stays consistent. */
 @layer components {
+  /* T-70: THE message prose class — one semantic owner for transcript body
+     type instead of per-callsite pixel utilities (the placebo-fix lesson:
+     a global clamp missed the real 13px path entirely). Desktop 15px, phones
+     step to 17px; full-ink for contrast; strong at 600 stays subordinate. */
+  .msg-prose {
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.6;
+    letter-spacing: normal;
+    color: rgb(var(--ink));
+  }
+  .msg-prose strong { font-weight: 600; color: rgb(var(--ink)); }
+  @media (max-width: 639px) {
+    .msg-prose { font-size: 17px; line-height: 1.55; }
+  }
+
   .ui-control {
     min-height: 44px;
     border-radius: 8px;
@@ -150,13 +166,6 @@ body {
     .text-xs:not(.text-fixed) {
       font-size: 14px;
       line-height: 1.55;
-    }
-    /* Waqas (phone capture, urgent): 15px prose reads small on compact
-       high-density phones. Message prose steps to 16px on phones only —
-       the desktop scale is untouched. */
-    .text-\[15px\]:not(.text-fixed) {
-      font-size: 16px;
-      line-height: 1.6;
     }
   }
 }
