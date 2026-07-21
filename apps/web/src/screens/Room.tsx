@@ -17,6 +17,7 @@ import { ProjectPanel } from '../components/ProjectPanel.js';
 import { QuestionArtifactCard } from '../components/QuestionArtifactCard.js';
 import { QuestionArtifactSheet } from '../components/QuestionArtifactSheet.js';
 import { VoiceButton } from '../components/VoiceButton.js';
+import { AttachmentSheet } from '../components/AttachmentSheet.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { AgentAvatar } from '../components/AgentAvatar.js';
@@ -223,6 +224,8 @@ export function Room() {
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  // T-80: the paperclip trigger — focus returns here on every sheet exit.
+  const attachTriggerRef = useRef<HTMLButtonElement>(null);
   const [attachmentJobs, setAttachmentJobs] = useState<AttachmentUploadJob[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
@@ -2490,12 +2493,13 @@ export function Room() {
                     onChange={e => { if (e.target.files) void addFiles(e.target.files); }}
                   />
                   <button
+                    ref={attachTriggerRef}
                     type="button"
                     onClick={() => setAttachmentMenuOpen(open => !open)}
                     disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
                     title="Add photos or files"
                     aria-label="Add photos or files"
-                    aria-haspopup="menu"
+                    aria-haspopup="dialog"
                     aria-expanded={attachmentMenuOpen}
                     className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50"
                   >
@@ -2507,22 +2511,16 @@ export function Room() {
                       </svg>
                     )}
                   </button>
-                  {attachmentMenuOpen && (
-                    <div role="menu" aria-label="Add attachment" className="absolute bottom-full left-0 z-30 mb-2 w-52 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-2xl">
-                      <button type="button" role="menuitem" onClick={() => imageInputRef.current?.click()} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink transition hover:bg-accent-tint">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-tint text-accent" aria-hidden="true">
-                          <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="2.5" width="12" height="11" rx="2"/><circle cx="5.5" cy="6" r="1.2"/><path d="m3.5 12 3.2-3 2.1 1.8 1.5-1.4 2.2 2.6"/></svg>
-                        </span>
-                        Photos & images
-                      </button>
-                      <button type="button" role="menuitem" onClick={() => fileInputRef.current?.click()} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-ink transition hover:bg-surface-softer">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-softer text-ink-soft" aria-hidden="true">
-                          <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M4 1.8h5l3 3V14H4z"/><path d="M9 1.8V5h3"/></svg>
-                        </span>
-                        Files & documents
-                      </button>
-                    </div>
-                  )}
+                  {/* T-80: every exit path is real (Cancel/backdrop/Escape/
+                      Back), and the sheet closes BEFORE the native picker
+                      opens, so an OS cancel can never strand it. */}
+                  <AttachmentSheet
+                    open={attachmentMenuOpen}
+                    onClose={() => setAttachmentMenuOpen(false)}
+                    onPickImages={() => imageInputRef.current?.click()}
+                    onPickFiles={() => fileInputRef.current?.click()}
+                    returnFocusRef={attachTriggerRef}
+                  />
                   <VoiceButton
                     onStart={() => {
                       dictationBaseRef.current = text;
