@@ -88,6 +88,8 @@ body {
   font-size: 15px;
   line-height: 1.6;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* T-39 foundation primitives. Feature tasks may compose these with layout

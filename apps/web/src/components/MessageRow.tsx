@@ -227,7 +227,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
               80ch uses large desktop canvases without turning prose into an
               edge-to-edge scan. */}
           {body.trim() && (
-            <div className="text-[15px] font-normal leading-[1.6] [&_strong]:font-semibold">
+            <div className="text-[13px] font-normal leading-[1.6] tracking-normal [&_strong]:font-medium">
               <CollapsibleMessageBody text={body} selfName={selfName} />
             </div>
           )}
@@ -254,7 +254,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // T-41 acceptance sheet: stay on the deliberate token scale. Perceived
   // shouting is solved by flat peer rows and hierarchy, not off-scale thin
   // glyphs that become harder to read on a dark canvas.
-  const bodyText = 'text-[15px] font-normal leading-[1.65] tracking-normal text-ink-muted [&_strong]:font-semibold [&_strong]:text-ink';
+  const bodyText = 'text-[13px] font-normal leading-[1.6] tracking-normal text-ink-muted [&_strong]:font-medium [&_strong]:text-ink';
 
   if (grouped) {
     // Follow-up in a group: a plain capped bubble under the first, no header.
@@ -282,7 +282,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           <SenderAvatar message={message} brand={senderBrand} sizeClass="h-7 w-7" textClass="text-[12px]" />
         </div>
         <div className="flex items-center gap-x-2 pl-10 pr-3 pt-2">
-          <span className="text-[13px] font-semibold" style={{ color: message.color }}>{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
+          <span className="text-[12px] font-medium" style={{ color: message.color }}>{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
           {ambiguous && <span className="text-[12px] text-ink-faint">{message.client}</span>}
           {message.role && <span className="hidden truncate text-[12px] text-ink-faint sm:inline">{message.role}</span>}
           <span className="text-[12px] text-ink-faint" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>

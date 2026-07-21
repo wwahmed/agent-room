@@ -90,15 +90,20 @@ export function AttachmentList({ attachments }: { attachments: MessageAttachment
   const [preview, setPreview] = useState<MessageAttachment | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const { renderable, unavailableCount } = partitionAttachments(attachments);
+  const images = renderable.filter(attachment => attachment.type === 'image');
+  const files = renderable.filter(attachment => attachment.type !== 'image');
 
   return (
     <>
       <div className="mt-2 space-y-2">
-        {renderable.map(attachment => (
-          attachment.type === 'image'
-            ? <ImageAttachment key={attachment.id} attachment={attachment} onOpen={() => setPreview(attachment)} />
-            : <FileAttachment key={attachment.id} attachment={attachment} />
-        ))}
+        {images.length > 0 && (
+          <div className="grid max-w-[656px] grid-cols-1 gap-2 sm:grid-cols-2" data-image-grid="compact">
+            {images.map(attachment => (
+              <ImageAttachment key={attachment.id} attachment={attachment} onOpen={() => setPreview(attachment)} />
+            ))}
+          </div>
+        )}
+        {files.map(attachment => <FileAttachment key={attachment.id} attachment={attachment} />)}
         {unavailableCount > 0 && (
           <div role="status" className="rounded-lg border border-border-faint bg-surface-softer px-3 py-2 text-[12px] text-ink-soft">
             {unavailableCount === 1 ? 'Attachment unavailable — its upload did not finish.' : `${unavailableCount} attachments unavailable — their uploads did not finish.`}
@@ -113,13 +118,13 @@ export function AttachmentList({ attachments }: { attachments: MessageAttachment
 function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment; onOpen: () => void }) {
   return (
     <figure
-      className="w-[min(520px,78vw)] max-w-full overflow-hidden rounded-xl border border-border bg-surface shadow-card"
+      className="w-full max-w-[320px] overflow-hidden rounded-xl border border-border bg-surface shadow-card"
       data-image-preview="compact"
     >
       <button
         type="button"
         onClick={onOpen}
-        className="group relative block h-44 w-full cursor-zoom-in overflow-hidden bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-56"
+        className="group relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         aria-label={`Open ${attachment.name} full size`}
       >
         <img
@@ -133,21 +138,10 @@ function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment
           </svg>
         </span>
       </button>
-      <figcaption className="flex min-h-11 items-center gap-1.5 border-t border-border-faint px-3 text-[11px] font-normal leading-none tracking-normal text-ink-faint">
+      <figcaption className="flex h-8 items-center gap-1.5 border-t border-border-faint px-2.5 text-[11px] font-normal leading-none tracking-normal text-ink-faint">
         <span className="min-w-0 truncate">{attachment.name}</span>
         <span aria-hidden="true">·</span>
         <span className="shrink-0">{formatBytes(attachment.size)}</span>
-        <a
-          href={attachment.url}
-          download={attachment.name}
-          className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-soft transition hover:bg-surface-softer hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          aria-label={`Download ${attachment.name}`}
-          title="Download"
-        >
-          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M8 2v8m-3-3 3 3 3-3M3 13h10" />
-          </svg>
-        </a>
       </figcaption>
     </figure>
   );
