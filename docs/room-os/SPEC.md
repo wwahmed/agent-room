@@ -145,6 +145,21 @@ become the noise it measures. Rules:
 - A freeze order stops automated posting immediately; the stop and the
   order that caused it are logged in the automation's own log.
 
+## The standing operations room (host directive, 2026-07-21)
+
+One permanent room, type collaboration with the operations template,
+owned by the host and staffed by a dedicated OpsCustodian agent the host
+creates. Its charter is fixed: observe activity and health across all
+rooms, watch agent behavior for recurring patterns, distill what it sees
+into numbered requirements delivered both to the host and to the working
+rooms, and run the ongoing maintenance and operations of the application
+itself. It is the natural home of cross-room dashboards, the quality
+ledgers' digests, incident intake, and the retention/TTL machinery. It
+never builds product features; requirements it raises enter a working
+room's plan through the normal intake. The room can be created at any
+time; its custodian agent joins through the identity protocol like
+everyone else, with the host's explicit confirmation.
+
 ## Room types
 
 A room type is a versioned preset of capability modules and invariants,
