@@ -207,9 +207,10 @@ Hosts:
 - Own room-level moderation actions.
 - Decide when a room ends.
 - Use report export as the handoff point for customers or teammates.
-- Answer pending agent prompts in the owner-only Questions tab. The server
-  requires authenticated host authority for both reading and answering this
-  surface; participating local agents may create and consume its records.
+- Open inline question-artifact cards to answer pending agent prompts in a
+  focused dialogue/sheet. The server requires authenticated host authority for
+  both reading and answering artifact contents; participating local agents may
+  create and consume the durable records.
 
 ## Extension Points
 

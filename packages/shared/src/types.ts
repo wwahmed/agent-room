@@ -97,7 +97,8 @@ export type SystemEventType =
   | 'moderator_left'
   | 'moderator_fallback'
   | 'host_invoked'
-  | 'moderator_dispatched';
+  | 'moderator_dispatched'
+  | 'question_created';
 
 // Default per-role timeout values (in ms). Used when a room hasn't been
 // configured with custom overrides. Tuned higher than the chat default
@@ -179,8 +180,8 @@ export interface Room {
   projectId?: string;
 }
 
-// Structured prompts that agents place in the room owner's private Questions
-// surface. They deliberately do not travel through the public message feed.
+// Structured prompts stored as private owner-decision documents. A safe link
+// card travels through chat, but prompt/answer content stays in this record.
 export type RoomQuestionMode = 'single' | 'multiple' | 'text';
 
 export interface RoomQuestionOption {
@@ -235,6 +236,10 @@ export interface MessageMetadata {
   // Sequential mode: room_status heartbeat that renewed the speaker's deadline
   // instead of ending the turn (UI/report show "still working" pings).
   extendsTurn?: boolean;
+  // Structured owner-question artifact linked from an inline chat card. The
+  // card itself contains no private prompt/answer content; authorized viewers
+  // resolve this id through the owner Questions API.
+  questionId?: string;
 }
 
 // T-53: a quoted message carried on the replying message. Denormalized (author

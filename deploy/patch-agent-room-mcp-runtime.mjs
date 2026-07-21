@@ -67,6 +67,26 @@ if (!patched.includes(questionMarker)) {
   changed = true;
 }
 
+// Product wording changed from a permanent tab to linked artifacts. Keep an
+// already-patched runtime upgradeable without weakening the exact code anchors
+// above; these are presentation-only, exact replacements.
+const wordingUpdates = [
+  [
+    'Ask the room owner a private structured question. mode is single, multiple, or text; choice modes require 2-12 option labels. Use room_question_list to consume the durable answer.',
+    'Create a private structured question artifact linked inline in chat. mode is single, multiple, or text; choice modes require 2-12 option labels. Use room_question_list to consume the durable owner answer.',
+  ],
+  [
+    'Question " + question.id + " is waiting in the owner\'s Questions tab. Use room_question_list to consume the answer.',
+    'Question artifact " + question.id + " is linked in chat and waiting for the owner. Use room_question_list to consume the answer.',
+  ],
+];
+for (const [oldText, newText] of wordingUpdates) {
+  if (patched.includes(oldText)) {
+    patched = patched.replace(oldText, newText);
+    changed = true;
+  }
+}
+
 if (changed) {
   writeFileSync(file, patched, { mode: 0o644 });
   console.log(`Patched WakiChat MCP runtime: ${file}`);

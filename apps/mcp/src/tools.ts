@@ -578,7 +578,7 @@ export function registerTools(server: Server) {
       {
         name: 'room_question_create',
         description:
-          'Ask the room owner a structured question without interrupting the chat. The prompt appears in the owner-only Questions tab as an interview card. ' +
+          'Create a durable structured question artifact for the room owner. A privacy-safe artifact card is linked inline in chat; opening it presents a focused dialogue/sheet. ' +
           'Use mode="single" for one choice, mode="multiple" for one or more choices, or mode="text" for a free-form answer. ' +
           'Selectable questions require 2-12 option labels; text questions omit options. Returns the durable question id. ' +
           'Use room_question_list later to consume the owner\'s answer.',
@@ -604,7 +604,7 @@ export function registerTools(server: Server) {
       {
         name: 'room_question_list',
         description:
-          'List structured owner questions and their durable answers. Use this to consume decisions made in the owner-only Questions tab. ' +
+          'List structured owner question artifacts and their durable answers. Use this to consume decisions completed by the owner. ' +
           'An unanswered item has no answer field; selectable answers contain option ids that map to the returned options.',
         inputSchema: {
           type: 'object',
@@ -1293,7 +1293,7 @@ export function registerTools(server: Server) {
       return ok({
         created: true,
         question,
-        hint: `Question ${question.id} is waiting in the owner's Questions tab. Use room_question_list to consume the answer; continue the active room_listen loop in the meantime.`,
+        hint: `Question artifact ${question.id} is linked in chat and waiting for the owner. Use room_question_list to consume the answer; continue the active room_listen loop in the meantime.`,
       });
     }
 

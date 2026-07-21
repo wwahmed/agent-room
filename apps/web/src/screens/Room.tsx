@@ -9,13 +9,14 @@ import { RenameRoomControl } from '../components/RenameRoomControl.js';
 import { WorkspaceRail } from '../components/WorkspaceRail.js';
 import { RoomListPane } from '../components/RoomListPane.js';
 import { ProjectPanel } from '../components/ProjectPanel.js';
-import { QuestionsPanel } from '../components/QuestionsPanel.js';
+import { QuestionArtifactCard } from '../components/QuestionArtifactCard.js';
+import { QuestionArtifactSheet } from '../components/QuestionArtifactSheet.js';
 import { VoiceButton } from '../components/VoiceButton.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
-import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type SystemEventType } from '@agent-room/shared';
+import { artifactLabel, extractArtifacts, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
@@ -57,7 +58,6 @@ function readStoredSelf(code: string): SelfIdentity | null {
 type MainTab = 'chat' | InspectorTab;
 const MAIN_TABS: Array<{ key: MainTab; label: string }> = [
   { key: 'chat', label: 'Chat' },
-  { key: 'questions', label: 'Questions' },
   { key: 'people', label: 'People' },
   { key: 'project', label: 'Project' },
   { key: 'outputs', label: 'Outputs' },
@@ -153,18 +153,19 @@ export function Room() {
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [pendingQuestionCount, setPendingQuestionCount] = useState(0);
+  const [ownerQuestions, setOwnerQuestions] = useState<RoomQuestion[]>([]);
+  const [openQuestionId, setOpenQuestionId] = useState<string | null>(null);
   useEffect(() => {
     const isOwner = Boolean(room && self && room.createdBy === self.name);
     if (!isOwner) {
-      setPendingQuestionCount(0);
+      setOwnerQuestions([]);
       return;
     }
     let cancelled = false;
     const pull = async () => {
       try {
         const questions = await listOwnerQuestions(createClient(), code);
-        if (!cancelled) setPendingQuestionCount(questions.filter(question => !question.answer).length);
+        if (!cancelled) setOwnerQuestions(questions);
       } catch { /* the tab carries the actionable error; the badge stays quiet */ }
     };
     void pull();
@@ -1352,8 +1353,7 @@ export function Room() {
   );
 
   const renderPanel = (tab: InspectorTab) =>
-    tab === 'questions' ? <QuestionsPanel code={code} isOwner={isHost} onPendingChange={setPendingQuestionCount} />
-      : tab === 'people' ? peoplePanel
+    tab === 'people' ? peoplePanel
       : tab === 'project' ? <ProjectPanel room={activeRoom} isHost={isHost} selfName={me.name} onAttached={() => { void refreshRoom(); }} />
       : tab === 'room' ? <>{roomInfoPanel}{roomFooterPanel}</>
       : renderOutputs();
@@ -1402,10 +1402,7 @@ export function Room() {
                   : 'border-transparent text-ink-soft hover:text-ink'
               }`}
             >
-              <span>{t.label}</span>
-              {t.key === 'questions' && pendingQuestionCount > 0 && (
-                <span className="ml-1.5 rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-white" aria-label={`${pendingQuestionCount} pending questions`}>{pendingQuestionCount}</span>
-              )}
+              {t.label}
             </button>
           ))}
         </div>
@@ -1454,17 +1451,26 @@ export function Room() {
                       <div className="h-px flex-1 bg-accent/40" />
                     </div>
                   )}
-                  <MessageRow
-                    key={m.id}
-                    message={m}
-                    self={m.name === self.name && m.client === 'web'}
-                    grouped={isSameGroup(messages[i - 1], m)}
-                    ambiguousNames={ambiguousNames}
-                    now={now}
-                    onReply={startReply}
-                    onJumpToQuote={jumpToMessage}
-                    selfName={self.name}
-                  />
+                  {m.metadata?.eventType === 'question_created' && m.metadata.questionId ? (
+                    <QuestionArtifactCard
+                      message={m}
+                      question={ownerQuestions.find(question => question.id === m.metadata?.questionId)}
+                      isOwner={isHost}
+                      onOpen={() => setOpenQuestionId(m.metadata!.questionId!)}
+                    />
+                  ) : (
+                    <MessageRow
+                      key={m.id}
+                      message={m}
+                      self={m.name === self.name && m.client === 'web'}
+                      grouped={isSameGroup(messages[i - 1], m)}
+                      ambiguousNames={ambiguousNames}
+                      now={now}
+                      onReply={startReply}
+                      onJumpToQuote={jumpToMessage}
+                      selfName={self.name}
+                    />
+                  )}
                   </Fragment>
                 ));
               })()}
@@ -1842,7 +1848,16 @@ export function Room() {
       {/* Mobile keeps the slide-over sheet — a phone has no room for peer tabs.
           On desktop the same panels are peers of the chat inside <main>, so the
           Inspector's desktop column is gone (T-64). */}
-      <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} questionCount={pendingQuestionCount} />
+      <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
+      {openQuestionId && (
+        <QuestionArtifactSheet
+          code={code}
+          questionId={openQuestionId}
+          isOwner={isHost}
+          onClose={() => setOpenQuestionId(null)}
+          onAnswered={(answered) => setOwnerQuestions(current => current.map(question => question.id === answered.id ? answered : question))}
+        />
+      )}
     </div>
   );
 

@@ -9,25 +9,23 @@ import { VersionTag } from './VersionTag.js';
 // host handlers); this component only owns the responsive chrome, the
 // tab strip, and dismissal.
 
-export type InspectorTab = 'questions' | 'people' | 'project' | 'outputs' | 'room';
+export type InspectorTab = 'people' | 'project' | 'outputs' | 'room';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   renderTab: (tab: InspectorTab) => ReactNode;
   initialTab?: InspectorTab;
-  questionCount?: number;
 }
 
 const TABS: Array<{ key: InspectorTab; label: string }> = [
-  { key: 'questions', label: 'Questions' },
   { key: 'people', label: 'People' },
   { key: 'project', label: 'Project' },
   { key: 'outputs', label: 'Outputs' },
   { key: 'room', label: 'Room' },
 ];
 
-export function Inspector({ open, onClose, renderTab, initialTab = 'people', questionCount = 0 }: Props) {
+export function Inspector({ open, onClose, renderTab, initialTab = 'people' }: Props) {
   const [tab, setTab] = useState<InspectorTab>(initialTab);
   if (!open) return null;
 
@@ -41,10 +39,7 @@ export function Inspector({ open, onClose, renderTab, initialTab = 'people', que
               onClick={() => setTab(t.key)}
               className={`min-h-12 min-w-[68px] flex-1 rounded-lg px-1.5 text-[14px] font-semibold transition ${tab === t.key ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer'}`}
             >
-              <span>{t.label}</span>
-              {t.key === 'questions' && questionCount > 0 && (
-                <span className="ml-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-white" aria-label={`${questionCount} pending questions`}>{questionCount}</span>
-              )}
+              {t.label}
             </button>
           ))}
         </div>

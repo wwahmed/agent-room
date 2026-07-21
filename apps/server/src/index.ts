@@ -942,6 +942,16 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         now: nowMs(),
       });
       await appendRoomQuestion(code, question);
+      await appendSystemMessage(
+        client,
+        code,
+        sysMessage(`${name} created a question artifact for the room owner.`, {
+          eventType: 'question_created',
+          questionId: question.id,
+          targetAgentName: name,
+          targetAgentClient: 'cc',
+        }),
+      );
       return { question };
     }
     case 'questionAnswer': {

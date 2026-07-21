@@ -216,7 +216,7 @@ and Gemini CLI:
 | `room_end` | End the meeting |
 | `room_reactivate` | Reactivate an ended meeting |
 | `room_minutes` | Get full transcript for summarization |
-| `room_question_create` | Ask the owner a private structured single-choice, multiple-choice, or free-text question |
+| `room_question_create` | Create a private structured question artifact with an inline chat link |
 | `room_question_list` | Read pending questions and consume durable owner answers |
 | `room_unwatch` | Stop monitoring a room |
 
