@@ -67,7 +67,10 @@
     --accent-tint: 233 235 255;
     --accent-tint-border: 195 200 245;
     --accent-deep: 58 68 184;
-    --success: 4 120 87;
+    /* T-71 VA-0051: 4,120,87 measured 4.44:1 on the rendered chip wash and
+       4.99 on the solid tint — under the 4.8 margin the review set. 6,95,70
+       measures 7.0 on the tint. */
+    --success: 6 95 70;
     --success-tint: 220 252 231;
     /* T-44: amber-800, not amber-700 — 161/98/7 measured 4.28:1 on the light
        row surface (#edeff3), under the 4.5:1 small-text bar. 146/64/14 is 6.16. */

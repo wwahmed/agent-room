@@ -110,9 +110,11 @@ function PageScaffold({ title, purpose, summary, action, children }: {
   );
 }
 
+// Solid tint tokens, never alpha washes: text sits on a KNOWN surface in
+// both themes (VA-0051 — the wash rendered 4.44:1 under the floor).
 const CHIP_TONES = {
-  ok: 'border-success/30 bg-success/10 text-success',
-  warn: 'border-warning/40 bg-warning/10 text-warning',
+  ok: 'border-success/40 bg-success-tint text-success',
+  warn: 'border-warning/40 bg-warning-tint text-warning',
   quiet: 'border-border-faint bg-surface-softer text-ink-soft',
 } as const;
 

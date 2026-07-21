@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import type { Room } from '@agent-room/shared';
 import { ProjectPanel } from './ProjectPanel.js';
 import type { BoardTask } from '../lib/api.js';
@@ -34,6 +34,26 @@ function mount(code: string, url: string, extra: Partial<Parameters<typeof Proje
   );
 }
 
+// Harness for SAME-MOUNTED-TREE navigation: the router persists, navigate()
+// drives the URL, and rerendering with a different room prop reconciles the
+// panel without unmounting (design lead: unmount/remount trivially resets
+// refs and proves nothing).
+const navRef: { current: ((to: string) => void) | null } = { current: null };
+function NavBridge() {
+  navRef.current = useNavigate();
+  return null;
+}
+function mountNavigable(code: string, url: string) {
+  const ui = (c: string) => (
+    <MemoryRouter initialEntries={[url]}>
+      <NavBridge />
+      <ProjectPanel room={room(c)} isHost selfName="A" onAttached={() => {}} board={tasks} />
+    </MemoryRouter>
+  );
+  const r = render(ui(code));
+  return { ...r, setRoom: (c: string) => r.rerender(ui(c)) };
+}
+
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('ProjectPanel DOM interactions', () => {
@@ -48,33 +68,42 @@ describe('ProjectPanel DOM interactions', () => {
     expect(row.className).not.toContain('reply-flash');
   });
 
-  it('clearing the URL and reopening the SAME task focuses again', async () => {
+  it('IN ONE MOUNTED TREE: clear the URL, reopen the same task, it focuses again', async () => {
     vi.useFakeTimers();
-    const first = mount('AAA', '/r/AAA?panel=project&task=T-1');
+    mountNavigable('AAA', '/r/AAA?panel=project&task=T-1');
     await vi.advanceTimersByTimeAsync(120);
     expect(document.activeElement).toBe(document.getElementById('task-T-1'));
-    first.unmount();
-    // Cleared URL render resets the one-shot...
-    const cleared = mount('AAA', '/r/AAA?panel=project');
+    (document.activeElement as HTMLElement).blur();
+    navRef.current!('/r/AAA?panel=project'); // clear WITHOUT unmounting
     await vi.advanceTimersByTimeAsync(120);
-    cleared.unmount();
-    // ...so the same task deep link focuses again on re-entry.
-    mount('AAA', '/r/AAA?panel=project&task=T-1');
+    navRef.current!('/r/AAA?panel=project&task=T-1'); // re-enter
     await vi.advanceTimersByTimeAsync(120);
     expect(document.activeElement).toBe(document.getElementById('task-T-1'));
   });
 
-  it('the same task ID in ANOTHER room focuses that room’s card (key is room|task)', async () => {
+  it('IN ONE MOUNTED TREE: switching room with the same task id focuses via the room|task key', async () => {
     vi.useFakeTimers();
-    const a = mount('AAA', '/r/AAA?panel=project&task=T-1');
+    const h = mountNavigable('AAA', '/r/AAA?panel=project&task=T-1');
     await vi.advanceTimersByTimeAsync(120);
-    a.unmount();
-    mount('BBB', '/r/BBB?panel=project&task=T-1');
+    expect(document.activeElement).toBe(document.getElementById('task-T-1'));
+    (document.activeElement as HTMLElement).blur();
+    h.setRoom('BBB'); // same mounted tree, room prop changes, refs survive
     await vi.advanceTimersByTimeAsync(120);
     expect(document.activeElement).toBe(document.getElementById('task-T-1'));
   });
 
-  it('unmount cleans the landing timers: nothing focuses or flashes afterwards', async () => {
+  it('navigating away MID-FLASH removes the highlight immediately (no stranded class)', async () => {
+    vi.useFakeTimers();
+    mountNavigable('AAA', '/r/AAA?panel=project&task=T-1');
+    await vi.advanceTimersByTimeAsync(120); // focus + flash applied
+    const row = document.getElementById('task-T-1')!;
+    expect(row.className).toContain('reply-flash');
+    navRef.current!('/r/AAA?panel=project'); // clear during the 2s flash
+    await vi.advanceTimersByTimeAsync(10);
+    expect(row.className).not.toContain('reply-flash');
+  });
+
+  it('unmount before landing cleans the timers: nothing focuses or flashes afterwards', async () => {
     vi.useFakeTimers();
     const a = mount('AAA', '/r/AAA?panel=project&task=T-1');
     a.unmount(); // before the 50ms landing timer fires
@@ -82,7 +111,7 @@ describe('ProjectPanel DOM interactions', () => {
     expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
   });
 
-  it('Retry advances ONLY the board fetch callback', () => {
+  it('Retry invokes only the board retry callback (Room-level fetch isolation is the split effects)', () => {
     const onRetryBoard = vi.fn();
     const artifactsSpy = vi.fn();
     render(

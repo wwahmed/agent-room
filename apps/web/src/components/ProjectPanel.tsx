@@ -13,10 +13,9 @@ import {
   type ProjectCandidate,
   type ProjectSummary,
 } from '../lib/api.js';
-import { boardCountsView, taskLinkKey } from '../lib/projectView.js';
+import { boardCountsView, projectViewState, taskLinkKey } from '../lib/projectView.js';
 import {
   PENDING_TASK_STATES,
-  projectTaskCounts,
   projectTasksForView,
   type PendingTaskState,
   type ProjectTaskSegment,
@@ -174,16 +173,25 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
     });
     setCompletedLimit(Math.max(COMPLETED_PAGE_SIZE, tasks.length));
     let flashTimer: number | undefined;
+    let flashedEl: HTMLElement | null = null;
     const landTimer = window.setTimeout(() => {
       const el = document.getElementById(`task-${taskId}`);
       if (!el) return;
-      el.scrollIntoView({ block: 'center' });
+      // Clean alignment below persistent chrome, no torn heading above the
+      // target (review: block start + the row's scroll margin).
+      el.scrollIntoView({ block: 'start' });
       el.focus();
       el.classList.add('reply-flash');
-      flashTimer = window.setTimeout(() => el.classList.remove('reply-flash'), 2000);
+      flashedEl = el;
+      flashTimer = window.setTimeout(() => { el.classList.remove('reply-flash'); flashedEl = null; }, 2000);
     }, 50);
-    // Cleanup on room/navigation change: no timer may act on the next state.
-    return () => { window.clearTimeout(landTimer); if (flashTimer != null) window.clearTimeout(flashTimer); };
+    // Cleanup on room/navigation change: no timer may act on the next state,
+    // and a mid-flash navigation must not leave the class stranded.
+    return () => {
+      window.clearTimeout(landTimer);
+      if (flashTimer != null) window.clearTimeout(flashTimer);
+      if (flashedEl) flashedEl.classList.remove('reply-flash');
+    };
   }, [location.search, room.code, tasks]);
 
   const project = projects.find(p => p.id === room.projectId);
@@ -197,6 +205,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
   const counts = { pending: countsView.pending, completed: countsView.completed };
   const matchingTasks = projectTasksForView(tasks ?? [], preferences.segment, preferences.status, preferences.assignee);
   const visible = preferences.segment === 'completed' ? matchingTasks.slice(0, completedLimit) : matchingTasks;
+  // The five board states are ONE tested enum, not scattered conditions.
+  const viewState = projectViewState(Boolean(room.projectId), tasks, Boolean(boardError), matchingTasks.length);
 
   function updateTaskPreferences(change: Partial<Omit<TaskPreferences, 'roomCode'>>) {
     setTaskPreferences(current => ({
@@ -327,13 +337,13 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
       </div>
 
       <div id="project-task-list" role="tabpanel" className="space-y-2" aria-live="polite">
-        {tasks === null && !boardError && (
+        {viewState === 'loading' && (
           <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-lg border border-border-faint bg-surface-softer px-3 py-2.5 text-[15px] text-ink-soft sm:text-[14px]">
             <span className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
             Loading the task board…
           </div>
         )}
-        {tasks === null && boardError && (
+        {viewState === 'error' && (
           <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
             <p className="text-[15px] font-semibold text-red-400 sm:text-[14px]">Couldn't load the task board</p>
             <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">The board didn't respond, so tasks can't be shown right now.</p>
@@ -348,13 +358,13 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
             )}
           </div>
         )}
-        {tasks !== null && tasks.length === 0 && (
+        {viewState === 'genuine-empty' && (
           <div className="rounded-xl border border-dashed border-border bg-transparent p-4">
             <p className="text-[16px] font-semibold text-ink-soft">No tasks yet</p>
             <p className="mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">Work created in this room will appear here as agents claim, build, and submit it.</p>
           </div>
         )}
-        {tasks !== null && tasks.length > 0 && matchingTasks.length === 0 && (
+        {viewState === 'filtered-empty' && (
           <div className="rounded-lg border border-border-faint bg-surface-softer p-4">
             <p className="text-[15px] text-ink-soft sm:text-[14px]">
               {preferences.segment === 'pending' ? 'No open tasks match these filters.' : 'No completed tasks match this filter.'}
@@ -369,7 +379,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
           </div>
         )}
         {visible.map(t => (
-          <div id={`task-${t.id}`} key={t.id} tabIndex={-1} className="rounded-xl border border-border-faint bg-surface-softer p-3.5 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent">
+          <div id={`task-${t.id}`} key={t.id} tabIndex={-1} className="scroll-mt-3 rounded-xl border border-border-faint bg-surface-softer p-3.5 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-accent">
             <div className="mb-1 flex flex-wrap items-center gap-1.5">
               <span className="font-mono text-[14px] font-bold text-ink">{t.id}</span>
               <span className={`rounded border px-1.5 py-px text-[13px] font-semibold ${STATE_TONE[t.state]}`}>{STATE_LABEL[t.state]}</span>
