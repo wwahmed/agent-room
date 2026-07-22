@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { fetchIdentity, type WhoAmI } from '../lib/identity.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { AppearanceChoices, ReadingScaleChoices } from '../components/PreferenceControls.js';
+import { NotificationSettings } from '../components/NotificationSettings.js';
 
 // T-26/T-27: the app-level Settings destination behind the Home account
 // menu's Settings row. Room-scoped settings stay on the room's Settings
@@ -44,6 +45,8 @@ export function Settings() {
       </header>
 
       <main className="mx-auto max-w-xl space-y-4 px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-6">
+        {/* T-118 (host order): notification truth lives at the TOP. */}
+        <NotificationSettings />
         <section aria-label="Account" className="rounded-xl border border-border-faint bg-surface p-4">
           {sectionHead('Account')}
           {identity ? (

@@ -3,11 +3,18 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './router.js';
 import { watchSystemTheme } from './lib/theme.js';
+import { installBadgeClearing, registerServiceWorker } from './lib/push.js';
 import './index.css';
 
 // T-26/T-27: while the stored theme setting is 'system' (the default), the
 // app follows the device's light/dark switch LIVE, not just at load.
 watchSystemTheme();
+
+// T-118: notification channel plumbing — the service worker registers at
+// boot (a no-op where unsupported), and the app icon badge clears whenever
+// the app comes to the foreground.
+void registerServiceWorker();
+installBadgeClearing();
 
 // The open-source app runs fully anonymous: share the room code and
 // anyone joins (self-host adds Access identity). Room creation, messaging, reports

@@ -68,6 +68,18 @@ import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
 import { stampMessageEnvelope } from './envelope.js';
+import {
+  initPush,
+  ownerEmail,
+  pushEnabled,
+  readPushEnv,
+  sendToAccount,
+  shouldNotifyOwner,
+  upsertSubscription,
+  vapidPublicKey,
+  type StoredSubscription,
+  type SubscriptionStore,
+} from './push.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
 import { ensureArtifactIndex, listRoomArtifacts,
@@ -119,6 +131,26 @@ if (!KV_TOKEN) {
 }
 
 const redis = new Redis(REDIS_URL);
+
+// T-118: owner push channel — enabled only when VAPID keys are configured.
+initPush(readPushEnv());
+const pushStore: SubscriptionStore = {
+  async read(email) {
+    const raw = await redis.get(`push:subs:${email}`);
+    if (!raw) return [];
+    try { return JSON.parse(raw) as StoredSubscription[]; } catch { return []; }
+  },
+  async write(email, subs) {
+    await redis.set(`push:subs:${email}`, JSON.stringify(subs));
+  },
+};
+/** Fire-and-forget owner notification; message flow never blocks on push. */
+function notifyOwnerAsync(payload: { title: string; body: string; url: string; tag?: string }): void {
+  if (!pushEnabled()) return;
+  void sendToAccount(pushStore, ownerEmail(), payload).catch(err => {
+    console.error('[push] owner dispatch failed:', (err as Error).message);
+  });
+}
 
 // ---------- UpstashClient over local Redis (in-process, no HTTP hop) ----------
 
@@ -870,7 +902,18 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         await appendSystemMessage(client, code, statusMessage);
         return { result: { appended: true, metadata: statusMessage.metadata ?? {} } };
       }
-      return { result: await appendMessage(client, code, stamped) };
+      const appendResult = await appendMessage(client, code, stamped);
+      // T-118: a message that @mentions the owner taps them on the shoulder —
+      // app badge + push on every registered device. Fire-and-forget.
+      if (shouldNotifyOwner(stamped)) {
+        notifyOwnerAsync({
+          title: `${stamped.name} mentioned you`,
+          body: String(stamped.text || '').slice(0, 140),
+          url: `/r/${code}`,
+          tag: `mention-${code}`,
+        });
+      }
+      return { result: appendResult };
     }
     case 'systemMessage': {
       await appendSystemMessage(client, code, payload.message as Message);
@@ -1002,6 +1045,13 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           targetAgentClient: 'cc',
         }),
       );
+      // T-118: questions are addressed to the owner by definition.
+      notifyOwnerAsync({
+        title: `${name} asked you a question`,
+        body: String(question.prompt || '').slice(0, 140),
+        url: `/r/${code}?panel=questions`,
+        tag: `question-${question.id}`,
+      });
       return { question };
     }
     case 'questionAnswer': {
@@ -1545,6 +1595,42 @@ const server = createServer(async (req, res) => {
           role: mapped?.role || '',
         },
       });
+    }
+
+    // ---------- T-118: owner push channel ----------
+    if (path === '/api/push/vapid-public-key' && req.method === 'GET') {
+      if (!pushEnabled()) return sendJson(res, 503, { error: 'push_disabled' });
+      return sendJson(res, 200, { publicKey: vapidPublicKey() });
+    }
+    if (path === '/api/push/subscribe' && req.method === 'POST') {
+      if (!pushEnabled()) return sendJson(res, 503, { error: 'push_disabled' });
+      const caller = await resolveCaller(req);
+      // Access-authenticated users register for their own account; trusted
+      // local tooling may register for the owner account (receipt harnesses).
+      const email = caller.kind === 'user' ? caller.email : caller.kind === 'local' ? ownerEmail() : null;
+      if (!email) return sendJson(res, 401, { error: 'unauthorized' });
+      let body: { subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } } };
+      try { body = JSON.parse(await readBody(req)); } catch { return sendJson(res, 400, { error: 'invalid JSON body' }); }
+      const sub = body.subscription;
+      if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys.auth) {
+        return sendJson(res, 400, { error: 'subscription must carry endpoint and keys' });
+      }
+      const current = await pushStore.read(email);
+      await pushStore.write(email, upsertSubscription(current, sub as never, Date.now()));
+      return sendJson(res, 200, { registered: true, devices: current.length + 1 });
+    }
+    if (path === '/api/push/test' && req.method === 'POST') {
+      if (!pushEnabled()) return sendJson(res, 503, { error: 'push_disabled' });
+      const caller = await resolveCaller(req);
+      const email = caller.kind === 'user' ? caller.email : caller.kind === 'local' ? ownerEmail() : null;
+      if (!email) return sendJson(res, 401, { error: 'unauthorized' });
+      const outcome = await sendToAccount(pushStore, email, {
+        title: 'WakiChat test notification',
+        body: 'The notification pipe works end to end on this device.',
+        url: '/',
+        tag: 'push-test',
+      });
+      return sendJson(res, 200, outcome);
     }
 
     if (path === '/api/rooms' && req.method === 'GET') {
