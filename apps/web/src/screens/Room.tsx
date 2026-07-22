@@ -224,6 +224,10 @@ export function Room() {
   const dictationUndoRef = useRef('');
   const [dictationDraft, setDictationDraft] = useState(false);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  // T-119: while dictation is ACTIVE the recording overlay carries every
+  // control, so the trigger cluster yields its row slots and the draft
+  // textarea takes the full composer width.
+  const [dictating, setDictating] = useState(false);
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   // T-80: the paperclip trigger — focus returns here on every sheet exit.
@@ -2591,7 +2595,7 @@ export function Room() {
                   aria-label="Add photos or files"
                   aria-haspopup="dialog"
                   aria-expanded={attachmentMenuOpen}
-                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 sm:hidden"
+                  className={`h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 sm:hidden ${dictating ? 'hidden' : 'flex'}`}
                 >
                   <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="m13 7.5-4.9 4.9a3.1 3.1 0 0 1-4.4-4.4l5.3-5.3a2.1 2.1 0 0 1 3 3l-5.3 5.3a1.1 1.1 0 0 1-1.6-1.6L9.8 4.7" />
@@ -2677,7 +2681,7 @@ export function Room() {
                     aria-label="Add photos or files"
                     aria-haspopup="dialog"
                     aria-expanded={attachmentMenuOpen}
-                    className="hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 sm:flex"
+                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 ${dictating ? '' : 'sm:flex'}`}
                   >
                     {attachBusy ? (
                       <span className="text-xs font-semibold">…</span>
@@ -2710,6 +2714,7 @@ export function Room() {
                       dictationBaseRef.current = text;
                       dictationUndoRef.current = text;
                       setDictationDraft(true);
+                      setDictating(true);
                     }}
                     onLiveTranscript={(live) => {
                       const base = (dictationBaseRef.current ?? '').trim();
@@ -2721,13 +2726,16 @@ export function Room() {
                       setText(base && t ? `${base} ${t}` : t || base);
                       dictationBaseRef.current = null;
                       setDictationDraft(true);
+                      setDictating(false);
                       requestAnimationFrame(() => textareaRef.current?.focus());
                     }}
                     onCancel={() => {
                       if (dictationBaseRef.current !== null) setText(dictationBaseRef.current);
                       dictationBaseRef.current = null;
                       setDictationDraft(false);
+                      setDictating(false);
                     }}
+                    hideTriggerWhileActive
                     disabled={ended}
                   />
                   </span>
@@ -2736,7 +2744,7 @@ export function Room() {
                     onClick={() => setComposerExpanded(v => !v)}
                     title={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
                     aria-label={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
-                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition sm:flex ${composerExpanded ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
+                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition ${dictating ? '' : 'sm:flex'} ${composerExpanded ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
                   >
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       {composerExpanded
@@ -2751,10 +2759,12 @@ export function Room() {
                     disabled={!text.trim() && attachments.length === 0}
                     title="Send"
                     aria-label="Send message"
-                    className={`h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 sm:flex ${
+                    className={`h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${
                       // T-84: no disabled Send consuming phone width — it
                       // APPEARS (replacing the mic) once content exists.
-                      text.trim() || attachments.length > 0 ? 'flex' : 'hidden'
+                      // T-119: and never during active dictation, when the
+                      // recording bar owns the controls.
+                      dictating ? 'hidden' : text.trim() || attachments.length > 0 ? 'flex sm:flex' : 'hidden sm:flex'
                     }`}
                   >
                     <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">

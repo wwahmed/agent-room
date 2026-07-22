@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { DictationController, mergeTranscript, type DictationSnapshot, type RecognizerLike } from '../lib/dictation.js';
 
 interface Props {
+  /** T-119: while dictation is active the recording overlay carries every
+   *  control, so the trigger can yield its row slot to the draft text. */
+  hideTriggerWhileActive?: boolean;
   /** Called once with the final transcript when the user Stops (accepts). */
   onTranscript: (text: string) => void;
   /** T-59: called continuously while recording with the live (final+interim)
@@ -51,7 +54,7 @@ function noSignalMessage(s: DictationSnapshot): string {
   return `No transcription yet (${s.lastTransientError})`;
 }
 
-export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled }: Props) {
+export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive }: Props) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const [tick, setTick] = useState(0);
   const ctrlRef = useRef<DictationController | null>(null);
@@ -112,7 +115,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
         aria-label={active ? 'Stop dictation and insert text' : 'Start voice dictation'}
         title={active ? 'Stop dictation' : 'Start voice dictation'}
         aria-pressed={active}
-        className={`text-base leading-none w-11 h-11 flex items-center justify-center rounded-lg transition ${
+        className={`text-base leading-none w-11 h-11 items-center justify-center rounded-lg transition ${active && hideTriggerWhileActive ? 'hidden' : 'flex'} ${
           recording
             ? 'bg-red-500/20 text-red-300'
             : snap.state === 'paused'

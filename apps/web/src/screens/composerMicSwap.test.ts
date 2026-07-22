@@ -12,3 +12,15 @@ describe('phone mic swap respects staged attachments (T-79)', () => {
     expect(source).toContain("text.trim() && !dictationDraft && attachments.length === 0 ? 'max-sm:hidden' : 'contents'");
   });
 });
+
+// T-119: while dictation is ACTIVE the recording overlay carries every
+// control, so the trigger cluster yields its slots and the draft textarea
+// takes the full composer width.
+describe('dictation clears the composer row (T-119)', () => {
+  it('hides attach, expand, and send while dictating and hands VoiceButton the trigger-hiding prop', () => {
+    expect(source).toContain("sm:hidden ${dictating ? 'hidden' : 'flex'}");
+    expect(source.split("${dictating ? '' : 'sm:flex'}").length).toBe(3); // desktop attach + expand
+    expect(source).toContain("dictating ? 'hidden' : text.trim() || attachments.length > 0");
+    expect(source).toContain('hideTriggerWhileActive');
+  });
+});
