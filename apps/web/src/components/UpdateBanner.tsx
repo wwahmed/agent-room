@@ -21,7 +21,7 @@ const POLL_MS = 44_000;
 export function ownBundle(doc: Document = document): string | null {
   for (const s of Array.from(doc.querySelectorAll('script[src]'))) {
     const m = (s.getAttribute('src') || '').match(/assets\/index-([A-Za-z0-9_-]+)\.js/);
-    if (m) return m[1];
+    if (m?.[1]) return m[1];
   }
   return null;
 }
