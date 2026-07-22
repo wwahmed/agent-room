@@ -26,6 +26,15 @@ export interface RoomSummary {
 /** Facepile payload cap — 3 visible faces + the "+N" overflow chip's worth. */
 export const ROOM_LIST_AGENT_CAP = 4;
 
+// T-114: QA/harness rooms are working scaffolding, not conversations — they
+// must never surface in an owner's Home or the desktop ROOMS list. A room is
+// QA when it was created with the qa flag or its topic carries the [QA]
+// prefix (the documented opt-in for shell probes).
+export function isQaRoom(room: { qa?: unknown; topic?: unknown }): boolean {
+  if (room.qa === true) return true;
+  return typeof room.topic === 'string' && room.topic.startsWith('[QA]');
+}
+
 export interface RoomIndexEntry {
   code: string;
   score: number;
@@ -64,8 +73,11 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
       createdBy?: unknown;
       createdAt?: unknown;
       participants?: unknown;
+      qa?: unknown;
     };
     if (typeof room.code !== 'string' || room.code !== entry.code) return null;
+    // T-114: harness scaffolding never reaches the owner's nav.
+    if (isQaRoom(room)) return null;
     const createdAt = Number(room.createdAt);
     if (!Number.isFinite(createdAt)) return null;
     const count = Number(record.messageCountRaw);

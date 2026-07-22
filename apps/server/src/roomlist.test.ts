@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isQaRoom,
   listIndexedRoomPage,
   roomListCursor,
   roomListLimit,
@@ -169,5 +170,42 @@ describe('room list agent facepile (T-34)', () => {
     expect(page.rooms[0]!.agentCount).toBe(0);
     expect(page.rooms[0]!.agentStaleCount).toBe(0);
     expect(page.rooms[0]!.agents).toEqual([]);
+  });
+});
+
+// T-114: QA/harness rooms never surface in the owner's nav.
+describe('QA room exclusion (T-114)', () => {
+  function qaStore(rooms: Array<Record<string, unknown>>) {
+    const store: RoomListStore = {
+      async count() { return rooms.length; },
+      async range() { return rooms.map((r, i) => ({ code: String(r.code), score: 100 - i })); },
+      async read(page) {
+        return page.map(entry => ({
+          raw: JSON.stringify(rooms.find(r => r.code === entry.code)),
+          messageCountRaw: 0,
+        }));
+      },
+      async remove() {},
+    };
+    return store;
+  }
+  const base = { status: 'active', createdBy: 'Claude', createdAt: 1, participants: [] };
+
+  it('classifies qa-flagged and [QA]-prefixed rooms', () => {
+    expect(isQaRoom({ qa: true, topic: 'anything' })).toBe(true);
+    expect(isQaRoom({ topic: '[QA] receipt probe' })).toBe(true);
+    expect(isQaRoom({ topic: 'Build: WakiDrive EV Nav' })).toBe(false);
+    expect(isQaRoom({ qa: 'yes', topic: 'x' })).toBe(false);
+  });
+
+  it('drops QA rooms from the list while real rooms flow through', async () => {
+    const store = qaStore([
+      { ...base, code: 'real-room-one', topic: 'Build: WakiDrive EV Nav' },
+      { ...base, code: 'gate-fixture', topic: 'Visual gate fixture (auto test room, safe to ignore)', qa: true },
+      { ...base, code: 'probe-room', topic: '[QA] T-114 receipt probe' },
+      { ...base, code: 'real-room-two', topic: 'Foundation planning' },
+    ]);
+    const page = await listIndexedRoomPage(store, 0, 10);
+    expect(page.rooms.map(r => r.code)).toEqual(['real-room-one', 'real-room-two']);
   });
 });

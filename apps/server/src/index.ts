@@ -54,6 +54,7 @@ import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { roomActivityAt } from './roomactivity.js';
 import {
+  isQaRoom,
   listIndexedRoomPage,
   roomListCursor,
   roomListLimit,
@@ -595,6 +596,13 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         hostAuthId: caller.kind === 'user' ? caller.email : undefined,
       });
       const { hostKey, ...room } = created;
+      // T-114: harness/probe rooms opt in as QA at creation (explicit flag or
+      // the [QA] topic prefix) and are excluded from Home and the desktop
+      // ROOMS list for everyone.
+      if (payload.qa === true || isQaRoom({ topic: room.topic })) {
+        const flagged = await casRoom(client, newCode, (cur) => ({ ...cur, qa: true }));
+        return { room: flagged, hostKey };
+      }
       // T-18: optional project binding at create time (the web form makes
       // it required; MCP clients may attach later via attachProject).
       const projectId = String(payload.projectId || '');
