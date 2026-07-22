@@ -90,8 +90,11 @@ export function HoverActionTray({ message, onReact, onReply, selfName, align = '
   );
 }
 
-/** Treatment B: slim vertical rail hugging the message wall edge, spanning
- *  the hovered message's full height. */
+/** Treatment B: slim accent rail hugging the message wall edge, marking the
+ *  hovered message's full height, CARRYING the action pill at its top (the
+ *  spec's "thin vertical bar alongside the message wall" reading). The pill
+ *  sits in the top margin like treatment A but anchored to the wall side,
+ *  visually connected to the bar. */
 export function EdgeActionRail({ message, onReact, onReply, selfName }: {
   message: Message;
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
@@ -101,10 +104,12 @@ export function EdgeActionRail({ message, onReact, onReply, selfName }: {
   return (
     <div
       data-gate="action-rail"
-      className="absolute inset-y-0 left-0 z-30 hidden w-9 flex-col items-center justify-center gap-1.5 transition-opacity sm:flex opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+      className="absolute inset-y-0 left-0 z-30 hidden transition-opacity sm:block opacity-0 focus-within:opacity-100 group-hover:opacity-100"
     >
       <span className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-accent/60" aria-hidden="true" />
-      <ActionGlyphs message={message} onReact={onReact} onReply={onReply} selfName={selfName} floating />
+      <div className="absolute -top-3.5 left-2 flex items-center gap-0.5 rounded-full border border-accent/40 bg-surface px-1.5 py-0.5 shadow-md">
+        <ActionGlyphs message={message} onReact={onReact} onReply={onReply} selfName={selfName} />
+      </div>
     </div>
   );
 }
