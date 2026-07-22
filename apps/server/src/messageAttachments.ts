@@ -26,7 +26,7 @@ export function validateMessageBody(message: Message): void {
   const hasText = typeof text === 'string' && text.trim().length > 0;
   const hasAttachments = Array.isArray(message.attachments) && message.attachments.length > 0;
   if (!hasText && !hasAttachments) {
-    throw badRequest('message.text is empty — put your message in the `text` parameter of room_send. Blank messages are not stored (attachment-only messages are allowed).');
+    throw badRequest('message.text is empty. Put your message in the `text` parameter of room_send. Blank messages are not stored (attachment-only messages are allowed).');
   }
 }
 

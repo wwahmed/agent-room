@@ -579,7 +579,7 @@ async function authenticateSender(
     case 'bad-key':
       throw memberAuthError(`Member credential does not match "${name}". A display name alone cannot authenticate.`);
     case 'ambiguous':
-      throw memberAuthError(`"${name}" (${clientKind}) is ambiguous — ${rows.length} rows share it. Rejoin with a distinct name or a member credential.`);
+      throw memberAuthError(`"${name}" (${clientKind}) is ambiguous: ${rows.length} rows share it. Rejoin with a distinct name or a member credential.`);
     case 'no-flag':
     default:
       throw memberAuthError(`Sender authentication required for "${name}". Rejoin to obtain a member credential.`);
@@ -872,7 +872,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         // Without a sender name the speaker check can only fail, and the
         // resulting MutedError text ('"undefined" has been muted') sends
         // agents down the wrong path. Name the real problem instead.
-        const err = new Error('message.name is required — pass your display name in the room_send call.');
+        const err = new Error('message.name is required. Pass your display name in the room_send call.');
         err.name = 'BadRequestError';
         throw err;
       }
@@ -937,7 +937,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       const kind = payload.kind as string;
       const targetMessageId = Number(payload.messageId);
       if (!reactorName) {
-        const err = new Error('name is required — pass your display name.');
+        const err = new Error('name is required. Pass your display name.');
         err.name = 'BadRequestError';
         throw err;
       }
@@ -1255,7 +1255,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         throw taskError('BadRequestError', `reassign target @${to} (${toClient}) is not a participant in this room`);
       }
       if (toRows.length > 1) {
-        throw taskError('BadRequestError', `reassign target @${to} (${toClient}) is ambiguous — ${toRows.length} rows share it`);
+        throw taskError('BadRequestError', `reassign target @${to} (${toClient}) is ambiguous: ${toRows.length} rows share it`);
       }
       if (!toRows[0].memberKeyHash) {
         throw taskError('MemberAuthError', `reassign target @${to} is not keyed; only a credentialed identity can receive task bindings`);
@@ -1507,8 +1507,18 @@ async function handleStatic(res: ServerResponse, urlPath: string): Promise<void>
   const safePath = normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
   let filePath = join(WEB_DIST, safePath);
   if (!filePath.startsWith(WEB_DIST)) filePath = join(WEB_DIST, 'index.html');
-  if (safePath === '/' || safePath === '' || !existsSync(filePath) || extname(filePath) === '') {
+  if (safePath === '/' || safePath === '' || extname(filePath) === '') {
+    // Extension-less paths are SPA navigation routes: serve the app shell.
     filePath = join(WEB_DIST, 'index.html');
+  } else if (!existsSync(filePath)) {
+    // T-115: a missing FILE must 404. The old fallback served index.html for
+    // ANY missing path, so a stale /assets/*.js or an unregistered /sw.js got
+    // an HTML body under a script URL: the browser executes it, dies on '<'
+    // as a syntax error, and the user sees a traceless white screen (this bit
+    // the first T-118 deploy). 404 is loud, cacheable-safe, and honest.
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('not found');
+    return;
   }
   try {
     const data = await readFile(filePath);

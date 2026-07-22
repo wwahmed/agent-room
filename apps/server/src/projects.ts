@@ -570,7 +570,7 @@ function assertLockOwner(lock: LedgerLock): void {
   let held: { owner?: string } | null = null;
   try { held = JSON.parse(readFileSync(lock.lockPath, 'utf8')) as { owner?: string }; } catch { held = null; }
   if (!held || held.owner !== lock.owner) {
-    throw projErr('LedgerConflictError', 'Lock was taken over by another writer (stale takeover); this write was aborted to avoid overwriting a concurrent completed write — retry.');
+    throw projErr('LedgerConflictError', 'Lock was taken over by another writer (stale takeover); this write was aborted to avoid overwriting a concurrent completed write. Retry.');
   }
 }
 
