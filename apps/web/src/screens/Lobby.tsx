@@ -158,9 +158,12 @@ export function Lobby() {
         </div>
       </div>
 
+      {/* T-116: the lobby is part of the committed creation transaction —
+          leaving it in either direction REPLACES it in history, so the back
+          stack from inside a fresh room is exactly [Home, room]. */}
       <div className="flex gap-2">
-        <button onClick={() => navigate('/')} className="flex-1 bg-surface border border-border py-2.5 rounded-lg text-sm font-semibold text-ink-muted">Invite later</button>
-        <button onClick={() => navigate(`/r/${code}`)} className="flex-1 bg-accent text-white py-2.5 rounded-lg text-sm font-semibold">Enter room →</button>
+        <button onClick={() => navigate('/', { replace: true })} className="flex-1 bg-surface border border-border py-2.5 rounded-lg text-sm font-semibold text-ink-muted">Invite later</button>
+        <button onClick={() => navigate(`/r/${code}`, { replace: true })} className="flex-1 bg-accent text-white py-2.5 rounded-lg text-sm font-semibold">Enter room →</button>
       </div>
       </div>
     </>

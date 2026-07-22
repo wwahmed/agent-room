@@ -87,7 +87,10 @@ export function CreateMeeting() {
       if (template && template.id !== 'blank') {
         sessionStorage.setItem(`${TEMPLATE_KEY}${code}`, template.id);
       }
-      navigate(`/r/${code}/lobby`);
+      // T-116: the room now exists — the create form is a dead intermediate
+      // state. Replace it in history so Back from the lobby/room lands on
+      // Home (where the flow started), never on this committed form.
+      navigate(`/r/${code}/lobby`, { replace: true });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
