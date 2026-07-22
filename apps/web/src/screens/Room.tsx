@@ -2216,7 +2216,7 @@ export function Room() {
                   pixels, and hiding them exposes reading canvas, no reflow. */}
               <div
                 className="mx-auto w-full max-w-[1280px]"
-                style={isPhone ? { paddingTop: 104, paddingBottom: composerH + 16 + (unseenCount > 0 || !atBottom || unseenMentions > 0 || mentionSeeking ? 56 : 0) } : undefined}
+                style={isPhone ? { paddingTop: 104, paddingBottom: composerH + 16 + (unseenCount > 0 || !atBottom || unseenMentions > 0 || mentionSeeking ? 56 : 0) } : { paddingBottom: composerH + 16 }}
               >
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
@@ -2314,14 +2314,22 @@ export function Room() {
                   the feed reserving collision padding only while it exists;
                   it stays visible as the way back to now even with chrome
                   hidden (it drops to the safe-area edge). */}
+              {/* T-45 (owner ruling): on >=sm the lane no longer reserves a
+                  band — it OVERLAYS the canvas just above the floating
+                  composer, so its appearance reflows nothing. The wrapper is
+                  click-transparent; only the pills take pointer events. */}
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
-                <div data-gate="floating" className="room-latest-lane flex w-full items-center justify-center gap-2 px-4 py-1.5">
+                <div
+                  data-gate="floating"
+                  className="room-latest-lane flex w-full items-center justify-center gap-2 px-4 py-1.5 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:z-[25] sm:py-0"
+                  style={!isPhone ? { bottom: composerH + 12 } : undefined}
+                >
                   {(unseenCount > 0 || !atBottom) && (
                     <button
                       type="button"
                       onClick={scrollToBottom}
                       aria-label={unseenCount > 0 ? `Jump to ${unseenCount} new messages` : 'Jump to latest messages'}
-                      className="flex min-h-11 w-fit items-center gap-1.5 rounded-full bg-accent px-4 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
+                      className="pointer-events-auto flex min-h-11 w-fit items-center gap-1.5 rounded-full bg-accent px-4 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
                     >
                       <span aria-hidden="true">↓</span>
                       {unseenCount > 0
@@ -2335,7 +2343,7 @@ export function Room() {
                       moment the reader catches up. The standing entry point
                       lives in the header next to the room title. */}
                   {(unseenMentions > 0 || mentionSeeking) && (
-                    <div role="group" aria-label="Unseen mentions of you" className="flex items-center gap-1 rounded-full border border-amber-400/50 bg-surface px-2 py-0.5 shadow-lg">
+                    <div role="group" aria-label="Unseen mentions of you" className="pointer-events-auto flex items-center gap-1 rounded-full border border-amber-400/50 bg-surface px-2 py-0.5 shadow-lg">
                       {mentionSeeking ? (
                         <span className="flex min-h-11 items-center gap-2 px-1.5 text-[12px] font-semibold text-ink-soft">
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400/40 border-t-amber-500 motion-reduce:animate-none" aria-hidden="true" />
@@ -2365,7 +2373,7 @@ export function Room() {
             {/* T-82: the whole bottom block overlays the feed on phones and
                 slides below the viewport in immersive reading (pinned states
                 keep it up); >=sm it stays in flow exactly as before. */}
-            <div ref={composerWrapRef} className="room-bottom-chrome">
+            <div ref={composerWrapRef} className="room-bottom-chrome sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
             {ended ? (
               // A1: ended-room CTA pivots from "Reactivate-only" to a primary
               // "Save & Share" call-to-action. Once the meeting wraps, the most
@@ -2500,18 +2508,18 @@ export function Room() {
                     suggestions above the box and only when they're relevant — so
                     these now appear only while the draft is empty and vanish the
                     moment you type, giving the space back to the conversation. */}
-                {!text.trim() && (
+                {!text.trim() && composerFocused && (
                   <div className="hidden lg:flex flex-wrap items-center gap-2 text-[12px]">
                     <button
                       type="button"
-                      onClick={() => fillPrompt('minutes')}
+                      onMouseDown={e => { e.preventDefault(); fillPrompt('minutes'); }}
                       className="min-h-11 rounded-full border border-accent-tint-border bg-accent-tint px-3 font-semibold text-accent hover:bg-accent-tint-border transition"
                     >
                       Ask for minutes
                     </button>
                     <button
                       type="button"
-                      onClick={() => fillPrompt('reply')}
+                      onMouseDown={e => { e.preventDefault(); fillPrompt('reply'); }}
                       className="min-h-11 rounded-full border border-border bg-surface-softer px-3 font-semibold text-ink-muted hover:border-accent/40 hover:text-accent transition"
                     >
                       Ask for reply draft
@@ -2574,7 +2582,7 @@ export function Room() {
                     [attach][flex field][mic], Send REPLACING mic the moment
                     content exists (no disabled Send eating width); >=sm keeps
                     the field-above-tools layout from the earlier host ruling. */}
-                <div className="max-sm:flex max-sm:items-end">
+                <div className="flex items-end">
                 <button
                   ref={attachTriggerPhoneRef}
                   type="button"
@@ -2636,7 +2644,7 @@ export function Room() {
                   /* T-74: the semantic composer role keeps typed and placeholder
                      text readable at physical phone scale. Borderless — the
                      wrapper owns the border and focus ring. */
-                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0 max-sm:min-w-0 max-sm:flex-1"
+                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0 min-w-0 flex-1"
                 />
                 {/* T-85 hotfix: NOT position:relative - the recording overlay
                     inside VoiceButton is absolute inset-x-0 and must anchor to
