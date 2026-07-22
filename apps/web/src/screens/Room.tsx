@@ -2691,8 +2691,12 @@ export function Room() {
                   />
                   {/* T-84 phone swap: mic yields to Send once content exists —
                       but NEVER mid-dictation, when the stop/cancel controls
-                      must stay reachable (T-85). */}
-                  <span className={text.trim() && !dictationDraft ? 'max-sm:hidden' : 'contents'}>
+                      must stay reachable (T-85), and NEVER while an
+                      attachment is staged (T-79): attachment plus dictated
+                      text must leave in ONE message, so the mic stays
+                      reachable alongside Send instead of forcing the host to
+                      send in installments. */}
+                  <span className={text.trim() && !dictationDraft && attachments.length === 0 ? 'max-sm:hidden' : 'contents'}>
                   <VoiceButton
                     onStart={() => {
                       dictationBaseRef.current = text;
