@@ -981,6 +981,14 @@ export function Room() {
     const appendedTail = appended > 0
       ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name) && !isStatusPing(message) && !isReactionEvent(message))
       : [];
+    // T-125 (host-critical): posting IS declaring you are at the conversation
+    // tail — transaction-commit navigation, T-116 family. Before this, a
+    // self-authored send from a scrolled-up position (the T-65 first-unread
+    // landing put Waqas a day back) fell through BOTH branches below: filtered
+    // out of the pill accounting, and not at the bottom, so his own message
+    // landed off-screen while the viewport stayed on yesterday.
+    const appendedSelf = appended > 0
+      && messages.slice(len - appended).some(message => isSelfAuthored(message, self?.name));
     const appendedUnread = appendedTail.length;
     // T-18 rev2: mentions among the unseen tail drive the navigator.
     const appendedMentions = appendedTail.filter(message => textMentionsSelf(message.text ?? '', self?.name)).length;
@@ -997,10 +1005,14 @@ export function Room() {
         feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
         setUnseenCount(0);
       }
-    } else if (appended > 0 && atBottomRef.current) {
+    } else if (appended > 0 && (atBottomRef.current || appendedSelf)) {
       feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
       setUnseenCount(0);
       setUnseenMentions(0);
+      // T-125: following your own send to the tail means everything above it
+      // has been scrolled past — the at-bottom state must reflect that so the
+      // next OTHER-sender message keeps sticking instead of pilling.
+      if (appendedSelf) atBottomRef.current = true;
     } else if (appendedUnread > 0) {
       setUnseenCount((n) => n + appendedUnread);
       if (appendedMentions > 0) setUnseenMentions((n) => n + appendedMentions);
