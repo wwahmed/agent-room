@@ -15,6 +15,12 @@ export interface DictationSnapshot {
   interim: string;   // current not-yet-final words
   elapsedMs: number; // active recording time, excluding paused time
   error: string | null;
+  // T-108 no-signal diagnostics: a session can sit in `recording` forever
+  // while the browser's recognizer returns nothing (wrong mic input, mute
+  // Siri/Google backend, silent restart loop). These let the UI say so.
+  hasHeardSpeech: boolean;          // any onresult at all this session
+  restarts: number;                 // automatic restarts this session
+  lastTransientError: string | null; // most recent non-fatal error code
 }
 
 export interface RecognizerLike {
@@ -93,6 +99,9 @@ export class DictationController {
   private error: string | null = null;
 
   private rec: RecognizerLike | null = null; // the CURRENT recognizer; events from any other are stale
+  private hasHeardSpeech = false;
+  private restarts = 0;
+  private lastTransientError: string | null = null;
   private stopping = false;
   private restartTimer: unknown = null;
   private deadlineTimer: unknown = null;
@@ -125,6 +134,9 @@ export class DictationController {
       interim: this.interim,
       elapsedMs: this.elapsed(),
       error: this.error,
+      hasHeardSpeech: this.hasHeardSpeech,
+      restarts: this.restarts,
+      lastTransientError: this.lastTransientError,
     };
   }
 
@@ -145,6 +157,7 @@ export class DictationController {
 
     rec.onresult = (e) => {
       if (!isCurrent()) return;
+      this.hasHeardSpeech = true;
       const finalParts: string[] = [];
       const interimParts: string[] = [];
       for (let i = 0; i < e.results.length; i++) {
@@ -171,7 +184,9 @@ export class DictationController {
         this.hardReset('idle');
         this.emit();
       }
-      // transient (no-speech/aborted) → handled by onend
+      // transient (no-speech/aborted) → handled by onend; record the code so
+      // the UI can explain a mute session instead of showing a silent timer
+      else { this.lastTransientError = err; this.emit(); }
     };
     rec.onend = () => {
       if (!isCurrent()) return;
@@ -183,10 +198,11 @@ export class DictationController {
       // longer replays are safe to commit because mergeTranscript collapses
       // a cumulative or overlapping rehypothesis into the committed text
       // instead of appending it again.
-      if (!this.stopping && this.state === 'recording') this.commitInterim();
+      const autoRestart = !this.stopping && this.state === 'recording';
+      if (autoRestart) { this.commitInterim(); this.restarts++; }
       this.emit();
       if (this.stopping) { this.finish(); return; }
-      if (this.state === 'recording') {
+      if (autoRestart) {
         // premature end (pause/silence/hiccup) — keep going, don't finalize
         this.rec = null; // ignore any further late events from this recognizer
         this.scheduleRestart();
@@ -248,6 +264,7 @@ export class DictationController {
     if (this.state !== 'idle') return;
     this.finalText = ''; this.liveFinal = ''; this.interim = '';
     this.error = null; this.activeMs = 0; this.stopping = false; this.startFailures = 0;
+    this.hasHeardSpeech = false; this.restarts = 0; this.lastTransientError = null;
     this.segmentStart = this.o.now();
     this.state = 'recording';
     this.scheduleDeadline();

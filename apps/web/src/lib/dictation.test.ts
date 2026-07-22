@@ -113,6 +113,33 @@ describe('DictationController', () => {
     expect(h.finals).toEqual(['only sentence']);
   });
 
+  it('T-108: exposes no-signal diagnostics — hasHeardSpeech, restarts, lastTransientError', () => {
+    const h = harness();
+    h.c.start();
+    expect(h.snap().hasHeardSpeech).toBe(false);
+    expect(h.snap().restarts).toBe(0);
+    // transient error records its code without killing the session
+    h.cur().onerror?.({ error: 'no-speech' });
+    expect(h.snap().lastTransientError).toBe('no-speech');
+    expect(h.snap().state).toBe('recording');
+    // silent restart loop counts
+    h.cur().onend?.();
+    h.flushRestarts();
+    h.cur().onend?.();
+    h.flushRestarts();
+    expect(h.snap().restarts).toBe(2);
+    expect(h.snap().hasHeardSpeech).toBe(false);
+    // the first real result flips hasHeardSpeech
+    h.cur().emit([{ final: false, text: 'finally' }]);
+    expect(h.snap().hasHeardSpeech).toBe(true);
+    // a new session resets all three
+    h.c.stop();
+    h.c.start();
+    expect(h.snap().hasHeardSpeech).toBe(false);
+    expect(h.snap().restarts).toBe(0);
+    expect(h.snap().lastTransientError).toBe(null);
+  });
+
   it('collapses Android cumulative final results instead of concatenating every hypothesis', () => {
     const h = harness();
     h.c.start();

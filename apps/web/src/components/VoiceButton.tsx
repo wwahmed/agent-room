@@ -32,8 +32,24 @@ function mmss(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-const IDLE: DictationSnapshot = { state: 'idle', finalText: '', interim: '', elapsedMs: 0, error: null };
+const IDLE: DictationSnapshot = {
+  state: 'idle', finalText: '', interim: '', elapsedMs: 0, error: null,
+  hasHeardSpeech: false, restarts: 0, lastTransientError: null,
+};
 const BARS = 22;
+// T-108: after this much recording with zero recognition results, stop
+// pretending — replace the decorative waveform with a diagnosis.
+const NO_SIGNAL_AFTER_MS = 6000;
+
+function noSignalMessage(s: DictationSnapshot): string {
+  if (s.lastTransientError === 'no-speech' || s.lastTransientError === null) {
+    return 'Hearing nothing — check the mic input in your browser';
+  }
+  if (s.lastTransientError === 'aborted' || s.restarts > 2) {
+    return `Speech service keeps disconnecting (${s.lastTransientError ?? 'restart loop'})`;
+  }
+  return `No transcription yet (${s.lastTransientError})`;
+}
 
 export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled }: Props) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
@@ -140,9 +156,24 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
                 here: Web Speech owns the microphone for this session. The old
                 analyser could show live bars while starving recognition on some
                 browser/device combinations. */}
-            {/* T-85 hotfix: min-w-0 lets the waveform shrink below its bars'
+            {/* T-108: a session that has heard NOTHING must say so instead of
+                animating a fake waveform over silence — the host recorded into
+                a mute recognizer for a full session with zero feedback. The
+                hint reuses the waveform's flexible slot so the controls never
+                move. */}
+            {recording && !snap.hasHeardSpeech && snap.elapsedMs >= NO_SIGNAL_AFTER_MS ? (
+              <span
+                role="status"
+                aria-live="polite"
+                className="min-w-0 flex-1 truncate text-center text-[12px] font-semibold text-amber-300"
+                title={noSignalMessage(snap)}
+              >
+                {noSignalMessage(snap)}
+              </span>
+            ) : (
+            /* T-85 hotfix: min-w-0 lets the waveform shrink below its bars'
                 min-content width - without it the flex row can never fit a
-                narrow viewport and the Use-draft control gets pushed out. */}
+                narrow viewport and the Use-draft control gets pushed out. */
             <span className="flex h-8 min-w-0 flex-1 items-center justify-center gap-[3px] overflow-hidden" aria-hidden="true">
               {Array.from({ length: BARS }, (_, i) => {
                 const amp = 11;
@@ -156,6 +187,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
                 );
               })}
             </span>
+            )}
 
             <button
               type="button"
