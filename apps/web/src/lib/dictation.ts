@@ -176,10 +176,14 @@ export class DictationController {
     rec.onend = () => {
       if (!isCurrent()) return;
       this.commitLive();
-      // Do NOT promote an interim tail on an automatic restart. Android/Chrome
-      // may replay a progressively longer interim phrase in each generation;
-      // committing every replay produced "this is this is my this is my text".
-      // Keep the tail live until the browser finalizes it or the user Stops.
+      // T-107: on an AUTOMATIC restart, commit the interim tail too. Desktop
+      // Chrome never replays it into the next generation, so leaving it live
+      // let the fresh generation's first result erase everything spoken so
+      // far (the host's disappearing-draft bug). Android's progressively
+      // longer replays are safe to commit because mergeTranscript collapses
+      // a cumulative or overlapping rehypothesis into the committed text
+      // instead of appending it again.
+      if (!this.stopping && this.state === 'recording') this.commitInterim();
       this.emit();
       if (this.stopping) { this.finish(); return; }
       if (this.state === 'recording') {

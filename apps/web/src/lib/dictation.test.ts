@@ -86,6 +86,33 @@ describe('DictationController', () => {
     expect(h.finals).toEqual(['this is my text']);
   });
 
+  it('T-107: interim words survive an automatic restart when the next generation does NOT replay them (desktop)', () => {
+    // Desktop Chrome holds a whole utterance as interim, ends on silence, and
+    // the fresh generation starts empty. Before the fix, the new generation's
+    // first result replaced the un-committed interim and the entire first
+    // sentence vanished from the draft.
+    const h = harness();
+    h.c.start();
+    h.cur().emit([{ final: false, text: 'first sentence spoken on desktop' }]);
+    h.cur().onend?.(); // silence timeout, not a user stop
+    h.flushRestarts();
+    h.cur().emit([{ final: false, text: 'second thought' }]);
+    expect(mergeTranscript(h.snap().finalText, h.snap().interim))
+      .toBe('first sentence spoken on desktop second thought');
+    h.c.stop();
+    expect(h.finals).toEqual(['first sentence spoken on desktop second thought']);
+  });
+
+  it('T-107: a restart with nothing spoken afterwards still finalizes the carried words on Stop', () => {
+    const h = harness();
+    h.c.start();
+    h.cur().emit([{ final: false, text: 'only sentence' }]);
+    h.cur().onend?.();
+    h.flushRestarts();
+    h.c.stop(); // no results in the second generation at all
+    expect(h.finals).toEqual(['only sentence']);
+  });
+
   it('collapses Android cumulative final results instead of concatenating every hypothesis', () => {
     const h = harness();
     h.c.start();
