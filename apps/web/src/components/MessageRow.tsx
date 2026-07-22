@@ -3,6 +3,7 @@ import type { Message } from '@agent-room/shared';
 import { AttachmentList, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
 import { MessageMenu } from './MessageMenu.js';
+import { EdgeActionRail, HoverActionTray, readActionTreatment } from './MessageActionTray.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 import { BrandedLogoAvatar, GenericAgentBadge } from './AgentAvatar.js';
 import type { AgentBrand } from '../lib/agentBrand.js';
@@ -237,6 +238,15 @@ function SwipeReplyIndicator({ progress }: { progress: number }) {
 export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, selfName, senderBrand }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
+  // T-124 prototype flag (default 'legacy' = shipped behavior). When a hover
+  // treatment is active, the legacy anchor stays for PHONE only (sm:hidden
+  // wrapper) and desktop gets the candidate overlay instead.
+  const treatment = readActionTreatment();
+  const legacyMenuClass = treatment === 'legacy' ? '' : 'sm:hidden';
+  const hoverOverlay = treatment === 'legacy' || message.type !== 'msg' ? null
+    : treatment === 'tray'
+      ? <HoverActionTray message={message} onReact={onReact} onReply={onReply} selfName={selfName} align={self ? 'left' : 'right'} />
+      : <EdgeActionRail message={message} onReact={onReact} onReply={onReply} selfName={selfName} />;
 
   if (message.type === 'sys') {
     return (
@@ -259,7 +269,8 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     return (
       <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-6'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
-        <div className="pt-1"><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
+        {hoverOverlay}
+        <div className={`pt-1 ${legacyMenuClass}`}><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
         <div style={swipe.style} data-gate="msg-content" data-gate-self="true" className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {/* T-30/T-48: keep 15px type and a deliberate readable measure;
@@ -307,7 +318,8 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>
-        <div className="absolute right-3 top-1"><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
+        {hoverOverlay}
+        <div className={`absolute right-3 top-1 ${legacyMenuClass}`}><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
       </div>
     );
   }
@@ -315,6 +327,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   return (
     <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-6`}>
       <SwipeReplyIndicator progress={swipe.progress} />
+      {hoverOverlay}
       <div data-gate="msg-content" className={bubbleShape} style={swipe.style}>
         {/* T-58 (host: "others on the left", "can barely read the name"): the
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
@@ -334,7 +347,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {!message.role && <span className="hidden flex-1 sm:block" aria-hidden="true" />}
           <span className="flex-1 sm:hidden" aria-hidden="true" />
           <span className="msg-meta shrink-0 whitespace-nowrap" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
-          <MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} />
+          <span className={legacyMenuClass}><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></span>
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
