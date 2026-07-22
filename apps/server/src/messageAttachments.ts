@@ -14,6 +14,22 @@ function isAttachment(value: unknown): value is MessageAttachment {
     && typeof item.uploadedAt === 'number' && Number.isFinite(item.uploadedAt);
 }
 
+/**
+ * T-111: a message must carry readable content. Agents that pass the wrong
+ * room_send parameter (e.g. `message` instead of `text`) used to store
+ * zero-length bubbles that render as a blank wall of avatars; reject them at
+ * the door with an error that names the correct parameter. Attachment-only
+ * messages remain valid.
+ */
+export function validateMessageBody(message: Message): void {
+  const text = (message as { text?: unknown }).text;
+  const hasText = typeof text === 'string' && text.trim().length > 0;
+  const hasAttachments = Array.isArray(message.attachments) && message.attachments.length > 0;
+  if (!hasText && !hasAttachments) {
+    throw badRequest('message.text is empty — put your message in the `text` parameter of room_send. Blank messages are not stored (attachment-only messages are allowed).');
+  }
+}
+
 /** Prevent upload-error/partial objects from ever entering the message ledger. */
 export function validateMessageAttachments(message: Message): void {
   if (message.attachments === undefined) return;

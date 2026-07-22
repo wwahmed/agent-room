@@ -1,7 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import type { Message } from '@agent-room/shared';
+import { hasRenderableContent } from './MessageRow.js';
 
 const source = readFileSync(new URL('./MessageRow.tsx', import.meta.url), 'utf8');
+
+// T-111: rows with no text/attachments/artifact metadata are storage
+// artifacts of malformed agent sends; they must not render as blank bubbles.
+describe('blank-message suppression (T-111)', () => {
+  const msg = (over: Partial<Message>): Message => ({ id: 1, type: 'msg', name: 'Codex Researcher', client: 'cc', time: 1, text: '', ...over }) as Message;
+
+  it('hides the zero-content rows that blanked leap-lip-mule', () => {
+    expect(hasRenderableContent(msg({ text: '' }))).toBe(false);
+    expect(hasRenderableContent(msg({ text: '  \n ' }))).toBe(false);
+    expect(hasRenderableContent(msg({ text: undefined as never }))).toBe(false);
+  });
+
+  it('keeps text, attachment-only, system, and artifact rows', () => {
+    expect(hasRenderableContent(msg({ text: 'hello' }))).toBe(true);
+    expect(hasRenderableContent(msg({ attachments: [{ id: 'a', type: 'image', url: '/blobs/x/a.png', name: 'a.png', mime: 'image/png', size: 1, uploadedAt: 1 }] as Message['attachments'] }))).toBe(true);
+    expect(hasRenderableContent(msg({ type: 'sys', text: '' }))).toBe(true);
+    expect(hasRenderableContent(msg({ metadata: { eventType: 'question_created', questionId: 'q1' } as Message['metadata'] }))).toBe(true);
+  });
+});
 
 describe('calm chat row anatomy', () => {
   it('keeps reading roles on the semantic T-74 classes', () => {

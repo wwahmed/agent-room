@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback, type ClipboardEvent, type DragEvent } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { OLDER_PAGE_SIZE, useRoom } from '../hooks/useRoom.js';
-import { MessageRow, isSameGroup } from '../components/MessageRow.js';
+import { MessageRow, isSameGroup, hasRenderableContent } from '../components/MessageRow.js';
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
@@ -2230,12 +2230,16 @@ export function Room() {
                 }
                 const ambiguousNames = new Set<string>();
                 for (const [n, cs] of byName) if (cs.size > 1) ambiguousNames.add(n);
+                // T-111: malformed agent sends stored zero-content rows that
+                // render as a wall of blank bubbles; drop them BEFORE day
+                // dividers and grouping so the visible feed reads coherently.
+                const visibleMessages = messages.filter(hasRenderableContent);
                 // T-72: consecutive same-agent heartbeats render as ONE
                 // Activity Note ("N updates") anchored at the newest ping.
-                const statusView = collapseStatusRuns(messages);
-                return messages.map((m, i) => (
+                const statusView = collapseStatusRuns(visibleMessages);
+                return visibleMessages.map((m, i) => (
                   <Fragment key={m.id}>
-                  {startsMessageDay(messages[i - 1], m) && <MessageDayDivider time={m.time} now={now} />}
+                  {startsMessageDay(visibleMessages[i - 1], m) && <MessageDayDivider time={m.time} now={now} />}
                   {/* T-65: the line he stopped reading at, so catching up has a
                       visible starting point instead of guesswork. */}
                   {m.id === firstUnreadIdRef.current && (
@@ -2261,7 +2265,7 @@ export function Room() {
                       key={m.id}
                       message={m}
                       self={m.name === self.name && m.client === 'web'}
-                      grouped={isSameGroup(messages[i - 1], m)}
+                      grouped={isSameGroup(visibleMessages[i - 1], m)}
                       ambiguousNames={ambiguousNames}
                       now={now}
                       onReply={startReply}

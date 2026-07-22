@@ -27,6 +27,20 @@ import type { AgentBrand } from '../lib/agentBrand.js';
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
+// T-111: a chat row with no text, no attachments, and no artifact metadata is
+// a storage artifact of a malformed agent send (wrong room_send parameter),
+// not a message. Runs of them render as a wall of empty bubbles — the host's
+// "blank screen". The server now rejects new ones; this hides the ones
+// already stored, so history heals without a data migration. System rows and
+// question artifacts always render.
+export function hasRenderableContent(m: Message): boolean {
+  if (m.type !== 'msg') return true;
+  if (m.metadata?.eventType || m.metadata?.questionId) return true;
+  const hasText = typeof m.text === 'string' && m.text.trim().length > 0;
+  const hasAttachments = Array.isArray(m.attachments) && m.attachments.length > 0;
+  return hasText || hasAttachments;
+}
+
 export function isSameGroup(prev: Message | undefined, m: Message): boolean {
   return Boolean(
     prev &&

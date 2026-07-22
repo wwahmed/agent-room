@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from '@agent-room/shared';
-import { validateMessageAttachments } from './messageAttachments.js';
+import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
 
 const base = { id: 1, type: 'msg', name: 'Agent', client: 'cc', text: 'evidence' } as Message;
 const valid = {
@@ -27,5 +27,25 @@ describe('message attachment write boundary', () => {
     expect(() => validateMessageAttachments({ ...base, attachments: [{ ...valid, url: 'https://evil.example/x' }] })).toThrow();
     expect(() => validateMessageAttachments({ ...base, attachments: [{ ...valid, mime: '' }] })).toThrow();
     expect(() => validateMessageAttachments({ ...base, attachments: Array.from({ length: 6 }, (_, i) => ({ ...valid, id: String(i) })) })).toThrow(/at most 5/);
+  });
+});
+
+describe('message body write boundary (T-111)', () => {
+  it('accepts ordinary text messages', () => {
+    expect(() => validateMessageBody(base)).not.toThrow();
+  });
+
+  it('accepts attachment-only messages', () => {
+    expect(() => validateMessageBody({ ...base, text: '', attachments: [valid] })).not.toThrow();
+  });
+
+  it('rejects the blank bubbles that rendered leap-lip-mule as a blank wall', () => {
+    expect(() => validateMessageBody({ ...base, text: '' })).toThrow(/message\.text is empty/);
+    expect(() => validateMessageBody({ ...base, text: '   \n ' })).toThrow(/text.*parameter of room_send/);
+    expect(() => validateMessageBody({ ...base, text: undefined as never })).toThrow(/message\.text is empty/);
+  });
+
+  it('names the correct parameter so a misconfigured agent can self-correct', () => {
+    expect(() => validateMessageBody({ ...base, text: '' })).toThrow(/`text` parameter/);
   });
 });
