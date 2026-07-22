@@ -246,7 +246,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   const hoverOverlay = treatment === 'legacy' || message.type !== 'msg' ? null
     : treatment === 'tray'
       ? <HoverActionTray message={message} onReact={onReact} onReply={onReply} selfName={selfName} align={self ? 'left' : 'right'} />
-      : <EdgeActionRail message={message} onReact={onReact} onReply={onReply} selfName={selfName} />;
+      : <EdgeActionRail message={message} onReact={onReact} onReply={onReply} selfName={selfName} mirror={self} />;
 
   if (message.type === 'sys') {
     return (

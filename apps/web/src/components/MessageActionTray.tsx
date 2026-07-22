@@ -83,7 +83,10 @@ export function HoverActionTray({ message, onReact, onReply, selfName, align = '
   return (
     <div
       data-gate="action-tray"
-      className={`absolute -top-3 z-30 hidden items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 shadow-md transition-opacity sm:flex ${align === 'right' ? 'right-6' : 'left-6'} opacity-0 focus-within:opacity-100 group-hover:opacity-100`}
+      // -top-8 floats the pill fully ABOVE the bubble's top edge: it hovers
+      // in the margin whitespace and can never clip the timestamp or name
+      // (verifier note on the first frame set).
+      className={`absolute -top-8 z-30 hidden items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 shadow-md transition-opacity sm:flex ${align === 'right' ? 'right-6' : 'left-6'} opacity-0 focus-within:opacity-100 group-hover:opacity-100`}
     >
       <ActionGlyphs message={message} onReact={onReact} onReply={onReply} selfName={selfName} />
     </div>
@@ -95,19 +98,22 @@ export function HoverActionTray({ message, onReact, onReply, selfName, align = '
  *  spec's "thin vertical bar alongside the message wall" reading). The pill
  *  sits in the top margin like treatment A but anchored to the wall side,
  *  visually connected to the bar. */
-export function EdgeActionRail({ message, onReact, onReply, selfName }: {
+export function EdgeActionRail({ message, onReact, onReply, selfName, mirror = false }: {
   message: Message;
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
   onReply?: (m: Message) => void;
   selfName?: string;
+  /** Own messages sit against the RIGHT wall — the rail mirrors with them
+   *  (verifier note on the first frame set). */
+  mirror?: boolean;
 }) {
   return (
     <div
       data-gate="action-rail"
-      className="absolute inset-y-0 left-0 z-30 hidden w-2 transition-opacity sm:block opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+      className={`absolute inset-y-0 z-30 hidden w-2 transition-opacity sm:block opacity-0 focus-within:opacity-100 group-hover:opacity-100 ${mirror ? 'right-0' : 'left-0'}`}
     >
-      <span className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-accent/60" aria-hidden="true" />
-      <div className="absolute -top-9 left-2 flex items-center gap-0.5 rounded-full border border-accent/40 bg-surface px-1.5 py-0.5 shadow-md">
+      <span className={`absolute inset-y-0 w-[3px] rounded-full bg-accent/60 ${mirror ? 'right-0' : 'left-0'}`} aria-hidden="true" />
+      <div className={`absolute -top-9 flex items-center gap-0.5 rounded-full border border-accent/40 bg-surface px-1.5 py-0.5 shadow-md ${mirror ? 'right-2' : 'left-2'}`}>
         <ActionGlyphs message={message} onReact={onReact} onReply={onReply} selfName={selfName} />
       </div>
     </div>
