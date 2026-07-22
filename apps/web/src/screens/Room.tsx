@@ -41,6 +41,7 @@ import {
   markSelfMessageSeen,
   unmarkSelfMessageSeen,
 } from '../lib/unread.js';
+import { withinAnchoredMutation } from '../lib/readingAnchor.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
@@ -1019,6 +1020,11 @@ export function Room() {
     const content = el?.firstElementChild;
     if (!el || !content || !('ResizeObserver' in window)) return;
     const ro = new ResizeObserver(() => {
+      // T-112: a user-initiated expansion (Show more/less) compensates its own
+      // scroll position to keep the tapped control anchored; re-pinning to
+      // bottom here would yank the view past the expanded text — exactly the
+      // lost-my-place jump the READING-ANCHOR RULE forbids.
+      if (withinAnchoredMutation()) return;
       if (atBottomRef.current && el.scrollHeight - el.scrollTop - el.clientHeight > 1) {
         el.scrollTop = el.scrollHeight;
       }
