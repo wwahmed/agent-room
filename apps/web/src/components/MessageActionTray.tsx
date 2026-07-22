@@ -107,7 +107,7 @@ export function EdgeActionRail({ message, onReact, onReply, selfName }: {
       className="absolute inset-y-0 left-0 z-30 hidden w-2 transition-opacity sm:block opacity-0 focus-within:opacity-100 group-hover:opacity-100"
     >
       <span className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-accent/60" aria-hidden="true" />
-      <div className="absolute -top-3.5 left-2 flex items-center gap-0.5 rounded-full border border-accent/40 bg-surface px-1.5 py-0.5 shadow-md">
+      <div className="absolute -top-9 left-2 flex items-center gap-0.5 rounded-full border border-accent/40 bg-surface px-1.5 py-0.5 shadow-md">
         <ActionGlyphs message={message} onReact={onReact} onReply={onReply} selfName={selfName} />
       </div>
     </div>
