@@ -118,7 +118,10 @@ export function RoomHeader({
           <button
             type="button"
             onClick={onOpenRoom}
-            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-1.5 py-1 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
+            /* T-109: py-0.5 + block-flow pill keep the two-line identity
+               inside the 52px bar — inline-flex left line-box slack that
+               pushed the name 2px above the viewport under the status bar. */
+            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-1.5 py-0.5 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
             aria-label={`Open room settings for ${room.topic}`}
           >
             {/* T-109: 42vw capped the name below what the freed space allows;
@@ -127,7 +130,7 @@ export function RoomHeader({
             <span className="block max-w-[56vw] truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-ink sm:max-w-[220px] lg:max-w-[240px] xl:max-w-[300px]">
               {room.topic}
             </span>
-            <span className={`header-room-presence mt-0.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full px-1.5 py-0.5 text-[12px] font-medium leading-none sm:mt-0 ${ended ? 'text-red-400' : 'text-ink-soft'}`}>
+            <span className={`header-room-presence mt-0 flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-1.5 py-0.5 text-[12px] font-medium leading-none ${ended ? 'text-red-400' : 'text-ink-soft'}`}>
               {!ended && <span className="header-live-dot inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />}
               <span className="truncate">
                 {ended ? 'Meeting ended' : `${room.participants.length} here`}
