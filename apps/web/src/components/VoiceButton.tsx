@@ -196,7 +196,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
               type="button"
               onClick={() => controller().stop()}
               aria-label="Use voice draft"
-              title="Use draft — this does not send the message"
+              title="Use draft (does not send the message)"
               className="flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-white transition hover:opacity-90"
             >
               <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
