@@ -16,13 +16,25 @@
 
 import { mergeServerReadMarker, getReadCount } from './unread.js';
 
+// A session that cannot be attributed to an account (no Access JWT — e.g. a
+// direct loopback open) gets a 400/403 on its first marker call and would get
+// one on every call after. Stand down for the rest of the session instead of
+// spamming the console with known-failing requests; markers stay device-local
+// exactly as before T-126.
+let unavailable = false;
+
 async function call(body: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+  if (unavailable) return null;
   try {
     const resp = await fetch('/api/room', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (resp.status === 400 || resp.status === 403) {
+      unavailable = true;
+      return null;
+    }
     if (!resp.ok) return null;
     return (await resp.json()) as Record<string, unknown>;
   } catch {
