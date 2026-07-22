@@ -69,8 +69,9 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
         className="overflow-hidden"
         style={{
           maxHeight: collapsible && !expanded ? COLLAPSED_MESSAGE_HEIGHT_PX : undefined,
+          // T-65: a single-line fade — the old 48px wash burned vertical space.
           WebkitMaskImage: collapsible && !expanded
-            ? 'linear-gradient(to bottom, #000 0, #000 calc(100% - 48px), transparent 100%)'
+            ? 'linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%)'
             : undefined,
         }}
       >
@@ -79,6 +80,11 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
         </div>
       </div>
       {collapsible && (
+        // T-65 INLINE CONTINUATION (verifier spec): no box. The affordance is
+        // an inline text link at BODY size (msg-prose), sitting directly under
+        // the last visible line with a tight single margin. The 44px tap
+        // minimum comes from invisible hit-slop (the ::after overlay), not
+        // visual bulk — bigger target AND less height at once.
         <button
           type="button"
           aria-expanded={expanded}
@@ -87,7 +93,7 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
             anchorTopRef.current = containerRef.current?.getBoundingClientRect().top ?? null;
             setExpanded(value => !value);
           }}
-          className="ui-focus-ring ml-auto mt-2 block min-h-11 rounded-control border border-border-subtle bg-surface-1 px-3 text-meta font-semibold text-ink-soft transition-colors duration-micro ease-product hover:border-border-strong hover:text-ink"
+          className="ui-focus-ring msg-prose relative mt-0.5 block leading-tight font-semibold text-accent transition-colors duration-micro ease-product hover:text-ink after:absolute after:-inset-x-3 after:-inset-y-3 after:content-['']"
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>
