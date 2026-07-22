@@ -192,15 +192,21 @@ Board: **T-17**. **T-16 is superseded**; do not build year-scale transcript rete
 
 Board: **T-10**.
 
-### Secure attachments — Planned
+### Secure agent attachments and storage — Planned
 
-- Drag/drop, paste, file picker, camera/photo, and share-sheet intake where supported.
-- Image, PDF, text, log, diff, code, archive, and audio previews with safe metadata.
-- Upload progress, retry, cancel, resumability, size/type limits, and explicit retention.
-- Project-aware storage: promote durable artifacts into the repository or approved storage; keep transient files bounded.
-- Agent-readable attachment references with permission-aware download tools and extracted text where safe.
-- Extend the upstream `room_attachment_read` contract for bounded PDF, DOCX, and text extraction instead of creating a parallel reader protocol.
-- Redaction and secret detection before an attachment is exposed to every room participant.
+- Drag/drop, paste, file picker, camera/photo, and share-sheet intake where supported, with upload progress, retry, cancel, resumability, size/type limits, and explicit retention.
+- Give every authorized client the same `room_attachment_read` path. It must validate current room/project membership and return an opaque, short-lived, room-scoped grant plus bytes, a stream, or safe server-side extraction; agents must not scrape browser cookies, reuse a human session, or learn server filesystem paths.
+- Return trustworthy metadata before transfer: attachment id, display name, sniffed MIME type, byte size, SHA-256 digest, scan state, retention state, and available preview/extraction operations.
+- Support efficient streaming, byte ranges, interrupted-transfer resume, bounded concurrency, and backpressure. Large files must not be copied wholesale into the room transcript or every agent context.
+- Store immutable payloads once in content-addressed object storage and keep room message references, project authorization, uploader, retention, scan results, and promotion state in separate metadata. Deduplicate by digest without leaking cross-room existence.
+- Keep transient room files bounded by quota and retention. Promote durable artifacts explicitly into the attached repository or approved project storage; preserve provenance rather than duplicating blob bytes.
+- Run MIME sniffing, malware scanning, archive-bomb and path-traversal checks, secret/redaction policy, and quarantine before broad access. Encrypt transport and storage, audit grants and reads, and make revocation take effect for outstanding grants.
+- Expose truthful lifecycle states—uploading, scanning, ready, quarantined, rejected, expired, deleted, and too large—and never render a broken download as if an agent can access it.
+- Extend `room_attachment_read` rather than creating client-specific readers: bounded text extraction for PDF, DOCX, text, logs, code, CSV, and XLSX; image/data-URL access for visual inspection; and metadata-first handling for other formats.
+- For ZIP and other supported archives, provide a sanitized manifest first and allow targeted member extraction with limits on member count, nesting, expanded bytes, compression ratio, path length, and processing time. Never extract an archive blindly into a project workspace.
+- Cache safe thumbnails and extracted text by payload digest and extractor version, expire derived data with the source, and garbage-collect unreferenced payloads only after all room/project references and retention holds end.
+- Give hosts visible per-project quotas, retention and deletion controls, export/promotion actions, and an auditable privacy-deletion path that removes source and derived data after required holds.
+- Acceptance must cover image, PDF, DOCX, text, CSV/XLSX, and ZIP from web and MCP clients; two authorized agents must receive identical bytes/digests, while expired/revoked grants, unauthorized rooms, spoofed MIME, traversal entries, malware, and archive bombs fail closed. Transfer/resume, deduplication, deletion propagation, and bounded extraction must be measured at configured size limits.
 
 ### Audio and multimodal collaboration — Later / Research
 
