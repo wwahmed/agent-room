@@ -2244,7 +2244,10 @@ export function Room() {
                 // Activity Note ("N updates") anchored at the newest ping.
                 const statusView = collapseStatusRuns(visibleMessages);
                 return visibleMessages.map((m, i) => (
-                  <Fragment key={m.id}>
+                  // T-113: 95 stored rows in leap-lip-mule carry no id at all —
+                  // undefined keys collapse React reconciliation; fall back to
+                  // time or position so one bad envelope cannot blank a room.
+                  <Fragment key={m.id ?? `envelope-${m.time ?? 'x'}-${i}`}>
                   {startsMessageDay(visibleMessages[i - 1], m) && <MessageDayDivider time={m.time} now={now} />}
                   {/* T-65: the line he stopped reading at, so catching up has a
                       visible starting point instead of guesswork. */}
@@ -2268,7 +2271,7 @@ export function Room() {
                       : <ActivityNote message={m} run={statusView.runs.get(m.id)} now={now} />
                   ) : (
                     <MessageRow
-                      key={m.id}
+                      key={m.id ?? `envelope-${m.time ?? 'x'}-${i}`}
                       message={m}
                       self={m.name === self.name && m.client === 'web'}
                       grouped={isSameGroup(visibleMessages[i - 1], m)}

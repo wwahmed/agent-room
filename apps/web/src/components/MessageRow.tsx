@@ -34,7 +34,9 @@ const GROUP_WINDOW_MS = 5 * 60 * 1000;
 // already stored, so history heals without a data migration. System rows and
 // question artifacts always render.
 export function hasRenderableContent(m: Message): boolean {
-  if (m.type !== 'msg') return true;
+  // T-113: rows stored without a type are participant speech from a raw-send
+  // client — treat them as 'msg' so the content check below applies.
+  if (m.type && m.type !== 'msg') return true;
   if (m.metadata?.eventType || m.metadata?.questionId) return true;
   const hasText = typeof m.text === 'string' && m.text.trim().length > 0;
   const hasAttachments = Array.isArray(m.attachments) && m.attachments.length > 0;

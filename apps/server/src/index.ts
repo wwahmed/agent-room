@@ -66,6 +66,7 @@ import { roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
+import { stampMessageEnvelope } from './envelope.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
 import { ensureArtifactIndex, listRoomArtifacts,
@@ -845,20 +846,23 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       );
       validateMessageAttachments(message);
       validateMessageBody(message);
+      // T-113: server-authoritative envelope — id/time stamped when missing,
+      // type normalized to 'msg' (only server code authors 'sys' rows).
+      const stamped = stampMessageEnvelope(message);
       if (kind === 'status') {
         // Status updates append without touching the turn machinery.
         // T-20: stamp the persisted message so every reader can classify it —
         // the web renders these as quiet status rows and keeps them out of
         // unread counts. Historical unstamped pings stay ordinary messages.
         const statusMessage: Message = {
-          ...message,
-          metadata: { ...(message as { metadata?: Record<string, unknown> }).metadata, kind: 'status' },
+          ...stamped,
+          metadata: { ...(stamped as { metadata?: Record<string, unknown> }).metadata, kind: 'status' },
         } as Message;
         await getRoom(client, code);
         await appendSystemMessage(client, code, statusMessage);
         return { result: { appended: true, metadata: statusMessage.metadata ?? {} } };
       }
-      return { result: await appendMessage(client, code, message) };
+      return { result: await appendMessage(client, code, stamped) };
     }
     case 'systemMessage': {
       await appendSystemMessage(client, code, payload.message as Message);

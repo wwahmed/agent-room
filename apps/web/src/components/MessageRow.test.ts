@@ -16,6 +16,13 @@ describe('blank-message suppression (T-111)', () => {
     expect(hasRenderableContent(msg({ text: undefined as never }))).toBe(false);
   });
 
+  // T-113: type-less rows are participant speech from a raw-send client —
+  // classified as msg rows (content check applies), never as system rows.
+  it('treats envelope-less rows as messages: text renders, empty hides', () => {
+    expect(hasRenderableContent(msg({ type: undefined as never, text: 'raw-send text survives' }))).toBe(true);
+    expect(hasRenderableContent(msg({ type: undefined as never, text: '' }))).toBe(false);
+  });
+
   it('keeps text, attachment-only, system, and artifact rows', () => {
     expect(hasRenderableContent(msg({ text: 'hello' }))).toBe(true);
     expect(hasRenderableContent(msg({ attachments: [{ id: 'a', type: 'image', url: '/blobs/x/a.png', name: 'a.png', mime: 'image/png', size: 1, uploadedAt: 1 }] as Message['attachments'] }))).toBe(true);
