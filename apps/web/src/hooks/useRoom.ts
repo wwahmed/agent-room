@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message, MessageReaction, Room } from '@agent-room/shared';
 import { applyReactionEvents } from '../lib/reactions.js';
+import { mergeMessages } from '../lib/messageMerge.js';
 import { syncReadMarkers } from '../lib/readSync.js';
 import {
   HEARTBEAT_MS,
@@ -91,12 +92,19 @@ export function useRoom(code: string, selfName: string) {
   // Fix: timestamp guard. A poll bails ONLY if a prior poll started < 10s
   // ago. Anything older is presumed dead and replaced.
   const inFlightRef = useRef<number | null>(null);
+  // T-105: fetch generation. forceRefresh bumps it; any pull that started
+  // under an older generation discards its results at every await boundary.
+  // This kills the visibility-resume race where a stale focus-debounced pull
+  // (holding the pre-background cursor) resolved AFTER forceRefresh and
+  // appended day-old rows to the live tail.
+  const generationRef = useRef(0);
   const pullMessages = useCallback(async () => {
     const tNow = Date.now();
     if (inFlightRef.current !== null && tNow - inFlightRef.current < 10_000) {
       return;
     }
     inFlightRef.current = tNow;
+    const gen = generationRef.current;
     // TEMPORARY instrumentation — remove once Robin confirms the foreground
     // sync bug ("agent message doesn't appear unless I hit Sync") is fixed.
     const traceTag = `[useRoom:${code.slice(0, 3)}]`;
@@ -104,6 +112,7 @@ export function useRoom(code: string, selfName: string) {
     console.debug(traceTag, 'pullMessages.fire', { cursor: cursor.current, t: startedAt });
     try {
       const fresh = await listMessages(clientRef.current, code, cursor.current);
+      if (gen !== generationRef.current) return; // superseded by a refresh
       // T-07: any successful poll heals both failure indicators. Before this,
       // only forceRefresh cleared `error`, so a single failed poll left the
       // full-screen error up until the next visibilitychange — the "transient
@@ -122,17 +131,20 @@ export function useRoom(code: string, selfName: string) {
         // clock skew), every future poll returns [] forever. Detect
         // and reset.
         const total = await getMessageTotalCount(clientRef.current, code);
+        if (gen !== generationRef.current) return;
         if (total !== null && cursor.current > total) {
           // T-04: recover a bounded recent page, not the whole history.
           const from = initialPageStart(total);
           cursor.current = from;
           const recover = await listMessages(clientRef.current, code, from);
+          if (gen !== generationRef.current) return;
           cursor.current = total;
           setState(s => {
-            const seen = new Set(s.messages.map(m => m.id));
-            const deduped = recover.filter(m => !seen.has(m.id));
-            if (deduped.length === 0) return s;
-            return { ...s, messages: applyReactionEvents([...s.messages, ...deduped], deduped) };
+            // T-105: order-preserving merge — arrival order never dictates
+            // timeline order.
+            const merged = mergeMessages(s.messages, recover);
+            if (merged === s.messages) return s;
+            return { ...s, messages: applyReactionEvents(merged, recover) };
           });
         }
         return;
@@ -150,25 +162,27 @@ export function useRoom(code: string, selfName: string) {
       // what the server has" regardless of how the local arithmetic went.
       // Two concurrent polls will both write the same value → no drift.
       const total = await getMessageTotalCount(clientRef.current, code);
+      if (gen !== generationRef.current) return; // superseded by a refresh
       cursor.current = total ?? (cursor.current + fresh.length);
       const anchored = cursor.current;
       setState(s => {
-        const seen = new Set(s.messages.map(m => m.id));
-        const deduped = fresh.filter(m => !seen.has(m.id));
-        console.debug(traceTag, 'pullMessages.dedup', {
+        // T-105: order-preserving merge by server-stamped id — a late-
+        // resolving fetch can never append older rows after the live tail.
+        const merged = mergeMessages(s.messages, fresh);
+        console.debug(traceTag, 'pullMessages.merge', {
           freshIds: fresh.map(m => m.id),
           existingCount: s.messages.length,
-          dedupedCount: deduped.length,
+          mergedCount: merged.length,
           newCursor: cursor.current,
           serverTotal: total,
         });
-        if (deduped.length === 0) {
-          return s.messageTotal === anchored ? s : { ...s, messageTotal: anchored };
+        if (merged === s.messages || merged.length === s.messages.length) {
+          return s.messageTotal === anchored ? { ...s, messages: merged } : { ...s, messages: merged, messageTotal: anchored };
         }
         // T-121: reactions rewrite stored rows in place, which this cursor
         // never re-reads — fold the reaction event rows we just received into
         // the already-loaded window so rendered messages grow their chips.
-        return { ...s, messages: applyReactionEvents([...s.messages, ...deduped], deduped), messageTotal: anchored };
+        return { ...s, messages: applyReactionEvents(merged, fresh), messageTotal: anchored };
       });
     } catch (e) {
       console.debug(traceTag, 'pullMessages.error', e);
@@ -209,6 +223,9 @@ export function useRoom(code: string, selfName: string) {
   // ever caught up the gap. Now visibility-resume always re-syncs from
   // cursor 0 with dedup, so the user sees the room as it actually is.
   const forceRefresh = useCallback(async () => {
+    // T-105: supersede every in-flight pull — their results are stale the
+    // moment a refresh decides to re-anchor.
+    generationRef.current += 1;
     cursor.current = 0;
     try {
       // T-126: fold the ACCOUNT's read markers in before the first-unread
@@ -227,16 +244,21 @@ export function useRoom(code: string, selfName: string) {
       const fresh = await listMessages(clientRef.current, code, from);
       // Match server-side logical cursor (counter) so polling stays correct after LTRIM; legacy rooms fall back.
       cursor.current = total ?? fresh.length;
-      oldestIndex.current = from;
-      setState({
+      // T-105: a resume refresh must never TRUNCATE the loaded window to the
+      // newest page — merging keeps older history the reader already paged
+      // in (and their reading position with it). oldestIndex keeps the
+      // lowest point we have ever loaded from, so upward paging continues
+      // from the right place.
+      oldestIndex.current = Math.min(oldestIndex.current || from, from);
+      setState(s => ({
         room: r,
-        messages: fresh,
+        messages: mergeMessages(s.messages, fresh),
         error: null,
         degraded: false,
         messageTotal: cursor.current,
-        hasOlder: from > 0 && fresh.length > 0,
+        hasOlder: oldestIndex.current > 0 && (s.messages.length > 0 || fresh.length > 0),
         loadingOlder: false,
-      });
+      }));
     } catch (e) {
       setState(s => s.room
         ? (s.degraded ? s : { ...s, degraded: true })
@@ -255,20 +277,22 @@ export function useRoom(code: string, selfName: string) {
     }
     loadingOlderRef.current = true;
     setState(s => ({ ...s, loadingOlder: true }));
+    const gen = generationRef.current;
     try {
       const older = await listMessages(clientRef.current, code, from, count);
+      if (gen !== generationRef.current) {
+        setState(s => ({ ...s, loadingOlder: false }));
+        return 0;
+      }
       oldestIndex.current = from;
-      setState(s => {
-        const seen = new Set(s.messages.map(m => m.id));
-        const fresh = older.filter(m => !seen.has(m.id));
-        return {
-          ...s,
-          messages: [...fresh, ...s.messages],
-          // Empty page above us = that history has been trimmed away; stop asking.
-          hasOlder: from > 0 && older.length > 0,
-          loadingOlder: false,
-        };
-      });
+      setState(s => ({
+        ...s,
+        // T-105: same order-preserving merge as every other ingest path.
+        messages: mergeMessages(s.messages, older),
+        // Empty page above us = that history has been trimmed away; stop asking.
+        hasOlder: from > 0 && older.length > 0,
+        loadingOlder: false,
+      }));
       return older.length;
     } catch {
       // Non-fatal for scrolling (the reader keeps their window and retries),
@@ -283,6 +307,11 @@ export function useRoom(code: string, selfName: string) {
 
   useEffect(() => {
     cursor.current = 0;
+    // T-105: room switch invalidates everything in flight — a pull from the
+    // PREVIOUS room resolving late must never merge into this room's feed —
+    // and the paging window starts over.
+    generationRef.current += 1;
+    oldestIndex.current = 0;
     setState({ room: null, messages: [], error: null, degraded: false, messageTotal: 0, hasOlder: false, loadingOlder: false });
 
     let msgTimer: ReturnType<typeof setInterval> | null = null;
@@ -364,7 +393,7 @@ export function useRoom(code: string, selfName: string) {
     // dedup. So no duplicate render.
     setState(s => {
       if (s.messages.some(m => m.id === msg.id)) return s;
-      return { ...s, messages: [...s.messages, msg] };
+      return { ...s, messages: mergeMessages(s.messages, [msg]) };
     });
 
     try {
