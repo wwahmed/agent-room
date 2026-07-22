@@ -38,6 +38,15 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
     if (!scroller) return;
     const delta = container.getBoundingClientRect().top - anchorTop;
     if (delta !== 0) scroller.scrollTop += delta;
+    // Collapsing from the bottom of a very long message: the compensation
+    // clamps at the scroll limit, so the exact position cannot be restored.
+    // Never leave the reader stranded on unrelated content — make sure the
+    // collapsed message is on screen.
+    const after = container.getBoundingClientRect();
+    const viewH = scroller.clientHeight || window.innerHeight;
+    if (after.bottom < 0 || after.top > viewH) {
+      container.scrollIntoView({ block: 'center' });
+    }
   }, [expanded]);
 
   useLayoutEffect(() => {

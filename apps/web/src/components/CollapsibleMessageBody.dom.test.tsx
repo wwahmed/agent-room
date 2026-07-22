@@ -60,7 +60,9 @@ describe('Show more anchors the read/unread boundary (T-112 rev2)', () => {
     makeCollapsible(scroller);
     rerender(<CollapsibleMessageBody text={long + ' '} />);
 
-    stubContainerTops(scroller, [200, 200, 200, 90]);
+    // Each toggle reads the rect three times: anchor at click, delta after
+    // commit, and the stranded-reader guard.
+    stubContainerTops(scroller, [200, 200, 200, 200, 90, 90]);
     fireEvent.click(screen.getByRole('button', { name: 'Show more' })); // 200 -> 200: no compensation
     expect(scroller.scrollTop).toBe(400);
     fireEvent.click(screen.getByRole('button', { name: 'Show less' })); // 200 -> 90: compensate -110
