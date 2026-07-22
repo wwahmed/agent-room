@@ -8,6 +8,7 @@ import { RoomBadges } from '../components/RoomBadges.js';
 import { RoomIdentitySlot } from '../components/RoomIdentitySlot.js';
 import { splitRooms } from '../lib/roomSections.js';
 import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, sortRooms, type RoomSort } from '../lib/roomSort.js';
+import { useLiveRooms } from '../hooks/useLiveRooms.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -70,6 +71,15 @@ export function Home() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // T-75: Home is a LIVE surface — rooms created on another device appear,
+  // activity re-sorts and updates badges, ended rooms leave Active, all with
+  // no reload. The hook polls the first page and merges over the loaded set
+  // (deeper pages survive the merge by construction), holds re-sorts while a
+  // pointer is down, and pauses entirely while the tab is hidden.
+  useLiveRooms(identity != null, useCallback((incoming: RoomSummary[]) => {
+    setRooms(current => mergeRoomPages(current, incoming));
+  }, []));
 
   const loadMoreRooms = useCallback(async () => {
     if (!nextRoomCursor || loadingMoreRef.current) return;
