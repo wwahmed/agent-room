@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message, MessageReaction, Room } from '@agent-room/shared';
 import { applyReactionEvents } from '../lib/reactions.js';
+import { syncReadMarkers } from '../lib/readSync.js';
 import {
   HEARTBEAT_MS,
   MESSAGE_POLL_MS,
@@ -210,6 +211,11 @@ export function useRoom(code: string, selfName: string) {
   const forceRefresh = useCallback(async () => {
     cursor.current = 0;
     try {
+      // T-126: fold the ACCOUNT's read markers in before the first-unread
+      // landing is computed — the whole point is that entering on desktop
+      // lands where you actually left off on your phone. Never throws; a
+      // failed sync just falls back to the device-local marker.
+      await syncReadMarkers();
       // T-04: bounded bootstrap — total count first, then only the most recent
       // page instead of the room's whole history. Legacy rooms without the
       // counter (total === null) still load from 0.

@@ -10,6 +10,9 @@ export function statusForError(err: Error): number {
     case 'NotYourTurnError':
     case 'NotHostError':
     case 'MemberAuthError':
+    // T-126: read markers demand an authenticated account (or explicit
+    // account naming from the trusted loopback tier).
+    case 'AccessDeniedError':
       return 403;
     // T-66: the caller tried to bind its durable anchor to a row it has not
     // proven it owns. 409, not 403: the request is authenticated, but it

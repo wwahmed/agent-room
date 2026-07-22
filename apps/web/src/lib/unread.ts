@@ -39,12 +39,34 @@ export function markRoomRead(code: string, total: number, selfName = ''): void {
     // Monotonic: never walk the marker backwards (a stale poll must not
     // resurrect already-read messages as unread).
     const prev = readMarker(code) ?? 0;
-    if (total > prev) localStorage.setItem(KEY(code), String(total));
+    if (total > prev) {
+      localStorage.setItem(KEY(code), String(total));
+      // T-126: READ-STATE IS USER-STATE — announce the advance so the
+      // account-sync layer (lib/readSync.ts) can push it server-side. An
+      // event keeps this module synchronous and transport-free.
+      try {
+        window.dispatchEvent(new CustomEvent('wakichat:read-marker', { detail: { code, total } }));
+      } catch { /* non-browser context */ }
+    }
     // Once the absolute read marker catches up, locally-authored messages are
     // represented by that marker and no longer need a separate subtraction.
     if (selfName) localStorage.removeItem(SELF_KEY(code, selfName));
   } catch {
     /* storage unavailable — unread simply won't persist */
+  }
+}
+
+/** T-126: fold a HIGHER server-side (account-level) count into the local
+ *  marker. Returns true when the local marker advanced. Never regresses. */
+export function mergeServerReadMarker(code: string, serverCount: number): boolean {
+  if (!code || !Number.isFinite(serverCount) || serverCount < 0) return false;
+  try {
+    const local = readMarker(code);
+    if (local !== null && local >= serverCount) return false;
+    localStorage.setItem(KEY(code), String(Math.floor(serverCount)));
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -68,6 +68,7 @@ import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
 import { stampMessageEnvelope } from './envelope.js';
+import { listReadMarkers, resolveMarkerAccount, setReadMarker } from './readmarkers.js';
 import {
   initPush,
   ownerEmail,
@@ -915,6 +916,18 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         });
       }
       return { result: appendResult };
+    }
+    case 'readMarkerSet': {
+      // T-126: READ-STATE IS USER-STATE — advance the account's marker for
+      // this room (monotonic; a stale device can never regress it).
+      const account = resolveMarkerAccount(caller, payload.account);
+      const stored = await setReadMarker(redis, account, code, Number(payload.count));
+      return { result: { code, count: stored } };
+    }
+    case 'readMarkerList': {
+      // T-126: the account's full { code: count } map, one call for Home.
+      const account = resolveMarkerAccount(caller, payload.account);
+      return { result: { markers: await listReadMarkers(redis, account) } };
     }
     case 'react': {
       // T-121: toggle an acknowledge/reject reaction on a stored message.

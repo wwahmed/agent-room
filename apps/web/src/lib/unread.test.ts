@@ -139,3 +139,51 @@ describe('unread counts (T-62)', () => {
     expect(firstUnreadMessageIndex(messages, 2, 1, 'Waqas')).toBe(-1);
   });
 });
+
+// T-126: READ-STATE IS USER-STATE — the account-sync seam.
+describe('account-level marker sync (T-126)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('mergeServerReadMarker folds in a HIGHER server count', async () => {
+    const { mergeServerReadMarker, getReadCount } = await import('./unread.js');
+    markRoomRead('AAA-BBB-CCC', 10);
+    expect(mergeServerReadMarker('AAA-BBB-CCC', 25)).toBe(true);
+    expect(getReadCount('AAA-BBB-CCC')).toBe(25);
+  });
+
+  it('mergeServerReadMarker never regresses a local marker', async () => {
+    const { mergeServerReadMarker, getReadCount } = await import('./unread.js');
+    markRoomRead('AAA-BBB-CCC', 30);
+    expect(mergeServerReadMarker('AAA-BBB-CCC', 12)).toBe(false);
+    expect(getReadCount('AAA-BBB-CCC')).toBe(30);
+  });
+
+  it('mergeServerReadMarker seeds a room with no local marker', async () => {
+    const { mergeServerReadMarker, getReadCount } = await import('./unread.js');
+    expect(mergeServerReadMarker('DDD-EEE-FFF', 8)).toBe(true);
+    expect(getReadCount('DDD-EEE-FFF')).toBe(8);
+  });
+
+  it('markRoomRead announces marker advances for the push layer', () => {
+    const events: Array<{ code: string; total: number }> = [];
+    (globalThis as unknown as { window: unknown }).window = {
+      dispatchEvent: (e: { detail: { code: string; total: number } }) => { events.push(e.detail); return true; },
+    };
+    (globalThis as unknown as { CustomEvent: unknown }).CustomEvent = class {
+      detail: unknown;
+      constructor(_type: string, init: { detail: unknown }) { this.detail = init.detail; }
+    };
+    try {
+      markRoomRead('AAA-BBB-CCC', 5);
+      markRoomRead('AAA-BBB-CCC', 3); // no advance, no event
+      markRoomRead('AAA-BBB-CCC', 9);
+      expect(events).toEqual([
+        { code: 'AAA-BBB-CCC', total: 5 },
+        { code: 'AAA-BBB-CCC', total: 9 },
+      ]);
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+      delete (globalThis as { CustomEvent?: unknown }).CustomEvent;
+    }
+  });
+});
