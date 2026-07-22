@@ -93,7 +93,7 @@ export function CollapsibleMessageBody({ text, selfName }: Props) {
             anchorTopRef.current = containerRef.current?.getBoundingClientRect().top ?? null;
             setExpanded(value => !value);
           }}
-          className="ui-focus-ring msg-prose relative mt-0.5 block leading-tight font-semibold text-accent transition-colors duration-micro ease-product hover:text-ink after:absolute after:-inset-x-3 after:-inset-y-3 after:content-['']"
+          className="ui-focus-ring msg-prose relative mt-0.5 block leading-tight font-semibold text-accent transition-colors duration-micro ease-product hover:text-ink after:absolute after:-inset-x-3 after:-inset-y-3.5 after:content-['']"
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>

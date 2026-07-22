@@ -15,7 +15,7 @@ describe('message prose measure', () => {
   // box, no min-h bulk.
   it('renders the disclosure as an inline body-size link with hit-slop, not a box', () => {
     expect(source).toContain('ui-focus-ring msg-prose relative mt-0.5 block leading-tight font-semibold text-accent');
-    expect(source).toContain("after:-inset-x-3 after:-inset-y-3 after:content-['']");
+    expect(source).toContain("after:-inset-x-3 after:-inset-y-3.5 after:content-['']");
     expect(source).not.toContain('min-h-11 rounded-control border');
     expect(source).not.toContain('ml-auto');
   });
