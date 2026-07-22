@@ -27,7 +27,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type BoardTask, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type BoardTask, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -35,6 +35,7 @@ import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import {
   firstUnreadMessageIndex,
   getReadCount,
+  isReactionEvent,
   isSelfAuthored,
   isStatusPing,
   markRoomRead,
@@ -208,7 +209,7 @@ export function Room() {
     })();
     return () => { cancelled = true; };
   }, [self, code, navigate]);
-  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal, hasOlder, loadingOlder, loadOlder } = useRoom(code, self?.name ?? '');
+  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal, hasOlder, loadingOlder, loadOlder, patchMessageReactions } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   // T-09: active @mention query in the composer — where the token starts, what
   // has been typed so far, and which candidate is keyboard-highlighted.
@@ -978,7 +979,7 @@ export function Room() {
     // T-16 excludes your own messages; T-20 also excludes stamped status pings
     // so heartbeat noise never inflates the "N new messages" pill.
     const appendedTail = appended > 0
-      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name) && !isStatusPing(message))
+      ? messages.slice(len - appended).filter(message => !isSelfAuthored(message, self?.name) && !isStatusPing(message) && !isReactionEvent(message))
       : [];
     const appendedUnread = appendedTail.length;
     // T-18 rev2: mentions among the unseen tail drive the navigator.
@@ -1321,6 +1322,20 @@ export function Room() {
   function startReply(m: Message) {
     setReplyingTo({ id: m.id, name: m.name, text: (m.text ?? '').slice(0, 240) });
     requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  // T-121: toggle an acknowledge/reject reaction. The server response patches
+  // the rendered message immediately; the sys event row it appends carries the
+  // same snapshot to every other client (and to listening agents as text).
+  async function reactTo(m: Message, kind: 'ack' | 'reject') {
+    if (!self) return;
+    try {
+      const out = await reactToMessage(createClient(), code, m.id, kind, self.name);
+      patchMessageReactions(m.id, out.reactions);
+    } catch (e) {
+      void import('../components/Toast.js').then(({ showToast }) =>
+        showToast(e instanceof Error ? e.message : 'Reaction failed', 'error'));
+    }
   }
 
   // T-54: jump to (and briefly highlight) the quoted original by id.
@@ -2242,7 +2257,9 @@ export function Room() {
                 // T-111: malformed agent sends stored zero-content rows that
                 // render as a wall of blank bubbles; drop them BEFORE day
                 // dividers and grouping so the visible feed reads coherently.
-                const visibleMessages = messages.filter(hasRenderableContent);
+                // T-121: reaction event rows are transport for the chip patch,
+                // not reading material — the chips on the target message are the UI.
+                const visibleMessages = messages.filter(m => hasRenderableContent(m) && !isReactionEvent(m));
                 // T-72: consecutive same-agent heartbeats render as ONE
                 // Activity Note ("N updates") anchored at the newest ping.
                 const statusView = collapseStatusRuns(visibleMessages);
@@ -2282,6 +2299,7 @@ export function Room() {
                       now={now}
                       onReply={startReply}
                       onJumpToQuote={jumpToMessage}
+                      onReact={reactTo}
                       selfName={self.name}
                       senderBrand={brandForSender(m, activeRoom.participants)}
                     />

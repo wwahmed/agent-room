@@ -85,6 +85,7 @@ import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './
 import { ensureArtifactIndex, listRoomArtifacts,
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
+  applyMessageReaction,
   casRoom,
   createRoom as createStoredRoom,
   createRoomReport,
@@ -914,6 +915,59 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         });
       }
       return { result: appendResult };
+    }
+    case 'react': {
+      // T-121: toggle an acknowledge/reject reaction on a stored message.
+      // Same authentication bar as 'send' — a display name alone never reacts.
+      const reactorName = String(payload.name || '');
+      const reactorClient = (payload.client as 'web' | 'cc') || 'web';
+      const kind = payload.kind as string;
+      const targetMessageId = Number(payload.messageId);
+      if (!reactorName) {
+        const err = new Error('name is required — pass your display name.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      if (kind !== 'ack' && kind !== 'reject') {
+        const err = new Error("kind must be 'ack' or 'reject'.");
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
+        const err = new Error('messageId must be the id of a stored message.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      await authenticateSender(code, reactorName, reactorClient, payload.memberKey as string | undefined, caller);
+      const outcome = await applyMessageReaction(client, code, targetMessageId, { name: reactorName, client: reactorClient }, kind);
+      // Event row: how cursor-polling web clients patch the already-rendered
+      // target (via reactionsSnapshot) and how listening agents learn that
+      // their work was acknowledged or contested (via the text). The web
+      // hides this row from the feed; the chips on the message are the UI.
+      const verb = outcome.added
+        ? (kind === 'ack' ? 'acknowledged' : 'rejected')
+        : (kind === 'ack' ? 'withdrew their acknowledgment of' : 'withdrew their rejection of');
+      const eventRow: Message = {
+        id: Date.now(),
+        type: 'sys',
+        name: 'system',
+        initials: 'SY',
+        color: '#64748b',
+        role: '',
+        client: 'cc',
+        time: Date.now(),
+        text: `${reactorName} ${verb} ${outcome.target.name}'s message: "${outcome.target.text}"`,
+        metadata: {
+          eventType: 'reaction',
+          targetMessageId,
+          reactionKind: kind,
+          reactionRemoved: !outcome.added,
+          reactionsSnapshot: outcome.reactions,
+          targetAgentName: reactorName,
+        },
+      };
+      await appendSystemMessage(client, code, eventRow);
+      return { result: { added: outcome.added, reactions: outcome.reactions } };
     }
     case 'systemMessage': {
       await appendSystemMessage(client, code, payload.message as Message);

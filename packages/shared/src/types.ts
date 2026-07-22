@@ -103,7 +103,8 @@ export type SystemEventType =
   | 'moderator_fallback'
   | 'host_invoked'
   | 'moderator_dispatched'
-  | 'question_created';
+  | 'question_created'
+  | 'reaction';
 
 // Default per-role timeout values (in ms). Used when a room hasn't been
 // configured with custom overrides. Tuned higher than the chat default
@@ -268,6 +269,27 @@ export interface MessageMetadata {
   // card itself contains no private prompt/answer content; authorized viewers
   // resolve this id through the owner Questions API.
   questionId?: string;
+  // T-121 reaction event rows (eventType === 'reaction'): which stored message
+  // the reaction landed on, what changed, and the target's FULL post-change
+  // reaction list. The snapshot is what lets cursor-polling web clients patch
+  // an already-rendered message without refetching history (the stored row is
+  // LSET in place, which append-only cursors never see again).
+  targetMessageId?: number;
+  reactionKind?: MessageReactionKind;
+  reactionRemoved?: boolean;
+  reactionsSnapshot?: MessageReaction[];
+}
+
+// T-121: structured acknowledge/reject state on a message. Stored ON the
+// message (authoritative) and mirrored into a sys event row's metadata so both
+// humans (chips) and listening agents (event text) can read it.
+export type MessageReactionKind = 'ack' | 'reject';
+
+export interface MessageReaction {
+  kind: MessageReactionKind;
+  name: string;        // reactor display name
+  client: ClientKind;  // reactor client kind (web = human, cc = agent)
+  time: number;        // epoch ms when the reaction was applied
 }
 
 // T-53: a quoted message carried on the replying message. Denormalized (author
@@ -291,6 +313,9 @@ export interface Message {
   time: number;
   attachments?: MessageAttachment[];
   replyTo?: MessageReplyRef;
+  // T-121: acknowledge/reject reactions. Authoritative copy — the stored row
+  // is updated in place (LSET) when someone reacts.
+  reactions?: MessageReaction[];
   metadata?: MessageMetadata;
 }
 

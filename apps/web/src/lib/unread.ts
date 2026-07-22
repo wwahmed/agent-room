@@ -99,6 +99,13 @@ export function isStatusPing(message: { metadata?: unknown }): boolean {
   return (message.metadata as { kind?: unknown } | undefined)?.kind === 'status';
 }
 
+/** T-121: reaction event rows are transport (they carry the reaction patch to
+ *  cursor-polling clients), not reading material. Hidden from the feed and
+ *  never counted as unread — the chips on the target message are the UI. */
+export function isReactionEvent(message: { metadata?: unknown }): boolean {
+  return (message.metadata as { eventType?: unknown } | undefined)?.eventType === 'reaction';
+}
+
 export function firstUnreadMessageIndex<T extends { name?: string; client?: string; type?: string; metadata?: unknown }>(
   messages: T[],
   messageTotal: number,
@@ -108,7 +115,7 @@ export function firstUnreadMessageIndex<T extends { name?: string; client?: stri
   const loadedStart = Math.max(0, messageTotal - messages.length);
   const firstLoadedUnread = Math.max(0, readCount - loadedStart);
   return messages.findIndex((message, index) =>
-    index >= firstLoadedUnread && !isSelfAuthored(message, selfName) && !isStatusPing(message));
+    index >= firstLoadedUnread && !isSelfAuthored(message, selfName) && !isStatusPing(message) && !isReactionEvent(message));
 }
 
 /**

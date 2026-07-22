@@ -471,6 +471,23 @@ export async function appendSystemMessage(
   await call({ action: 'systemMessage', code, message });
 }
 
+// T-121: toggle an acknowledge/reject reaction. Same credential bar and
+// self-healing retry as send. Returns the target's full post-change reaction
+// list so the caller can patch the rendered message immediately (the sys
+// event row confirms it for everyone else on the next poll).
+export async function reactToMessage(
+  _client: ApiClient,
+  code: string,
+  messageId: number,
+  kind: 'ack' | 'reject',
+  name: string,
+): Promise<{ added: boolean; reactions: import('@agent-room/shared').MessageReaction[] }> {
+  return (await keyedCall<{ result: { added: boolean; reactions: import('@agent-room/shared').MessageReaction[] } }>(
+    mk => ({ action: 'react', code, messageId, kind, name, client: 'web', memberKey: mk }),
+    code,
+  )).result;
+}
+
 // ---------- turn state ----------
 
 export async function getTurnState(_client: ApiClient, code: string): Promise<TurnState | null> {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Message, Room } from '@agent-room/shared';
+import type { Message, MessageReaction, Room } from '@agent-room/shared';
+import { applyReactionEvents } from '../lib/reactions.js';
 import {
   HEARTBEAT_MS,
   MESSAGE_POLL_MS,
@@ -130,7 +131,7 @@ export function useRoom(code: string, selfName: string) {
             const seen = new Set(s.messages.map(m => m.id));
             const deduped = recover.filter(m => !seen.has(m.id));
             if (deduped.length === 0) return s;
-            return { ...s, messages: [...s.messages, ...deduped] };
+            return { ...s, messages: applyReactionEvents([...s.messages, ...deduped], deduped) };
           });
         }
         return;
@@ -163,7 +164,10 @@ export function useRoom(code: string, selfName: string) {
         if (deduped.length === 0) {
           return s.messageTotal === anchored ? s : { ...s, messageTotal: anchored };
         }
-        return { ...s, messages: [...s.messages, ...deduped], messageTotal: anchored };
+        // T-121: reactions rewrite stored rows in place, which this cursor
+        // never re-reads — fold the reaction event rows we just received into
+        // the already-loaded window so rendered messages grow their chips.
+        return { ...s, messages: applyReactionEvents([...s.messages, ...deduped], deduped), messageTotal: anchored };
       });
     } catch (e) {
       console.debug(traceTag, 'pullMessages.error', e);
@@ -373,5 +377,15 @@ export function useRoom(code: string, selfName: string) {
     }
   }, [code, pullMessages]);
 
-  return { ...state, sendMessage, refreshRoom: pullRoom, forceRefresh, loadOlder };
+  // T-121: apply a reaction result to the loaded window immediately (the
+  // reactor shouldn't wait a poll cycle to see their own chip). The sys event
+  // row arriving later carries the same snapshot, so this stays convergent.
+  const patchMessageReactions = useCallback((messageId: number, reactions: MessageReaction[]) => {
+    setState(s => ({
+      ...s,
+      messages: s.messages.map(m => (m.id === messageId ? { ...m, reactions } : m)),
+    }));
+  }, []);
+
+  return { ...state, sendMessage, refreshRoom: pullRoom, forceRefresh, loadOlder, patchMessageReactions };
 }

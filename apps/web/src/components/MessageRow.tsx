@@ -87,6 +87,8 @@ interface Props {
   onReply?: (m: Message) => void;
   /** T-54: jump to a quoted original by id. */
   onJumpToQuote?: (id: number) => void;
+  /** T-121: toggle an acknowledge/reject reaction on this message. */
+  onReact?: (m: Message, kind: 'ack' | 'reject') => void;
   /** T-12: the VIEWER's display name, for the you-were-mentioned highlight. */
   selfName?: string;
   /** T-47: provider brand for the sender (resolved by Room from participant
@@ -177,6 +179,45 @@ function useSwipeReply(onReply: (() => void) | undefined) {
   };
 }
 
+// T-121: structured acknowledge/reject chips rendered for EVERYONE under the
+// message body. One chip per kind carrying the reactor names in full — agents
+// and humans read the same record. Tapping a chip toggles the viewer's own
+// reaction of that kind.
+function ReactionChips({ message, onReact, selfName }: { message: Message; onReact?: (m: Message, kind: 'ack' | 'reject') => void; selfName?: string }) {
+  const reactions = message.reactions ?? [];
+  if (reactions.length === 0) return null;
+  const kinds: Array<{ kind: 'ack' | 'reject'; glyph: string; label: string }> = [
+    { kind: 'ack', glyph: '✓', label: 'Acknowledged by' },
+    { kind: 'reject', glyph: '✕', label: 'Rejected by' },
+  ];
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5" data-gate="reactions">
+      {kinds.map(({ kind, glyph, label }) => {
+        const who = reactions.filter(r => r.kind === kind);
+        if (who.length === 0) return null;
+        const mine = Boolean(selfName && who.some(r => r.name === selfName && r.client === 'web'));
+        const names = who.map(r => r.name).join(', ');
+        return (
+          <button
+            key={kind}
+            type="button"
+            onClick={onReact ? () => onReact(message, kind) : undefined}
+            aria-label={`${label} ${names}${onReact ? (mine ? ' — tap to remove yours' : ' — tap to add yours') : ''}`}
+            className={`flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] leading-tight transition ${
+              kind === 'ack'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+            } ${mine ? 'ring-1 ring-current' : ''} ${onReact ? 'cursor-pointer hover:bg-surface-softer' : 'cursor-default'}`}
+          >
+            <span aria-hidden="true" className="font-bold">{glyph}</span>
+            <span className="truncate">{names}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // The reply-arrow that fades in behind a bubble as it's swiped.
 function SwipeReplyIndicator({ progress }: { progress: number }) {
   if (progress <= 0) return null;
@@ -193,7 +234,7 @@ function SwipeReplyIndicator({ progress }: { progress: number }) {
   );
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, selfName, senderBrand }: Props) {
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, selfName, senderBrand }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
 
@@ -218,7 +259,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
     return (
       <div id={`msg-${message.id}`} {...swipe.bind} className={`group relative flex items-start justify-end gap-1 pl-10 pr-3 sm:pl-16 sm:pr-4 ${grouped ? 'mt-2' : 'mt-6'}`}>
         <SwipeReplyIndicator progress={swipe.progress} />
-        <div className="pt-1"><MessageMenu message={message} onReply={onReply} /></div>
+        <div className="pt-1"><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
         <div style={swipe.style} data-gate="msg-content" data-gate-self="true" className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {/* T-30/T-48: keep 15px type and a deliberate readable measure;
@@ -230,6 +271,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
+          <ReactionChips message={message} onReact={onReact} selfName={selfName} />
           <div className="msg-meta mt-1 text-right leading-none" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
         </div>
       </div>
@@ -263,8 +305,9 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
+          <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>
-        <div className="absolute right-3 top-1"><MessageMenu message={message} onReply={onReply} /></div>
+        <div className="absolute right-3 top-1"><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
       </div>
     );
   }
@@ -291,12 +334,13 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           {!message.role && <span className="hidden flex-1 sm:block" aria-hidden="true" />}
           <span className="flex-1 sm:hidden" aria-hidden="true" />
           <span className="msg-meta shrink-0 whitespace-nowrap" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
-          <MessageMenu message={message} onReply={onReply} />
+          <MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} />
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
+          <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>
       </div>
     </div>

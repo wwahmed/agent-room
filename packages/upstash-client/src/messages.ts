@@ -1,4 +1,4 @@
-import type { Message, MessageMetadata, MessageReplyRef, RoleInTurn, InvocationType } from '@agent-room/shared';
+import type { Message, MessageMetadata, MessageReaction, MessageReactionKind, MessageReplyRef, RoleInTurn, InvocationType } from '@agent-room/shared';
 import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS, extractArtifacts } from '@agent-room/shared';
 import { artifactAppendCommands } from './artifactStore.js';
 import type { UpstashClient } from './client.js';
@@ -301,6 +301,83 @@ async function rpushMessage(client: UpstashClient, code: string, message: Messag
     ['EXPIRE', msgsKey(code), ROOM_TTL_SECONDS],
     ['EXPIRE', msgCountKey(code), ROOM_TTL_SECONDS],
   ]);
+}
+
+// T-121: toggle an acknowledge/reject reaction on a stored message.
+//
+// Semantics:
+//   - Same person + same kind again  → the reaction is REMOVED (toggle off).
+//   - Same person + the OTHER kind   → their old reaction is replaced; ack and
+//     reject are mutually exclusive per person (a message is either accepted
+//     or contested by you, never both).
+//   - The stored row is rewritten in place with LSET, so history readers and
+//     fresh page loads see the authoritative reaction list on the message
+//     itself. Cursor-polling clients learn about the change from the sys
+//     event row the server appends after calling this.
+//
+// Concurrency note: find-then-LSET is not atomic. Two simultaneous reactions
+// on the SAME message can lose one of the two writes; an LTRIM between the
+// read and the write can shift indices. Both windows are milliseconds wide on
+// a single-server deployment and the failure mode is a missing chip, not
+// corruption — accepted for now rather than pulling in WATCH/EVAL machinery.
+export class MessageNotFoundError extends Error {
+  constructor(messageId: number) {
+    super(`Message ${messageId} was not found in this room (it may have been trimmed from history).`);
+    this.name = 'MessageNotFoundError';
+  }
+}
+
+export interface ReactionResult {
+  /** true = the reaction is now present; false = it was toggled off. */
+  added: boolean;
+  /** The target message's full post-change reaction list. */
+  reactions: MessageReaction[];
+  /** Target author + snippet, for composing the human/agent-readable event. */
+  target: { id: number; name: string; text: string };
+}
+
+export async function applyMessageReaction(
+  client: UpstashClient,
+  code: string,
+  messageId: number,
+  reactor: { name: string; client: Message['client'] },
+  kind: MessageReactionKind,
+): Promise<ReactionResult> {
+  const raw = await client.command<string[]>(['LRANGE', msgsKey(code), 0, -1]);
+  let index = -1;
+  let message: Message | null = null;
+  // Scan from the tail — reactions overwhelmingly land on recent messages.
+  for (let i = raw.length - 1; i >= 0; i--) {
+    const parsed = JSON.parse(raw[i]!) as Message;
+    if (parsed.id === messageId) { index = i; message = parsed; break; }
+  }
+  if (index === -1 || !message) throw new MessageNotFoundError(messageId);
+  if (message.type === 'sys') {
+    const err = new Error('Reactions can only be applied to participant messages, not system rows.');
+    err.name = 'BadRequestError';
+    throw err;
+  }
+  const prior = Array.isArray(message.reactions) ? message.reactions : [];
+  const mine = prior.find(r => r.name === reactor.name && r.client === reactor.client);
+  const others = prior.filter(r => !(r.name === reactor.name && r.client === reactor.client));
+  const added = !(mine && mine.kind === kind);
+  const reactions: MessageReaction[] = added
+    ? [...others, { kind, name: reactor.name, client: reactor.client, time: Date.now() }]
+    : others;
+  const updated: Message = { ...message, reactions };
+  await client.pipeline([
+    ['LSET', msgsKey(code), index, JSON.stringify(updated)],
+    ['EXPIRE', msgsKey(code), ROOM_TTL_SECONDS],
+  ]);
+  return {
+    added,
+    reactions,
+    target: {
+      id: message.id,
+      name: message.name,
+      text: (message.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 80),
+    },
+  };
 }
 
 // Append a server-originated system message. Bypasses the speaker/mute/turn
