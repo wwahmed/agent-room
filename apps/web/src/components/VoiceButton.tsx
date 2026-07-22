@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DictationController, mergeTranscript, type DictationSnapshot, type RecognizerLike } from '../lib/dictation.js';
+import { ScreenWakeLockController } from '../lib/screenWakeLock.js';
 
 interface Props {
   /** T-119: while dictation is active the recording overlay carries every
@@ -58,6 +59,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const [tick, setTick] = useState(0);
   const ctrlRef = useRef<DictationController | null>(null);
+  const wakeLockRef = useRef<ScreenWakeLockController | null>(null);
 
   // The controller is created once; keep the latest callbacks in refs so its
   // long-lived onChange/onFinalize always call the current handlers.
@@ -68,6 +70,22 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
 
   const recording = snap.state === 'recording';
   const active = snap.state !== 'idle';
+
+  // Keep the display awake only for the lifetime of the voice-recording mode.
+  // The controller is best-effort, releases on stop/error/cancel/unmount, and
+  // reacquires after a hidden recording tab becomes visible again.
+  useEffect(() => {
+    const wakeLock = new ScreenWakeLockController();
+    wakeLockRef.current = wakeLock;
+    return () => {
+      wakeLockRef.current = null;
+      wakeLock.dispose();
+    };
+  }, []);
+
+  useEffect(() => {
+    wakeLockRef.current?.setActive(active);
+  }, [active]);
 
   // T-57: drive a continuous clock while recording — the controller only emits on
   // speech events, so without this the timer sits at 0:00 during silence and the
