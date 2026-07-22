@@ -82,7 +82,9 @@ export function RoomHeader({
 
   return (
     <header className={`app-command-bar fixed inset-x-0 top-0 z-40 flex flex-col ${workspaceNav ? (mobileNavHidden ? 'h-[52px] lg:h-14' : 'h-[96px] lg:h-14') : 'h-[52px] items-center sm:h-14'}`}>
-      <div className={`relative z-10 flex min-w-0 items-center px-1.5 sm:px-3 ${workspaceNav ? 'h-[52px] flex-shrink-0 lg:h-full' : 'h-full flex-1 w-full'}`}>
+      {/* T-109: px-1 below sm — every horizontal pixel the chrome keeps is a
+          pixel the room name loses; four 44px controls already fill the bar. */}
+      <div className={`relative z-10 flex min-w-0 items-center px-1 sm:px-3 ${workspaceNav ? 'h-[52px] flex-shrink-0 lg:h-full' : 'h-full flex-1 w-full'}`}>
         <div className="flex min-w-0 items-center">
           {backOverride ? (
             <button
@@ -116,7 +118,7 @@ export function RoomHeader({
           <button
             type="button"
             onClick={onOpenRoom}
-            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-2 py-1 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
+            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-1.5 py-1 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
             aria-label={`Open room settings for ${room.topic}`}
           >
             {/* T-109: 42vw capped the name below what the freed space allows;
@@ -161,7 +163,7 @@ export function RoomHeader({
         </button>
         )}
 
-        <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
+        <div className="ml-auto flex flex-shrink-0 items-center gap-0 sm:gap-0.5">
           <button
             type="button"
             onClick={onSearch}
