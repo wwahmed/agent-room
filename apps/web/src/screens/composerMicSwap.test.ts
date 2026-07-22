@@ -2,25 +2,27 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(new URL('./Room.tsx', import.meta.url), 'utf8');
+const voiceButton = readFileSync(new URL('../components/VoiceButton.tsx', import.meta.url), 'utf8');
 
-// T-79: attachment + dictated text leave in ONE message. The T-84 phone
-// mic-to-Send swap must never fire while an attachment is staged (or
-// mid-dictation, per T-85) — otherwise the mic is unreachable exactly when
-// the host wants to dictate the caption, forcing installment sends.
-describe('phone mic swap respects staged attachments (T-79)', () => {
-  it('hides the mic only when there is text, no dictation, AND no attachments', () => {
-    expect(source).toContain("text.trim() && !dictationDraft && attachments.length === 0 ? 'max-sm:hidden' : 'contents'");
+// T-120 FULL-WIDTH FIELD RULE (host order, supersedes the T-84 phone swap,
+// the T-45 one-row layout, and the T-79/T-119 visibility conditions those
+// layouts required): the text box owns the entire composer width at every
+// moment; attach, mic, expand, and send live on their own row BELOW it.
+describe('composer full-width field rule (T-120)', () => {
+  it('gives the textarea the full width with no flex sharing', () => {
+    expect(source).toContain('className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0"');
+    expect(source).not.toContain('msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0 min-w-0 flex-1');
   });
-});
 
-// T-119: while dictation is ACTIVE the recording overlay carries every
-// control, so the trigger cluster yields its slots and the draft textarea
-// takes the full composer width.
-describe('dictation clears the composer row (T-119)', () => {
-  it('hides attach, expand, and send while dictating and hands VoiceButton the trigger-hiding prop', () => {
-    expect(source).toContain("sm:hidden ${dictating ? 'hidden' : 'flex'}");
-    expect(source.split("${dictating ? '' : 'sm:flex'}").length).toBe(3); // desktop attach + expand
-    expect(source).toContain("dictating ? 'hidden' : text.trim() || attachments.length > 0");
-    expect(source).toContain('hideTriggerWhileActive');
+  it('keeps the tools row height while dictating (invisible, not hidden) so the recording bar covers tools, never the transcript', () => {
+    expect(source).toContain("${dictating ? 'invisible' : ''}");
+    // the overlay escapes the inherited visibility so the recording controls stay usable
+    expect(voiceButton).toContain('visible absolute inset-x-0 bottom-0');
+  });
+
+  it('retires the width-contention machinery: mic always present, single attach trigger', () => {
+    expect(source).toContain('<span className="contents">');
+    expect(source).not.toContain("max-sm:hidden' : 'contents'");
+    expect(source).not.toContain('attachTriggerPhoneRef');
   });
 });

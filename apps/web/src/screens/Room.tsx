@@ -234,7 +234,6 @@ export function Room() {
   // T-84: phones render the paperclip LEFT of the field (its own button),
   // so the sheet's focus return targets whichever trigger is visible.
   const attachTriggerRef = useRef<HTMLButtonElement>(null);
-  const attachTriggerPhoneRef = useRef<HTMLButtonElement>(null);
   // T-86: inert state-injection hook for the gate's voice-draft fixture —
   // headless capture has no microphone, and this is the state where send
   // controls historically left the screen. Explicit query param only;
@@ -2582,25 +2581,14 @@ export function Room() {
                     </button>
                   </div>
                 )}
-                {/* T-82/T-84: phone resting composer is ONE row —
-                    [attach][flex field][mic], Send REPLACING mic the moment
-                    content exists (no disabled Send eating width); >=sm keeps
-                    the field-above-tools layout from the earlier host ruling. */}
-                <div className="flex items-end">
-                <button
-                  ref={attachTriggerPhoneRef}
-                  type="button"
-                  onClick={() => setAttachmentMenuOpen(open => !open)}
-                  disabled={attachBusy || attachments.length >= MAX_ATTACHMENTS_PER_MESSAGE}
-                  aria-label="Add photos or files"
-                  aria-haspopup="dialog"
-                  aria-expanded={attachmentMenuOpen}
-                  className={`h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 sm:hidden ${dictating ? 'hidden' : 'flex'}`}
-                >
-                  <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m13 7.5-4.9 4.9a3.1 3.1 0 0 1-4.4-4.4l5.3-5.3a2.1 2.1 0 0 1 3 3l-5.3 5.3a1.1 1.1 0 0 1-1.6-1.6L9.8 4.7" />
-                  </svg>
-                </button>
+                {/* T-120 FULL-WIDTH FIELD RULE (host order, supersedes the
+                    T-45 one-row layout and the T-84 phone swap): the text box
+                    owns the entire composer width at every moment; controls
+                    live on their own compact row BELOW. While dictating the
+                    tools row goes INVISIBLE (not hidden) so it keeps its
+                    height as the recording bar's cover zone — the live
+                    transcript stays visible above the bar. */}
+                <div>
                 <textarea
                   ref={textareaRef}
                   value={text}
@@ -2648,14 +2636,15 @@ export function Room() {
                   /* T-74: the semantic composer role keeps typed and placeholder
                      text readable at physical phone scale. Borderless — the
                      wrapper owns the border and focus ring. */
-                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0 min-w-0 flex-1"
+                  className="msg-composer w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 outline-none focus:ring-0"
                 />
                 {/* T-85 hotfix: NOT position:relative - the recording overlay
                     inside VoiceButton is absolute inset-x-0 and must anchor to
-                    the full-width composer wrapper above, not this 44px tool
-                    cluster. A relative here collapsed the recorder onto the
-                    mic button and pushed its send control off-screen. */}
-                <div className="flex items-center gap-0.5 max-sm:flex-shrink-0">
+                    the full-width composer wrapper above, not this tool row.
+                    T-120: `invisible` (not hidden) while dictating keeps the
+                    row's height as the overlay's cover zone; the overlay
+                    itself is `visible` so it escapes the inherited hiding. */}
+                <div className={`flex items-center gap-0.5 ${dictating ? 'invisible' : ''}`}>
                   <input
                     ref={imageInputRef}
                     type="file"
@@ -2681,7 +2670,7 @@ export function Room() {
                     aria-label="Add photos or files"
                     aria-haspopup="dialog"
                     aria-expanded={attachmentMenuOpen}
-                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50 ${dictating ? '' : 'sm:flex'}`}
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-surface-softer hover:text-ink disabled:opacity-50"
                   >
                     {attachBusy ? (
                       <span className="text-xs font-semibold">…</span>
@@ -2699,16 +2688,12 @@ export function Room() {
                     onClose={() => setAttachmentMenuOpen(false)}
                     onPickImages={() => imageInputRef.current?.click()}
                     onPickFiles={() => fileInputRef.current?.click()}
-                    returnFocusRef={isPhone ? attachTriggerPhoneRef : attachTriggerRef}
+                    returnFocusRef={attachTriggerRef}
                   />
-                  {/* T-84 phone swap: mic yields to Send once content exists —
-                      but NEVER mid-dictation, when the stop/cancel controls
-                      must stay reachable (T-85), and NEVER while an
-                      attachment is staged (T-79): attachment plus dictated
-                      text must leave in ONE message, so the mic stays
-                      reachable alongside Send instead of forcing the host to
-                      send in installments. */}
-                  <span className={text.trim() && !dictationDraft && attachments.length === 0 ? 'max-sm:hidden' : 'contents'}>
+                  {/* T-120: the mic is ALWAYS present — its own row means no
+                      width contention, which is what the old T-84 swap and the
+                      T-79/T-119 visibility rules existed to manage. */}
+                  <span className="contents">
                   <VoiceButton
                     onStart={() => {
                       dictationBaseRef.current = text;
@@ -2739,12 +2724,12 @@ export function Room() {
                     disabled={ended}
                   />
                   </span>
-                  <span className="flex-1 max-sm:hidden" aria-hidden="true" />
+                  <span className="flex-1" aria-hidden="true" />
                   <button
                     onClick={() => setComposerExpanded(v => !v)}
                     title={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
                     aria-label={composerExpanded ? 'Collapse writing surface' : 'Expand writing surface'}
-                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition ${dictating ? '' : 'sm:flex'} ${composerExpanded ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
+                    className={`hidden h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl transition sm:flex ${composerExpanded ? 'bg-accent-tint text-accent' : 'text-ink-soft hover:bg-surface-softer hover:text-ink'}`}
                   >
                     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       {composerExpanded
@@ -2759,13 +2744,7 @@ export function Room() {
                     disabled={!text.trim() && attachments.length === 0}
                     title="Send"
                     aria-label="Send message"
-                    className={`h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${
-                      // T-84: no disabled Send consuming phone width — it
-                      // APPEARS (replacing the mic) once content exists.
-                      // T-119: and never during active dictation, when the
-                      // recording bar owns the controls.
-                      dictating ? 'hidden' : text.trim() || attachments.length > 0 ? 'flex sm:flex' : 'hidden sm:flex'
-                    }`}
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
                       <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />

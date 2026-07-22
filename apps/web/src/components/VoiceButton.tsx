@@ -135,7 +135,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
         <div
           role="group"
           aria-label="Voice recording"
-          className="absolute inset-x-0 bottom-0 z-10 rounded-b-2xl border-t border-border bg-surface px-2 py-1"
+          className="visible absolute inset-x-0 bottom-0 z-10 rounded-b-2xl border-t border-border bg-surface px-2 py-1"
         >
           <div className="flex w-full items-center gap-3">
             <button
