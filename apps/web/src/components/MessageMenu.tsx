@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Message } from '@agent-room/shared';
 import { showToast } from './Toast.js';
 import { ownReaction } from '../lib/reactions.js';
+import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 
 // T-52: per-message actions. A ⋯ button (revealed on hover, always focusable)
 // and long-press on touch both open a small popover; "Copy text" copies the
@@ -101,9 +102,7 @@ export function MessageMenu({ message, align = 'right', onReply, onReact, selfNa
                 onClick={() => { setOpen(false); onReact(message, 'ack'); }}
                 className={itemClass}
               >
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m3 8.5 3.2 3.2L13 4.5" />
-                </svg>
+                <ThumbUpIcon />
                 {mine?.kind === 'ack' ? 'Remove acknowledgment' : 'Acknowledge'}
               </button>
               <button
@@ -112,9 +111,7 @@ export function MessageMenu({ message, align = 'right', onReply, onReact, selfNa
                 onClick={() => { setOpen(false); onReact(message, 'reject'); }}
                 className={itemClass}
               >
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M4 4l8 8M12 4l-8 8" />
-                </svg>
+                <ThumbDownIcon />
                 {mine?.kind === 'reject' ? 'Remove rejection' : 'Reject'}
               </button>
             </>

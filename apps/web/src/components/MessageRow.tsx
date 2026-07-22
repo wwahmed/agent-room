@@ -4,6 +4,7 @@ import { AttachmentList, systemEventLabel } from './Bubble.js';
 import { messageTime } from '../lib/relativeTime.js';
 import { MessageMenu } from './MessageMenu.js';
 import { EdgeActionRail, HoverActionTray, readActionTreatment } from './MessageActionTray.js';
+import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 import { BrandedLogoAvatar, GenericAgentBadge } from './AgentAvatar.js';
 import type { AgentBrand } from '../lib/agentBrand.js';
@@ -187,9 +188,11 @@ function useSwipeReply(onReply: (() => void) | undefined) {
 function ReactionChips({ message, onReact, selfName }: { message: Message; onReact?: (m: Message, kind: 'ack' | 'reject') => void; selfName?: string }) {
   const reactions = message.reactions ?? [];
   if (reactions.length === 0) return null;
-  const kinds: Array<{ kind: 'ack' | 'reject'; glyph: string; label: string }> = [
-    { kind: 'ack', glyph: '✓', label: 'Acknowledged by' },
-    { kind: 'reject', glyph: '✕', label: 'Rejected by' },
+  // T-124 owner ruling: thumbs, not check/cross — a verdict ABOUT the
+  // message, not an action on it.
+  const kinds: Array<{ kind: 'ack' | 'reject'; glyph: React.ReactNode; label: string }> = [
+    { kind: 'ack', glyph: <ThumbUpIcon size={12} />, label: 'Acknowledged by' },
+    { kind: 'reject', glyph: <ThumbDownIcon size={12} />, label: 'Rejected by' },
   ];
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5" data-gate="reactions">
@@ -210,7 +213,7 @@ function ReactionChips({ message, onReact, selfName }: { message: Message; onRea
                 : 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
             } ${mine ? 'ring-1 ring-current' : ''} ${onReact ? 'cursor-pointer hover:bg-surface-softer' : 'cursor-default'}`}
           >
-            <span aria-hidden="true" className="font-bold">{glyph}</span>
+            <span aria-hidden="true" className="flex items-center">{glyph}</span>
             <span className="truncate">{names}</span>
           </button>
         );

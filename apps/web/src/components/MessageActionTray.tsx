@@ -1,5 +1,6 @@
 import type { Message } from '@agent-room/shared';
 import { MessageMenu } from './MessageMenu.js';
+import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 
 // T-124 (T-38i) PROTOTYPE: two hover-treatment candidates for the message
 // action cluster, shipped INERT behind a local flag so the live experience is
@@ -48,16 +49,12 @@ function ActionGlyphs({ message, onReact, onReply, selfName, floating }: {
     <>
       {onReact && (
         <GlyphButton label="Acknowledge message" floating={floating} onClick={() => onReact(message, 'ack')}>
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m3 8.5 3.2 3.2L13 4.5" />
-          </svg>
+          <ThumbUpIcon />
         </GlyphButton>
       )}
       {onReact && (
         <GlyphButton label="Reject message" floating={floating} onClick={() => onReact(message, 'reject')}>
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M4 4l8 8M12 4l-8 8" />
-          </svg>
+          <ThumbDownIcon />
         </GlyphButton>
       )}
       {onReply && (
