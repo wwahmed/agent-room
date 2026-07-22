@@ -2565,7 +2565,7 @@ export function Room() {
                 )}
                 {dictationDraft && text.trim() && (
                   <div className="mx-1 mt-1 flex items-center gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-[12px]">
-                    <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft — editable. Type to revise, then Send.</span>
+                    <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft: editable. Type to revise, then Send.</span>
                     <button
                       type="button"
                       onClick={() => { setText(dictationUndoRef.current); setDictationDraft(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
