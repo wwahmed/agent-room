@@ -2705,6 +2705,14 @@ export function Room() {
                       const base = (dictationBaseRef.current ?? '').trim();
                       setText(base && live ? `${base} ${live}` : live || dictationBaseRef.current || '');
                       setDictationDraft(true);
+                      // T-120 (c): the live stream keeps the box scrolled to
+                      // the NEWEST words — programmatic setText leaves
+                      // scrollTop at the oldest line once the draft passes
+                      // the field's cap.
+                      requestAnimationFrame(() => {
+                        const ta = textareaRef.current;
+                        if (ta) ta.scrollTop = ta.scrollHeight;
+                      });
                     }}
                     onTranscript={(t) => {
                       const base = (dictationBaseRef.current ?? '').trim();
