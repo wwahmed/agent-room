@@ -62,26 +62,33 @@ export function upsertSubscription(subs: StoredSubscription[], incoming: PushSub
   return [...rest, { ...incoming, addedAt: now }];
 }
 
-/** Send a payload to every device of the given account; prune dead endpoints. */
+/**
+ * Send a payload to every device of the given account; prune dead endpoints.
+ * `agent` is test-injection only: web-push always speaks TLS, so the
+ * integration test hands in an https.Agent trusting its local fixture cert.
+ */
 export async function sendToAccount(
   store: SubscriptionStore,
   email: string,
   payload: { title: string; body: string; url: string; tag?: string },
-): Promise<{ sent: number; pruned: number }> {
-  if (!configured) return { sent: 0, pruned: 0 };
+  agent?: unknown,
+): Promise<{ sent: number; pruned: number; lastError: string | null }> {
+  if (!configured) return { sent: 0, pruned: 0, lastError: null };
   const subs = await store.read(email);
   let sent = 0;
+  let lastError: string | null = null;
   const dead: string[] = [];
   await Promise.all(subs.map(async sub => {
     try {
-      await webpush.sendNotification(sub, JSON.stringify(payload), { TTL: 3600 });
+      await webpush.sendNotification(sub, JSON.stringify(payload), { TTL: 3600, ...(agent ? { agent: agent as never } : {}) });
       sent += 1;
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode;
+      lastError = `${status ?? ''} ${(err as Error).message}`.trim().slice(0, 160);
       if (status === 404 || status === 410) dead.push(sub.endpoint);
       // other failures (transient) leave the subscription in place
     }
   }));
   if (dead.length) await store.write(email, subs.filter(s => !dead.includes(s.endpoint)));
-  return { sent, pruned: dead.length };
+  return { sent, pruned: dead.length, lastError };
 }
