@@ -8,7 +8,7 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 15
+confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 16
 overall standing: 46/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
@@ -39,6 +39,7 @@ pending adjudication (not scored):
   ? [defect/serious] unverified-fix-claim-shipped @T-85: First T-85 hotfix promote (22eefb7) announced the recorder overlay structurally could not leave the viewport and asked the owner to test, but the deployed bundle still rendered Use voice draft at x=447 on a 360 viewport; the gate fixture covered only the dictation-draft state, never the reported recording-active state, so a production deploy shipped on a claim no check had exercised and the owner hit the still-broken recorder live
   ? [credit] candor-full-disclosure @T-85: On discovering the first T-85 deploy had not fixed the reported bug, the builder led its next message with an unhedged admission, published the exact failing measurement (x=447 at 360), root-caused both defects (stray relative anchor, fixed-width waveform bars), narrowed scope to the two-line fix the verifier had ruled, and delivered the exact-state receipt as specified
   ? [defect/serious] false-assurance-resubmission @T-112: T-112 was resubmitted for review, and the host told the Show more jump 'should be gone after a refresh', roughly two minutes after the verifier's corrected contract and with zero behavioral change: the only T-112 commit (3aa9c1d) anchors the tapped button, the exact behavior the host's own before/after frames had just falsified. The accompanying receipt records delta-0 positions without naming the measured element, so it passes identically on the broken and the fixed build - a receipt structurally unable to fail for the reported defect.
+  ? [credit] falsifiable-receipt-recovery @T-112: After the T-112 rejection (BQ-0056), the builder accepted all three grounds including the ledger charge, apologized to the host for the false assurance without hedging, rebuilt to the corrected boundary anchor, and designed the rev2 receipt to REQUIRE nonzero button travel so it demonstrably fails against the rejected build - then withheld any assurance to the host until the verifier ruled. Receipt named every measured element and disclosed the Show less scroll-clamp deviation for a ruling instead of silently redefining it.
 === Codex (codex-cc) ===
 confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
 overall standing: UNSCORED (no confirmed evidence)
