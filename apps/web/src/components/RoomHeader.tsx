@@ -121,7 +121,7 @@ export function RoomHeader({
             /* T-109: py-0.5 + block-flow pill keep the two-line identity
                inside the 52px bar — inline-flex left line-box slack that
                pushed the name 2px above the viewport under the status bar. */
-            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-1.5 py-0.5 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
+            className="header-room-identity group min-h-11 min-w-0 rounded-xl px-1 py-0.5 text-left transition sm:flex sm:items-center sm:gap-2 sm:px-2.5"
             aria-label={`Open room settings for ${room.topic}`}
           >
             {/* T-109: 42vw capped the name below what the freed space allows;
