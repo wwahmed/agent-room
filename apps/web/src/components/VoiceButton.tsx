@@ -43,7 +43,7 @@ const NO_SIGNAL_AFTER_MS = 6000;
 
 function noSignalMessage(s: DictationSnapshot): string {
   if (s.lastTransientError === 'no-speech' || s.lastTransientError === null) {
-    return 'Hearing nothing — check the mic input in your browser';
+    return 'Hearing nothing. Check the mic input in your browser.';
   }
   if (s.lastTransientError === 'aborted' || s.restarts > 2) {
     return `Speech service keeps disconnecting (${s.lastTransientError ?? 'restart loop'})`;
