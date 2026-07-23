@@ -563,6 +563,26 @@ function downloadRateLimited(key: string, now: number): boolean {
   return false;
 }
 
+// T-134: the compute endpoints (/api/transcribe, /api/tts) each spawn ffmpeg +
+// whisper/say, so cap per-caller volume as a runaway backstop. The ceiling is
+// generous on purpose: legitimate continuous dictation is ~24 segments/min and
+// a reconnect can drain a buffered backlog in a burst, so a tight cap would
+// break real use. This bounds a runaway loop without touching normal traffic.
+// A 429 is signalled as transient so the client retries (never drops a segment).
+const COMPUTE_RATE_MAX = 300;
+const COMPUTE_RATE_WINDOW_MS = 60_000;
+const computeRateHits = new Map<string, number[]>();
+function computeRateLimited(key: string, now: number): boolean {
+  const hits = (computeRateHits.get(key) ?? []).filter(t => now - t < COMPUTE_RATE_WINDOW_MS);
+  if (hits.length >= COMPUTE_RATE_MAX) { computeRateHits.set(key, hits); return true; }
+  hits.push(now);
+  computeRateHits.set(key, hits);
+  return false;
+}
+function computeCallerKey(caller: Caller): string {
+  return caller.kind === 'user' ? `u:${caller.email}` : caller.kind;
+}
+
 // Structured audit line — NO file contents, credentials, cookies, tokens, or
 // signed URLs. Just who read what, when, and the outcome.
 function attachmentAudit(fields: { room: string; attachmentId: string; participant: string; op: string; bytes: number; outcome: string }): void {
@@ -1773,6 +1793,7 @@ const server = createServer(async (req, res) => {
     if (path === '/api/transcribe' && req.method === 'POST') {
       const caller = await resolveCaller(req);
       if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      if (computeRateLimited(computeCallerKey(caller), nowMs())) return sendJson(res, 429, { error: 'rate_limited', message: 'Too many requests, slow down.' });
       let raw: Buffer;
       try {
         raw = await readRawBody(req);
@@ -1796,6 +1817,7 @@ const server = createServer(async (req, res) => {
     if (path === '/api/tts' && req.method === 'POST') {
       const caller = await resolveCaller(req);
       if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      if (computeRateLimited(computeCallerKey(caller), nowMs())) return sendJson(res, 429, { error: 'rate_limited', message: 'Too many requests, slow down.' });
       let text = '';
       try {
         const body = JSON.parse(await readBody(req)) as { text?: unknown };

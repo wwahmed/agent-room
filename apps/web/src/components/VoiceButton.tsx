@@ -60,8 +60,9 @@ async function postTranscribe(blob: Blob): Promise<{ text: string }> {
   });
   if (!r.ok) {
     // 4xx (e.g. 422 bad_segment) is permanent for THIS clip; the controller
-    // drops it and drains past. 5xx / network is transient and gets retried.
-    throw Object.assign(new Error(`transcribe ${r.status}`), { permanent: r.status >= 400 && r.status < 500 });
+    // drops it and drains past. 5xx / network / 429 (rate limited) are
+    // transient and get retried — a throttled segment must never be dropped.
+    throw Object.assign(new Error(`transcribe ${r.status}`), { permanent: r.status >= 400 && r.status < 500 && r.status !== 429 });
   }
   const body = (await r.json()) as { text?: string };
   return { text: body?.text ?? '' };
