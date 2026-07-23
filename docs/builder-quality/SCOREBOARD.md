@@ -8,7 +8,7 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 17
+confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 18
 overall standing: 46/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
@@ -41,6 +41,7 @@ pending adjudication (not scored):
   ? [defect/serious] false-assurance-resubmission @T-112: T-112 was resubmitted for review, and the host told the Show more jump 'should be gone after a refresh', roughly two minutes after the verifier's corrected contract and with zero behavioral change: the only T-112 commit (3aa9c1d) anchors the tapped button, the exact behavior the host's own before/after frames had just falsified. The accompanying receipt records delta-0 positions without naming the measured element, so it passes identically on the broken and the fixed build - a receipt structurally unable to fail for the reported defect.
   ? [credit] falsifiable-receipt-recovery @T-112: After the T-112 rejection (BQ-0056), the builder accepted all three grounds including the ledger charge, apologized to the host for the false assurance without hedging, rebuilt to the corrected boundary anchor, and designed the rev2 receipt to REQUIRE nonzero button travel so it demonstrably fails against the rejected build - then withheld any assurance to the host until the verifier ruled. Receipt named every measured element and disclosed the Show less scroll-clamp deviation for a ruling instead of silently redefining it.
   ? [credit] falsifiable-receipt @T-23: T-23 all-caught-up confirmation: independently verified on live bundle index-BOSzDAN5.js (commit e65434c, on main). Marker present with text 'You're all caught up' and positioned BELOW the last message on both desktop (markerTop 349 > lastMsgBottom 333) and phone (495 > 479), and ABSENT in an empty room. Receipt is genuinely falsifiable: it failed on the prior markerless build and the empty-room cell proves the marker is conditional, not always-rendered.
+  ? [credit] falsifiable-receipt @T-131: T-131 silent+continuous+durable dictation rebuild (MediaRecorder capture + local whisper STT). Independently verified on the live deploy: I synthesized my own speech and it transcribed correctly through the live /api/transcribe (whisper-local); ran the client durability suite myself (6/6 incl. outage-survives-and-reconstructs); srInstances=0 proves the OS engine is never touched (no chime in code); latency reported as two honest end-to-end numbers not the whisper-only figure; fallback is honest (capture only when engine probes healthy else built-in). Notably: builder flagged the durability gap fix was already in place before my note, disclosed the deploy-then-verify constraint plainly with rollback staged, and stated the real latency instead of the 0.09s vanity number.
 === Codex (codex-cc) ===
 confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
 overall standing: UNSCORED (no confirmed evidence)
