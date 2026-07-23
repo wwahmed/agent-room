@@ -174,6 +174,45 @@ describe('VoiceCaptureController (durable)', () => {
     expect((await store.pending()).length).toBe(0); // queue fully drained past it
   });
 
+  it('RATE-LIMIT: a 429-style transient failure retries and lands, never dropped as poison', async () => {
+    // A 429 is a 4xx but is signalled transient (no `permanent` flag), so it
+    // must take the retry path, not the poison-drop path. First attempt on the
+    // segment throws transient; the retry succeeds and the text lands.
+    let recN = 0;
+    const attempts = new Map<string, number>();
+    const store = createMemoryStore();
+    const snaps: DictationSnapshot[] = [];
+    const timers: { seg: (() => void) | null; ret: (() => void) | null } = { seg: null, ret: null };
+    let clock = 3000;
+    const ctrl = new VoiceCaptureController({
+      getStream: async () => ({ getTracks: () => [{ stop() {} }] }),
+      createRecorder: () => new FakeRecorder(`seg${recN++}`),
+      transcribe: async (blob) => {
+        const label = await blob.text();
+        const n = (attempts.get(label) ?? 0) + 1;
+        attempts.set(label, n);
+        if (n === 1) throw new Error('429 rate limited'); // transient: NO permanent flag
+        return { text: label };
+      },
+      store,
+      onChange: (s) => snaps.push(s),
+      onFinalize: () => {},
+      segmentMs: 4000, retryMs: 2000,
+      now: () => clock,
+      setTimer: (fn, ms) => { if (ms === 2000) timers.ret = fn; else timers.seg = fn; return 1; },
+      clearTimer: () => {},
+    });
+    await ctrl.start();
+    const tick = () => { const fn = timers.seg; timers.seg = null; clock += 4000; fn?.(); };
+    tick(); await flush(); // seg0 -> first attempt 429 -> offline, buffered, retry scheduled
+    expect(ctrl.snapshot().offline).toBe(true);
+    expect(ctrl.snapshot().droppedSegments).toBe(0); // NOT dropped
+    const fire = timers.ret; timers.ret = null; fire?.(); await flush(); // retry -> succeeds
+    expect(ctrl.snapshot().finalText).toContain('seg0'); // it landed
+    expect(ctrl.snapshot().droppedSegments).toBe(0);     // never counted as poison
+    expect((await store.pending()).length).toBe(0);      // drained
+  });
+
   it('surfaces an error and stays idle when the mic is denied', async () => {
     const denied = makeHarness({ getStreamRejects: true });
     await denied.ctrl.start();
