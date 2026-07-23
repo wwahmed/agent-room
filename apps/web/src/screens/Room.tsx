@@ -619,12 +619,18 @@ export function Room() {
   useEffect(() => {
     if (messageTotal <= 0) return;
     if (!arrivalMarkedRef.current) {
+      // T-140: hold the first acknowledgement until the arrival marker has
+      // actually been snapshotted. Marking read here advances the stored
+      // marker to messageTotal, and doing that before a late-resolving marker
+      // lands would poison the snapshot (line ~598) into reading "all-read",
+      // dropping the reader at the bottom instead of the first-unread divider.
+      if (arrivalReadRef.current === null) return;
       arrivalMarkedRef.current = true;
       markRoomRead(code, messageTotal, self?.name);
     } else if (atBottomRef.current) {
       markRoomRead(code, messageTotal, self?.name);
     }
-  }, [messageTotal, code, self?.name]);
+  }, [messageTotal, code, self?.name, markerNonce]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
