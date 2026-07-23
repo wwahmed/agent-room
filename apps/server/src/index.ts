@@ -29,7 +29,7 @@
 //                   ONLY when unambiguous; every use logs a [security] event.
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -69,6 +69,12 @@ import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
 import { stampMessageEnvelope } from './envelope.js';
 import { listReadMarkers, resolveMarkerAccount, setReadMarker } from './readmarkers.js';
+import {
+  selectAttachment, storageKeyFor, verifyIntegrity,
+  signDownloadToken, verifyDownloadToken, AttachmentDownloadError,
+  INLINE_MAX_BYTES, SIGNED_URL_TTL_MS,
+  type SignedTokenClaims,
+} from './attachmentDownload.js';
 import {
   initPush,
   ownerEmail,
@@ -400,12 +406,18 @@ function adminGate(caller: Caller): { status: number; body: unknown } | null {
 
 // Registry problems are logged in full server-side; browsers get a
 // generic message so absolute host paths never leak (Codex round-3).
-function sanitizeProjectError(err: Error): { error: string; message: string } {
+function sanitizeProjectError(err: Error): { error: string; message: string; code?: string } {
   if (err.name === 'ProjectRegistryError') {
     console.error(`[project] ${err.message}`);
     return { error: err.name, message: 'Project registry is misconfigured on the server; check the server log.' };
   }
-  return { error: err.name, message: err.message };
+  // T-123: surface the stable attachment-download code (not_found,
+  // not_a_participant, too_large, integrity_mismatch, ...) so a tool consumer
+  // can branch on a machine code rather than parsing prose.
+  const downloadCode = (err as Error & { downloadCode?: string }).downloadCode;
+  return downloadCode
+    ? { error: err.name, message: err.message, code: downloadCode }
+    : { error: err.name, message: err.message };
 }
 
 function sysMessage(text: string, metadata: Record<string, unknown>): Message {
@@ -525,6 +537,58 @@ function memberAuthError(message: string): Error {
   const err = new Error(message);
   err.name = 'MemberAuthError';
   return err;
+}
+
+// T-123: secure attachment download state.
+// Signing secret for one-time download URLs. An explicit env value survives
+// restarts; the random fallback simply invalidates outstanding 60s tokens on
+// restart, which is safe. Never logged.
+const ATTACHMENT_SIGN_SECRET = process.env.ATTACHMENT_SIGN_SECRET || randomBytes(32).toString('hex');
+// Single-use enforcement: a consumed token's nonce is remembered until its own
+// expiry, so a replay after first success is rejected. Pruned lazily.
+const consumedDownloadNonces = new Map<string, number>();
+// Per (room, participant) sliding-window rate limit on attachment reads.
+const DOWNLOAD_RATE_MAX = 30;
+const DOWNLOAD_RATE_WINDOW_MS = 60_000;
+const downloadRateHits = new Map<string, number[]>();
+
+function downloadRateLimited(key: string, now: number): boolean {
+  const hits = (downloadRateHits.get(key) ?? []).filter(t => now - t < DOWNLOAD_RATE_WINDOW_MS);
+  if (hits.length >= DOWNLOAD_RATE_MAX) { downloadRateHits.set(key, hits); return true; }
+  hits.push(now);
+  downloadRateHits.set(key, hits);
+  return false;
+}
+
+// Structured audit line — NO file contents, credentials, cookies, tokens, or
+// signed URLs. Just who read what, when, and the outcome.
+function attachmentAudit(fields: { room: string; attachmentId: string; participant: string; op: string; bytes: number; outcome: string }): void {
+  console.info(`[audit] attachment op=${fields.op} room=${fields.room} attachment=${fields.attachmentId} participant=${fields.participant} bytes=${fields.bytes} outcome=${fields.outcome}`);
+}
+
+// Strict participant authorization for download: unlike the send path, a caller
+// with NO matching participant row is REJECTED (not silently allowed), and a
+// valid member credential is REQUIRED — a display name alone never authorizes a
+// file read. Kicked/left participants have no row, so their access ends at once.
+async function authorizeAttachmentParticipant(
+  code: string,
+  name: string,
+  clientKind: 'web' | 'cc',
+  memberKey: string | undefined,
+  caller: Caller,
+): Promise<void> {
+  const room = await getRoom(client, code); // throws RoomNotFoundError if the room is gone
+  const rows = room.participants.filter(p => p.name === name && p.client === clientKind);
+  if (rows.length === 0) {
+    throw new AttachmentDownloadError('not_a_participant', `"${name}" (${clientKind}) is not a current participant of this room.`);
+  }
+  const presentedHash = memberKey ? await sha256Hex(memberKey) : undefined;
+  const verifiedAuthIdHash = caller.kind === 'user' && clientKind === 'web' ? await sha256Hex(caller.email) : undefined;
+  // Force credential auth (no legacy-name relaxation) for file reads.
+  const decision = decideSenderAuth(rows, presentedHash, false, verifiedAuthIdHash);
+  if (!decision.ok) {
+    throw new AttachmentDownloadError('not_a_participant', `Participant credential required to read attachments in this room. Rejoin to obtain one, then retry.`);
+  }
 }
 
 // T-30 (F1): host authority now REQUIRES a valid hostKey — the name-equality
@@ -981,6 +1045,77 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       };
       await appendSystemMessage(client, code, eventRow);
       return { result: { added: outcome.added, reactions: outcome.reactions } };
+    }
+    case 'attachmentDownload': {
+      // T-123: agent-native secure download. Authorized by the caller's
+      // participant member credential (NOT a browser cookie), scoped to this
+      // one room. Returns inline bytes for small files or a one-time signed
+      // URL for larger ones, always with integrity metadata. Every outcome is
+      // audited; stable error codes distinguish the failure modes.
+      const pName = String(payload.name || '');
+      const pClient = (payload.client as 'web' | 'cc') || 'cc';
+      const participant = `${pName}|${pClient}`;
+      const selector = {
+        id: typeof payload.attachmentId === 'string' ? payload.attachmentId : undefined,
+        name: typeof payload.attachmentName === 'string' ? payload.attachmentName : undefined,
+        url: typeof payload.url === 'string' ? payload.url : undefined,
+      };
+      const now = Date.now();
+      try {
+        if (!pName) throw new AttachmentDownloadError('bad_request', 'name (your participant display name) is required.');
+        if (!selector.id && !selector.name && !selector.url) {
+          throw new AttachmentDownloadError('bad_request', 'Provide exactly one selector: attachmentId, attachmentName, or url.');
+        }
+        await authorizeAttachmentParticipant(code, pName, pClient, payload.memberKey as string | undefined, caller);
+        if (downloadRateLimited(`${code}|${participant}`, now)) {
+          throw new AttachmentDownloadError('bad_request', `Rate limit exceeded: at most ${DOWNLOAD_RATE_MAX} attachment reads per minute per participant.`);
+        }
+        const messages = await listMessages(client, code, 0);
+        const resolved = selectAttachment(messages, selector);
+        if (!resolved) throw new AttachmentDownloadError('not_found', 'No attachment in this room matches that selector.');
+        const key = storageKeyFor(resolved.attachment);
+        if (!key) throw new AttachmentDownloadError('not_found', 'Attachment has no resolvable storage key.');
+        const blob = readBlob(code, key);
+        if (!blob) throw new AttachmentDownloadError('not_found', 'Stored object is missing.');
+        const integrity = verifyIntegrity(blob.data, resolved.attachment); // throws integrity_mismatch / too_large
+
+        const base = {
+          id: resolved.attachment.id,
+          name: resolved.attachment.name,
+          declaredMime: resolved.attachment.mime,
+          detectedMime: integrity.detectedMime,
+          bytes: integrity.bytes,
+          sha256: integrity.sha256,
+          uploaderMessageId: resolved.uploaderMessageId,
+          uploadedAt: resolved.uploadedAt,
+        };
+
+        if (integrity.bytes <= INLINE_MAX_BYTES) {
+          attachmentAudit({ room: code, attachmentId: base.id, participant, op: 'download-inline', bytes: base.bytes, outcome: 'ok' });
+          return { result: { ...base, delivery: 'inline', contentBase64: blob.data.toString('base64') } };
+        }
+        // Larger than the inline threshold: hand back a one-time signed URL.
+        const claims: SignedTokenClaims = {
+          code, attachmentId: base.id, storageKey: key, participant,
+          op: 'download', exp: now + SIGNED_URL_TTL_MS, nonce: randomUUID(),
+        };
+        const token = signDownloadToken(ATTACHMENT_SIGN_SECRET, claims);
+        attachmentAudit({ room: code, attachmentId: base.id, participant, op: 'download-url', bytes: base.bytes, outcome: 'ok' });
+        return { result: { ...base, delivery: 'signed-url', signedUrl: `${PUBLIC_ORIGIN}/dl?token=${encodeURIComponent(token)}`, expiresInMs: SIGNED_URL_TTL_MS } };
+      } catch (e) {
+        const outcome = e instanceof AttachmentDownloadError ? e.code : 'error';
+        attachmentAudit({ room: code, attachmentId: selector.id || selector.name || selector.url || '?', participant, op: 'download', bytes: 0, outcome });
+        if (e instanceof AttachmentDownloadError) {
+          const err = new Error(e.message);
+          // 404 for not_found; 403 for auth; 400 for the rest.
+          err.name = e.code === 'not_found' ? 'RoomNotFoundError'
+            : (e.code === 'not_a_participant' || e.code === 'permission_revoked') ? 'MemberAuthError'
+            : 'BadRequestError';
+          (err as Error & { downloadCode?: string }).downloadCode = e.code;
+          throw err;
+        }
+        throw e;
+      }
     }
     case 'systemMessage': {
       await appendSystemMessage(client, code, payload.message as Message);
@@ -1623,6 +1758,45 @@ const server = createServer(async (req, res) => {
       const code = canonicalizeCode(String(payload.roomCode || ''));
       if (!code) return sendJson(res, 400, { error: 'bad_request', message: 'invalid roomCode' });
       return sendJson(res, 200, { deleted: deleteRoomBlobs(code) });
+    }
+
+    // T-123: one-time signed download URL for the large-file path. Self-
+    // authorizing (the HMAC token carries the room/attachment/participant
+    // claims); no Access cookie required, so an agent can follow it directly.
+    // Single-use: a consumed nonce is rejected on replay. Never logged.
+    if (path === '/dl' && req.method === 'GET') {
+      const token = url.searchParams.get('token') || '';
+      const nowDl = Date.now();
+      // Prune expired nonces opportunistically.
+      for (const [n, exp] of consumedDownloadNonces) if (exp < nowDl) consumedDownloadNonces.delete(n);
+      let claims: SignedTokenClaims;
+      try {
+        claims = verifyDownloadToken(ATTACHMENT_SIGN_SECRET, token, nowDl);
+      } catch (e) {
+        const code = e instanceof AttachmentDownloadError ? e.code : 'bad_request';
+        return sendJson(res, code === 'expired' ? 410 : 400, { error: code, message: 'Invalid or expired download token.' });
+      }
+      if (consumedDownloadNonces.has(claims.nonce)) {
+        attachmentAudit({ room: claims.code, attachmentId: claims.attachmentId, participant: claims.participant, op: 'download-url-follow', bytes: 0, outcome: 'replayed' });
+        return sendJson(res, 410, { error: 'replayed', message: 'This download link has already been used.' });
+      }
+      consumedDownloadNonces.set(claims.nonce, claims.exp);
+      const blob = readBlob(claims.code, claims.storageKey);
+      if (!blob) {
+        attachmentAudit({ room: claims.code, attachmentId: claims.attachmentId, participant: claims.participant, op: 'download-url-follow', bytes: 0, outcome: 'not_found' });
+        res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('not found'); return;
+      }
+      attachmentAudit({ room: claims.code, attachmentId: claims.attachmentId, participant: claims.participant, op: 'download-url-follow', bytes: blob.data.length, outcome: 'ok' });
+      res.writeHead(200, {
+        'Content-Type': mimeForExt(blob.ext),
+        'Content-Length': String(blob.data.length),
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'Content-Disposition': 'attachment',
+      });
+      res.end(blob.data);
+      return;
     }
 
     // T-51: serve a stored attachment. Access-gated (only signed-in users can
