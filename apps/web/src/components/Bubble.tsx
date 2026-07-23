@@ -116,28 +116,48 @@ export function AttachmentList({ attachments }: { attachments: MessageAttachment
 }
 
 function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment; onOpen: () => void }) {
+  // T-144: an image whose blob is gone (404 — never uploaded, or later purged)
+  // must not render as a silent broken-image icon that the reader can miss. Show
+  // an explicit "Image unavailable" placeholder so a missing attachment is
+  // legible, not invisible. This is the render-side half of the attachment
+  // truthfulness work; the upload path itself is the MCP client's (T-28 lane).
+  const [broken, setBroken] = useState(false);
   return (
     <figure
       className="w-full max-w-[320px] overflow-hidden rounded-xl border border-border bg-surface shadow-card"
       data-image-preview="compact"
     >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="group relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        aria-label={`Open ${attachment.name} full size`}
-      >
-        <img
-          src={attachment.url}
-          alt={attachment.name}
-          className="h-full w-full object-cover object-top transition-transform duration-200 group-hover:scale-[1.015]"
-        />
-        <span className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/60 text-white shadow-sm" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 3H3v3M10 3h3v3M6 13H3v-3M10 13h3v-3" />
+      {broken ? (
+        <div
+          data-gate="image-unavailable"
+          className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1.5 bg-surface-sunken px-4 text-center text-ink-faint"
+        >
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" /><path d="m4 16 5-5 4 4 3-3 4 4" /><path d="m4 4 16 16" />
           </svg>
-        </span>
-      </button>
+          <span className="text-[12px] font-semibold">Image unavailable</span>
+          <span className="text-[11px]">The sender's upload did not reach the room.</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="group relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          aria-label={`Open ${attachment.name} full size`}
+        >
+          <img
+            src={attachment.url}
+            alt={attachment.name}
+            onError={() => setBroken(true)}
+            className="h-full w-full object-cover object-top transition-transform duration-200 group-hover:scale-[1.015]"
+          />
+          <span className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/60 text-white shadow-sm" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 3H3v3M10 3h3v3M6 13H3v-3M10 13h3v-3" />
+            </svg>
+          </span>
+        </button>
+      )}
       <figcaption className="flex h-8 items-center gap-1.5 border-t border-border-faint px-2.5 text-[12px] font-normal leading-none tracking-normal text-ink-faint">
         <span className="min-w-0 truncate">{attachment.name}</span>
         <span aria-hidden="true">·</span>
