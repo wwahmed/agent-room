@@ -10,8 +10,10 @@ import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { OwnerBrief } from '../components/OwnerBrief.js';
 import { BriefCard } from '../components/BriefCard.js';
+import { CommandPalette } from '../components/CommandPalette.js';
 import { parseBriefCommand } from '../lib/briefCommand.js';
 import { runBrief } from '../lib/runBrief.js';
+import { filterSlashCommands, type SlashCommand } from '../lib/slashCommands.js';
 import { CommandSearch } from '../components/CommandSearch.js';
 import { Inspector, type InspectorTab } from '../components/Inspector.js';
 import { RecoverHostButton } from '../components/RecoverHostButton.js';
@@ -520,6 +522,11 @@ export function Room() {
   // who already scrolled up to read history).
   const landedRef = useRef(false);
   const openInteractedRef = useRef(false);
+  // T-141: slash-command palette. Open when the composer holds a leading "/",
+  // dismissed on Esc or after a completion until the text changes again.
+  const [paletteDismissed, setPaletteDismissed] = useState(false);
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const completedCmdRef = useRef<string | null>(null);
   // T-04: previous LAST message id — distinguishes appended messages from a
   // prepended history page — and the scroll geometry captured just before a
   // prepend so the reader's position survives it.
@@ -1556,6 +1563,22 @@ export function Room() {
     }
   }
 
+  // T-141: complete a slash command into the composer without sending. A trailing
+  // space (the /brief <topic> form) leaves the caret ready for the argument.
+  function completeCommand(command: SlashCommand) {
+    setText(command.insert);
+    completedCmdRef.current = command.insert;
+    setPaletteDismissed(true);
+    const el = textareaRef.current;
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const n = command.insert.length;
+      el.setSelectionRange(n, n);
+      autoGrow(el);
+    });
+  }
+
   async function addFiles(files: FileList | File[]) {
     const incoming = Array.from(files);
     if (!incoming.length) return;
@@ -2251,6 +2274,11 @@ export function Room() {
         </aside>
   ) : null;
 
+  // T-141: the slash-command palette is open when the composer holds a leading
+  // "/" and we are not dictating; dismissed after Esc / a completion. paletteIndex
+  // is clamped to the current match count.
+  const paletteCommands = !paletteDismissed && !dictating && !dictationDraft ? filterSlashCommands(text) : [];
+  const paletteActive = paletteCommands.length > 0 ? paletteIndex % paletteCommands.length : 0;
 
   return (
     // T-82: on phones the CHAT tab is full-bleed (pt-0) — the feed's top
@@ -2804,7 +2832,15 @@ export function Room() {
                     tools row goes INVISIBLE (not hidden) so it keeps its
                     height as the recording bar's cover zone — the live
                     transcript stays visible above the bar. */}
-                <div>
+                <div className="relative">
+                {!dictating && (
+                  <CommandPalette
+                    commands={paletteCommands}
+                    activeIndex={paletteActive}
+                    onPick={completeCommand}
+                    onHover={setPaletteIndex}
+                  />
+                )}
                 <textarea
                   ref={textareaRef}
                   value={text}
@@ -2812,6 +2848,14 @@ export function Room() {
                     const v = e.target.value;
                     setText(v);
                     syncMention();
+                    // T-141: any real edit that departs from the just-completed
+                    // command re-opens the palette (so filtering resumes) and
+                    // resets the highlight to the top.
+                    if (v !== completedCmdRef.current) {
+                      completedCmdRef.current = null;
+                      setPaletteDismissed(false);
+                      setPaletteIndex(0);
+                    }
                     // T-138: onChange fires only for real user input (programmatic
                     // setText from the live transcript does NOT), so a keystroke
                     // while recording means the user is taking over — pause the mic
@@ -2838,6 +2882,20 @@ export function Room() {
                       if (e.key === 'ArrowUp') { e.preventDefault(); setMention(m => m && { ...m, index: (m.index - 1 + mentionCandidates.length) % mentionCandidates.length }); return; }
                       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionCandidates[mention.index % mentionCandidates.length]!); return; }
                       if (e.key === 'Escape') { e.preventDefault(); setMention(null); return; }
+                    }
+                    // T-141: while the command palette is open it owns the same
+                    // keys — Enter/Tab COMPLETE (never send), arrows move, Esc
+                    // dismisses. A plain Enter with the palette closed still sends.
+                    if (paletteCommands.length > 0) {
+                      const len = paletteCommands.length;
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteIndex(i => (i + 1) % len); return; }
+                      if (e.key === 'ArrowUp') { e.preventDefault(); setPaletteIndex(i => (i - 1 + len) % len); return; }
+                      if (e.key === 'Escape') { e.preventDefault(); setPaletteDismissed(true); return; }
+                      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey)) {
+                        e.preventDefault();
+                        completeCommand(paletteCommands[paletteActive]!);
+                        return;
+                      }
                     }
                     const enterAction = composerEnterAction({
                       key: e.key,
