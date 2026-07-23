@@ -837,6 +837,14 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     }
     case 'join': {
       const participant = payload.participant as Participant;
+      // T-145 (completes T-143): a joining participant is present NOW. The cc
+      // join path (MCP) does not stamp joinedAt/lastSeenAt, which left a fresh
+      // agent reading "unknown"/1969 until its first message. Stamp presence
+      // server-side when the client omitted it — respecting any value the client
+      // did send — so a new agent reads online immediately and has a real anchor.
+      const joinStamp = Date.now();
+      if (!Number(participant.lastSeenAt)) participant.lastSeenAt = joinStamp;
+      if (!Number(participant.joinedAt)) participant.joinedAt = joinStamp;
       const hostKey = payload.hostKey as string | undefined;
       const priorIdentity = payload.priorIdentity as { name: string; client: 'web' | 'cc' } | undefined;
       const room = await getRoom(client, code);
