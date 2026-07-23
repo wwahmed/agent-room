@@ -1393,6 +1393,10 @@ export function Room() {
     const body = text.trim();
     if ((!body && attachments.length === 0) || ended || sendingRef.current) return;
     sendingRef.current = true;
+    // T-131: the app send-chime. Waqas asked for a cue at record-start and at
+    // send, nothing in between — so it fires only for a dictated message, the
+    // subtle app tone that replaces the OS one.
+    const wasDictation = dictationDraft;
     const msg: Message = {
       id: Date.now(),
       type: 'msg',
@@ -1416,6 +1420,7 @@ export function Room() {
     markSelfMessageSeen(code, me.name);
     try {
       await sendMessage(msg);
+      if (wasDictation) void import('../lib/audioCue.js').then((m) => m.playSendCue()).catch(() => {});
     } catch (e) {
       unmarkSelfMessageSeen(code, me.name);
       const { showToast } = await import('../components/Toast.js');
