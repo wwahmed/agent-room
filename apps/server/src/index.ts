@@ -53,6 +53,7 @@ import { createProjectFromCandidate, getProject, listProjectCandidates, listProj
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { effectiveVerifier, verifierCollidesWithOwner } from './taskrules.js';
+import { transcribeSegment, engineStatus } from './transcribe.js';
 import { roomActivityAt } from './roomactivity.js';
 import {
   isQaRoom,
@@ -1759,6 +1760,31 @@ const server = createServer(async (req, res) => {
         ...(Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : {}),
       };
       return sendJson(res, 200, attachment);
+    }
+
+    // T-131: local speech-to-text for silent, continuous dictation. The client
+    // checks status first so it can fall back to the built-in engine when the
+    // local one is not installed, rather than recording into a dead endpoint.
+    if (path === '/api/transcribe/status' && req.method === 'GET') {
+      const s = engineStatus();
+      return sendJson(res, 200, { ok: s.ok, engine: s.ok ? 'whisper-local' : 'none', reason: s.reason });
+    }
+    if (path === '/api/transcribe' && req.method === 'POST') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      let raw: Buffer;
+      try {
+        raw = await readRawBody(req);
+      } catch {
+        return sendJson(res, 413, { error: 'file_too_large', message: 'Audio segment exceeds the size limit.' });
+      }
+      if (!raw || raw.length === 0) return sendJson(res, 400, { error: 'empty', message: 'no audio in body' });
+      const result = await transcribeSegment(raw);
+      if (!result.ok) {
+        // 503 signals the client to fall back to the built-in engine.
+        return sendJson(res, 503, { error: 'engine_unavailable', engine: 'none', text: '', reason: result.reason });
+      }
+      return sendJson(res, 200, { text: result.text, engine: result.engine });
     }
 
     if (path === '/api/delete-room-blobs' && req.method === 'POST') {
