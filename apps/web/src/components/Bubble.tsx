@@ -121,7 +121,23 @@ function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment
   // an explicit "Image unavailable" placeholder so a missing attachment is
   // legible, not invisible. This is the render-side half of the attachment
   // truthfulness work; the upload path itself is the MCP client's (T-28 lane).
+  //
+  // The placeholder must be driven by a GENUINE miss, not a first-paint blip: an
+  // <img> onError also fires on a transient network error, so on error we probe
+  // the URL — a 404/4xx/5xx is truly unavailable, but a reachable blob (a flaky
+  // decode/fetch) is retried with a cache-bust up to twice before giving up.
   const [broken, setBroken] = useState(false);
+  const [bust, setBust] = useState(0);
+  const src = bust > 0 ? `${attachment.url}${attachment.url.includes('?') ? '&' : '?'}retry=${bust}` : attachment.url;
+  function onImgError() {
+    void fetch(attachment.url, { method: 'GET', cache: 'no-store' })
+      .then((r) => {
+        if (r.status === 404 || r.status >= 400) setBroken(true);   // genuinely gone
+        else if (bust < 2) setBust((b) => b + 1);                    // exists — transient; retry
+        else setBroken(true);
+      })
+      .catch(() => { if (bust < 2) setBust((b) => b + 1); else setBroken(true); });
+  }
   return (
     <figure
       className="w-full max-w-[320px] overflow-hidden rounded-xl border border-border bg-surface shadow-card"
@@ -146,9 +162,9 @@ function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment
           aria-label={`Open ${attachment.name} full size`}
         >
           <img
-            src={attachment.url}
+            src={src}
             alt={attachment.name}
-            onError={() => setBroken(true)}
+            onError={onImgError}
             className="h-full w-full object-cover object-top transition-transform duration-200 group-hover:scale-[1.015]"
           />
           <span className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/60 text-white shadow-sm" aria-hidden="true">
