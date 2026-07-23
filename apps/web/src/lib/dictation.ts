@@ -27,6 +27,8 @@ export interface DictationSnapshot {
   // built-in-engine DictationController.
   pendingUploads?: number;
   offline?: boolean;
+  // Segments the server permanently rejected (undecodable audio) and gave up on.
+  droppedSegments?: number;
 }
 
 export interface RecognizerLike {

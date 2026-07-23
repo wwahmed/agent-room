@@ -136,6 +136,44 @@ describe('VoiceCaptureController (durable)', () => {
     expect(h.streamStopped()).toBe(true);
   });
 
+  it('POISON: a permanently-rejected segment is dropped so the good ones behind it drain', async () => {
+    // Second segment throws a permanent error; first and third must still land.
+    let recN = 0;
+    const store = createMemoryStore();
+    const snaps: DictationSnapshot[] = [];
+    const finals: string[] = [];
+    let seg: (() => void) | null = null;
+    let clock = 2000;
+    const ctrl = new VoiceCaptureController({
+      getStream: async () => ({ getTracks: () => [{ stop() {} }] }),
+      createRecorder: () => new FakeRecorder(`seg${recN++}`),
+      transcribe: async (blob) => {
+        const label = await blob.text();
+        if (label === 'seg1') throw Object.assign(new Error('bad'), { permanent: true });
+        return { text: label };
+      },
+      store,
+      onChange: (s) => snaps.push(s),
+      onFinalize: (t) => finals.push(t),
+      segmentMs: 4000, retryMs: 2000,
+      now: () => clock,
+      setTimer: (fn, ms) => { if (ms !== 2000) seg = fn; return 1; },
+      clearTimer: () => {},
+    });
+    await ctrl.start();
+    // n increments per createRecorder; label = seg(n-at-create). Drive 3 segments.
+    const tick = () => { const fn = seg; seg = null; clock += 4000; fn?.(); };
+    tick(); await flush(); // seg0 -> ok
+    tick(); await flush(); // seg1 -> permanent drop
+    tick(); await flush(); // seg2 -> ok
+    const snap = ctrl.snapshot();
+    expect(snap.droppedSegments).toBe(1);          // the poison clip was abandoned
+    expect(snap.finalText).toContain('seg0');
+    expect(snap.finalText).toContain('seg2');       // the good clip BEHIND it still drained
+    expect(snap.offline).toBe(false);               // a poison clip is not an outage
+    expect((await store.pending()).length).toBe(0); // queue fully drained past it
+  });
+
   it('surfaces an error and stays idle when the mic is denied', async () => {
     const denied = makeHarness({ getStreamRejects: true });
     await denied.ctrl.start();

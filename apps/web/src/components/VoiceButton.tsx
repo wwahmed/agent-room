@@ -58,7 +58,11 @@ async function postTranscribe(blob: Blob): Promise<{ text: string }> {
     headers: { 'content-type': blob.type || 'application/octet-stream' },
     body: blob,
   });
-  if (!r.ok) throw new Error(`transcribe ${r.status}`);
+  if (!r.ok) {
+    // 4xx (e.g. 422 bad_segment) is permanent for THIS clip; the controller
+    // drops it and drains past. 5xx / network is transient and gets retried.
+    throw Object.assign(new Error(`transcribe ${r.status}`), { permanent: r.status >= 400 && r.status < 500 });
+  }
   const body = (await r.json()) as { text?: string };
   return { text: body?.text ?? '' };
 }
@@ -306,6 +310,17 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
                 title="Saved locally, will transcribe when reconnected"
               >
                 Saved locally · {snap.pendingUploads} clip{(snap.pendingUploads ?? 0) === 1 ? '' : 's'} will transcribe when reconnected
+              </span>
+            ) : (snap.droppedSegments ?? 0) > 0 ? (
+              // T-131: a poison segment was abandoned so the rest could drain.
+              // Say so rather than silently dropping words.
+              <span
+                role="status"
+                aria-live="polite"
+                className="min-w-0 flex-1 truncate text-center text-[12px] font-semibold text-amber-300"
+                title="Some audio could not be transcribed"
+              >
+                {snap.droppedSegments} clip{(snap.droppedSegments ?? 0) === 1 ? '' : 's'} could not be transcribed
               </span>
             ) : recording && !snap.hasHeardSpeech && snap.elapsedMs >= NO_SIGNAL_AFTER_MS ? (
               <span

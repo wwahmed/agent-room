@@ -82,4 +82,22 @@ describe('transcribeSegment', () => {
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/500/);
   });
+  it('marks a 5xx as transient (retry) and a 4xx as permanent (drop)', async () => {
+    const s5: any = async () => ({ ok: false, status: 503 });
+    const s4: any = async () => ({ ok: false, status: 400 });
+    expect((await transcribeSegment(Buffer.from('x'), { runner: okFfmpeg, fetchImpl: s5 })).permanent).toBe(false);
+    expect((await transcribeSegment(Buffer.from('x'), { runner: okFfmpeg, fetchImpl: s4 })).permanent).toBe(true);
+  });
+  it('an ffmpeg decode failure (non-zero exit) is a permanent bad segment', async () => {
+    const badFfmpeg: any = () => ({ status: 1, stdout: Buffer.from('') });
+    const r = await transcribeSegment(Buffer.from('x'), { runner: badFfmpeg });
+    expect(r.ok).toBe(false);
+    expect(r.permanent).toBe(true);
+  });
+  it('an ffmpeg SPAWN error (binary missing) is transient, not a bad segment', async () => {
+    const noFfmpeg: any = () => ({ error: Object.assign(new Error('nope'), { code: 'ENOENT' }) });
+    const r = await transcribeSegment(Buffer.from('x'), { runner: noFfmpeg });
+    expect(r.ok).toBe(false);
+    expect(r.permanent).toBe(false);
+  });
 });

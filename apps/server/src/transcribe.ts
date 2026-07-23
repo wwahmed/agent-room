@@ -79,6 +79,10 @@ export interface TranscribeResult {
   text: string;
   engine: 'whisper-local' | 'none';
   reason?: string;
+  // permanent: this specific segment can never succeed (undecodable audio, or
+  // whisper rejected it with a 4xx). The client must give up on THIS clip and
+  // drain past it. Absent/false = transient (engine down, network) -> retry.
+  permanent?: boolean;
 }
 
 // Transcode + transcribe one audio segment. Returns ok:false (never throws) so
@@ -92,11 +96,15 @@ export async function transcribeSegment(
   const fetchImpl = opts.fetchImpl ?? fetch;
   if (!audio || audio.length === 0) return { ok: true, text: '', engine: 'whisper-local' };
 
-  // 1) Decode the browser container to 16 kHz mono WAV.
+  // 1) Decode the browser container to 16 kHz mono WAV. A spawn error (ffmpeg
+  // missing) is transient/environmental; a non-zero exit means ffmpeg ran but
+  // could not decode THIS audio — a permanent problem with the segment itself.
   const wav = runner(FFMPEG_BIN, ffmpegArgs(), { input: audio, maxBuffer: 64 * 1024 * 1024 });
-  if (wav.error || wav.status !== 0 || !wav.stdout || wav.stdout.length === 0) {
-    const why = wav.error ? (wav.error as NodeJS.ErrnoException).code || wav.error.message : `exit ${wav.status}`;
-    return { ok: false, text: '', engine: 'none', reason: `ffmpeg failed (${why})` };
+  if (wav.error) {
+    return { ok: false, text: '', engine: 'none', reason: `ffmpeg spawn: ${(wav.error as NodeJS.ErrnoException).code || wav.error.message}`, permanent: false };
+  }
+  if (wav.status !== 0 || !wav.stdout || wav.stdout.length === 0) {
+    return { ok: false, text: '', engine: 'none', reason: `ffmpeg could not decode segment (exit ${wav.status})`, permanent: true };
   }
 
   // 2) Inference on the persistent whisper-server.
@@ -109,10 +117,13 @@ export async function transcribeSegment(
     const timer = setTimeout(() => ctrl.abort(), 30000);
     const r = await fetchImpl(`${WHISPER_SERVER_URL}/inference`, { method: 'POST', body: fd, signal: ctrl.signal });
     clearTimeout(timer);
-    if (!r.ok) return { ok: false, text: '', engine: 'none', reason: `whisper-server ${r.status}` };
+    if (!r.ok) {
+      // 4xx: whisper rejected this clip -> permanent. 5xx: server-side, transient.
+      return { ok: false, text: '', engine: 'none', reason: `whisper-server ${r.status}`, permanent: r.status >= 400 && r.status < 500 };
+    }
     const body = (await r.json()) as { text?: string };
     return { ok: true, text: pickSegmentText(body?.text ?? ''), engine: 'whisper-local' };
   } catch {
-    return { ok: false, text: '', engine: 'none', reason: 'whisper-server unreachable' };
+    return { ok: false, text: '', engine: 'none', reason: 'whisper-server unreachable', permanent: false };
   }
 }

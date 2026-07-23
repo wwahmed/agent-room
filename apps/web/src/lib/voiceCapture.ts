@@ -67,6 +67,7 @@ export class VoiceCaptureController {
 
   private enqueueSeq = 0;      // next segment index to assign
   private pendingCount = 0;    // segments buffered locally, not yet transcribed
+  private droppedCount = 0;    // segments the server permanently rejected (poison)
   private pumpRunning = false;
   private offline = false;     // last upload attempt failed -> buffering locally
 
@@ -104,6 +105,7 @@ export class VoiceCaptureController {
       // reconnected" without a separate channel.
       pendingUploads: this.pendingCount,
       offline: this.offline,
+      droppedSegments: this.droppedCount,
       lastTransientError: null,
     };
   }
@@ -116,6 +118,7 @@ export class VoiceCaptureController {
     this.finalText = '';
     this.enqueueSeq = 0;
     this.pendingCount = 0;
+    this.droppedCount = 0;
     this.stopping = false;
     this.settled = false;
     this.offline = false;
@@ -194,11 +197,23 @@ export class VoiceCaptureController {
           await this.o.store.delete(item.seq);
           this.pendingCount = Math.max(0, this.pendingCount - 1);
           this.emit();
-        } catch {
+        } catch (err) {
+          if ((err as { permanent?: boolean } | null)?.permanent) {
+            // Poison segment: the server can never transcribe THIS clip. Give up
+            // on it alone, drain past it, and surface it honestly — one bad
+            // 2.5s piece must never block or silently drop the whole session.
+            await this.o.store.delete(item.seq).catch(() => {});
+            this.pendingCount = Math.max(0, this.pendingCount - 1);
+            this.droppedCount++;
+            this.emit();
+            continue; // keep draining the good segments behind it
+          }
+          // Transient (engine down / network): keep this and later segments
+          // buffered and retry — the outage-recovery contract.
           this.offline = true;
           this.emit();
           this.scheduleRetry();
-          return; // leave this and later segments buffered; finally resets the guard
+          return;
         }
       }
     } finally {

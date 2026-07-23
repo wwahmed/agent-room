@@ -1781,8 +1781,12 @@ const server = createServer(async (req, res) => {
       if (!raw || raw.length === 0) return sendJson(res, 400, { error: 'empty', message: 'no audio in body' });
       const result = await transcribeSegment(raw);
       if (!result.ok) {
-        // 503 signals the client to fall back to the built-in engine.
-        return sendJson(res, 503, { error: 'engine_unavailable', engine: 'none', text: '', reason: result.reason });
+        // 422 = this segment can never succeed (undecodable) -> client drops it
+        // and drains past. 503 = transient (engine down) -> client keeps the
+        // segment buffered and retries.
+        const status = result.permanent ? 422 : 503;
+        const error = result.permanent ? 'bad_segment' : 'engine_unavailable';
+        return sendJson(res, status, { error, engine: 'none', text: '', reason: result.reason });
       }
       return sendJson(res, 200, { text: result.text, engine: result.engine });
     }
