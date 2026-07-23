@@ -132,8 +132,11 @@ function ImageAttachment({ attachment, onOpen }: { attachment: MessageAttachment
   function onImgError() {
     void fetch(attachment.url, { method: 'GET', cache: 'no-store' })
       .then((r) => {
-        if (r.status === 404 || r.status >= 400) setBroken(true);   // genuinely gone
-        else if (bust < 2) setBust((b) => b + 1);                    // exists — transient; retry
+        // A client error (404 gone, 403 forbidden, any 4xx) is a GENUINE miss.
+        // A 5xx or a reachable/2xx blob is a transient failure — retry, don't
+        // flash "unavailable" for something that is actually there.
+        if (r.status >= 400 && r.status < 500) setBroken(true);
+        else if (bust < 2) setBust((b) => b + 1);
         else setBroken(true);
       })
       .catch(() => { if (bust < 2) setBust((b) => b + 1); else setBroken(true); });
