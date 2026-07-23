@@ -526,6 +526,10 @@ export function Room() {
   // dismissed on Esc or after a completion until the text changes again.
   const [paletteDismissed, setPaletteDismissed] = useState(false);
   const [paletteIndex, setPaletteIndex] = useState(0);
+  // T-141 rev2: a bare Enter (no arrow navigation) always SENDS/RUNS the command;
+  // the palette only completes on explicit arrow-navigation or a single-partial
+  // match. Tracks whether the user has moved the highlight this open.
+  const [paletteNavigated, setPaletteNavigated] = useState(false);
   const completedCmdRef = useRef<string | null>(null);
   // T-04: previous LAST message id — distinguishes appended messages from a
   // prepended history page — and the scroll geometry captured just before a
@@ -1569,6 +1573,7 @@ export function Room() {
     setText(command.insert);
     completedCmdRef.current = command.insert;
     setPaletteDismissed(true);
+    setPaletteNavigated(false);
     const el = textareaRef.current;
     requestAnimationFrame(() => {
       if (!el) return;
@@ -2855,6 +2860,7 @@ export function Room() {
                       completedCmdRef.current = null;
                       setPaletteDismissed(false);
                       setPaletteIndex(0);
+                      setPaletteNavigated(false);
                     }
                     // T-138: onChange fires only for real user input (programmatic
                     // setText from the live transcript does NOT), so a keystroke
@@ -2883,18 +2889,30 @@ export function Room() {
                       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionCandidates[mention.index % mentionCandidates.length]!); return; }
                       if (e.key === 'Escape') { e.preventDefault(); setMention(null); return; }
                     }
-                    // T-141: while the command palette is open it owns the same
-                    // keys — Enter/Tab COMPLETE (never send), arrows move, Esc
-                    // dismisses. A plain Enter with the palette closed still sends.
+                    // T-141 rev2: while the command palette is open, arrows move
+                    // the highlight, Tab always completes, Esc dismisses. Enter is
+                    // deliberate: it only COMPLETES when the user has arrow-picked a
+                    // choice OR narrowed to a single partial match (e.g. "/brief-w").
+                    // Otherwise Enter falls through and SENDS/RUNS the typed command
+                    // — so "type /brief, press Enter" just works. (The earlier build
+                    // ate every Enter into a completion and never ran the command.)
                     if (paletteCommands.length > 0) {
                       const len = paletteCommands.length;
-                      if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteIndex(i => (i + 1) % len); return; }
-                      if (e.key === 'ArrowUp') { e.preventDefault(); setPaletteIndex(i => (i - 1 + len) % len); return; }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteNavigated(true); setPaletteIndex(i => (i + 1) % len); return; }
+                      if (e.key === 'ArrowUp') { e.preventDefault(); setPaletteNavigated(true); setPaletteIndex(i => (i - 1 + len) % len); return; }
                       if (e.key === 'Escape') { e.preventDefault(); setPaletteDismissed(true); return; }
-                      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey)) {
-                        e.preventDefault();
-                        completeCommand(paletteCommands[paletteActive]!);
-                        return;
+                      if (e.key === 'Tab') { e.preventDefault(); completeCommand(paletteCommands[paletteActive]!); return; }
+                      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                        const target = paletteCommands[paletteActive]!;
+                        const typed = text.trim();
+                        const targetInsert = target.insert.trim();
+                        const singlePartial = len === 1 && targetInsert !== typed && targetInsert.toLowerCase().startsWith(typed.toLowerCase());
+                        if (paletteNavigated || singlePartial) {
+                          e.preventDefault();
+                          completeCommand(target);
+                          return;
+                        }
+                        // else: fall through — the typed command sends and runs.
                       }
                     }
                     const enterAction = composerEnterAction({

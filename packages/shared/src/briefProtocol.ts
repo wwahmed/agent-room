@@ -84,17 +84,26 @@ export function humanizeTitle(title: string): string {
   // Provenance parentheticals are noise to the owner and carry task ids:
   // "(supersedes T-76 target)", "(see T-42)", "(T-111 sibling)". Drop any
   // parenthetical that contains a task id wholesale, plus common provenance words.
-  s = s.replace(/\s*\([^)]*\bT-\d+[a-z]?\b[^)]*\)/gi, '');
   s = s.replace(/\s*\((?:supersedes?|supersed|see|ref|cf|per)\b[^)]*\)/gi, '');
-  // Strip any residual STANDALONE task-id token so no "T-NNN" jargon ever reaches
-  // the owner, then tidy the seams (empty parens, doubled spaces, space-before-punct).
-  s = s.replace(/\bT-\d+[a-z]?\b/g, '')
+  s = stripTaskIds(s);
+  return s || title.trim();
+}
+
+/** Remove every task-id token so no "T-NNN" jargon reaches the owner — from
+ *  titles AND from message-sourced decision text (raw chat can name tasks). Drops
+ *  any parenthetical containing an id wholesale, then standalone id tokens, then
+ *  tidies the seams (empty parens, doubled spaces, dangling connectors). */
+export function stripTaskIds(s: string): string {
+  return s
+    .replace(/\s*\([^)]*\bT-\d+[a-z]?\b[^)]*\)/gi, '')
+    .replace(/\bT-\d+[a-z]?\b/g, '')
     .replace(/\(\s*\)/g, '')
+    // A connector left dangling by a removed id ("separately from ?" / "as ,").
+    .replace(/\b(from|as|for|with|to|and)\s+([?.!,;:])/gi, '$2')
     .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([),.;:])/g, '$1')
+    .replace(/\s+([),.;:?!])/g, '$1')
     .replace(/\(\s+/g, '(')
     .trim();
-  return s || title.trim();
 }
 
 /** Lowercase the first letter so a humanized title reads inside a sentence,
@@ -243,8 +252,11 @@ export function composeBrief(input: BriefProtocolInput): ComposedBrief {
   for (const m of scopedFresh) {
     if (m.name === self) continue;
     if (msgDecisions >= (deep ? 4 : 2)) break;
-    const ask = extractOwnerQuestion(m.text ?? '', self);
-    if (!ask) continue;
+    const rawAsk = extractOwnerQuestion(m.text ?? '', self);
+    // Raw chat can name tasks by id ("file it as T-141?"); scrub them so the
+    // brief never prints "T-NNN" jargon, same rule the titles get.
+    const ask = rawAsk ? stripTaskIds(rawAsk) : null;
+    if (!ask || ask.length < 6) continue;
     const key = ask.toLowerCase().slice(0, 40);
     if (seenAsks.has(key)) continue;
     seenAsks.add(key);

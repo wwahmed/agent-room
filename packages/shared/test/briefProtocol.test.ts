@@ -112,6 +112,18 @@ describe('composeBrief — honesty by construction', () => {
     expect(b.speech).not.toMatch(/There are one more/);
   });
 
+  it('scrubs task ids from MESSAGE-sourced decisions (T-139 verifier reject)', () => {
+    const b = composeBrief({
+      ...base,
+      firstUnreadIndex: 0,
+      messages: [{ name: 'UX', text: '@Waqas want me to file it as T-141 ("/" command palette), tracked separately from T-139?' }],
+    });
+    const askText = b.sections.decisions.map((d) => d.ask).join(' ');
+    expect(askText).not.toMatch(/\bT-\d+\b/);          // no id leak
+    expect(b.display).not.toMatch(/\bT-\d+\b/);
+    expect(askText).toMatch(/command palette/i);        // the real ask survives
+  });
+
   it('only attaches a recommendation when the source states one', () => {
     const withRec = composeBrief({
       ...base,
