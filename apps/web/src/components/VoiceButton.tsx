@@ -26,6 +26,11 @@ function liveText(s: DictationSnapshot): string {
 
 // Browser SpeechRecognition is non-standard; `any` avoids pulling a lib in for
 // one component. null when unsupported (Firefox, older Safari) → render nothing.
+// T-130: the OS "listening" beep on recognizer start is a mobile behavior
+// (Android/iOS). Desktop browsers do not beep, so only mobile needs the
+// no-mid-recording-restart treatment.
+const MOBILE_BEEPS = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+
 const SpeechRecognitionImpl: any =
   typeof window !== 'undefined'
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -111,6 +116,13 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
       ctrlRef.current = new DictationController({
         createRecognizer: () => new SpeechRecognitionImpl() as RecognizerLike,
         lang: navigator.language || undefined,
+        // T-130 (host ruling): on mobile, the OS plays a "listening" beep on
+        // every recognizer start, so restarting mid-recording beeps through the
+        // user's speech. Disable the pause-restart there — the single
+        // continuous session beeps once at start and finalizes on a real
+        // silence (no mid beeps). Desktop has no such beep and keeps restarting
+        // so a pause never loses the draft (T-107).
+        restartOnPause: !MOBILE_BEEPS,
         // T-59: stream every update into the composer as it's spoken (not just at
         // the end), so a dropped final event can never swallow what was said.
         onChange: (s) => { setSnap(s); if (s.state !== 'idle') onLiveRef.current?.(liveText(s)); },

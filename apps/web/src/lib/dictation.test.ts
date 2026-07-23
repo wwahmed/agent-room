@@ -22,7 +22,7 @@ class FakeRec implements RecognizerLike {
   }
 }
 
-function harness(opts: { maxMs?: number; failStartAll?: boolean; minRestartIntervalMs?: number } = {}) {
+function harness(opts: { maxMs?: number; failStartAll?: boolean; minRestartIntervalMs?: number; restartOnPause?: boolean } = {}) {
   const recs: FakeRec[] = [];
   const timers: Array<{ fn: () => void; ms: number }> = [];
   let clock = 0;
@@ -40,6 +40,7 @@ function harness(opts: { maxMs?: number; failStartAll?: boolean; minRestartInter
     // interval small here so restart timers stay in the flushRestarts band.
     // The dedicated beep-coalescing test below uses a realistic interval.
     minRestartIntervalMs: opts.minRestartIntervalMs ?? 10,
+    restartOnPause: opts.restartOnPause,
     maxMs: opts.maxMs,
   });
   return {
@@ -397,5 +398,46 @@ describe('T-76: dictation restart beeps do not fire on every pause', () => {
     h.runUntil(200);
     h.c.start();                         // a distinct new recording
     expect(h.beeps()).toBe(2);          // the new start is not suppressed
+  });
+});
+
+// T-130 (host ruling): on mobile the OS beeps on every recognizer start, so
+// restarting mid-recording beeps through the user's speech. With
+// restartOnPause=false the mic session starts EXACTLY ONCE (one beep at start,
+// none mid-recording); a premature end finalizes the draft instead of
+// restarting, and nothing spoken is lost.
+describe('T-130: no mid-recording restart (mobile) means no mid-recording beeps', () => {
+  it('a premature end FINALIZES instead of restarting — start() fired exactly once', () => {
+    const h = harness({ restartOnPause: false });
+    h.c.start();
+    expect(h.recCount()).toBe(1);               // one mic session start = one beep
+    h.cur().emit([{ final: true, text: 'first part ' }, { final: false, text: 'second part' }]);
+    h.cur().onend?.();                           // a pause / silence ends the session
+    // No restart: the session count stays 1 (no second beep) and it finalized.
+    expect(h.recCount()).toBe(1);
+    expect(h.snap().state).toBe('idle');
+    // Nothing spoken is lost — the interim tail is merged into the final draft.
+    expect(h.finals).toEqual(['first part second part']);
+  });
+
+  it('even repeated premature ends never trigger a second start()', () => {
+    const h = harness({ restartOnPause: false });
+    h.c.start();
+    h.cur().emit([{ final: true, text: 'words' }]);
+    h.cur().onend?.();
+    // the finalized session is idle; further stray events do nothing
+    h.cur().onend?.();
+    h.flushRestarts();
+    expect(h.recCount()).toBe(1);               // still one — no beep after the first
+  });
+
+  it('desktop default (restartOnPause=true) still restarts across a pause (T-107 intact)', () => {
+    const h = harness();                        // default true
+    h.c.start();
+    h.cur().emit([{ final: true, text: 'keep going' }]);
+    h.cur().onend?.();
+    h.flushRestarts();
+    expect(h.recCount()).toBe(2);               // restarted — desktop keeps the draft alive
+    expect(h.snap().state).toBe('recording');
   });
 });

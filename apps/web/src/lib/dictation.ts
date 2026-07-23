@@ -54,6 +54,14 @@ export interface DictationOptions {
   // start/stop. The OS beep itself is not JS-suppressible; this removes the
   // excess restarts that caused the repeated beeping.
   minRestartIntervalMs?: number;
+  // T-130 (host ruling): whether to auto-restart the recognizer when it ends
+  // prematurely (a pause/silence) while still recording. True (default) keeps
+  // continuous dictation across pauses — correct on desktop, which has no OS
+  // beep. FALSE means a premature end FINALIZES the draft instead of
+  // restarting, so the mic session starts exactly once (one OS beep at start,
+  // none mid-recording); used on the mobile platforms whose OS beeps on every
+  // recognizer start. The committed draft is preserved either way.
+  restartOnPause?: boolean;
   maxConsecutiveStartFailures?: number;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -133,6 +141,7 @@ export class DictationController {
       maxMs: opts.maxMs ?? DEFAULT_MAX_MS,
       restartBackoffMs: opts.restartBackoffMs ?? 250,
       minRestartIntervalMs: opts.minRestartIntervalMs ?? 1500,
+      restartOnPause: opts.restartOnPause ?? true,
       maxConsecutiveStartFailures: opts.maxConsecutiveStartFailures ?? 3,
       now: opts.now ?? (() => Date.now()),
       setTimer: opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms) as unknown),
@@ -211,7 +220,8 @@ export class DictationController {
       // longer replays are safe to commit because mergeTranscript collapses
       // a cumulative or overlapping rehypothesis into the committed text
       // instead of appending it again.
-      const autoRestart = !this.stopping && this.state === 'recording';
+      const premature = !this.stopping && this.state === 'recording';
+      const autoRestart = premature && this.o.restartOnPause;
       if (autoRestart) { this.commitInterim(); this.restarts++; }
       this.emit();
       if (this.stopping) { this.finish(); return; }
@@ -219,6 +229,13 @@ export class DictationController {
         // premature end (pause/silence/hiccup) — keep going, don't finalize
         this.rec = null; // ignore any further late events from this recognizer
         this.scheduleRestart();
+      } else if (premature) {
+        // T-130: no-restart mode (mobile). A premature end FINALIZES the draft
+        // instead of beeping through a restart. finish() merges the interim
+        // tail, so nothing spoken is lost — the mic session started exactly
+        // once (one OS beep at start, none mid-recording).
+        this.rec = null;
+        this.finish();
       }
     };
 
