@@ -1519,9 +1519,10 @@ export function Room() {
       setReplyingTo(null);
       const result = await runBrief(code, me.name, briefCmd);
       if (result.posted) {
-        // T-141: the brief posts as a message; pull it in NOW so the card lands
-        // immediately instead of on the next background poll.
-        void refreshRoom();
+        // T-141: the brief posts as a message; force a message re-fetch NOW so
+        // the card lands immediately instead of on the next background poll
+        // (refreshRoom only pulls room metadata, not messages).
+        void forceRefresh();
       } else {
         const { showToast } = await import('../components/Toast.js');
         showToast(result.error ?? 'Could not build your brief.', 'error');
