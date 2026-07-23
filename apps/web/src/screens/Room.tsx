@@ -152,6 +152,11 @@ const TEXTAREA_MIN_HEIGHT = 44;
 const TEXTAREA_MAX_HEIGHT = 180;
 const TEXTAREA_EXPANDED_MIN = 240;
 const TEXTAREA_EXPANDED_MAX = 360;
+// T-128: the instant voice recording starts, the draft field opens already
+// multi-line (~3 lines) so it reads as a live-transcription surface, visibly
+// different from the single-line box you type into. It still grows with the
+// words under the T-119/T-120 full-width and T-85 phone-cap rules.
+const TEXTAREA_DICTATING_MIN = 96;
 // Enter is a newline on every device (host direction); Cmd/Ctrl+Enter
 // sends on hardware keyboards. IS_TOUCH only tunes the placeholder.
 const IS_TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
@@ -606,7 +611,10 @@ export function Room() {
   // Runs after every value change (typed, pasted, Draft injected, voice transcript).
   function autoGrow(el: HTMLTextAreaElement | null) {
     if (!el) return;
-    const min = composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT;
+    // T-128: while recording, the field opens at (and never drops below) the
+    // multi-line dictating height so it is obviously a transcription surface
+    // from the first moment, before any words arrive.
+    const min = dictating ? TEXTAREA_DICTATING_MIN : composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT;
     let max = composerExpanded ? TEXTAREA_EXPANDED_MAX : TEXTAREA_MAX_HEIGHT;
     // T-85: on phones the transcript/draft region is CAPPED and scrolls
     // internally — a long dictation must never push Stop/Send off-screen.
@@ -625,7 +633,8 @@ export function Room() {
   useEffect(() => {
     autoGrow(textareaRef.current);
     // composerExpanded changes the min/max window, so re-measure on toggle.
-  }, [text, composerExpanded]);
+    // T-128: dictating raises the min, so re-measure when it flips too.
+  }, [text, composerExpanded, dictating]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 10_000);
@@ -2563,7 +2572,10 @@ export function Room() {
                     the input keeps its full width; the tools live on their own
                     compact row below it inside the same bordered surface, so the
                     typing area is never squeezed by active buttons on mobile. */}
-                <div data-gate="composer" className="relative rounded-2xl border border-border bg-surface-softer px-1 py-1 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint">
+                {/* T-128: while recording, the whole field carries an always-on
+                    accent (not just the on-focus ring a typed box gets), so it
+                    reads as an active live-transcription surface. */}
+                <div data-gate="composer" data-recording={dictating ? 'true' : undefined} className={`relative rounded-2xl border bg-surface-softer px-1 py-1 transition ${dictating ? 'border-accent ring-4 ring-accent-tint' : 'border-border focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-tint'}`}>
                 {/* T-09: Slack/Teams-style in-place participant picker. Opens
                     while the caret sits in an @token; mouse uses onMouseDown so
                     the textarea never blurs before the pick lands. */}
@@ -2590,6 +2602,19 @@ export function Room() {
                         </button>
                       );
                     })}
+                  </div>
+                )}
+                {/* T-128: a labeled, gently pulsing indicator while recording so
+                    it is unmistakably a live-transcription surface, distinct from
+                    a box you are typing into. Sits above the field; the field is
+                    already multi-line tall from the moment recording starts. */}
+                {dictating && (
+                  <div data-gate="transcribing" className="mx-1 mb-1 flex items-center gap-2 rounded-lg bg-accent/10 px-2.5 py-1 text-[12px] font-semibold text-accent">
+                    <span className="relative flex h-2 w-2" aria-hidden="true">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+                    </span>
+                    <span>Transcribing your voice…</span>
                   </div>
                 )}
                 {dictationDraft && text.trim() && (
@@ -2656,7 +2681,7 @@ export function Room() {
                   placeholder="Message…"
                   rows={1}
                   style={{
-                    height: composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
+                    height: dictating ? TEXTAREA_DICTATING_MIN : composerExpanded ? TEXTAREA_EXPANDED_MIN : TEXTAREA_MIN_HEIGHT,
                     // T-85 phone cap mirrors autoGrow: long transcripts scroll
                     // inside the field instead of displacing the controls.
                     maxHeight: isPhone
