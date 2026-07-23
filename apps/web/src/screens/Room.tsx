@@ -1518,7 +1518,11 @@ export function Room() {
       setDictationPaused(false);
       setReplyingTo(null);
       const result = await runBrief(code, me.name, briefCmd);
-      if (!result.posted) {
+      if (result.posted) {
+        // T-141: the brief posts as a message; pull it in NOW so the card lands
+        // immediately instead of on the next background poll.
+        void refreshRoom();
+      } else {
         const { showToast } = await import('../components/Toast.js');
         showToast(result.error ?? 'Could not build your brief.', 'error');
         setText(body); // restore so they can retry
@@ -2906,13 +2910,19 @@ export function Room() {
                         const target = paletteCommands[paletteActive]!;
                         const typed = text.trim();
                         const targetInsert = target.insert.trim();
-                        const singlePartial = len === 1 && targetInsert !== typed && targetInsert.toLowerCase().startsWith(typed.toLowerCase());
-                        if (paletteNavigated || singlePartial) {
+                        const differs = targetInsert !== typed;
+                        const isExtension = differs && targetInsert.toLowerCase().startsWith(typed.toLowerCase());
+                        // Only SEND when the typed text is itself a runnable command
+                        // (so a bare "/" or partial never sends garbage). Otherwise
+                        // complete: on explicit navigation, when not-yet-runnable, or
+                        // when narrowed to a single partial like "/brief-w".
+                        const runnable = parseBriefCommand(typed) != null;
+                        if (differs && (paletteNavigated || !runnable || (len === 1 && isExtension))) {
                           e.preventDefault();
                           completeCommand(target);
                           return;
                         }
-                        // else: fall through — the typed command sends and runs.
+                        // else: a complete runnable command — fall through and send/run.
                       }
                     }
                     const enterAction = composerEnterAction({
