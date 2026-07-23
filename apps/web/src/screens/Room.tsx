@@ -1504,7 +1504,9 @@ export function Room() {
   }
 
   async function send() {
-    const body = text.trim();
+    // T-142: read the LIVE composer value so a fast type+Enter parses exactly
+    // what is in the box, never a React state that has not committed yet.
+    const body = (textareaRef.current?.value ?? text).trim();
     if ((!body && attachments.length === 0) || ended || sendingRef.current) return;
 
     // T-139: the /brief command family. A brief COMPOSES a room artifact from
@@ -2901,15 +2903,22 @@ export function Room() {
                     // Otherwise Enter falls through and SENDS/RUNS the typed command
                     // — so "type /brief, press Enter" just works. (The earlier build
                     // ate every Enter into a completion and never ran the command.)
-                    if (paletteCommands.length > 0) {
-                      const len = paletteCommands.length;
+                    // T-142: derive the palette decision from the LIVE composer
+                    // value (the DOM), not the last-rendered React state — a fast
+                    // Enter within ~300ms of a keystroke would otherwise read stale
+                    // `text`/`paletteCommands` and clear the command without running.
+                    const liveValue = textareaRef.current?.value ?? text;
+                    const liveCmds = paletteDismissed || dictating || dictationDraft ? [] : filterSlashCommands(liveValue);
+                    if (liveCmds.length > 0) {
+                      const len = liveCmds.length;
+                      const active = Math.min(paletteActive, len - 1);
                       if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteNavigated(true); setPaletteIndex(i => (i + 1) % len); return; }
                       if (e.key === 'ArrowUp') { e.preventDefault(); setPaletteNavigated(true); setPaletteIndex(i => (i - 1 + len) % len); return; }
                       if (e.key === 'Escape') { e.preventDefault(); setPaletteDismissed(true); return; }
-                      if (e.key === 'Tab') { e.preventDefault(); completeCommand(paletteCommands[paletteActive]!); return; }
+                      if (e.key === 'Tab') { e.preventDefault(); completeCommand(liveCmds[active]!); return; }
                       if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-                        const target = paletteCommands[paletteActive]!;
-                        const typed = text.trim();
+                        const target = liveCmds[active]!;
+                        const typed = liveValue.trim();
                         const targetInsert = target.insert.trim();
                         const differs = targetInsert !== typed;
                         const isExtension = differs && targetInsert.toLowerCase().startsWith(typed.toLowerCase());
