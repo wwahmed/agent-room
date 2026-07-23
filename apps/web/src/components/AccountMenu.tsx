@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { storedThemeSetting } from '../lib/theme.js';
 import { currentReadingScale } from '../lib/readingScale.js';
+import { openWhatsNew } from '../lib/whatsNew.js';
+import { hasUnseenReleaseNotes } from '../lib/releaseNotes.js';
 import {
   AppearanceChoices,
   ReadingScaleChoices,
@@ -134,6 +136,15 @@ export function AccountMenu({ name, email, onOpenSettings }: Props) {
                 <span className="flex-1">Reading scale</span>
                 <span className="text-[13px] text-ink-faint">{readingScaleLabel(currentReadingScale())}</span>
                 <Chevron />
+              </button>
+              {/* T-137: what changed in recent releases. A dot marks a release
+                  the user has not opened yet. */}
+              <button type="button" data-gate="menu-whats-new" onClick={() => { setOpen(false); openWhatsNew(); }} className={ROW}>
+                <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
+                  <path d="M8 1.8 9.9 5.9 14.2 6.4 11 9.3 11.9 13.6 8 11.4 4.1 13.6 5 9.3 1.8 6.4 6.1 5.9z" />
+                </svg>
+                <span className="flex-1">What's new</span>
+                {hasUnseenReleaseNotes() && <span aria-label="New updates" className="h-2 w-2 flex-shrink-0 rounded-full bg-accent" />}
               </button>
               {/* Destructive separation: Log out alone below its own rule,
                   with a real exit-door icon (a refresh glyph reads as reload). */}

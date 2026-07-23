@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { openWhatsNew } from '../lib/whatsNew.js';
 
 // Self-host update banner (waki-shell convention). The server exposes the
 // deployed bundle hash at /api/version; the client knows its OWN hash from
@@ -69,22 +70,33 @@ export function UpdateBanner() {
   }, []);
 
   if (!updateReady) return null;
+  const reload = () => {
+    // Revalidate the cached document first so the reload cannot hand back the
+    // same stale index.html, then reload. Best-effort: if the fetch fails
+    // (offline blip) the plain reload still runs.
+    void fetch('/', { cache: 'reload' }).catch(() => undefined).then(() => window.location.reload());
+  };
   return (
-    <button
-      onClick={() => {
-        // Revalidate the cached document first so the reload cannot hand
-        // back the same stale index.html, then reload. Best-effort: if the
-        // fetch fails (offline blip) the plain reload still runs.
-        void fetch('/', { cache: 'reload' }).catch(() => undefined).then(() => window.location.reload());
-      }}
+    <div
       role="status"
       // T-42 (Waqas): pinned to the TOP so it never overlaps the composer /
       // bottom controls; top safe-area inset keeps it clear of the notch.
       // T-46: one 250ms ease-out drop-in, reduced-motion guarded.
-      className="banner-enter fixed inset-x-0 top-0 z-[100] flex min-h-11 items-center justify-center gap-2 bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg"
+      className="banner-enter fixed inset-x-0 top-0 z-[100] flex min-h-11 items-center justify-center gap-3 bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg"
       style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
     >
-      A new version is ready — tap to reload
-    </button>
+      <button type="button" onClick={reload} className="underline-offset-2 hover:underline">
+        A new version is ready — tap to reload
+      </button>
+      {/* T-137: see what changed WITHOUT reloading first. */}
+      <button
+        type="button"
+        data-gate="banner-whats-new"
+        onClick={openWhatsNew}
+        className="flex-shrink-0 rounded-full bg-white/20 px-2.5 py-0.5 text-[13px] font-semibold transition hover:bg-white/30"
+      >
+        What's new
+      </button>
+    </div>
   );
 }

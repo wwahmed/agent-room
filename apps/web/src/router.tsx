@@ -10,9 +10,10 @@ import { Join } from './screens/Join.js';
 import { ToastHost } from './components/Toast.js';
 import { Analytics } from './components/Analytics.js';
 import { UpdateBanner } from './components/UpdateBanner.js';
+import { WhatsNew } from './components/WhatsNew.js';
 
 function Layout({ children }: { children: ReactNode }) {
-  return <><ToastHost /><Analytics /><UpdateBanner />{children}</>;
+  return <><ToastHost /><Analytics /><UpdateBanner /><WhatsNew />{children}</>;
 }
 
 // Wrappers force a full remount whenever :code changes. Without this
