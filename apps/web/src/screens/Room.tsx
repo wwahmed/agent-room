@@ -1954,9 +1954,16 @@ export function Room() {
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
                             {presence.state !== 'listening' && h && (
-                              <span className="text-ink-faint" title={new Date(Date.now() - h.lastSeenAgoMs).toLocaleString()}>
-                                · last heard {relativeTime(Date.now() - h.lastSeenAgoMs)}
-                              </span>
+                              // T-143: lastSeenAgoMs < 0 means "no timestamp" —
+                              // render "unknown", never a wall-clock (which would
+                              // print the epoch, "1969", for a null row).
+                              h.lastSeenAgoMs < 0 ? (
+                                <span className="text-ink-faint">· last heard: unknown</span>
+                              ) : (
+                                <span className="text-ink-faint" title={new Date(Date.now() - h.lastSeenAgoMs).toLocaleString()}>
+                                  · last heard {relativeTime(Date.now() - h.lastSeenAgoMs)}
+                                </span>
+                              )
                             )}
                           </div>
                         )}

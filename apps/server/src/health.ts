@@ -35,9 +35,25 @@ export interface ParticipantHealth {
 // listener at all. That gap is exactly the "transport works while presence
 // lies" failure, so the two signals stay separate rather than collapsing into
 // a single boolean.
+// T-143: the best evidence of "last heard" is an explicit lastSeenAt; a
+// just-joined row with no heartbeat yet still has a joinedAt and is present, not
+// ancient. Returns 0 ONLY when we genuinely have nothing — callers must never
+// treat that 0 as an epoch-0 wall-clock (that produced "last heard 1969").
+export function effectiveLastSeen(p: Participant): number {
+  const seen = Number(p.lastSeenAt || 0);
+  if (seen > 0) return seen;
+  const joined = Number(p.joinedAt || 0);
+  return joined > 0 ? joined : 0;
+}
+
 export function presenceState(p: Participant, now: number): PresenceState {
   if (Number(p.listenUntil || 0) > now) return 'listening';
-  const age = Math.max(0, now - Number(p.lastSeenAt || 0));
+  const seen = effectiveLastSeen(p);
+  // No timestamp at all: the loop is not armed and we have no proof of life, so
+  // it is disconnected — but the AGE is unknown (see participantHealth), never
+  // a 56-year span computed from epoch 0.
+  if (seen <= 0) return 'disconnected';
+  const age = Math.max(0, now - seen);
   if (age <= PRESENCE_STALE_MS) return 'online';
   if (age <= PRESENCE_DISCONNECTED_MS) return 'stale';
   return 'disconnected';
@@ -47,12 +63,15 @@ export function presenceState(p: Participant, now: number): PresenceState {
 // agentIdHash ever appears here — this payload is handed to every member, and
 // the whole T-66 redaction pass exists because we were shipping those.
 export function participantHealth(p: Participant, now: number): ParticipantHealth {
+  const seen = effectiveLastSeen(p);
   return {
     name: p.name,
     client: p.client,
     role: p.role,
     state: presenceState(p, now),
-    lastSeenAgoMs: Math.max(0, now - Number(p.lastSeenAt || 0)),
+    // -1 signals "unknown" — no timestamp exists, so the UI must render "unknown"
+    // rather than a wall-clock (now - 0 -> the epoch -> "1969"). Real ages are >= 0.
+    lastSeenAgoMs: seen > 0 ? Math.max(0, now - seen) : -1,
     listenRemainingMs: Math.max(0, Number(p.listenUntil || 0) - now),
   };
 }

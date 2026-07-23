@@ -975,6 +975,11 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       );
       validateMessageAttachments(message);
       validateMessageBody(message);
+      // T-143: any authenticated send is proof of life — heal the sender's
+      // presence so an actively-posting agent is never shown offline. A server
+      // restart can leave a rejoined row with a null lastSeenAt; the first
+      // message re-establishes it. Fire-and-forget: never fail a send on this.
+      void updatePresence(client, code, String(message.name), Date.now()).catch(() => {});
       // T-113: server-authoritative envelope — id/time stamped when missing,
       // type normalized to 'msg' (only server code authors 'sys' rows).
       const stamped = stampMessageEnvelope(message);

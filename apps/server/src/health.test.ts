@@ -59,4 +59,31 @@ describe('T-66 presence health — stop presence from lying', () => {
     ).map((h) => `${h.name}:${h.state}`);
     expect(states).toEqual(['live:listening', 'dead:disconnected']);
   });
+
+  // T-143: a server restart can leave a rejoined row with a null lastSeenAt.
+  // Presence must not lie about it as "last heard 1969".
+  describe('T-143 null-timestamp rows must not render as epoch-0', () => {
+    it('falls back to joinedAt: a just-joined row with null lastSeenAt reads online', () => {
+      expect(presenceState(p({ lastSeenAt: undefined, joinedAt: NOW - 5_000 }), NOW)).toBe('online');
+      const h = participantHealth(p({ lastSeenAt: undefined, joinedAt: NOW - 5_000 }), NOW);
+      expect(h.lastSeenAgoMs).toBe(5_000); // real age from joinedAt, not ~56 years
+    });
+
+    it('a row with NO timestamps yields the unknown sentinel (-1), not a 56-year age', () => {
+      const h = participantHealth(p({ lastSeenAt: undefined, joinedAt: 0 }), NOW);
+      expect(h.lastSeenAgoMs).toBe(-1);            // UI renders "unknown", never 1969
+      expect(h.lastSeenAgoMs).not.toBeGreaterThan(NOW - 1); // the old bug produced ~NOW
+      expect(h.state).toBe('disconnected');        // no proof of life
+    });
+
+    it('an armed listen window still reads listening even with null lastSeenAt', () => {
+      expect(presenceState(p({ lastSeenAt: undefined, joinedAt: 0, listenUntil: NOW + 60_000 }), NOW)).toBe('listening');
+    });
+
+    it('a real recent lastSeenAt still wins and reads online with a real age', () => {
+      const h = participantHealth(p({ lastSeenAt: NOW - 10_000, joinedAt: NOW - 999_999 }), NOW);
+      expect(h.state).toBe('online');
+      expect(h.lastSeenAgoMs).toBe(10_000);
+    });
+  });
 });
