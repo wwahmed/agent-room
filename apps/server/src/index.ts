@@ -1766,7 +1766,7 @@ const server = createServer(async (req, res) => {
     // checks status first so it can fall back to the built-in engine when the
     // local one is not installed, rather than recording into a dead endpoint.
     if (path === '/api/transcribe/status' && req.method === 'GET') {
-      const s = engineStatus();
+      const s = await engineStatus();
       return sendJson(res, 200, { ok: s.ok, engine: s.ok ? 'whisper-local' : 'none', reason: s.reason });
     }
     if (path === '/api/transcribe' && req.method === 'POST') {

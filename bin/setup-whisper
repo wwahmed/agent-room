@@ -1,0 +1,42 @@
+#!/bin/sh
+# T-131: provision the local speech-to-text engine for silent, continuous
+# dictation. Idempotent. Installs whisper.cpp, fetches the base English model,
+# and runs whisper-server as a persistent (KeepAlive) launchd agent on :8110.
+# The chat server's /api/transcribe forwards audio segments here.
+set -eu
+MODEL_DIR="$HOME/.cache/whisper"
+MODEL="$MODEL_DIR/ggml-base.en.bin"
+PLIST="$HOME/Library/LaunchAgents/com.wakilabs.whisper.plist"
+
+command -v whisper-server >/dev/null 2>&1 || brew install whisper-cpp
+
+mkdir -p "$MODEL_DIR"
+if [ ! -f "$MODEL" ]; then
+  echo "Downloading ggml-base.en.bin (~148MB) from the official whisper.cpp repo..."
+  curl -fL --retry 3 -o "$MODEL" \
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
+fi
+
+if [ ! -f "$PLIST" ]; then
+  cat > "$PLIST" <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.wakilabs.whisper</string>
+  <key>ProgramArguments</key><array>
+    <string>/opt/homebrew/bin/whisper-server</string>
+    <string>-m</string><string>$MODEL</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8110</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$HOME/workspaces/agent-room/whisper.log</string>
+  <key>StandardErrorPath</key><string>$HOME/workspaces/agent-room/whisper-error.log</string>
+</dict></plist>
+PL
+fi
+
+launchctl bootout "gui/$(id -u)/com.wakilabs.whisper" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$PLIST"
+echo "whisper-server provisioned on 127.0.0.1:8110"

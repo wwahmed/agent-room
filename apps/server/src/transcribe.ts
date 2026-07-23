@@ -3,69 +3,31 @@
 // segments here; we transcribe them ourselves and never touch the built-in
 // speech engine, so there is no OS "listening" chime and no stop-on-pause.
 //
-// Engine: local whisper.cpp (the `whisper-cli` binary + a ggml model). No API
-// key, no per-minute cost, self-contained on the host. ffmpeg transcodes the
-// browser's webm/opus segment to the 16 kHz mono WAV whisper expects.
+// Engine: local whisper.cpp running as a PERSISTENT server (whisper-server),
+// so the ~150 MB model is loaded once and every segment is just inference.
+// Spawning `whisper-cli` per segment reloaded the model each time (~8 s);
+// whisper-server answers a warm request in well under a second on Apple
+// Silicon. ffmpeg transcodes the browser's webm/opus (Android/desktop) or
+// mp4/aac (iPhone) segment to the 16 kHz mono WAV whisper wants.
 //
-// This module keeps the process-spawning I/O thin and pushes every decision
-// into PURE helpers (resolveModelPath, ffmpegArgs, parseWhisperText,
-// pickSegmentText) so the transcription logic is unit-tested without needing
-// the engine or audio fixtures installed.
+// I/O (spawning ffmpeg, HTTP to whisper-server) is thin; the decisions live in
+// PURE helpers (ffmpegArgs, parseWhisperText, pickSegmentText) that are
+// unit-tested without the engine or audio fixtures.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 
-export const WHISPER_BIN = process.env.AGENT_ROOM_WHISPER_BIN || 'whisper-cli';
+export const WHISPER_SERVER_URL = (process.env.AGENT_ROOM_WHISPER_URL || 'http://127.0.0.1:8110').replace(/\/$/, '');
 
-// Model lookup order: explicit env, then the common homebrew/user cache spots.
-// Kept pure (existsFn injected) so tests can drive every branch deterministically.
-export function resolveModelPath(
-  env: string | undefined,
-  existsFn: (p: string) => boolean = existsSync,
-): string | null {
-  const candidates = [
-    env,
-    join(process.env.HOME || '', '.cache', 'whisper', 'ggml-base.en.bin'),
-    '/opt/homebrew/share/whisper-cpp/ggml-base.en.bin',
-    '/opt/homebrew/share/whisper.cpp/models/ggml-base.en.bin',
-    '/usr/local/share/whisper-cpp/ggml-base.en.bin',
-  ].filter((c): c is string => typeof c === 'string' && c.length > 0);
-  for (const c of candidates) if (existsFn(c)) return c;
-  return null;
-}
+// The chat server runs under launchd with a minimal PATH that does not include
+// Homebrew, so `ffmpeg` alone resolves to ENOENT (spawn status null). Resolve
+// an absolute path; override with AGENT_ROOM_FFMPEG if it lives elsewhere.
+export const FFMPEG_BIN =
+  process.env.AGENT_ROOM_FFMPEG ||
+  ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'].find((p) => existsSync(p)) ||
+  'ffmpeg';
 
-// True when a runnable binary is found on PATH (or as an absolute path).
-export function binaryAvailable(bin: string = WHISPER_BIN, runner = spawnSync): boolean {
-  try {
-    const probe = runner(bin, ['--help'], { encoding: 'utf8', timeout: 4000 });
-    // whisper-cli exits non-zero for --help on some builds but still runs;
-    // the reliable signal is that the process spawned at all (no ENOENT).
-    return !(probe.error && (probe.error as NodeJS.ErrnoException).code === 'ENOENT');
-  } catch {
-    return false;
-  }
-}
-
-export interface EngineStatus {
-  ok: boolean;
-  bin: string;
-  model: string | null;
-  reason?: string;
-}
-
-export function engineStatus(
-  opts: { modelEnv?: string; existsFn?: (p: string) => boolean; runner?: typeof spawnSync } = {},
-): EngineStatus {
-  const bin = WHISPER_BIN;
-  const model = resolveModelPath(opts.modelEnv ?? process.env.AGENT_ROOM_WHISPER_MODEL, opts.existsFn);
-  if (!binaryAvailable(bin, opts.runner)) {
-    return { ok: false, bin, model, reason: 'whisper-cli not installed' };
-  }
-  if (!model) return { ok: false, bin, model: null, reason: 'no whisper model found' };
-  return { ok: true, bin, model };
-}
+type FetchLike = typeof fetch;
 
 // ffmpeg args to decode ANY container on stdin to 16 kHz mono 16-bit WAV on
 // stdout — the exact shape whisper.cpp wants. Pure so it is asserted directly.
@@ -73,7 +35,7 @@ export function ffmpegArgs(): string[] {
   return ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-ar', '16000', '-ac', '1', '-f', 'wav', 'pipe:1'];
 }
 
-// whisper.cpp text output carries non-speech markers and stray whitespace.
+// whisper output carries non-speech markers and stray whitespace/newlines.
 // Strip bracketed markers like [BLANK_AUDIO] / (music), collapse whitespace.
 export function parseWhisperText(raw: string): string {
   return raw
@@ -83,11 +45,33 @@ export function parseWhisperText(raw: string): string {
     .trim();
 }
 
-// A segment is transcribed independently; the client concatenates segments in
-// order. Empty/blank-only results collapse to '' so a pause adds nothing.
+// A segment is transcribed independently; the client concatenates in order.
+// Blank-only results collapse to '' so a silent pause adds nothing.
 export function pickSegmentText(raw: string): string {
-  const t = parseWhisperText(raw);
-  return t;
+  return parseWhisperText(raw);
+}
+
+export interface EngineStatus {
+  ok: boolean;
+  url: string;
+  reason?: string;
+}
+
+// Reachability of the persistent whisper-server. whisper-server answers GET /
+// with the demo page (200); anything that connects proves the model host is up.
+export async function engineStatus(fetchImpl: FetchLike = fetch): Promise<EngineStatus> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetchImpl(`${WHISPER_SERVER_URL}/`, { method: 'GET', signal: ctrl.signal }).catch((e) => {
+      throw e;
+    });
+    clearTimeout(t);
+    if (r.status >= 500) return { ok: false, url: WHISPER_SERVER_URL, reason: `whisper-server ${r.status}` };
+    return { ok: true, url: WHISPER_SERVER_URL };
+  } catch {
+    return { ok: false, url: WHISPER_SERVER_URL, reason: 'whisper-server unreachable' };
+  }
 }
 
 export interface TranscribeResult {
@@ -98,44 +82,37 @@ export interface TranscribeResult {
 }
 
 // Transcode + transcribe one audio segment. Returns ok:false (never throws) so
-// the caller can fall the CLIENT back to the built-in engine when the local
-// engine is unavailable, rather than 500-ing mid-dictation.
+// the caller can 503 and the CLIENT can fall back to the built-in engine or
+// buffer locally, rather than losing audio mid-dictation.
 export async function transcribeSegment(
   audio: Buffer,
-  opts: { runner?: typeof spawnSync; status?: EngineStatus } = {},
+  opts: { runner?: typeof spawnSync; fetchImpl?: FetchLike } = {},
 ): Promise<TranscribeResult> {
   const runner = opts.runner ?? spawnSync;
-  const status = opts.status ?? engineStatus();
-  if (!status.ok || !status.model) {
-    return { ok: false, text: '', engine: 'none', reason: status.reason || 'engine unavailable' };
-  }
+  const fetchImpl = opts.fetchImpl ?? fetch;
   if (!audio || audio.length === 0) return { ok: true, text: '', engine: 'whisper-local' };
 
-  const dir = mkdtempSync(join(tmpdir(), 'arstt-'));
+  // 1) Decode the browser container to 16 kHz mono WAV.
+  const wav = runner(FFMPEG_BIN, ffmpegArgs(), { input: audio, maxBuffer: 64 * 1024 * 1024 });
+  if (wav.error || wav.status !== 0 || !wav.stdout || wav.stdout.length === 0) {
+    const why = wav.error ? (wav.error as NodeJS.ErrnoException).code || wav.error.message : `exit ${wav.status}`;
+    return { ok: false, text: '', engine: 'none', reason: `ffmpeg failed (${why})` };
+  }
+
+  // 2) Inference on the persistent whisper-server.
   try {
-    const wav = runner('ffmpeg', ffmpegArgs(), { input: audio, maxBuffer: 64 * 1024 * 1024 });
-    if (wav.status !== 0 || !wav.stdout || wav.stdout.length === 0) {
-      return { ok: false, text: '', engine: 'none', reason: `ffmpeg failed (${wav.status})` };
-    }
-    const wavPath = join(dir, 'seg.wav');
-    writeFileSync(wavPath, wav.stdout);
-    // -nt: no timestamps; -otxt: write <wav>.txt; read that back for the text.
-    const w = runner(status.bin, ['-m', status.model, '-f', wavPath, '-nt', '-otxt'], {
-      encoding: 'buffer',
-      timeout: 30000,
-    });
-    if (w.status !== 0) {
-      // whisper writes text to stdout too; try that before declaring failure.
-      const stdoutText = w.stdout ? w.stdout.toString('utf8') : '';
-      if (stdoutText.trim()) return { ok: true, text: pickSegmentText(stdoutText), engine: 'whisper-local' };
-      return { ok: false, text: '', engine: 'none', reason: `whisper failed (${w.status})` };
-    }
-    let text = '';
-    const txtPath = `${wavPath}.txt`;
-    if (existsSync(txtPath)) text = readFileSync(txtPath, 'utf8');
-    else if (w.stdout) text = w.stdout.toString('utf8');
-    return { ok: true, text: pickSegmentText(text), engine: 'whisper-local' };
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
+    const fd = new FormData();
+    fd.append('file', new Blob([new Uint8Array(wav.stdout)], { type: 'audio/wav' }), 'seg.wav');
+    fd.append('response_format', 'json');
+    fd.append('temperature', '0');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
+    const r = await fetchImpl(`${WHISPER_SERVER_URL}/inference`, { method: 'POST', body: fd, signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!r.ok) return { ok: false, text: '', engine: 'none', reason: `whisper-server ${r.status}` };
+    const body = (await r.json()) as { text?: string };
+    return { ok: true, text: pickSegmentText(body?.text ?? ''), engine: 'whisper-local' };
+  } catch {
+    return { ok: false, text: '', engine: 'none', reason: 'whisper-server unreachable' };
   }
 }
