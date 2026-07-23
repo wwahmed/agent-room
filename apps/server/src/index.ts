@@ -36,7 +36,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TTL_SECONDS, roomTopicIssue } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TTL_SECONDS, roomTopicIssue, buildOwnerBrief, briefToSpeech } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 import { parseMultipart } from './multipart.js';
 import {
@@ -1811,6 +1811,32 @@ const server = createServer(async (req, res) => {
         return sendJson(res, status, { error, engine: 'none', text: '', reason: result.reason });
       }
       return sendJson(res, 200, { text: result.text, engine: result.engine });
+    }
+
+    // T-134: assemble the owner brief server-side from real messages + the
+    // account read marker + the board, so the client just renders and speaks.
+    if (path === '/api/brief' && req.method === 'GET') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const url = new URL(req.url || '/', `http://localhost:${PORT}`);
+      const code = canonicalizeCode(String(url.searchParams.get('code') || ''));
+      if (!code) return sendJson(res, 400, { error: 'bad_request', message: 'missing or invalid code' });
+      const self = String(url.searchParams.get('self') || '');
+      let firstUnreadIndex: number | null = null;
+      try {
+        const account = resolveMarkerAccount(caller, url.searchParams.get('account'));
+        const markers = await listReadMarkers(redis, account);
+        firstUnreadIndex = code in markers ? markers[code] ?? null : null;
+      } catch { firstUnreadIndex = null; } // no account/marker -> first-visit framing
+      const messages = await listMessages(client, code, 0);
+      const board = await getTaskBoard(code);
+      const lines = buildOwnerBrief({
+        selfName: self,
+        firstUnreadIndex,
+        messages: (messages as Array<{ name?: string; text?: string }>).map((m) => ({ name: String(m.name || ''), text: m.text })),
+        tasks: board.tasks.map((t) => ({ id: t.id, title: t.title, state: t.state, owner: t.owner, verifier: t.verifier })),
+      });
+      return sendJson(res, 200, { lines, speech: briefToSpeech(lines) });
     }
 
     // T-134: local text-to-speech for the owner brief's speaker button.

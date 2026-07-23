@@ -1,17 +1,19 @@
 // T-134: the on-demand owner executive brief — "what changed in THIS room since
-// you last looked," for you, five lines at most. It is assembled ONLY from real
-// board and message state anchored to your account read marker (T-126). If
-// nothing has changed it says exactly that rather than padding with invented
-// "activity." This is the pure assembler; the trigger, render, and local-TTS
-// playback wrap it.
+// you last looked," for you, five lines at most. Assembled ONLY from real board
+// and message state anchored to your account read marker (T-126). The read
+// marker is a COUNT of messages already seen (not a timestamp), so "new" is the
+// tail of the message list past that index. If nothing has changed it says
+// exactly that rather than padding with invented "activity." This is the pure
+// assembler; the trigger, render, and local-TTS playback wrap it.
 
-export interface BriefMessage { name: string; time: number; text?: string }
+export interface BriefMessage { name: string; text?: string }
 export interface BriefTask { id: string; title: string; state: string; owner?: string; verifier?: string }
 
 export interface BriefInput {
   selfName: string;
-  /** The account read marker's timestamp; null/0 means "never looked". */
-  lastSeenTime: number | null;
+  /** Count of messages already seen (the account read marker). null = never
+   *  looked here (first visit). Messages at index >= this are "new". */
+  firstUnreadIndex: number | null;
   messages: BriefMessage[];
   tasks: BriefTask[];
 }
@@ -48,10 +50,10 @@ export function buildOwnerBrief(input: BriefInput): BriefLine[] {
   // No read marker (first visit / a device that never marked read) has no
   // anchor for "since you last looked". We must NOT report the whole history as
   // new — instead say it is a first visit and give the current state.
-  const firstVisit = input.lastSeenTime == null;
-  const since = input.lastSeenTime ?? 0;
+  const firstVisit = input.firstUnreadIndex == null;
+  const seen = Math.max(0, Math.min(input.firstUnreadIndex ?? 0, input.messages.length));
   const fromOthers = input.messages.filter((m) => m.name !== input.selfName);
-  const fresh = firstVisit ? [] : fromOthers.filter((m) => m.time > since);
+  const fresh = firstVisit ? [] : input.messages.slice(seen).filter((m) => m.name !== input.selfName);
   const changed = firstVisit || fresh.length > 0;
   const lines: BriefLine[] = [];
 
