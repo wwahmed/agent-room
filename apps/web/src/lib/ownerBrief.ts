@@ -45,12 +45,20 @@ function needsOwner(t: BriefTask): boolean {
  * last visit, what needs you, what is building now, what just finished.
  */
 export function buildOwnerBrief(input: BriefInput): BriefLine[] {
+  // No read marker (first visit / a device that never marked read) has no
+  // anchor for "since you last looked". We must NOT report the whole history as
+  // new — instead say it is a first visit and give the current state.
+  const firstVisit = input.lastSeenTime == null;
   const since = input.lastSeenTime ?? 0;
-  const fresh = input.messages.filter((m) => m.time > since && m.name !== input.selfName);
+  const fromOthers = input.messages.filter((m) => m.name !== input.selfName);
+  const fresh = firstVisit ? [] : fromOthers.filter((m) => m.time > since);
+  const changed = firstVisit || fresh.length > 0;
   const lines: BriefLine[] = [];
 
-  // 1. Since you last looked.
-  if (fresh.length > 0) {
+  // 1. Since you last looked (or a first-visit framing).
+  if (firstVisit) {
+    lines.push({ kind: 'since', text: `First time here — ${plural(fromOthers.length, 'message')} in this room so far. Current state:` });
+  } else if (fresh.length > 0) {
     lines.push({ kind: 'since', text: `${plural(fresh.length, 'new message')} since your last visit, from ${topSenders(fresh.map((m) => m.name))}.` });
   }
 
@@ -67,15 +75,19 @@ export function buildOwnerBrief(input: BriefInput): BriefLine[] {
     lines.push({ kind: 'building', text: `Building now: ${plural(building.length, 'task')}${building[0] ? `, incl. ${building[0].id}` : ''}.` });
   }
 
-  // 4. Just finished (verified done) — only meaningful when something changed.
+  // 4. Just finished (verified done) — meaningful when something changed or on
+  // a first visit (current state).
   const done = input.tasks.filter((t) => t.state === 'done');
-  if (fresh.length > 0 && done.length > 0) {
+  if (changed && done.length > 0) {
     lines.push({ kind: 'done', text: `${plural(done.length, 'task')} verified done on the board.` });
   }
 
-  // Honest empty state: nothing changed since the last visit.
+  // Honest empty states, never padded.
   if (lines.length === 0) {
     lines.push({ kind: 'none', text: 'Nothing has changed since your last visit.' });
+  } else if (firstVisit && lines.length === 1) {
+    // First visit but nothing else to report (no tasks): keep it honest.
+    lines[0] = { kind: 'none', text: `First time here — ${plural(fromOthers.length, 'message')} so far, and nothing is waiting on you.` };
   }
 
   return lines.slice(0, 5);

@@ -73,6 +73,21 @@ describe('buildOwnerBrief', () => {
     expect(lines.length).toBeLessThanOrEqual(5);
   });
 
+  it('NO READ MARKER: does not report the whole history as new (first-visit framing)', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ name: 'Alex', time: 100 + i }));
+    const lines = buildOwnerBrief({ ...base, lastSeenTime: null, messages: many, tasks: [{ id: 'T-1', title: 'x', state: 'in_progress' }] });
+    const since = lines.find((l) => l.kind === 'since');
+    expect(since?.text).toMatch(/First time here/);
+    expect(since?.text).not.toMatch(/20 new messages/); // must NOT dump all as new
+    expect(lines.find((l) => l.kind === 'building')).toBeDefined(); // shows current state instead
+  });
+
+  it('NO READ MARKER with no tasks stays honest, not "nothing changed"', () => {
+    const lines = buildOwnerBrief({ ...base, lastSeenTime: null, messages: [{ name: 'Alex', time: 100 }], tasks: [] });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.text).toMatch(/First time here.*nothing is waiting on you/);
+  });
+
   it('briefToSpeech flattens to one spoken paragraph', () => {
     const lines = buildOwnerBrief({ ...base, messages: [{ name: 'Alex', time: 1500 }] });
     expect(briefToSpeech(lines)).toContain('1 new message');
