@@ -22,7 +22,7 @@ class FakeRec implements RecognizerLike {
   }
 }
 
-function harness(opts: { maxMs?: number; failStartAll?: boolean } = {}) {
+function harness(opts: { maxMs?: number; failStartAll?: boolean; minRestartIntervalMs?: number } = {}) {
   const recs: FakeRec[] = [];
   const timers: Array<{ fn: () => void; ms: number }> = [];
   let clock = 0;
@@ -36,6 +36,10 @@ function harness(opts: { maxMs?: number; failStartAll?: boolean } = {}) {
     setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length - 1; },
     clearTimer: (id) => { const i = id as number; if (timers[i]) timers[i] = { fn: () => {}, ms: -1 }; },
     restartBackoffMs: 10,
+    // T-76: existing tests exercise fast auto-restart; keep the coalescing
+    // interval small here so restart timers stay in the flushRestarts band.
+    // The dedicated beep-coalescing test below uses a realistic interval.
+    minRestartIntervalMs: opts.minRestartIntervalMs ?? 10,
     maxMs: opts.maxMs,
   });
   return {
@@ -299,5 +303,99 @@ describe('mergeTranscript', () => {
 
   it('still appends unrelated sequential phrases', () => {
     expect(mergeTranscript('hello there', 'general kenobi')).toBe('hello there general kenobi');
+  });
+});
+
+// T-76: on Android the OS plays a "listening" beep on every SpeechRecognition
+// start(), and the recognizer ends on natural pauses. A per-onend restart
+// therefore beeps on every pause/partial. The fix coalesces restarts so start()
+// (the beep trigger) is spaced by minRestartIntervalMs, keeping the beep near
+// the genuine start/stop instead of firing on every pause. These tests spy on
+// start() calls with a clock-aware timer model.
+describe('T-76: dictation restart beeps do not fire on every pause', () => {
+  function beepHarness(minRestartIntervalMs: number) {
+    const recs: FakeRec[] = [];
+    const startTimes: number[] = [];
+    const timers: Array<{ fireAt: number; fn: () => void; done: boolean }> = [];
+    let clock = 0;
+    let beeps = 0;
+    class SpyRec extends FakeRec {
+      start() { super.start(); beeps++; startTimes.push(clock); }
+    }
+    const c = new DictationController({
+      createRecognizer: () => { const r = new SpyRec(); recs.push(r); return r; },
+      onChange: () => {}, onFinalize: () => {},
+      now: () => clock,
+      setTimer: (fn, ms) => { const id = timers.length; timers.push({ fireAt: clock + ms, fn, done: false }); return id; },
+      clearTimer: (id) => { const t = timers[id as number]; if (t) t.done = true; },
+      restartBackoffMs: 250,
+      minRestartIntervalMs,
+      maxMs: 5 * 60 * 1000,
+    });
+    const runUntil = (t: number) => {
+      let guard = 0;
+      for (;;) {
+        if (guard++ > 100000) throw new Error('timer loop');
+        const due = timers.filter(x => !x.done && x.fireAt <= t).sort((a, b) => a.fireAt - b.fireAt)[0];
+        if (!due) break;
+        clock = due.fireAt; due.done = true; due.fn();
+      }
+      clock = t;
+    };
+    return { c, recs, beeps: () => beeps, startTimes, clock: () => clock, runUntil, live: () => recs[recs.length - 1]! };
+  }
+
+  it('an immediate pause does NOT beep again until a full restart interval passes', () => {
+    const h = beepHarness(1500);
+    h.c.start();
+    expect(h.beeps()).toBe(1);          // genuine start beep
+    h.live().onend?.();                  // recognizer ends instantly (pause)
+    h.runUntil(1499);
+    expect(h.beeps()).toBe(1);          // still one — the restart is held back
+    h.runUntil(1500);
+    expect(h.beeps()).toBe(2);          // exactly one restart after the interval
+  });
+
+  it('baseline (no coalescing) beeps right after a pause — proving the fix is load-bearing', () => {
+    const b = beepHarness(250);          // interval == backoff ≈ pre-fix behavior
+    b.c.start();
+    b.live().onend?.();
+    b.runUntil(250);
+    expect(b.beeps()).toBe(2);          // beeps almost immediately on the pause
+  });
+
+  it('a burst of rapid pauses collapses to a handful of beeps, not one per pause', () => {
+    const h = beepHarness(1500);
+    h.c.start();
+    // The recognizer keeps ending ~30ms after each (re)start, 20 times over ~3s.
+    for (let step = 0; step <= 100; step++) {
+      h.runUntil(step * 30);
+      const rec = h.live();
+      if (rec && rec.started && !rec.stopped && !(rec as unknown as { _ended?: boolean })._ended) {
+        (rec as unknown as { _ended?: boolean })._ended = true;
+        rec.emit([{ final: true, text: `word${h.beeps()} ` }]);
+        rec.onend?.();                   // pause
+      }
+    }
+    h.runUntil(3000);
+    // 20+ pause events over 3s, but starts are spaced >= 1500ms → at most 3 beeps.
+    expect(h.beeps()).toBeLessThanOrEqual(3);
+    // consecutive starts are genuinely spaced by the interval (no machine-gun).
+    for (let i = 1; i < h.startTimes.length; i++) {
+      expect(h.startTimes[i]! - h.startTimes[i - 1]!).toBeGreaterThanOrEqual(1500 - 1);
+    }
+    // transcript still accumulated across the coalesced restarts (no T-120 loss).
+    expect(h.c.snapshot().finalText.length).toBeGreaterThan(0);
+  });
+
+  it('a genuinely NEW recording after stop still beeps (coalescing never silences a real start)', () => {
+    const h = beepHarness(1500);
+    h.c.start();
+    expect(h.beeps()).toBe(1);
+    h.runUntil(100);
+    h.c.stop();                          // finishes the session
+    h.runUntil(200);
+    h.c.start();                         // a distinct new recording
+    expect(h.beeps()).toBe(2);          // the new start is not suppressed
   });
 });

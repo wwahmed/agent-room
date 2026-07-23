@@ -46,6 +46,14 @@ export interface DictationOptions {
   lang?: string;
   maxMs?: number;
   restartBackoffMs?: number;
+  // T-76: minimum spacing between recognizer (re)starts. On Android Chrome the
+  // OS plays a "listening" beep on every SpeechRecognition start, and the
+  // recognizer ends on natural pauses, so a per-onend restart beeps on every
+  // pause and partial. Coalescing restarts to at most one per this interval
+  // means the beep no longer fires on every pause — it stays near the genuine
+  // start/stop. The OS beep itself is not JS-suppressible; this removes the
+  // excess restarts that caused the repeated beeping.
+  minRestartIntervalMs?: number;
   maxConsecutiveStartFailures?: number;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -106,6 +114,10 @@ export class DictationController {
   private restartTimer: unknown = null;
   private deadlineTimer: unknown = null;
   private startFailures = 0;
+  // T-76: timestamp of the last recognizer start() — restarts are spaced at
+  // least minRestartIntervalMs apart so pause/partial-driven restarts (each an
+  // Android beep) cannot machine-gun.
+  private lastStartAt = 0;
 
   private activeMs = 0;
   private segmentStart = 0;
@@ -120,6 +132,7 @@ export class DictationController {
       lang: opts.lang,
       maxMs: opts.maxMs ?? DEFAULT_MAX_MS,
       restartBackoffMs: opts.restartBackoffMs ?? 250,
+      minRestartIntervalMs: opts.minRestartIntervalMs ?? 1500,
       maxConsecutiveStartFailures: opts.maxConsecutiveStartFailures ?? 3,
       now: opts.now ?? (() => Date.now()),
       setTimer: opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms) as unknown),
@@ -212,6 +225,7 @@ export class DictationController {
     this.rec = rec;
     try {
       rec.start();
+      this.lastStartAt = this.o.now(); // T-76: anchor for restart coalescing
       this.startFailures = 0;
     } catch {
       // Synchronous start() failure must NOT leave a false "Recording" state.
@@ -237,10 +251,16 @@ export class DictationController {
 
   private scheduleRestart() {
     if (this.restartTimer != null) return;
+    // T-76: never restart sooner than minRestartIntervalMs after the last
+    // start. A flurry of pause/partial onends collapses into a single restart
+    // (one beep) instead of one beep per pause, while a genuinely long gap
+    // still revives recording. The floor is always at least restartBackoffMs.
+    const sinceStart = this.o.now() - this.lastStartAt;
+    const delay = Math.max(this.o.restartBackoffMs, this.o.minRestartIntervalMs - sinceStart);
     this.restartTimer = this.o.setTimer(() => {
       this.restartTimer = null;
       if (this.state === 'recording' && !this.stopping) this.spawn(false);
-    }, this.o.restartBackoffMs);
+    }, delay);
   }
   private clearRestart() {
     if (this.restartTimer != null) { this.o.clearTimer(this.restartTimer); this.restartTimer = null; }
