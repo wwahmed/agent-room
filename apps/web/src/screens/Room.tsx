@@ -944,7 +944,10 @@ export function Room() {
   function scrollToBottom() {
     const el = feedRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight });
-    markRoomRead(code, messageTotal, self?.name);
+    // T-140: don't advance the marker until the arrival snapshot is locked, or
+    // the provisional bottom-land would mark everything read before a
+    // late-resolving account marker can position the first-unread divider.
+    if (arrivalReadRef.current !== null) markRoomRead(code, messageTotal, self?.name);
     setUnseenCount(0);
     setUnseenMentions(0);
   }
@@ -958,7 +961,10 @@ export function Room() {
     if (atBottomRef.current) {
       // messageTotal does not change when the reader scrolls, so the effect
       // above cannot observe this transition. Persist it here immediately.
-      markRoomRead(code, messageTotal, self?.name);
+      // T-140: but only after the arrival snapshot is locked — the provisional
+      // bottom-land on open fires a scroll event, and marking read here would
+      // poison the snapshot into all-read before a late marker can resolve.
+      if (arrivalReadRef.current !== null) markRoomRead(code, messageTotal, self?.name);
       setUnseenCount(0);
       setUnseenMentions(0);
     }
