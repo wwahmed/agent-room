@@ -78,7 +78,11 @@ export class VoiceCaptureController {
       store: opts.store,
       onChange: opts.onChange,
       onFinalize: opts.onFinalize,
-      segmentMs: opts.segmentMs ?? 4000,
+      // 2.5s balances felt latency against per-segment recognition context: a
+      // word spoken right after a cut appears in ~segmentMs, so shorter feels
+      // more live. whisper base at ~0.1s/clip has ample headroom for the extra
+      // requests. (UX-Adversary: report end-to-end, not whisper-only, latency.)
+      segmentMs: opts.segmentMs ?? 2500,
       maxMs: opts.maxMs,
       retryMs: opts.retryMs ?? 2000,
       now: opts.now ?? (() => Date.now()),

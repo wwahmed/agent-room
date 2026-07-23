@@ -1,6 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
 import { DictationController, mergeTranscript, type DictationSnapshot, type RecognizerLike } from '../lib/dictation.js';
+import {
+  VoiceCaptureController,
+  createIndexedDbStore,
+  createMemoryStore,
+  type RecorderLike,
+  type SegmentStoreLike,
+} from '../lib/voiceCapture.js';
+import { playStartCue } from '../lib/audioCue.js';
 import { ScreenWakeLockController } from '../lib/screenWakeLock.js';
+
+// A controller the button can drive uniformly, whether it is the built-in
+// speech engine (DictationController) or the T-131 server-STT capture path
+// (VoiceCaptureController). start() may be async for the capture path.
+interface VoiceController {
+  start(): void | Promise<void>;
+  stop(): void;
+  cancel(): void;
+  snapshot(): DictationSnapshot;
+}
+
+// T-131: the capture path needs MediaRecorder + getUserMedia. Widely supported
+// on desktop Chrome/Safari/Edge/Firefox, Chrome/Android, and Safari/iOS 14.3+.
+const CAPTURE_SUPPORTED =
+  typeof window !== 'undefined' &&
+  typeof (window as { MediaRecorder?: unknown }).MediaRecorder === 'function' &&
+  typeof navigator !== 'undefined' &&
+  !!navigator.mediaDevices?.getUserMedia;
+
+// Prefer webm/opus (Android/desktop); Safari/iPhone only offers mp4/aac. The
+// server decodes either with ffmpeg, so we just pick whatever the device says
+// it can record.
+function pickMimeType(): string | undefined {
+  const MR = (window as unknown as { MediaRecorder?: { isTypeSupported?: (t: string) => boolean } }).MediaRecorder;
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac'];
+  for (const c of candidates) if (MR?.isTypeSupported?.(c)) return c;
+  return undefined;
+}
+
+// Wrap a native MediaRecorder as the controller's RecorderLike. Each stop()
+// yields one complete, independently decodable segment.
+function makeRecorder(stream: MediaStream): RecorderLike {
+  const mimeType = pickMimeType();
+  const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const rec: RecorderLike = { start: () => mr.start(), stop: () => mr.stop(), ondata: null, onstop: null, onerror: null };
+  mr.ondataavailable = (e: BlobEvent) => { if (e.data && e.data.size > 0) rec.ondata?.(e.data); };
+  mr.onstop = () => rec.onstop?.();
+  mr.onerror = (e: Event) => rec.onerror?.(e);
+  return rec;
+}
+
+// POST one segment to the server. MUST throw on any non-2xx or network error so
+// the controller keeps the audio buffered locally and retries (never drops it).
+async function postTranscribe(blob: Blob): Promise<{ text: string }> {
+  const r = await fetch('/api/transcribe', {
+    method: 'POST',
+    headers: { 'content-type': blob.type || 'application/octet-stream' },
+    body: blob,
+  });
+  if (!r.ok) throw new Error(`transcribe ${r.status}`);
+  const body = (await r.json()) as { text?: string };
+  return { text: body?.text ?? '' };
+}
+
+function makeStore(): SegmentStoreLike {
+  try {
+    if (typeof indexedDB !== 'undefined') return createIndexedDbStore();
+  } catch { /* private mode / disabled */ }
+  return createMemoryStore();
+}
 
 interface Props {
   /** T-119: while dictation is active the recording overlay carries every
@@ -67,8 +135,12 @@ function noSignalMessage(s: DictationSnapshot): string {
 export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive }: Props) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const [tick, setTick] = useState(0);
-  const ctrlRef = useRef<DictationController | null>(null);
+  const ctrlRef = useRef<VoiceController | null>(null);
   const wakeLockRef = useRef<ScreenWakeLockController | null>(null);
+  // T-131: whether the local server-STT engine is reachable. Checked once on
+  // mount; when true we use the silent, continuous capture path, otherwise we
+  // fall back to the built-in speech engine.
+  const engineOkRef = useRef(false);
 
   // The controller is created once; keep the latest callbacks in refs so its
   // long-lived onChange/onFinalize always call the current handlers.
@@ -113,25 +185,49 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
   // Abort any in-flight session if the composer unmounts (accidental navigation).
   useEffect(() => () => { ctrlRef.current?.cancel(); }, []);
 
-  if (!SpeechRecognitionImpl) return null;
+  // T-131: probe the local STT engine once so start() can choose the capture path.
+  useEffect(() => {
+    if (!CAPTURE_SUPPORTED) return;
+    let alive = true;
+    fetch('/api/transcribe/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (alive && j?.ok) engineOkRef.current = true; })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
-  function controller(): DictationController {
-    if (!ctrlRef.current) {
-      ctrlRef.current = new DictationController({
-        createRecognizer: () => new SpeechRecognitionImpl() as RecognizerLike,
-        lang: navigator.language || undefined,
-        // T-131: always restart on a pause so the session never stops
-        // mid-thought (reverts T-130's mobile no-restart, which stopped on the
-        // first silence). The controller option is kept for the future
-        // silent-capture path; T-76 coalescing throttles the restart beeps.
-        restartOnPause: true,
-        // T-59: stream every update into the composer as it's spoken (not just at
-        // the end), so a dropped final event can never swallow what was said.
-        onChange: (s) => { setSnap(s); if (s.state !== 'idle') onLiveRef.current?.(liveText(s)); },
-        onFinalize: (text) => { if (text) onTranscriptRef.current?.(text); },
+  // Render if EITHER path is available — capture works even where the built-in
+  // SpeechRecognition does not (e.g. Firefox).
+  if (!SpeechRecognitionImpl && !CAPTURE_SUPPORTED) return null;
+
+  const onChange = (s: DictationSnapshot) => { setSnap(s); if (s.state !== 'idle') onLiveRef.current?.(liveText(s)); };
+  const onFinalize = (text: string) => { if (text) onTranscriptRef.current?.(text); };
+
+  // Built fresh at each start so a late engine probe is honored on the next
+  // session, not frozen to what was known at first click. Prefer the silent
+  // capture path when the engine is reachable (or when there is no built-in
+  // engine to fall back to); otherwise the built-in speech engine.
+  function buildController(): VoiceController {
+    const useCapture = CAPTURE_SUPPORTED && (engineOkRef.current || !SpeechRecognitionImpl);
+    if (useCapture) {
+      return new VoiceCaptureController({
+        getStream: () => navigator.mediaDevices.getUserMedia({ audio: true }),
+        createRecorder: (stream) => makeRecorder(stream as MediaStream),
+        transcribe: postTranscribe,
+        store: makeStore(),
+        onChange,
+        onFinalize,
       });
     }
-    return ctrlRef.current;
+    return new DictationController({
+      createRecognizer: () => new SpeechRecognitionImpl() as RecognizerLike,
+      lang: navigator.language || undefined,
+      // The built-in engine restarts on a pause to stay continuous (T-131
+      // revert); the capture path above avoids the OS beep entirely instead.
+      restartOnPause: true,
+      onChange,
+      onFinalize,
+    });
   }
 
   return (
@@ -140,9 +236,12 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
         type="button"
         disabled={disabled}
         onClick={() => {
-          if (active) { controller().stop(); return; }
+          if (active) { ctrlRef.current?.stop(); return; }
           onStart?.(); // snapshot the composer's base draft before words stream in
-          controller().start();
+          const c = buildController();
+          ctrlRef.current = c;
+          playStartCue(); // T-131: the one app cue that replaces the OS chime
+          void c.start();
         }}
         aria-label={active ? 'Stop dictation and insert text' : 'Start voice dictation'}
         title={active ? 'Stop dictation' : 'Start voice dictation'}
@@ -172,7 +271,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
           <div className="flex w-full items-center gap-3">
             <button
               type="button"
-              onClick={() => { controller().cancel(); onCancel?.(); }}
+              onClick={() => { ctrlRef.current?.cancel(); onCancel?.(); }}
               aria-label="Discard recording"
               title="Discard"
               className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
@@ -196,7 +295,19 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
                 a mute recognizer for a full session with zero feedback. The
                 hint reuses the waveform's flexible slot so the controls never
                 move. */}
-            {recording && !snap.hasHeardSpeech && snap.elapsedMs >= NO_SIGNAL_AFTER_MS ? (
+            {snap.offline && (snap.pendingUploads ?? 0) > 0 ? (
+              // T-131: the server/network dropped, but audio is safe in the
+              // local buffer and will transcribe on reconnect. Say so, so the
+              // user trusts nothing was lost.
+              <span
+                role="status"
+                aria-live="polite"
+                className="min-w-0 flex-1 truncate text-center text-[12px] font-semibold text-amber-300"
+                title="Saved locally, will transcribe when reconnected"
+              >
+                Saved locally · {snap.pendingUploads} clip{(snap.pendingUploads ?? 0) === 1 ? '' : 's'} will transcribe when reconnected
+              </span>
+            ) : recording && !snap.hasHeardSpeech && snap.elapsedMs >= NO_SIGNAL_AFTER_MS ? (
               <span
                 role="status"
                 aria-live="polite"
@@ -226,7 +337,7 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
 
             <button
               type="button"
-              onClick={() => controller().stop()}
+              onClick={() => ctrlRef.current?.stop()}
               aria-label="Use voice draft"
               title="Use draft (does not send the message)"
               className="flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-white transition hover:opacity-90"
