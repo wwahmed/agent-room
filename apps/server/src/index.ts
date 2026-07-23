@@ -54,6 +54,7 @@ import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { effectiveVerifier, verifierCollidesWithOwner } from './taskrules.js';
 import { transcribeSegment, engineStatus } from './transcribe.js';
+import { synthesize } from './tts.js';
 import { roomActivityAt } from './roomactivity.js';
 import {
   isQaRoom,
@@ -1789,6 +1790,24 @@ const server = createServer(async (req, res) => {
         return sendJson(res, status, { error, engine: 'none', text: '', reason: result.reason });
       }
       return sendJson(res, 200, { text: result.text, engine: result.engine });
+    }
+
+    // T-134: local text-to-speech for the owner brief's speaker button.
+    if (path === '/api/tts' && req.method === 'POST') {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      let text = '';
+      try {
+        const body = JSON.parse(await readBody(req)) as { text?: unknown };
+        text = typeof body.text === 'string' ? body.text : '';
+      } catch {
+        return sendJson(res, 400, { error: 'bad_request', message: 'expected JSON { text }' });
+      }
+      const result = await synthesize(text);
+      if (!result.ok || !result.audio) return sendJson(res, 503, { error: 'tts_unavailable', reason: result.reason });
+      res.writeHead(200, { 'content-type': result.mime || 'audio/mpeg', 'content-length': String(result.audio.length), 'cache-control': 'no-store' });
+      res.end(result.audio);
+      return;
     }
 
     if (path === '/api/delete-room-blobs' && req.method === 'POST') {
