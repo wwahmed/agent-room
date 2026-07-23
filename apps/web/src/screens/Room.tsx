@@ -510,12 +510,22 @@ export function Room() {
   // already there; if they've scrolled up, hold their spot and count arrivals.
   const atBottomRef = useRef(true);
   const prevLenRef = useRef(0);
+  // T-140: the first-unread landing rides on the account read marker, which can
+  // resolve a beat AFTER the chat renders. We land immediately, then re-fire the
+  // divider landing once the marker settles — but ONLY if the reader has not
+  // touched the feed since open (T-112: a late re-fire must never yank someone
+  // who already scrolled up to read history).
+  const landedRef = useRef(false);
+  const openInteractedRef = useRef(false);
   // T-04: previous LAST message id — distinguishes appended messages from a
   // prepended history page — and the scroll geometry captured just before a
   // prepend so the reader's position survives it.
   const prevLastIdRef = useRef<number | null>(null);
   const prependAnchorRef = useRef<{ heightBefore: number; topBefore: number } | null>(null);
   const [unseenCount, setUnseenCount] = useState(0);
+  // T-140: bumped when the account read marker resolves after open, forcing the
+  // arrival snapshot + first-unread landing to recompute against the real marker.
+  const [markerNonce, setMarkerNonce] = useState(0);
   // T-18 rev2 (UX): the navigator earns screen space only for UNSEEN mentions
   // that arrived while scrolled up — never a lifetime count.
   const [unseenMentions, setUnseenMentions] = useState(0);
@@ -579,8 +589,16 @@ export function Room() {
   // above has been snapshotted for first-unread positioning. Later arrivals are
   // only acknowledged while the reader is actually at the bottom.
   const arrivalMarkedRef = useRef(false);
+  // T-140: the account read marker can resolve a beat AFTER the first render.
+  // Capturing `messageTotal` (all-read) before it lands is what dropped the
+  // reader at the bottom instead of the first-unread divider. So capture only
+  // once the marker is actually known; if it never resolves within the grace
+  // window, fall back to messageTotal (a genuine first visit reads as caught-up).
+  const markerGaveUpRef = useRef(false);
   if (arrivalReadRef.current === null && messageTotal > 0) {
-    arrivalReadRef.current = getReadCount(code) ?? messageTotal;
+    const known = getReadCount(code);
+    if (known !== null) arrivalReadRef.current = known;
+    else if (markerGaveUpRef.current) arrivalReadRef.current = messageTotal;
   }
   // The absolute marker locates the unread tail within the bounded message
   // page. Skip messages authored by this browser identity so they never create
@@ -1016,9 +1034,14 @@ export function Room() {
         // Landing above the bottom means there IS unread below — reflect that
         // rather than silently claiming he's caught up.
         onFeedScroll();
+        landedRef.current = true;
       } else {
         feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
         setUnseenCount(0);
+        // T-140: only "done" when the marker actually resolved (genuinely caught
+        // up). If it is still pending, leave landedRef false so the re-fire
+        // effect lands us on the divider the moment the marker arrives.
+        if (arrivalReadRef.current !== null) landedRef.current = true;
       }
     } else if (appended > 0 && (atBottomRef.current || appendedSelf)) {
       feedRef.current?.scrollTo(0, feedRef.current.scrollHeight);
@@ -1040,6 +1063,59 @@ export function Room() {
     prevLenRef.current = len;
     prevLastIdRef.current = len > 0 ? messages[len - 1]!.id : null;
   }, [messages]);
+
+  // T-140: on open, reset the landing state, listen for the reader taking over
+  // the scroll (so a late re-fire respects their place — T-112), and poll for
+  // the account read marker to resolve; bump markerNonce when it does (or after
+  // a short grace) so the first-unread landing recomputes against the real marker.
+  useEffect(() => {
+    landedRef.current = false;
+    openInteractedRef.current = false;
+    markerGaveUpRef.current = false;
+    const el = feedRef.current;
+    const mark = () => { openInteractedRef.current = true; };
+    if (el) {
+      el.addEventListener('wheel', mark, { passive: true });
+      el.addEventListener('touchstart', mark, { passive: true });
+      el.addEventListener('pointerdown', mark, { passive: true });
+      el.addEventListener('keydown', mark);
+    }
+    let tries = 0;
+    const poll = window.setInterval(() => {
+      if (getReadCount(code) !== null) {
+        window.clearInterval(poll);
+        setMarkerNonce((n) => n + 1);
+      } else if (++tries >= 8) {
+        window.clearInterval(poll);
+        markerGaveUpRef.current = true;
+        setMarkerNonce((n) => n + 1);
+      }
+    }, 200);
+    return () => {
+      window.clearInterval(poll);
+      if (el) {
+        el.removeEventListener('wheel', mark);
+        el.removeEventListener('touchstart', mark);
+        el.removeEventListener('pointerdown', mark);
+        el.removeEventListener('keydown', mark);
+      }
+    };
+  }, [code]);
+
+  // T-140: once the marker resolves after open, land on the first-unread divider
+  // — but ONLY if the reader has not scrolled/interacted since open. If they
+  // flicked up to read history while the marker was in flight, leave them there
+  // (READING-ANCHOR RULE, T-112). A one-time commit, guarded by landedRef.
+  useEffect(() => {
+    if (markerNonce === 0 || landedRef.current || openInteractedRef.current) return;
+    const target = firstUnreadIdRef.current;
+    if (target == null) { if (arrivalReadRef.current !== null) landedRef.current = true; return; }
+    const el = document.getElementById(`msg-${target}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'start' });
+    onFeedScroll();
+    landedRef.current = true;
+  }, [markerNonce]);
 
   // T-72: content that measures itself in AFTER the initial scroll (clamp
   // toggles, fonts, previews) grows the feed below the landed position,
