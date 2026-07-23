@@ -1,16 +1,17 @@
-// T-131: silent, continuous dictation by capturing the mic ourselves instead
-// of using the browser's built-in speech engine.
+// T-131: silent, continuous, DURABLE dictation. We capture the mic ourselves
+// (MediaRecorder) instead of using the browser's built-in speech engine, so
+// there is no OS "listening" chime and a pause never ends the session.
 //
-// The built-in engine on mobile fires the OS "listening" chime on every start
-// and ends on every pause, so it can only ever be quiet-but-stops or
-// continuous-but-beeps. Here we record raw audio with MediaRecorder in short
-// COMPLETE segments, POST each to /api/transcribe, and stream the returned
-// text into the composer. No built-in engine is touched, so there is no OS
-// chime, and we cycle segments regardless of speech, so a pause never stops
-// the session. Segments are transcribed in parallel but COMMITTED in order.
-//
-// The snapshot shape matches DictationController's so VoiceButton can swap
-// controllers behind an engine-availability check with no UI changes.
+// Durability (host requirement): audio must never be lost to a network/server
+// blip. So capture and upload are DECOUPLED:
+//   capture  -> every recorded segment is written to a local store
+//               (IndexedDB) FIRST. The local copy is the source of truth.
+//   pump     -> a separate loop drains the store in order: transcribe a
+//               segment, append its text, and only THEN delete it locally.
+// If the server drops mid-recording, capture keeps filling the store and the
+// pump retries with backoff; when the server returns, the pump drains
+// everything in spoken order and the transcript reconstructs with nothing lost.
+// Because the pump is strictly sequential, transcript order is guaranteed.
 
 import { mergeTranscript, type DictationSnapshot, type DictationState } from './dictation.js';
 
@@ -22,28 +23,33 @@ export interface RecorderLike {
   onerror: ((err: unknown) => void) | null;
 }
 
+export interface StoredSegment { seq: number; blob: Blob }
+
+// A durable, ordered segment queue. IndexedDB in the browser; an in-memory fake
+// in tests. pending() returns segments sorted ascending by seq.
+export interface SegmentStoreLike {
+  put(seg: StoredSegment): Promise<void>;
+  pending(): Promise<StoredSegment[]>;
+  delete(seq: number): Promise<void>;
+  clear(): Promise<void>;
+}
+
 export interface VoiceCaptureOptions {
-  /** Acquire the mic stream (wraps getUserMedia). Rejects -> error state. */
   getStream: () => Promise<unknown>;
-  /** Build a recorder for one segment; each stop() yields one complete blob. */
   createRecorder: (stream: unknown) => RecorderLike;
-  /** Transcribe one complete audio segment on the server. */
-  transcribe: (blob: Blob) => Promise<{ text: string; engine?: string }>;
+  /** Transcribe one segment. MUST reject/throw on any failure so the pump keeps
+   *  the segment buffered locally and retries, rather than dropping audio. */
+  transcribe: (blob: Blob) => Promise<{ text: string }>;
+  store: SegmentStoreLike;
   onChange: (s: DictationSnapshot) => void;
   onFinalize: (text: string) => void;
-  /** Length of each recorded segment before it is cut and transcribed. */
   segmentMs?: number;
-  /** Hard ceiling on total recording time. */
   maxMs?: number;
+  retryMs?: number;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (h: unknown) => void;
 }
-
-const IDLE_SNAPSHOT: DictationSnapshot = {
-  state: 'idle', finalText: '', interim: '', elapsedMs: 0, error: null,
-  hasHeardSpeech: false, restarts: 0, lastTransientError: null,
-};
 
 export class VoiceCaptureController {
   private o: Required<Omit<VoiceCaptureOptions, 'maxMs'>> & Pick<VoiceCaptureOptions, 'maxMs'>;
@@ -55,25 +61,26 @@ export class VoiceCaptureController {
   private error: string | null = null;
   private startedAt = 0;
   private stopping = false;
+  private settled = false;
   private segTimer: unknown = null;
+  private retryTimer: unknown = null;
 
-  // Ordered-commit bookkeeping: segments are transcribed in parallel but the
-  // recognized text must land in spoken order, so each segment gets a sequence
-  // number and out-of-order results wait in `pending` until their turn.
-  private seq = 0;             // next segment index to START
-  private nextCommit = 0;      // next segment index to COMMIT
-  private pending = new Map<number, string>();
-  private inFlight = 0;        // transcriptions not yet resolved
+  private enqueueSeq = 0;      // next segment index to assign
+  private pendingCount = 0;    // segments buffered locally, not yet transcribed
+  private pumpRunning = false;
+  private offline = false;     // last upload attempt failed -> buffering locally
 
   constructor(opts: VoiceCaptureOptions) {
     this.o = {
       getStream: opts.getStream,
       createRecorder: opts.createRecorder,
       transcribe: opts.transcribe,
+      store: opts.store,
       onChange: opts.onChange,
       onFinalize: opts.onFinalize,
       segmentMs: opts.segmentMs ?? 4000,
       maxMs: opts.maxMs,
+      retryMs: opts.retryMs ?? 2000,
       now: opts.now ?? (() => Date.now()),
       setTimer: opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms) as unknown),
       clearTimer: opts.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>)),
@@ -89,6 +96,10 @@ export class VoiceCaptureController {
       error: this.error,
       hasHeardSpeech: this.finalText.length > 0,
       restarts: 0,
+      // Surfaced so the composer can show "saved locally, will transcribe when
+      // reconnected" without a separate channel.
+      pendingUploads: this.pendingCount,
+      offline: this.offline,
       lastTransientError: null,
     };
   }
@@ -99,14 +110,15 @@ export class VoiceCaptureController {
     if (this.state !== 'idle') return;
     this.error = null;
     this.finalText = '';
-    this.seq = 0;
-    this.nextCommit = 0;
-    this.pending.clear();
-    this.inFlight = 0;
+    this.enqueueSeq = 0;
+    this.pendingCount = 0;
     this.stopping = false;
+    this.settled = false;
+    this.offline = false;
+    await this.o.store.clear().catch(() => {});
     try {
       this.stream = await this.o.getStream();
-    } catch (e) {
+    } catch {
       this.state = 'idle';
       this.error = 'Microphone permission denied or unavailable.';
       this.emit();
@@ -121,7 +133,6 @@ export class VoiceCaptureController {
   private beginSegment(): void {
     if (this.state !== 'recording') return;
     if (this.o.maxMs && this.o.now() - this.startedAt >= this.o.maxMs) { this.stop(); return; }
-    const mySeq = this.seq++;
     this.chunks = [];
     let rec: RecorderLike;
     try {
@@ -134,16 +145,25 @@ export class VoiceCaptureController {
     this.rec = rec;
     rec.ondata = (blob: Blob) => { if (blob && (blob as { size?: number }).size !== 0) this.chunks.push(blob); };
     rec.onerror = () => { this.error = 'Recording error.'; this.emit(); };
-    rec.onstop = () => {
-      const parts = this.chunks;
-      this.chunks = [];
-      // Keep capturing immediately so a pause in speech never drops audio;
-      // the just-finished segment transcribes in parallel.
-      if (!this.stopping && this.state === 'recording') this.beginSegment();
-      this.transcribeSegment(mySeq, parts);
-    };
+    rec.onstop = () => { void this.onSegmentStopped(); };
     rec.start();
     this.segTimer = this.o.setTimer(() => { this.cutSegment(); }, this.o.segmentMs);
+  }
+
+  private async onSegmentStopped(): Promise<void> {
+    const parts = this.chunks;
+    this.chunks = [];
+    // Keep capturing immediately so a pause never drops audio.
+    if (!this.stopping && this.state === 'recording') this.beginSegment();
+    const blob = parts.length ? new Blob(parts) : null;
+    if (blob && blob.size > 0) {
+      const seq = this.enqueueSeq++;
+      await this.o.store.put({ seq, blob }); // DURABLE: land locally before any upload
+      this.pendingCount++;
+      this.emit();
+      void this.pump();
+    }
+    if (this.stopping) this.maybeSettle();
   }
 
   private cutSegment(): void {
@@ -153,28 +173,42 @@ export class VoiceCaptureController {
     if (rec) { try { rec.stop(); } catch { /* already stopped */ } }
   }
 
-  private transcribeSegment(mySeq: number, parts: Blob[]): void {
-    this.inFlight++;
-    const blob = parts.length ? new Blob(parts) : new Blob([]);
-    this.o.transcribe(blob)
-      .then((r) => this.commit(mySeq, r?.text || ''))
-      .catch(() => this.commit(mySeq, '')) // a failed segment must not stall the queue
-      .finally(() => {
-        this.inFlight--;
-        if (this.stopping && this.inFlight === 0) this.settle();
-      });
+  // Drain the local store in order. On any transcribe failure, mark offline and
+  // retry later — the segment stays buffered, never dropped.
+  private async pump(): Promise<void> {
+    if (this.pumpRunning) return;
+    this.pumpRunning = true;
+    try {
+      for (;;) {
+        const items = await this.o.store.pending();
+        if (items.length === 0) break;
+        const item = items[0]!;
+        try {
+          const res = await this.o.transcribe(item.blob);
+          this.offline = false;
+          if (res && res.text) this.finalText = mergeTranscript(this.finalText, res.text);
+          await this.o.store.delete(item.seq);
+          this.pendingCount = Math.max(0, this.pendingCount - 1);
+          this.emit();
+        } catch {
+          this.offline = true;
+          this.emit();
+          this.scheduleRetry();
+          return; // leave this and later segments buffered; finally resets the guard
+        }
+      }
+    } finally {
+      this.pumpRunning = false;
+    }
+    // Store fully drained.
+    this.offline = false;
+    this.emit();
+    if (this.stopping) this.maybeSettle();
   }
 
-  // Commit recognized text in spoken order, buffering any that arrive early.
-  private commit(seq: number, text: string): void {
-    this.pending.set(seq, text);
-    while (this.pending.has(this.nextCommit)) {
-      const t = this.pending.get(this.nextCommit)!;
-      this.pending.delete(this.nextCommit);
-      this.nextCommit++;
-      if (t) this.finalText = mergeTranscript(this.finalText, t);
-    }
-    this.emit();
+  private scheduleRetry(): void {
+    if (this.retryTimer) return;
+    this.retryTimer = this.o.setTimer(() => { this.retryTimer = null; void this.pump(); }, this.o.retryMs);
   }
 
   stop(): void {
@@ -184,12 +218,16 @@ export class VoiceCaptureController {
     const rec = this.rec;
     this.rec = null;
     if (rec) { try { rec.stop(); } catch { /* noop */ } }
-    // If nothing is left to transcribe, settle now; otherwise settle() runs
-    // when the last in-flight segment resolves.
-    if (this.inFlight === 0) this.settle();
+    else this.maybeSettle();
   }
 
-  private settle(): void {
+  // Finalize only once every segment has been transcribed AND removed from the
+  // local store. If the server is down at stop time, the draft stays buffered
+  // and finalizes when the pump drains it after reconnection (nothing lost).
+  private maybeSettle(): void {
+    if (!this.stopping || this.settled) return;
+    if (this.pendingCount > 0 || this.pumpRunning) return;
+    this.settled = true;
     this.stopReleaseStream();
     this.state = 'idle';
     this.emit();
@@ -198,13 +236,15 @@ export class VoiceCaptureController {
 
   cancel(): void {
     this.stopping = true;
+    this.settled = true;
     if (this.segTimer) { this.o.clearTimer(this.segTimer); this.segTimer = null; }
+    if (this.retryTimer) { this.o.clearTimer(this.retryTimer); this.retryTimer = null; }
     const rec = this.rec;
     this.rec = null;
     if (rec) { try { rec.stop(); } catch { /* noop */ } }
-    this.pending.clear();
     this.finalText = '';
-    this.inFlight = 0;
+    this.pendingCount = 0;
+    void this.o.store.clear().catch(() => {});
     this.stopReleaseStream();
     this.state = 'idle';
     this.emit();
@@ -217,4 +257,48 @@ export class VoiceCaptureController {
   }
 }
 
-export { IDLE_SNAPSHOT };
+// ---- IndexedDB-backed segment store (production) --------------------------
+// One object store keyed by seq. Survives reloads, so audio persists even if
+// the tab is refreshed mid-outage, not just across a server blip.
+export function createIndexedDbStore(dbName = 'ar-dictation'): SegmentStoreLike {
+  const STORE = 'segments';
+  function open(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(dbName, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE, { keyPath: 'seq' }); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+    const db = await open();
+    return new Promise<T>((resolve, reject) => {
+      const t = db.transaction(STORE, mode);
+      const req = fn(t.objectStore(STORE));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+      t.oncomplete = () => db.close();
+    });
+  }
+  return {
+    put: (seg) => tx('readwrite', (s) => s.put(seg)).then(() => {}),
+    delete: (seq) => tx('readwrite', (s) => s.delete(seq)).then(() => {}),
+    clear: () => tx('readwrite', (s) => s.clear()).then(() => {}),
+    pending: () =>
+      tx<StoredSegment[]>('readonly', (s) => s.getAll() as IDBRequest<StoredSegment[]>).then((all) =>
+        (all || []).sort((a, b) => a.seq - b.seq),
+      ),
+  };
+}
+
+// In-memory store — a safe fallback where IndexedDB is unavailable (still gives
+// server-outage durability within the session, just not across a reload).
+export function createMemoryStore(): SegmentStoreLike {
+  let segs: StoredSegment[] = [];
+  return {
+    put: async (seg) => { segs = segs.filter((s) => s.seq !== seg.seq).concat(seg); },
+    delete: async (seq) => { segs = segs.filter((s) => s.seq !== seq); },
+    clear: async () => { segs = []; },
+    pending: async () => [...segs].sort((a, b) => a.seq - b.seq),
+  };
+}

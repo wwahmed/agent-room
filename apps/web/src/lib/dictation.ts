@@ -21,6 +21,12 @@ export interface DictationSnapshot {
   hasHeardSpeech: boolean;          // any onresult at all this session
   restarts: number;                 // automatic restarts this session
   lastTransientError: string | null; // most recent non-fatal error code
+  // T-131 (server-STT capture path only): segments recorded locally but not yet
+  // transcribed, and whether the last upload failed so the composer can show a
+  // "saved locally, will transcribe when reconnected" state. Unset for the
+  // built-in-engine DictationController.
+  pendingUploads?: number;
+  offline?: boolean;
 }
 
 export interface RecognizerLike {

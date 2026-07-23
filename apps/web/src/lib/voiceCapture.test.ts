@@ -1,125 +1,139 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { VoiceCaptureController, type RecorderLike } from './voiceCapture.js';
+import { VoiceCaptureController, createMemoryStore, type RecorderLike, type SegmentStoreLike } from './voiceCapture.js';
 import type { DictationSnapshot } from './dictation.js';
 
-// Deferred so a test can resolve segment transcriptions in any order.
-function deferred<T>() {
-  let resolve!: (v: T) => void, reject!: (e?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-  return { promise, resolve, reject };
-}
-const flush = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-
-interface Harness {
-  ctrl: VoiceCaptureController;
-  tick: () => void;              // fire the pending segment timer (cut segment)
-  recorders: FakeRecorder[];
-  transcripts: Array<ReturnType<typeof deferred<{ text: string }>>>;
-  snaps: DictationSnapshot[];
-  finals: string[];
-  streamStopped: () => boolean;
-}
+// Drain enough microtask turns to let the async pump process a full buffer
+// (each segment does several awaits: pending -> transcribe -> delete).
+const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
 
 class FakeRecorder implements RecorderLike {
   ondata: ((b: Blob) => void) | null = null;
   onstop: (() => void) | null = null;
   onerror: ((e: unknown) => void) | null = null;
-  started = false;
   stopped = false;
-  start() { this.started = true; }
+  constructor(private label: string) {}
+  start() {}
   stop() {
     if (this.stopped) return;
     this.stopped = true;
-    this.ondata?.(new Blob([new Uint8Array([1, 2, 3])]));
+    // Non-empty blob tagged by segment so assertions can read spoken order.
+    this.ondata?.(new Blob([this.label]));
     this.onstop?.();
   }
 }
 
+interface Harness {
+  ctrl: VoiceCaptureController;
+  tick: () => void;                  // fire the current segment timer (cut it)
+  fireRetry: () => void;             // fire a pending retry timer
+  setServerUp: (up: boolean) => void;
+  snaps: DictationSnapshot[];
+  finals: string[];
+  store: SegmentStoreLike;
+  storeCount: () => Promise<number>;
+  streamStopped: () => boolean;
+  transcribeCalls: () => number;
+}
+
 function makeHarness(opts: { getStreamRejects?: boolean } = {}): Harness {
-  const recorders: FakeRecorder[] = [];
-  const transcripts: Array<ReturnType<typeof deferred<{ text: string }>>> = [];
   const snaps: DictationSnapshot[] = [];
   const finals: string[] = [];
-  let currentTimer: (() => void) | null = null;
+  const store = createMemoryStore();
+  let segTimer: (() => void) | null = null;
+  let retryTimer: (() => void) | null = null;
   let clock = 1000;
-  let stopped = false;
-  const tracks = [{ stop: () => { stopped = true; } }];
+  let streamStopped = false;
+  let serverUp = true;
+  let calls = 0;
+  const tracks = [{ stop: () => { streamStopped = true; } }];
+  let recCount = 0;
 
   const ctrl = new VoiceCaptureController({
-    getStream: async () => {
-      if (opts.getStreamRejects) throw new Error('denied');
-      return { getTracks: () => tracks };
+    getStream: async () => { if (opts.getStreamRejects) throw new Error('denied'); return { getTracks: () => tracks }; },
+    createRecorder: () => new FakeRecorder(`seg${recCount++}`),
+    // The blob text is the segment label; the "transcript" is that label so
+    // ordering is checkable. Throws while the server is down (never drops audio).
+    transcribe: async (blob: Blob) => {
+      calls++;
+      if (!serverUp) throw new Error('server down');
+      const label = await blob.text();
+      return { text: label };
     },
-    createRecorder: () => { const r = new FakeRecorder(); recorders.push(r); return r; },
-    transcribe: () => { const d = deferred<{ text: string }>(); transcripts.push(d); return d.promise; },
+    store,
     onChange: (s) => snaps.push(s),
     onFinalize: (t) => finals.push(t),
     segmentMs: 4000,
+    retryMs: 2000,
     now: () => clock,
-    setTimer: (fn) => { currentTimer = fn; return 1; },
-    clearTimer: () => { currentTimer = null; },
+    setTimer: (fn, ms) => { if (ms === 2000) retryTimer = fn; else segTimer = fn; return 1; },
+    clearTimer: () => {},
   });
 
   return {
     ctrl,
-    tick: () => { const fn = currentTimer; currentTimer = null; clock += 4000; fn?.(); },
-    recorders, transcripts, snaps, finals,
-    streamStopped: () => stopped,
+    tick: () => { const fn = segTimer; segTimer = null; clock += 4000; fn?.(); },
+    fireRetry: () => { const fn = retryTimer; retryTimer = null; fn?.(); },
+    setServerUp: (up) => { serverUp = up; },
+    snaps, finals, store,
+    storeCount: async () => (await store.pending()).length,
+    streamStopped: () => streamStopped,
+    transcribeCalls: () => calls,
   };
 }
 
-describe('VoiceCaptureController', () => {
+describe('VoiceCaptureController (durable)', () => {
   let h: Harness;
   beforeEach(() => { h = makeHarness(); });
 
-  it('commits segment text in spoken order even when transcriptions resolve out of order', async () => {
+  it('transcribes segments in spoken order and grows the transcript', async () => {
     await h.ctrl.start();
-    h.tick(); // cut segment 0 -> starts segment 1, transcribe(0) in flight
-    h.tick(); // cut segment 1 -> starts segment 2, transcribe(1) in flight
-    expect(h.transcripts.length).toBe(2);
-    // Resolve segment 1 FIRST; it must NOT appear until segment 0 commits.
-    h.transcripts[1]!.resolve({ text: 'world' });
-    await flush();
-    expect(h.ctrl.snapshot().finalText).toBe('');
-    h.transcripts[0]!.resolve({ text: 'hello' });
-    await flush();
-    expect(h.ctrl.snapshot().finalText).toBe('hello world');
+    h.tick(); await flush(); // cut seg0 -> stored -> pumped
+    h.tick(); await flush(); // cut seg1 -> stored -> pumped
+    expect(h.ctrl.snapshot().finalText).toBe('seg0 seg1');
+    expect(await h.storeCount()).toBe(0); // committed segments deleted locally
   });
 
-  it('a silent pause (empty transcript) adds nothing but keeps recording', async () => {
+  it('keeps recording across a pause (never stops on its own)', async () => {
     await h.ctrl.start();
-    const recordersAfterStart = h.recorders.length; // 1
-    h.tick(); // cut seg 0 -> begins seg 1
-    h.transcripts[0]!.resolve({ text: '' }); // silence
-    await flush();
-    expect(h.ctrl.snapshot().finalText).toBe('');
-    expect(h.ctrl.snapshot().state).toBe('recording'); // did NOT stop on the pause
-    expect(h.recorders.length).toBeGreaterThan(recordersAfterStart); // cycled to a new segment
+    h.tick(); await flush();
+    h.tick(); await flush();
+    expect(h.ctrl.snapshot().state).toBe('recording');
   });
 
-  it('finalizes with the full transcript only after in-flight segments settle', async () => {
+  it('DURABILITY: audio survives a server outage and reconstructs on reconnect', async () => {
     await h.ctrl.start();
-    h.tick(); // cut seg 0 (in flight) -> seg 1 recording
-    h.ctrl.stop(); // cuts seg 1 as the final partial segment -> also in flight
-    expect(h.finals.length).toBe(0); // not finalized while segments are transcribing
-    h.transcripts[0]!.resolve({ text: 'done' });
+    // Server goes down; keep speaking. Segments must buffer locally, not drop.
+    h.setServerUp(false);
+    h.tick(); await flush(); // seg0 -> stored, upload fails -> offline
+    h.tick(); await flush(); // seg1 -> stored
+    h.tick(); await flush(); // seg2 -> stored
+    expect(h.ctrl.snapshot().offline).toBe(true);
+    expect(h.ctrl.snapshot().pendingUploads).toBe(3);
+    expect(await h.storeCount()).toBe(3);         // three segments safe on disk
+    expect(h.ctrl.snapshot().finalText).toBe(''); // nothing transcribed yet
+
+    // Server restored; the retry drains the whole buffer in spoken order.
+    h.setServerUp(true);
+    h.fireRetry(); await flush();
+    expect(h.ctrl.snapshot().finalText).toBe('seg0 seg1 seg2'); // nothing lost, in order
+    expect(h.ctrl.snapshot().offline).toBe(false);
+    expect(h.ctrl.snapshot().pendingUploads).toBe(0);
+    expect(await h.storeCount()).toBe(0);
+  });
+
+  it('stop finalizes only after the local buffer fully drains', async () => {
+    await h.ctrl.start();
+    h.setServerUp(false);
+    h.tick(); await flush();     // seg0 buffered, server down
+    h.ctrl.stop();               // cuts final segment; both are buffered
     await flush();
-    expect(h.finals.length).toBe(0); // final partial segment still transcribing
-    h.transcripts[1]!.resolve({ text: '' });
-    await flush();
-    expect(h.finals).toEqual(['done']);
+    expect(h.finals.length).toBe(0); // cannot finalize while segments are buffered
+    h.setServerUp(true);
+    h.fireRetry(); await flush();
+    expect(h.finals.length).toBe(1);
+    expect(h.finals[0]).toContain('seg0');
     expect(h.ctrl.snapshot().state).toBe('idle');
-    expect(h.streamStopped()).toBe(true); // mic track released
-  });
-
-  it('a failed segment transcription does not stall the commit queue', async () => {
-    await h.ctrl.start();
-    h.tick();
-    h.tick();
-    h.transcripts[0]!.reject(new Error('network'));
-    h.transcripts[1]!.resolve({ text: 'after' });
-    await flush();
-    expect(h.ctrl.snapshot().finalText).toBe('after');
+    expect(h.streamStopped()).toBe(true);
   });
 
   it('surfaces an error and stays idle when the mic is denied', async () => {
@@ -127,18 +141,17 @@ describe('VoiceCaptureController', () => {
     await denied.ctrl.start();
     expect(denied.ctrl.snapshot().state).toBe('idle');
     expect(denied.ctrl.snapshot().error).toMatch(/permission|denied|unavailable/i);
-    expect(denied.recorders.length).toBe(0);
   });
 
-  it('cancel discards the draft and never finalizes', async () => {
+  it('cancel discards the buffer and never finalizes', async () => {
     await h.ctrl.start();
-    h.tick();
-    h.transcripts[0]!.resolve({ text: 'throwaway' });
-    await flush();
+    h.tick(); await flush();
     h.ctrl.cancel();
+    await flush();
     expect(h.ctrl.snapshot().finalText).toBe('');
     expect(h.ctrl.snapshot().state).toBe('idle');
     expect(h.finals.length).toBe(0);
+    expect(await h.storeCount()).toBe(0);
     expect(h.streamStopped()).toBe(true);
   });
 });
