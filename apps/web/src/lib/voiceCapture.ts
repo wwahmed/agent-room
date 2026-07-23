@@ -160,7 +160,10 @@ export class VoiceCaptureController {
   private async onSegmentStopped(): Promise<void> {
     const parts = this.chunks;
     this.chunks = [];
-    // Keep capturing immediately so a pause never drops audio.
+    // T-138: a pause/cancel (settled) drops this tail segment — the user took
+    // over with the keyboard and everything already streamed is in the draft.
+    if (this.settled) return;
+    // Keep capturing immediately so a pause in speech never drops audio.
     if (!this.stopping && this.state === 'recording') this.beginSegment();
     const blob = parts.length ? new Blob(parts) : null;
     if (blob && blob.size > 0) {
@@ -192,6 +195,9 @@ export class VoiceCaptureController {
         const item = items[0]!;
         try {
           const res = await this.o.transcribe(item.blob);
+          // T-138: a pause/cancel while this segment was in flight — do not
+          // commit or emit late text over the draft the user is now editing.
+          if (this.settled) return;
           this.offline = false;
           if (res && res.text) this.finalText = mergeTranscript(this.finalText, res.text);
           await this.o.store.delete(item.seq);

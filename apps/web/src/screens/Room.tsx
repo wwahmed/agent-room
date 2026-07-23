@@ -18,7 +18,7 @@ import { RoomListPane } from '../components/RoomListPane.js';
 import { ProjectPanel } from '../components/ProjectPanel.js';
 import { QuestionArtifactCard } from '../components/QuestionArtifactCard.js';
 import { QuestionArtifactSheet } from '../components/QuestionArtifactSheet.js';
-import { VoiceButton } from '../components/VoiceButton.js';
+import { VoiceButton, type VoiceButtonHandle } from '../components/VoiceButton.js';
 import { AttachmentSheet } from '../components/AttachmentSheet.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { Avatar } from '../components/Avatar.js';
@@ -230,6 +230,11 @@ export function Room() {
   const dictationBaseRef = useRef<string | null>(null);
   const dictationUndoRef = useRef('');
   const [dictationDraft, setDictationDraft] = useState(false);
+  // T-138: the mic and keyboard must not fight for the draft. Typing while
+  // recording pauses dictation (voiceRef.pause); the trigger then shows a
+  // resume state and tapping it appends after the current draft.
+  const voiceRef = useRef<VoiceButtonHandle>(null);
+  const [dictationPaused, setDictationPaused] = useState(false);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   // T-119: while dictation is ACTIVE the recording overlay carries every
   // control, so the trigger cluster yields its row slots and the draft
@@ -1414,6 +1419,7 @@ export function Room() {
     };
     setText('');
     setDictationDraft(false);
+    setDictationPaused(false);
     setAttachments([]);
     setReplyingTo(null);
     // The server's absolute count lands on the next poll. Record the successful
@@ -2653,14 +2659,14 @@ export function Room() {
                     <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft: editable. Type to revise, then Send.</span>
                     <button
                       type="button"
-                      onClick={() => { setText(dictationUndoRef.current); setDictationDraft(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
+                      onClick={() => { voiceRef.current?.pause(); setText(dictationUndoRef.current); setDictationDraft(false); setDictationPaused(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
                       className="min-h-8 rounded-md px-2 font-semibold text-accent hover:bg-surface"
                     >
                       Undo
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setText(''); setDictationDraft(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
+                      onClick={() => { voiceRef.current?.pause(); setText(''); setDictationDraft(false); setDictationPaused(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}
                       className="min-h-8 rounded-md px-2 font-semibold text-red-300 hover:bg-red-500/10"
                     >
                       Clear
@@ -2678,7 +2684,21 @@ export function Room() {
                 <textarea
                   ref={textareaRef}
                   value={text}
-                  onChange={e => { setText(e.target.value); syncMention(); }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setText(v);
+                    syncMention();
+                    // T-138: onChange fires only for real user input (programmatic
+                    // setText from the live transcript does NOT), so a keystroke
+                    // while recording means the user is taking over — pause the mic
+                    // and re-anchor so resume appends after these edits.
+                    if (dictating) {
+                      voiceRef.current?.pause();
+                      dictationBaseRef.current = v;
+                      setDictating(false);
+                      setDictationPaused(true);
+                    }
+                  }}
                   onSelect={syncMention}
                   onFocus={() => setComposerFocused(true)}
                   onBlur={() => { setComposerFocused(false); window.setTimeout(() => setMention(null), 150); }}
@@ -2781,11 +2801,16 @@ export function Room() {
                       T-79/T-119 visibility rules existed to manage. */}
                   <span className="contents">
                   <VoiceButton
+                    ref={voiceRef}
+                    resumeMode={dictationPaused}
                     onStart={() => {
+                      // Re-anchor to whatever is in the draft NOW (typed edits
+                      // included) so a resume appends after them (T-138).
                       dictationBaseRef.current = text;
-                      dictationUndoRef.current = text;
+                      if (!dictationPaused) dictationUndoRef.current = text;
                       setDictationDraft(true);
                       setDictating(true);
+                      setDictationPaused(false);
                     }}
                     onLiveTranscript={(live) => {
                       const base = (dictationBaseRef.current ?? '').trim();
@@ -2806,6 +2831,7 @@ export function Room() {
                       dictationBaseRef.current = null;
                       setDictationDraft(true);
                       setDictating(false);
+                      setDictationPaused(false);
                       requestAnimationFrame(() => textareaRef.current?.focus());
                     }}
                     onCancel={() => {
@@ -2813,6 +2839,7 @@ export function Room() {
                       dictationBaseRef.current = null;
                       setDictationDraft(false);
                       setDictating(false);
+                      setDictationPaused(false);
                     }}
                     hideTriggerWhileActive
                     disabled={ended}

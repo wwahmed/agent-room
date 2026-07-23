@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { DictationController, mergeTranscript, type DictationSnapshot, type RecognizerLike } from '../lib/dictation.js';
 import {
   VoiceCaptureController,
@@ -19,6 +19,9 @@ interface VoiceController {
   cancel(): void;
   snapshot(): DictationSnapshot;
 }
+
+// T-138: the composer pauses dictation imperatively when the user starts typing.
+export interface VoiceButtonHandle { pause(): void }
 
 // T-131: the capture path needs MediaRecorder + getUserMedia. Widely supported
 // on desktop Chrome/Safari/Edge/Firefox, Chrome/Android, and Safari/iOS 14.3+.
@@ -90,6 +93,9 @@ interface Props {
   /** Fired when the user discards (🗑), so the composer can revert to the base. */
   onCancel?: () => void;
   disabled?: boolean;
+  /** T-138: the dictation is paused (the user typed); the trigger shows a
+   *  distinct "resume" state, and tapping it resumes appending to the draft. */
+  resumeMode?: boolean;
 }
 
 // The live transcript = committed words plus the not-yet-final interim tail.
@@ -137,11 +143,20 @@ function noSignalMessage(s: DictationSnapshot): string {
   return `No transcription yet (${s.lastTransientError})`;
 }
 
-export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive }: Props) {
+export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceButton(
+  { onTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive, resumeMode }: Props,
+  ref,
+) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
   const [tick, setTick] = useState(0);
   const ctrlRef = useRef<VoiceController | null>(null);
   const wakeLockRef = useRef<ScreenWakeLockController | null>(null);
+  // T-138: the composer pauses dictation imperatively the instant the user
+  // types. Pause is a SILENT teardown to idle (drops the sub-second
+  // untranscribed tail, no finalize, no revert); the composer keeps the draft,
+  // and tapping the (now amber) trigger resumes with a fresh start() that
+  // re-anchors to the current draft — so new speech appends without duplicating.
+  useImperativeHandle(ref, () => ({ pause: () => ctrlRef.current?.cancel() }), []);
   // T-131: whether the local server-STT engine is reachable. Checked once on
   // mount; when true we use the silent, continuous capture path, otherwise we
   // fall back to the built-in speech engine.
@@ -248,14 +263,15 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
           playStartCue(); // T-131: the one app cue that replaces the OS chime
           void c.start();
         }}
-        aria-label={active ? 'Stop dictation and insert text' : 'Start voice dictation'}
-        title={active ? 'Stop dictation' : 'Start voice dictation'}
+        aria-label={active ? 'Stop dictation and insert text' : resumeMode ? 'Resume dictation' : 'Start voice dictation'}
+        title={active ? 'Stop dictation' : resumeMode ? 'Resume dictation (paused)' : 'Start voice dictation'}
         aria-pressed={active}
+        data-gate={resumeMode && !active ? 'dictation-paused' : undefined}
         className={`text-base leading-none w-11 h-11 items-center justify-center rounded-lg transition ${active && hideTriggerWhileActive ? 'hidden' : 'flex'} ${
           recording
             ? 'bg-red-500/20 text-red-300'
-            : snap.state === 'paused'
-            ? 'bg-amber-500/20 text-amber-300'
+            : snap.state === 'paused' || (resumeMode && !active)
+            ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/50'
             : 'bg-surface-softer text-ink-soft hover:bg-accent-tint hover:text-accent'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
@@ -380,4 +396,4 @@ export function VoiceButton({ onTranscript, onLiveTranscript, onStart, onCancel,
       )}
     </div>
   );
-}
+});
