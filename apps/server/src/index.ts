@@ -36,7 +36,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TTL_SECONDS, roomTopicIssue, buildOwnerBrief, briefToSpeech } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TTL_SECONDS, roomTopicIssue, buildOwnerBrief, briefToSpeech, composeBrief } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 import { parseMultipart } from './multipart.js';
 import {
@@ -1830,13 +1830,16 @@ const server = createServer(async (req, res) => {
       } catch { firstUnreadIndex = null; } // no account/marker -> first-visit framing
       const messages = await listMessages(client, code, 0);
       const board = await getTaskBoard(code);
-      const lines = buildOwnerBrief({
-        selfName: self,
-        firstUnreadIndex,
-        messages: (messages as Array<{ name?: string; text?: string }>).map((m) => ({ name: String(m.name || ''), text: m.text })),
-        tasks: board.tasks.map((t) => ({ id: t.id, title: t.title, state: t.state, owner: t.owner, verifier: t.verifier })),
-      });
-      return sendJson(res, 200, { lines, speech: briefToSpeech(lines) });
+      const briefMessages = (messages as Array<{ name?: string; text?: string }>).map((m) => ({ name: String(m.name || ''), text: m.text }));
+      const briefTasks = board.tasks.map((t) => ({ id: t.id, title: t.title, state: t.state, owner: t.owner, verifier: t.verifier }));
+      // T-134 legacy shape (still consumed by the header button during transition).
+      const lines = buildOwnerBrief({ selfName: self, firstUnreadIndex, messages: briefMessages, tasks: briefTasks });
+      // T-139: the agreed protocol brief — server-composed, honest by construction,
+      // with display + speech renderings. `mode=deep` expands; `topic` scopes it.
+      const mode = url.searchParams.get('mode') === 'deep' ? 'deep' : 'default';
+      const topic = url.searchParams.get('topic')?.trim() || undefined;
+      const brief = composeBrief({ selfName: self, firstUnreadIndex, messages: briefMessages, tasks: briefTasks, mode, topic });
+      return sendJson(res, 200, { lines, speech: briefToSpeech(lines), brief });
     }
 
     // T-134: local text-to-speech for the owner brief's speaker button.

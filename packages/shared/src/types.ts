@@ -278,6 +278,13 @@ export interface MessageMetadata {
   reactionKind?: MessageReactionKind;
   reactionRemoved?: boolean;
   reactionsSnapshot?: MessageReaction[];
+  // T-139: an /brief command result rendered as an EXECUTIVE BRIEF card. The
+  // message text carries the display (markdown) rendering; briefSpeech carries
+  // the speech-optimized rendering the 🔊 button plays (same facts, IDs/URLs
+  // stripped). briefScope notes a /brief <topic> or deep run for provenance.
+  brief?: boolean;
+  briefSpeech?: string;
+  briefScope?: string;
 }
 
 // T-121: structured acknowledge/reject state on a message. Stored ON the

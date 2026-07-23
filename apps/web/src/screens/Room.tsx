@@ -9,6 +9,9 @@ import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { OwnerBrief } from '../components/OwnerBrief.js';
+import { BriefCard } from '../components/BriefCard.js';
+import { parseBriefCommand } from '../lib/briefCommand.js';
+import { runBrief } from '../lib/runBrief.js';
 import { CommandSearch } from '../components/CommandSearch.js';
 import { Inspector, type InspectorTab } from '../components/Inspector.js';
 import { RecoverHostButton } from '../components/RecoverHostButton.js';
@@ -1492,6 +1495,26 @@ export function Room() {
   async function send() {
     const body = text.trim();
     if ((!body && attachments.length === 0) || ended || sendingRef.current) return;
+
+    // T-139: the /brief command family. A brief COMPOSES a room artifact from
+    // real board+message state (server-side, honest by construction) and posts
+    // it as an EXECUTIVE BRIEF card instead of sending the "/brief" text. Only
+    // when there are no attachments — an image caption of "/brief" is a caption.
+    const briefCmd = attachments.length === 0 ? parseBriefCommand(body) : null;
+    if (briefCmd) {
+      setText('');
+      setDictationDraft(false);
+      setDictationPaused(false);
+      setReplyingTo(null);
+      const result = await runBrief(code, me.name, briefCmd);
+      if (!result.posted) {
+        const { showToast } = await import('../components/Toast.js');
+        showToast(result.error ?? 'Could not build your brief.', 'error');
+        setText(body); // restore so they can retry
+      }
+      return;
+    }
+
     sendingRef.current = true;
     // T-131: the app send-chime. Waqas asked for a cue at record-start and at
     // send, nothing in between — so it fires only for a dictated message, the
@@ -2408,7 +2431,14 @@ export function Room() {
                       <div className="h-px flex-1 bg-accent/40" />
                     </div>
                   )}
-                  {m.metadata?.eventType === 'question_created' && m.metadata.questionId ? (
+                  {m.metadata?.brief ? (
+                    <BriefCard
+                      text={m.text ?? ''}
+                      speech={m.metadata.briefSpeech}
+                      scope={m.metadata.briefScope}
+                      selfName={self.name}
+                    />
+                  ) : m.metadata?.eventType === 'question_created' && m.metadata.questionId ? (
                     <QuestionArtifactCard
                       message={m}
                       question={ownerQuestions.find(question => question.id === m.metadata?.questionId)}
