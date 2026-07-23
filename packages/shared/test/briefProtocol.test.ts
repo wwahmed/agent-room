@@ -30,6 +30,12 @@ describe('humanizeTitle', () => {
   it('never returns empty; falls back to the raw title', () => {
     expect(humanizeTitle('T-99')).toBe('T-99');
   });
+  it('strips mid-title task ids and provenance parentheticals (no jargon leak)', () => {
+    expect(humanizeTitle('zero beeps mid-recording (supersedes T-76 target)'))
+      .toBe('zero beeps mid-recording');
+    expect(humanizeTitle('server stamps message envelopes (T-111 sibling)'))
+      .toBe('server stamps message envelopes');
+  });
 });
 
 describe('composeBrief — honesty by construction', () => {
@@ -77,6 +83,33 @@ describe('composeBrief — honesty by construction', () => {
     const b = composeBrief({ ...base, tasks: [task('T-1', 'Refine chat typography', 'done')], firstUnreadIndex: 0 });
     expect(b.display).toContain('Nothing needs you right now');
     expect(b.speech).toContain('Nothing needs your decision right now');
+  });
+
+  it('does not promote a greeting/ack or a non-question mention into a decision', () => {
+    const b = composeBrief({
+      ...base,
+      firstUnreadIndex: 0,
+      messages: [
+        { name: 'UX', text: '@Waqas thanks — the screenshot changes the diagnosis, we adopt it.' }, // ack, has no '?'
+        { name: 'UX', text: '@Waqas the /brief command is not wired in yet, it is next in the queue.' }, // status, no '?'
+        { name: 'UX', text: '@Waqas got it. Should we default the audio on?' }, // real question -> included
+      ],
+    });
+    const asks = b.sections.decisions.map((d) => d.ask);
+    expect(asks.some((a) => /thanks/i.test(a))).toBe(false);
+    expect(asks.some((a) => /next in the queue/i.test(a))).toBe(false);
+    expect(asks.some((a) => /default the audio on\?/i.test(a))).toBe(true);
+  });
+
+  it('produces no doubled sentence punctuation in speech', () => {
+    const b = composeBrief({
+      ...base,
+      tasks: boardSample,
+      firstUnreadIndex: 0,
+      messages: [{ name: 'UX', text: '@Waqas should we ship it now?' }],
+    });
+    expect(b.speech).not.toMatch(/\.\./);
+    expect(b.speech).not.toMatch(/There are one more/);
   });
 
   it('only attaches a recommendation when the source states one', () => {

@@ -81,10 +81,19 @@ export function humanizeTitle(title: string): string {
   s = s.replace(/^\s*(urgent\s+)?(hotfix|p0|p1|p2|emergency|urgent|board defect|real fix)\b[^:]*:\s*/i, '');
   // A second pass catches "P0 incident: " style double tags.
   s = s.replace(/^\s*(p0|p1|p2)\b[^:]*:\s*/i, '');
-  s = s.trim();
-  // Drop any residual leading "T-NNN" mention anywhere is NOT done — mid-title
-  // ids are rare and removing them blindly could corrupt meaning. We only strip
-  // the standalone-token form for the speech pass (see stripForSpeech).
+  // Provenance parentheticals are noise to the owner and carry task ids:
+  // "(supersedes T-76 target)", "(see T-42)", "(T-111 sibling)". Drop any
+  // parenthetical that contains a task id wholesale, plus common provenance words.
+  s = s.replace(/\s*\([^)]*\bT-\d+[a-z]?\b[^)]*\)/gi, '');
+  s = s.replace(/\s*\((?:supersedes?|supersed|see|ref|cf|per)\b[^)]*\)/gi, '');
+  // Strip any residual STANDALONE task-id token so no "T-NNN" jargon ever reaches
+  // the owner, then tidy the seams (empty parens, doubled spaces, space-before-punct).
+  s = s.replace(/\bT-\d+[a-z]?\b/g, '')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([),.;:])/g, '$1')
+    .replace(/\(\s+/g, '(')
+    .trim();
   return s || title.trim();
 }
 
@@ -137,22 +146,30 @@ function mentionsOwner(text: string, selfName: string): boolean {
   return OWNER_ALIASES.some((a) => t.includes(`@${a}`));
 }
 
-/** A message is an ask ON the owner when it @-mentions them and either asks a
- *  question or uses decision language. Grounded: the ask text is the real
- *  message, trimmed. */
-function messageAsksOwner(m: BriefMessage, selfName: string): boolean {
-  if (m.name === selfName) return false;
-  const text = m.text ?? '';
-  if (!mentionsOwner(text, selfName)) return false;
-  return /\?|\byour call\b|\bconfirm\b|\bapprove\b|\bdecide\b|\bauthoriz|\bwhich (one|option)\b|\bshould we\b/i.test(text);
-}
+// Openers that mark a message as an acknowledgement / status, never a decision
+// for the owner — so "@Waqas thanks, the screenshot changes the diagnosis" is
+// not misreported as something waiting on them.
+const ACK_OPENERS = /^(thanks?|thank you|got it|ok(ay)?|great|nice|good|agreed|done|noted|fyi|update|status|confirmed|will do|on it|yes|no\b)/i;
 
-/** First sentence / clause of a message, for surfacing a decision ask concisely. */
-function firstClause(text: string, max = 140): string {
+/** Pull the QUESTION the owner is actually being asked: the first sentence that
+ *  ends in a question mark. Returns null when there is none — we never promote a
+ *  greeting or status line into a "decision waiting on you". */
+function extractOwnerQuestion(text: string, selfName: string, max = 160): string | null {
+  if (!mentionsOwner(text, selfName)) return null;
   const cleaned = text.replace(/\s+/g, ' ').trim();
-  const stop = cleaned.search(/[.!?\n]/);
-  const clause = stop > 0 ? cleaned.slice(0, stop + 1) : cleaned;
-  return clause.length > max ? `${clause.slice(0, max - 1).trimEnd()}…` : clause;
+  if (!cleaned.includes('?')) return null;
+  // Split into sentences and take the first that is a genuine question.
+  const sentences = cleaned.split(/(?<=[.!?])\s+/);
+  for (const s of sentences) {
+    const q = s.trim();
+    if (!q.endsWith('?')) continue;
+    if (ACK_OPENERS.test(q)) continue;
+    // Drop a leading @mention so the ask reads cleanly.
+    const ask = q.replace(/^@\S+\s*/, '').trim();
+    if (ask.length < 6) continue;
+    return ask.length > max ? `${ask.slice(0, max - 1).trimEnd()}…` : ask;
+  }
+  return null;
 }
 
 function matchesTopic(text: string, topic: string): boolean {
@@ -170,8 +187,12 @@ export function stripForSpeech(s: string): string {
     .replace(/\b[0-9a-f]{7,40}\b/gi, '')
     .replace(/\bT-\d+[a-z]?\b/g, '')
     .replace(/\/?\S+\.(mjs|tsx?|jsx?|json|png|jpg|css)\b/gi, '')
+    // An ellipsis in a title (e.g. the "..." overflow-menu glyph) reads as
+    // "dot dot dot" aloud — collapse runs of dots to a single comma pause.
+    .replace(/\s*\.{2,}\s*/g, ', ')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\s+([.,;:!?])/g, '$1')
+    .replace(/,\s*,/g, ',')
     .replace(/\n{2,}/g, '\n')
     .trim();
 }
@@ -211,17 +232,24 @@ export function composeBrief(input: BriefProtocolInput): ComposedBrief {
     seenAsks.add(key);
     decisions.push({ ask, recommendation: extractRecommendation(t.title), source: `task:${t.id}` });
   }
-  // Fresh (post-marker) messages that put a question to the owner.
+  // Fresh (post-marker) messages that put an EXPLICIT question to the owner.
+  // Board tasks are the trustworthy signal; message questions are surfaced only
+  // when they genuinely end in "?" and are not an ack/status line, so we never
+  // promote a greeting into a decision. Capped tighter than task decisions.
   const seen = Math.max(0, Math.min(input.firstUnreadIndex ?? 0, input.messages.length));
   const freshMsgs = input.firstUnreadIndex == null ? input.messages : input.messages.slice(seen);
   const scopedFresh = keepByTopic(freshMsgs, (m) => m.text ?? '');
+  let msgDecisions = 0;
   for (const m of scopedFresh) {
-    if (!messageAsksOwner(m, self)) continue;
-    const ask = firstClause(m.text ?? '');
+    if (m.name === self) continue;
+    if (msgDecisions >= (deep ? 4 : 2)) break;
+    const ask = extractOwnerQuestion(m.text ?? '', self);
+    if (!ask) continue;
     const key = ask.toLowerCase().slice(0, 40);
     if (seenAsks.has(key)) continue;
     seenAsks.add(key);
     decisions.push({ ask, recommendation: extractRecommendation(m.text), source: 'message' });
+    msgDecisions++;
   }
   const decisionCap = deep ? 8 : 3;
   const shownDecisions = decisions.slice(0, decisionCap);
@@ -341,25 +369,33 @@ function renderSpeech(s: ComposedBrief['sections'], totalDecisions: number): str
     parts.push('Nothing needs your decision right now.');
   } else if (s.decisions.length === 1 && s.decisions[0]) {
     const d = s.decisions[0];
-    parts.push(`One decision is waiting on you. ${d.ask}${d.recommendation ? ` The recommendation is ${d.recommendation}.` : ''}`);
+    parts.push(`One decision is waiting on you. ${endSentence(d.ask)}${d.recommendation ? ` The recommendation is ${endSentence(d.recommendation)}` : ''}`);
   } else {
     parts.push(`${cap(numberWord(s.decisions.length))} decisions are waiting on you.`);
     const ord = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth'];
     s.decisions.forEach((d, i) => {
-      parts.push(`${ord[i] ?? `Number ${i + 1}`}, ${lower(d.ask)}${d.recommendation ? `. The recommendation is ${d.recommendation}` : ''}.`);
+      const lead = ord[i] ?? `Number ${i + 1}`;
+      parts.push(`${lead}, ${endSentence(lower(d.ask))}${d.recommendation ? ` The recommendation is ${endSentence(d.recommendation)}` : ''}`);
     });
-    if (totalDecisions > s.decisions.length) parts.push(`There are ${numberWord(totalDecisions - s.decisions.length)} more.`);
+    const extra = totalDecisions - s.decisions.length;
+    if (extra > 0) parts.push(extra === 1 ? 'There is one more.' : `There are ${numberWord(extra)} more.`);
   }
 
-  parts.push(s.delta);
-  if (s.live.length > 0) parts.push(`Live now: ${joinSentence(s.live)}.`);
-  if (s.watch.length > 0) parts.push(`Worth watching: ${joinSentence(s.watch.map(stripTrailingDot))}.`);
-  if (s.next) parts.push(`Next up, ${lower(s.next)}`);
+  parts.push(endSentence(s.delta));
+  if (s.live.length > 0) parts.push(`Live now: ${endSentence(joinSentence(s.live.map(stripTrailingDot)))}`);
+  if (s.watch.length > 0) parts.push(`Worth watching: ${endSentence(joinSentence(s.watch.map(stripTrailingDot)))}`);
+  if (s.next) parts.push(`Next up, ${endSentence(lower(s.next))}`);
 
   return stripForSpeech(parts.join(' '));
 }
 
 function stripTrailingDot(s: string): string { return s.replace(/\.\s*$/, ''); }
+/** Exactly one terminal period — strips any trailing punctuation first so we
+ *  never produce "stalled.." or a mid-sentence run-on in the spoken brief. */
+function endSentence(s: string): string {
+  const trimmed = s.replace(/[\s.!?;:,]+$/, '').trim();
+  return trimmed ? `${trimmed}.` : '';
+}
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 function lower(s: string): string { return s.charAt(0).toLowerCase() + s.slice(1); }
 function joinSentence(items: string[]): string {
