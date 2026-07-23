@@ -1085,7 +1085,10 @@ export function Room() {
       if (getReadCount(code) !== null) {
         window.clearInterval(poll);
         setMarkerNonce((n) => n + 1);
-      } else if (++tries >= 8) {
+      } else if (++tries >= 20) {
+        // ~4s grace. The provisional bottom-land is already on screen, so a
+        // generous window only helps a slow marker re-fire to the divider; a
+        // genuine first visit with no marker simply stays at Latest.
         window.clearInterval(poll);
         markerGaveUpRef.current = true;
         setMarkerNonce((n) => n + 1);
