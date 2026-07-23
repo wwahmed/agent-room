@@ -52,6 +52,7 @@ import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
+import { effectiveVerifier, verifierCollidesWithOwner } from './taskrules.js';
 import { roomActivityAt } from './roomactivity.js';
 import {
   isQaRoom,
@@ -1312,6 +1313,15 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       }
       task.owner = String(payload.name || '');
       task.ownerClient = (payload.client as 'web' | 'cc') || 'cc';
+      // Builder != verifier: if this task was cross-assigned a verifier that is
+      // the very agent now claiming it (its original builder went offline and
+      // someone else picked the work up), keep verification open by re-opening
+      // the verifier slot — a claimant may never be left as their own verifier.
+      // (See taskrules.ts; the verify handler tolerates the collision too.)
+      if (verifierCollidesWithOwner(task.owner, task.verifier)) {
+        task.verifier = undefined;
+        task.verifierClient = undefined;
+      }
       task.state = 'in_progress';
       task.claimedAt = nowMs();
       await commitBoard(code, board);
@@ -1357,8 +1367,13 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       if (task.owner && task.owner === name) {
         throw taskError('NotHostError', `Self-verification rejected: @${name} owns ${task.id}.`);
       }
-      if (task.verifier && task.verifier !== name) {
-        throw taskError('NotHostError', `Only the designated verifier (@${task.verifier}) can rule on ${task.id}.`);
+      // Honor a designated verifier only when it differs from the owner; an
+      // owner==verifier assignment can never be satisfied and must not lock
+      // other agents out (taskrules.ts). The self-verify guard above still
+      // bars the owner, so builder != verifier holds either way.
+      const effVerifier = effectiveVerifier(task.owner, task.verifier);
+      if (effVerifier && effVerifier !== name) {
+        throw taskError('NotHostError', `Only the designated verifier (@${effVerifier}) can rule on ${task.id}.`);
       }
       if (verdict !== 'done' && verdict !== 'rejected') {
         throw taskError('BadRequestError', 'verdict must be "done" or "rejected"');
