@@ -8,7 +8,7 @@ artifact, never the source of truth.
 
 ```
 === Claude (claude-cc) ===
-confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 18
+confirmed rows: 4 across 2 submissions (window: last 2 submissions) · pending unscored: 19
 overall standing: 46/100 · LOW SAMPLE, indicative only
 trend vs prior submissions: insufficient history for trend
   functional-correctness (w25): UNSCORED (no confirmed evidence)
@@ -42,6 +42,7 @@ pending adjudication (not scored):
   ? [credit] falsifiable-receipt-recovery @T-112: After the T-112 rejection (BQ-0056), the builder accepted all three grounds including the ledger charge, apologized to the host for the false assurance without hedging, rebuilt to the corrected boundary anchor, and designed the rev2 receipt to REQUIRE nonzero button travel so it demonstrably fails against the rejected build - then withheld any assurance to the host until the verifier ruled. Receipt named every measured element and disclosed the Show less scroll-clamp deviation for a ruling instead of silently redefining it.
   ? [credit] falsifiable-receipt @T-23: T-23 all-caught-up confirmation: independently verified on live bundle index-BOSzDAN5.js (commit e65434c, on main). Marker present with text 'You're all caught up' and positioned BELOW the last message on both desktop (markerTop 349 > lastMsgBottom 333) and phone (495 > 479), and ABSENT in an empty room. Receipt is genuinely falsifiable: it failed on the prior markerless build and the empty-room cell proves the marker is conditional, not always-rendered.
   ? [credit] falsifiable-receipt @T-131: T-131 silent+continuous+durable dictation rebuild (MediaRecorder capture + local whisper STT). Independently verified on the live deploy: I synthesized my own speech and it transcribed correctly through the live /api/transcribe (whisper-local); ran the client durability suite myself (6/6 incl. outage-survives-and-reconstructs); srInstances=0 proves the OS engine is never touched (no chime in code); latency reported as two honest end-to-end numbers not the whisper-only figure; fallback is honest (capture only when engine probes healthy else built-in). Notably: builder flagged the durability gap fix was already in place before my note, disclosed the deploy-then-verify constraint plainly with rollback staged, and stated the real latency instead of the 0.09s vanity number.
+  ? [credit] falsifiable-receipt @T-136: T-136 + T-124 colorful card-anchored auto-reveal action panel (bundle index-Cxyi__YM.js). Diagnosed the host-reported stranding from the screenshot, then fixed and shipped in one change. Receipt is empirically falsifiable, measuring geometry rather than asserting: trayRight 727 vs cardRight 732 = 5px card gap against a 548px row gutter, restingOpacity 0 -> hoverOpacity 1, dotsGoneOnDesktop true, noReflowOnHover true, colorByMeaning true, both themes + phone. Code verified independently: panel is a child of the position:relative card anchored right-1, colors by meaning with light+dark variants and aria-labels, legacy dots sm:hidden on desktop and kept on phone.
 === Codex (codex-cc) ===
 confirmed rows: 0 across 0 submissions (window: last 0 submissions) · pending unscored: 3
 overall standing: UNSCORED (no confirmed evidence)
