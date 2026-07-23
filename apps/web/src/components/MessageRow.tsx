@@ -246,10 +246,14 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // wrapper) and desktop gets the candidate overlay instead.
   const treatment = readActionTreatment();
   const legacyMenuClass = treatment === 'legacy' ? '' : 'sm:hidden';
-  const hoverOverlay = treatment === 'legacy' || message.type !== 'msg' ? null
-    : treatment === 'tray'
-      ? <HoverActionTray message={message} onReact={onReact} onReply={onReply} selfName={selfName} align={self ? 'left' : 'right'} />
-      : <EdgeActionRail message={message} onReact={onReact} onReply={onReply} selfName={selfName} mirror={self} />;
+  // T-124/T-136: the tray is a CARD child (anchored to the bubble's top-right),
+  // so it hugs the card at every width. The rail variant stays a row overlay.
+  const cardTray = treatment === 'tray' && message.type === 'msg'
+    ? <HoverActionTray message={message} onReact={onReact} onReply={onReply} selfName={selfName} />
+    : null;
+  const hoverOverlay = treatment === 'rail' && message.type === 'msg'
+    ? <EdgeActionRail message={message} onReact={onReact} onReply={onReply} selfName={selfName} mirror={self} />
+    : null;
 
   if (message.type === 'sys') {
     return (
@@ -275,6 +279,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         {hoverOverlay}
         <div className={`pt-1 ${legacyMenuClass}`}><MessageMenu message={message} onReply={onReply} onReact={onReact} selfName={selfName} /></div>
         <div style={swipe.style} data-gate="msg-content" data-gate-self="true" className="relative z-10 min-w-0 max-w-[88%] break-words rounded-xl rounded-br-md border border-accent/20 bg-accent-tint/40 px-3 py-2 text-ink sm:max-w-[70%] [overflow-wrap:anywhere]">
+          {cardTray}
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {/* T-30/T-48: keep 15px type and a deliberate readable measure;
               80ch uses large desktop canvases without turning prose into an
@@ -316,6 +321,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
       <div id={`msg-${message.id}`} {...swipe.bind} className={`${rowClass} mt-2`} title={exactTime(message.time)}>
         <SwipeReplyIndicator progress={swipe.progress} />
         <div data-gate="msg-content" className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
+          {cardTray}
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
           {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -332,6 +338,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
       <SwipeReplyIndicator progress={swipe.progress} />
       {hoverOverlay}
       <div data-gate="msg-content" className={bubbleShape} style={swipe.style}>
+        {cardTray}
         {/* T-58 (host: "others on the left", "can barely read the name"): the
             avatar badge sits on the bubble's OUTER (left) edge, overlapping the
             top corner, and is legible-sized. */}
