@@ -1118,11 +1118,14 @@ export function Room() {
   }, [code]);
 
   // T-140: once the marker resolves after open, land on the first-unread divider
-  // — but ONLY if the reader has not scrolled/interacted since open. If they
-  // flicked up to read history while the marker was in flight, leave them there
-  // (READING-ANCHOR RULE, T-112). A one-time commit, guarded by landedRef.
+  // — but ONLY if the reader has not moved since open. Two signals, either one
+  // vetoes the yank (READING-ANCHOR RULE, T-112): an explicit interaction
+  // (wheel/touch/key), OR the feed no longer sitting where the provisional
+  // bottom-land left it (they scrolled away, e.g. flick/trackpad momentum that
+  // never fires a discrete interaction event). A one-time commit via landedRef.
   useEffect(() => {
     if (markerNonce === 0 || landedRef.current || openInteractedRef.current) return;
+    if (!atBottomRef.current) { landedRef.current = true; return; }
     const target = firstUnreadIdRef.current;
     if (target == null) { if (arrivalReadRef.current !== null) landedRef.current = true; return; }
     const el = document.getElementById(`msg-${target}`);
