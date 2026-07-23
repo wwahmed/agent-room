@@ -2284,7 +2284,9 @@ export function Room() {
                 // T-72: consecutive same-agent heartbeats render as ONE
                 // Activity Note ("N updates") anchored at the newest ping.
                 const statusView = collapseStatusRuns(visibleMessages);
-                return visibleMessages.map((m, i) => (
+                return (
+                <>
+                {visibleMessages.map((m, i) => (
                   // T-113: 95 stored rows in leap-lip-mule carry no id at all —
                   // undefined keys collapse React reconciliation; fall back to
                   // time or position so one bad envelope cannot blank a room.
@@ -2326,7 +2328,29 @@ export function Room() {
                     />
                   )}
                   </Fragment>
-                ));
+                ))}
+                {/* T-23: a quiet end-of-conversation cap. It is the LAST feed
+                    element, so it only comes into view once every message above
+                    it has been scrolled past — reaching it IS being caught up,
+                    which keeps the claim honest without tracking read-state
+                    here. Suppressed for empty rooms and for ended meetings
+                    (their own closed-state banner is the end-cap there). */}
+                {visibleMessages.length > 0 && !ended && (
+                  <div
+                    data-gate="caught-up"
+                    className="my-4 flex items-center justify-center gap-2 px-4 text-ink-faint"
+                    aria-label="You're all caught up"
+                  >
+                    <div className="h-px w-8 bg-border" />
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m3 8.5 3.1 3.1L13 4.7" />
+                    </svg>
+                    <span className="text-[12px] font-semibold">You're all caught up</span>
+                    <div className="h-px w-8 bg-border" />
+                  </div>
+                )}
+                </>
+                );
               })()}
 
               {showIdlePrompt && !ended && (
