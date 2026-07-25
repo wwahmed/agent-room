@@ -345,7 +345,20 @@ async function resolveCaller(req: IncomingMessage): Promise<Caller> {
   const viaEdge = Boolean(req.headers['cf-ray'] || req.headers['cf-connecting-ip']);
   const addr = req.socket.remoteAddress || '';
   const loopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
-  if (loopback && !viaEdge) return { kind: 'local' };
+  if (loopback && !viaEdge) {
+    // DEV-ONLY visual-verification bypass: when DEV_AUTH_EMAIL is set, a
+    // trusted-loopback (non-edge) BROWSER request authenticates AS that
+    // allow-listed user, so the web app — which gates on /api/me — is enterable
+    // on 127.0.0.1 without the Google flow. Scoped to browser requests (they
+    // send Sec-Fetch-* / a Mozilla UA; the agents' MCP node client does not),
+    // so summoned agents keep caller.kind==='local' and their identity/anchor
+    // paths are untouched. Never fires for real users: edge traffic always
+    // carries cf-ray/cf-connecting-ip (excluded above). Off unless the env is set.
+    const devEmail = (process.env.DEV_AUTH_EMAIL || '').toLowerCase();
+    const isBrowser = Boolean(req.headers['sec-fetch-site']) || /Mozilla\//.test(String(req.headers['user-agent'] || ''));
+    if (devEmail && isBrowser && allowedEmails().has(devEmail)) return { kind: 'user', email: devEmail };
+    return { kind: 'local' };
+  }
   return { kind: 'anonymous' };
 }
 
