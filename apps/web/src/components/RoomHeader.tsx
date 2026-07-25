@@ -18,6 +18,7 @@ interface Props {
   onToggleInspector: () => void;
   onSearch: () => void;
   onOpenRoom: () => void;
+  onSummon?: () => void;
   onEndRoom: () => void;
   canEndRoom: boolean;
   /** T-26/T-27: the signed-in person, for the account menu avatar. */
@@ -47,6 +48,7 @@ export function RoomHeader({
   onToggleInspector,
   onSearch,
   onOpenRoom,
+  onSummon,
   onEndRoom,
   canEndRoom,
   selfName,
@@ -138,6 +140,7 @@ export function RoomHeader({
               <span className="truncate">
                 {ended ? 'Meeting ended' : `${room.participants.length} here`}
                 {!ended && listeningCount > 0 && <span className="text-ink-faint"> · {listeningCount} listening</span>}
+                {room.workspace && <span className="text-ink-faint"> · <span aria-hidden="true">📁 </span>{room.workspace.split('/').pop()}</span>}
               </span>
             </span>
             <svg className="hidden flex-shrink-0 text-ink-faint opacity-0 transition group-hover:opacity-100 lg:block" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -147,10 +150,11 @@ export function RoomHeader({
         </div>
 
         {workspaceNav && (
-          /* Flex auto-margin centering, not absolute: the nav can squeeze
-             between the identity and control clusters but can never overlap
-             them (proven at 1024/1100/1280 — absolute centering collided). */
-          <div className="mx-auto hidden min-w-0 flex-shrink px-2 lg:block">{workspaceNav}</div>
+          /* Flex auto-margin centering from lg–xl (the nav squeezes between the
+             clusters, never overlapping — absolute collided at 1024/1100/1280).
+             At 2xl+ (ultrawide) there IS room, so TRUE-center it absolutely so
+             the three clusters read as a clean left/center/right. */
+          <div className="mx-auto hidden min-w-0 flex-shrink px-2 lg:block 2xl:absolute 2xl:left-1/2 2xl:mx-0 2xl:-translate-x-1/2">{workspaceNav}</div>
         )}
         {!workspaceNav && (
         <button
@@ -169,7 +173,7 @@ export function RoomHeader({
         </button>
         )}
 
-        <div className="ml-auto flex flex-shrink-0 items-center gap-0 sm:gap-0.5">
+        <div className="ml-auto flex flex-shrink-0 items-center gap-0.5 sm:gap-1 lg:gap-1.5 2xl:gap-2 2xl:pr-1">
           <button
             type="button"
             onClick={onSearch}
@@ -285,6 +289,16 @@ export function RoomHeader({
                   <span className="flex w-5 justify-center" aria-hidden="true">⚙</span>
                   Room settings & rename
                 </button>
+                {onSummon && !ended && (
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onSummon(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink">
+                    <span className="flex w-5 justify-center" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 2v5M8 7l2.2-1.3M8 7 5.8 5.7" /><circle cx="8" cy="10.5" r="3.2" />
+                      </svg>
+                    </span>
+                    Summon agent
+                  </button>
+                )}
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onShare(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink sm:hidden">
                   <span className="flex w-5 justify-center" aria-hidden="true">
                     <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

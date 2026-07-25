@@ -110,6 +110,9 @@ import { ensureArtifactIndex, listRoomArtifacts,
   joinRoom,
   listMessages,
   reactivateRoom,
+  archiveRoom,
+  unarchiveRoom,
+  setRoomWorkspace,
   removeParticipant,
   RoomNotFoundError,
   setListenUntil,
@@ -715,6 +718,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         topic: normalizeRoomTopic(requestedTopic),
         createdBy: String(payload.createdBy || ''),
         hostAuthId: caller.kind === 'user' ? caller.email : undefined,
+        workspace: typeof payload.workspace === 'string' && payload.workspace ? payload.workspace : undefined,
       });
       const { hostKey, ...room } = created;
       // T-114: harness/probe rooms opt in as QA at creation (explicit flag or
@@ -1202,6 +1206,20 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     case 'reactivate': {
       await requireHost(code, payload.hostKey as string | undefined, caller);
       return { room: await reactivateRoom(client, code) };
+    }
+    case 'archiveRoom': {
+      // Owner-gated in the browser; a trusted local process may also archive
+      // (lets the admin/summoner clean up rooms it created).
+      if (caller.kind !== 'local') await requireHost(code, payload.hostKey as string | undefined, caller);
+      return { room: await archiveRoom(client, code) };
+    }
+    case 'unarchiveRoom': {
+      if (caller.kind !== 'local') await requireHost(code, payload.hostKey as string | undefined, caller);
+      return { room: await unarchiveRoom(client, code) };
+    }
+    case 'setWorkspace': {
+      if (caller.kind !== 'local') await requireHost(code, payload.hostKey as string | undefined, caller);
+      return { room: await setRoomWorkspace(client, code, String(payload.workspace || '')) };
     }
     case 'createReport': {
       const room = await getRoom(client, code);
@@ -1749,6 +1767,38 @@ const server = createServer(async (req, res) => {
           `[api/room] ${payload.action} rejected: ${e.name} (${e.message}) code=${payload.code ?? ''} name=${who?.name ?? payload.name ?? payload.requesterName ?? ''} client=${who?.client ?? ''}`,
         );
         return sendJson(res, statusForError(e), sanitizeProjectError(e));
+      }
+    }
+
+    // Summon Agent — forward owner-authenticated requests to the loopback
+    // agent-summoner service (deploy/summoner), which spawns/kills/tracks the
+    // CLI agents. Kept out of this process so summoning can't destabilize the
+    // room server and so quorum can reuse the same service.
+    if (path === '/api/summon' || path.startsWith('/api/summon/')) {
+      const summonCaller = await resolveCaller(req);
+      if (summonCaller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const SUMMONER = process.env.SUMMONER_URL || 'http://127.0.0.1:8219';
+      const routeMap: Record<string, string> = {
+        'GET /api/summon/workspaces': '/workspaces',
+        'GET /api/summon/providers': '/providers',
+        'GET /api/summon/agents': '/agents',
+        'POST /api/summon': '/summon',
+        'POST /api/summon/dismiss': '/dismiss',
+      };
+      const target = routeMap[`${req.method} ${path}`];
+      if (!target) return sendJson(res, 404, { error: 'NotFound', message: 'unknown summon route' });
+      try {
+        const init: RequestInit = { method: req.method };
+        if (req.method === 'POST') {
+          init.headers = { 'content-type': 'application/json' };
+          init.body = await readBody(req);
+        }
+        const upstream = await fetch(SUMMONER + target, init);
+        const text = await upstream.text();
+        res.writeHead(upstream.status, { 'content-type': 'application/json' });
+        return res.end(text);
+      } catch {
+        return sendJson(res, 502, { error: 'SummonerUnavailable', message: 'the agent summoner service is not reachable' });
       }
     }
 

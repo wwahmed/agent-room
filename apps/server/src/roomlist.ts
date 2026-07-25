@@ -8,6 +8,7 @@ export interface RoomSummary {
   code: string;
   topic: string;
   status: string;
+  archived?: boolean;
   createdBy: string;
   createdAt: number;
   participants: number;
@@ -106,6 +107,7 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
       code: room.code,
       topic: typeof room.topic === 'string' ? room.topic : room.code,
       status: typeof room.status === 'string' ? room.status : 'active',
+      archived: room.archived === true,
       createdBy: typeof room.createdBy === 'string' ? room.createdBy : '',
       createdAt,
       participants: participants.length,

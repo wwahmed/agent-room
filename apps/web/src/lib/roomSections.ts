@@ -6,6 +6,7 @@
 export interface SectionableRoom {
   status: string;
   topic: string;
+  archived?: boolean;
 }
 
 // Explicit convention first ("auto test room", "safe to ignore" — the words
@@ -26,11 +27,15 @@ export interface RoomSections<T> {
   ended: T[];
   activeTest: T[];
   endedTest: T[];
+  archived: T[];
 }
 
 export function splitRooms<T extends SectionableRoom>(rooms: T[]): RoomSections<T> {
-  const sections: RoomSections<T> = { active: [], ended: [], activeTest: [], endedTest: [] };
+  const sections: RoomSections<T> = { active: [], ended: [], activeTest: [], endedTest: [], archived: [] };
   for (const room of rooms) {
+    // Archived is orthogonal to status and wins: an archived room leaves the
+    // Active/Ended views entirely and lives only in the Archived view.
+    if (room.archived) { sections.archived.push(room); continue; }
     const test = isAutoTestRoom(room.topic);
     if (room.status === 'active') (test ? sections.activeTest : sections.active).push(room);
     else (test ? sections.endedTest : sections.ended).push(room);

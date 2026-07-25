@@ -248,6 +248,8 @@ export interface CreateRoomInput {
   createdBy: string;
   /** T-18: registry project id; required by the web create form. */
   projectId?: string;
+  /** Local workspace path this room is based in; summoned agents inherit it. */
+  workspace?: string;
 }
 
 export async function createRoom(
@@ -259,8 +261,16 @@ export async function createRoom(
     topic: input.topic,
     createdBy: input.createdBy,
     projectId: input.projectId,
+    workspace: input.workspace,
   });
   return { ...out.room, hostKey: out.hostKey };
+}
+
+/** Bind (or clear) the room's workspace — the source of truth agents inherit. */
+export async function setRoomWorkspaceAction(_client: ApiClient, code: string, workspace: string, auth: HostAuth = {}): Promise<Room> {
+  return (await call<{ room: Room }>({
+    action: 'setWorkspace', code, workspace, hostKey: auth.hostKey ?? storedHostKey(code),
+  })).room;
 }
 
 export async function getRoom(_client: ApiClient, code: string): Promise<Room> {
@@ -662,4 +672,74 @@ export async function attachProject(
     requesterName: auth.requesterName,
     hostKey: auth.hostKey ?? storedHostKey(code),
   });
+}
+
+// ---------- Summon Agent (proxied to the agent-summoner service) ----------
+export interface SummonModelOption { id: string; label: string }
+export interface SummonProvider {
+  id: string; label: string; cli: string; available: boolean;
+  defaultModel: string; note?: string; models: SummonModelOption[]; allowCustomModel?: boolean;
+}
+export interface SummonWorkspaceItem { name: string; path: string; git: boolean; pkg: boolean }
+export interface SummonWorkspaceGroup { group: string; items: SummonWorkspaceItem[] }
+export interface SummonedAgent {
+  agentId: string; name: string; role: string; provider: string; model: string;
+  workspace: string; room: string; mode: string; status: string; health: string;
+  tmuxSession: string; access: string[]; createdAt: number;
+}
+
+export async function summonProviders(): Promise<SummonProvider[]> {
+  const res = await fetch('/api/summon/providers', { credentials: 'same-origin' });
+  if (!res.ok) return [];
+  return ((await res.json()) as { providers?: SummonProvider[] }).providers ?? [];
+}
+
+export async function summonWorkspaces(): Promise<SummonWorkspaceGroup[]> {
+  const res = await fetch('/api/summon/workspaces', { credentials: 'same-origin' });
+  if (!res.ok) return [];
+  return ((await res.json()) as { groups?: SummonWorkspaceGroup[] }).groups ?? [];
+}
+
+export async function listSummonedAgents(): Promise<SummonedAgent[]> {
+  const res = await fetch('/api/summon/agents', { credentials: 'same-origin' });
+  if (!res.ok) return [];
+  return ((await res.json()) as { agents?: SummonedAgent[] }).agents ?? [];
+}
+
+export async function summonAgent(body: {
+  room: string; provider: string; model: string; workspace: string; name: string; role: string; mode: string;
+}): Promise<SummonedAgent> {
+  const res = await fetch('/api/summon', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify(body),
+  });
+  const j = (await res.json().catch(() => ({}))) as { agent?: SummonedAgent; error?: string; message?: string };
+  if (!res.ok || !j.agent) {
+    throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Summon failed (${res.status})`), res.status);
+  }
+  return j.agent;
+}
+
+export async function dismissSummonedAgent(agentId: string, archived = false): Promise<void> {
+  const res = await fetch('/api/summon/dismiss', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ agentId, archived }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Dismiss failed (${res.status})`), res.status);
+  }
+}
+
+// ---------- Archive a room (reversible) ----------
+export async function archiveRoomAction(_client: ApiClient, code: string, auth: HostAuth = {}): Promise<Room> {
+  return (await call<{ room: Room }>({
+    action: 'archiveRoom', code, hostKey: auth.hostKey ?? storedHostKey(code),
+  })).room;
+}
+
+export async function unarchiveRoomAction(_client: ApiClient, code: string, auth: HostAuth = {}): Promise<Room> {
+  return (await call<{ room: Room }>({
+    action: 'unarchiveRoom', code, hostKey: auth.hostKey ?? storedHostKey(code),
+  })).room;
 }

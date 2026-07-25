@@ -180,6 +180,9 @@ export interface Room {
   ownerName?: string;
   status: 'active' | 'ended';
   endedAt?: number;      // epoch ms — set when meeting ends
+  archived?: boolean;    // reversible: hidden from Active/Ended into the Archived view
+  archivedAt?: number;   // epoch ms — set when archived
+  workspace?: string;    // local workspace path the room is based in; summoned agents inherit it
   version: number;       // for optimistic concurrency
   participants: Participant[];
   // Hash of the secret returned to the host on createRoom. Anyone trying to

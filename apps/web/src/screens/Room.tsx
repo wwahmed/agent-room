@@ -8,6 +8,7 @@ import { collapseStatusRuns } from '../lib/statusRuns.js';
 import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
+import { SummonAgentSheet } from '../components/SummonAgentSheet.js';
 import { OwnerBrief } from '../components/OwnerBrief.js';
 import { BriefCard } from '../components/BriefCard.js';
 import { CommandPalette } from '../components/CommandPalette.js';
@@ -478,6 +479,7 @@ export function Room() {
     focusHandledRef.current = next.handled;
   }, [seekFailure, mainTab, serverArtifacts, outputsFilter, showAllArtifacts]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [summonOpen, setSummonOpen] = useState(false);
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
@@ -2330,6 +2332,7 @@ export function Room() {
           onToggleInspector={() => setInspectorOpen(v => !v)}
           onSearch={() => setSearchOpen(true)}
           onOpenRoom={() => selectTab('room')}
+          onSummon={() => setSummonOpen(true)}
           onEndRoom={handleEndMeeting}
           canEndRoom={!ended && activeRoom.createdBy === self.name}
           selfName={self.name}
@@ -3118,6 +3121,7 @@ export function Room() {
           On desktop the same panels are peers of the chat inside <main>, so the
           Inspector's desktop column is gone (T-64). */}
       <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
+      {summonOpen && <SummonAgentSheet code={code} onClose={() => setSummonOpen(false)} />}
       <CommandSearch
         open={searchOpen}
         room={activeRoom}

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { createClient, createProject, createRoom, listProjectCandidates, listProjects, type ProjectCandidate, type ProjectSummary } from '../lib/api.js';
+import { createClient, createProject, createRoom, listProjectCandidates, listProjects, summonWorkspaces, type ProjectCandidate, type ProjectSummary, type SummonWorkspaceGroup } from '../lib/api.js';
 import { normalizeRoomTopic, ROLE_PRESETS, roomTopicIssue } from '@agent-room/shared';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
 import { fetchIdentity, lastRole } from '../lib/identity.js';
@@ -31,6 +31,8 @@ export function CreateMeeting() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [projectId, setProjectId] = useState('');
+  const [wsGroups, setWsGroups] = useState<SummonWorkspaceGroup[]>([]);
+  const [workspace, setWorkspace] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -39,6 +41,10 @@ export function CreateMeeting() {
       if (list.length === 1 && list[0]) setProjectId(list[0].id);
     });
     void listProjectCandidates().then(setCandidates);
+    void summonWorkspaces().then(gs => {
+      setWsGroups(gs);
+      setWorkspace(prev => prev || gs[0]?.items[0]?.path || '');
+    });
     let cancelled = false;
     void fetchIdentity().then(me => {
       if (cancelled || !me) return;
@@ -78,6 +84,7 @@ export function CreateMeeting() {
         topic: normalizeRoomTopic(topic),
         createdBy: name.trim(),
         projectId: resolvedProjectId || undefined,
+        workspace: workspace || undefined,
       });
       const code = created.code;
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));
@@ -153,6 +160,22 @@ export function CreateMeeting() {
             </span>
           )}
         </label>
+
+        {wsGroups.length > 0 && (
+          <label className="mb-4 block">
+            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Workspace</span>
+            <select value={workspace} onChange={e => setWorkspace(e.target.value)} className={fieldClass}>
+              {wsGroups.map(g => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.items.map(it => <option key={it.path} value={it.path}>{it.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <span className="mt-1 block text-[12px] text-ink-faint">
+              The local workspace this room is based in. Agents you summon here inherit it.
+            </span>
+          </label>
+        )}
 
         <div className="mb-5">
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Template <span className="font-medium text-ink-faint">optional</span></span>

@@ -98,6 +98,18 @@ body {
 /* T-39 foundation primitives. Feature tasks may compose these with layout
    utilities, but the product's control/card/sheet geometry stays consistent. */
 @layer components {
+  /* T-104: Teams-like room-list scanning. The row follows the actual refined
+     unread badge instead of recalculating unread from the raw counter, so
+     self-authored/status noise and the active-room suppression cannot drift
+     from the typography. Read rows remain regular/medium; only the existing
+     title and secondary summary gain weight. */
+  .room-list-title { font-weight: 500; }
+  .room-list-summary { font-weight: 400; }
+  .room-list-row:has([data-unread-badge]) .room-list-title,
+  .room-list-row:has([data-unread-badge]) .room-list-summary {
+    font-weight: 600;
+  }
+
   /* T-74: semantic reading roles own the mobile scale. These are deliberately
      comfortable defaults, not minimum browser-zoom workarounds. */
   .msg-prose {

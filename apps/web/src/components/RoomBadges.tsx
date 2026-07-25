@@ -55,6 +55,7 @@ export function RoomBadges({ code, messageCount, selfName, active = false, compa
       )}
       {unread > 0 && (
         <span
+          data-unread-badge=""
           className={`flex ${badgeSize} flex-shrink-0 items-center justify-center rounded-full bg-accent px-1.5 font-bold tabular-nums text-white`}
           aria-label={`${unread} unread message${unread === 1 ? '' : 's'}`}
         >

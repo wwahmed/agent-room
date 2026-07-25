@@ -46,6 +46,8 @@ export interface CreateRoomInput {
   ownerId?: string;
   ownerEmail?: string;
   ownerName?: string;
+  /** Local workspace path this room is based in; summoned agents inherit it. */
+  workspace?: string;
 }
 
 // createRoom now returns the Room PLUS a one-time `hostKey`. The host stores
@@ -67,6 +69,7 @@ export async function createRoom(client: UpstashClient, input: CreateRoomInput):
     ownerId: input.ownerId,
     ownerEmail: input.ownerEmail,
     ownerName: input.ownerName,
+    workspace: input.workspace,
     status: 'active',
     version: 1,
     participants: [],
@@ -872,6 +875,43 @@ export async function reactivateRoom(
     ...current,
     status: 'active' as const,
     endedAt: undefined,
+  }));
+}
+
+// Archive is a reversible hidden flag, orthogonal to status: an archived room
+// keeps its active/ended status but drops out of those views into "Archived".
+export async function archiveRoom(
+  client: UpstashClient,
+  code: string,
+): Promise<Room> {
+  return casRoom(client, code, (current) => ({
+    ...current,
+    archived: true,
+    archivedAt: Date.now(),
+  }));
+}
+
+export async function unarchiveRoom(
+  client: UpstashClient,
+  code: string,
+): Promise<Room> {
+  return casRoom(client, code, (current) => ({
+    ...current,
+    archived: false,
+    archivedAt: undefined,
+  }));
+}
+
+// Bind (or clear) the room's workspace — the single source of truth that
+// summoned agents inherit.
+export async function setRoomWorkspace(
+  client: UpstashClient,
+  code: string,
+  workspace: string,
+): Promise<Room> {
+  return casRoom(client, code, (current) => ({
+    ...current,
+    workspace: workspace || undefined,
   }));
 }
 

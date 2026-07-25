@@ -9,6 +9,7 @@ import { RoomIdentitySlot } from '../components/RoomIdentitySlot.js';
 import { splitRooms } from '../lib/roomSections.js';
 import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, sortRooms, type RoomSort } from '../lib/roomSort.js';
 import { useLiveRooms } from '../hooks/useLiveRooms.js';
+import { createClient, unarchiveRoomAction } from '../lib/api.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -41,7 +42,12 @@ export function Home() {
   const roomListEndRef = useRef<HTMLDivElement>(null);
   const [checked, setChecked] = useState(false);
   // T-40: Active is the default view; Ended renders only when selected.
-  const [view, setView] = useState<'active' | 'ended'>('active');
+  const [view, setView] = useState<'active' | 'ended' | 'archived'>('active');
+  const homeClient = useRef(createClient()).current;
+  async function handleUnarchive(code: string) {
+    try { await unarchiveRoomAction(homeClient, code); window.location.reload(); }
+    catch (e) { window.alert(`Could not unarchive: ${e instanceof Error ? e.message : String(e)}`); }
+  }
   const [showTestRooms, setShowTestRooms] = useState(false);
   // T-26/T-27: sort applies at render over the MERGED pages, so the chosen
   // order survives paging by construction. Latest activity is the default.
@@ -121,7 +127,13 @@ export function Home() {
   const sections = splitRooms(rooms);
   const activeRooms = sortRooms(sections.active, roomSort);
   const endedRooms = sortRooms(sections.ended, roomSort);
-  const testRooms = sortRooms(view === 'active' ? sections.activeTest : sections.endedTest, roomSort);
+  const testRooms = sortRooms(view === 'active' ? sections.activeTest : view === 'ended' ? sections.endedTest : [], roomSort);
+  const archivedRooms = sortRooms(sections.archived, roomSort);
+  const roomTabs: Array<['active' | 'ended' | 'archived', string, number]> = [
+    ['active', 'Active', activeRooms.length + sections.activeTest.length],
+    ['ended', 'Ended', endedRooms.length + sections.endedTest.length],
+  ];
+  if (archivedRooms.length > 0) roomTabs.push(['archived', 'Archived', archivedRooms.length]);
   // T-40 R2: a segment whose rows are ALL collapsed must say so explicitly —
   // "Ended 6" showing an empty list reads as broken, not filtered.
   const realRowCount = view === 'active' ? activeRooms.length : endedRooms.length;
@@ -229,7 +241,7 @@ export function Home() {
         {identity && !roomsLoading && rooms.length > 0 && (
           <div className="mt-5 flex items-center gap-2">
             <div role="tablist" aria-label="Room lists" className="flex flex-1 rounded-xl bg-surface-softer p-1">
-              {([['active', 'Active', activeRooms.length + sections.activeTest.length], ['ended', 'Ended', endedRooms.length + sections.endedTest.length]] as const).map(([key, label, count]) => (
+              {roomTabs.map(([key, label, count]) => (
                 <button
                   key={key}
                   role="tab"
@@ -275,7 +287,7 @@ export function Home() {
               return (
                 <div
                   key={r.code}
-                  className="relative flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint focus-within:border-accent-tint-border"
+                  className="room-list-row relative flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint focus-within:border-accent-tint-border"
                   style={{ contentVisibility: 'auto', containIntrinsicSize: '72px' }}
                 >
                   <Link
@@ -292,8 +304,8 @@ export function Home() {
                     agents={r.agents ?? []}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-semibold">{r.topic}</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
+                    <div className="room-list-title truncate text-[15px]">{r.topic}</div>
+                    <div className="room-list-summary mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
                       <span className="truncate">{r.participants} here · updated {timeAgo(updatedAt)}</span>
                     </div>
                   </div>
@@ -337,6 +349,33 @@ export function Home() {
                   <div className="text-xs text-ink-soft">ended · {timeAgo(r.createdAt)}</div>
                 </div>
               </button>
+            ))}
+          </section>
+        )}
+
+        {identity && view === 'archived' && (
+          <section className="mt-3 space-y-2">
+            {archivedRooms.length === 0 && (
+              <div className="rounded-xl border border-border-faint bg-surface p-5 text-sm text-ink-soft">No archived rooms.</div>
+            )}
+            {archivedRooms.map(r => (
+              <div key={r.code} className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface-softer px-4 py-2.5">
+                <button
+                  onClick={() => navigate(`/r/${r.code}`)}
+                  className="min-w-0 flex-1 text-left opacity-70 transition hover:opacity-100"
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '58px' }}
+                >
+                  <div className="truncate text-sm font-medium">{r.topic}</div>
+                  <div className="text-xs text-ink-soft">archived · {timeAgo(r.createdAt)}</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleUnarchive(r.code)}
+                  className="flex-shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10"
+                >
+                  Unarchive
+                </button>
+              </div>
             ))}
           </section>
         )}

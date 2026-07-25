@@ -12,6 +12,7 @@ export interface RoomSummary {
   code: string;
   topic: string;
   status: string;
+  archived?: boolean;
   createdBy: string;
   createdAt: number;
   participants: number;
