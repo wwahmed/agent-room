@@ -2,7 +2,7 @@
 // "reach this agent directly" instructions shown in the app.
 import { spawn, execFileSync } from 'node:child_process';
 import { readFileSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -21,6 +21,16 @@ function which(bin) {
     return execFileSync('/usr/bin/which', [bin], {
       env: { ...process.env, PATH: AUG_PATH }, encoding: 'utf8',
     }).trim();
+  } catch { return ''; }
+}
+
+// Codex has no model-list command; the account's real default lives in
+// ~/.codex/config.toml (`model = "…"`). Read it so the dropdown isn't stale.
+function codexDefaultModel() {
+  try {
+    const toml = readFileSync(join(homedir(), '.codex', 'config.toml'), 'utf8');
+    const m = toml.match(/^\s*model\s*=\s*"([^"]+)"/m);
+    return m ? m[1] : '';
   } catch { return ''; }
 }
 
@@ -81,20 +91,21 @@ export function catalog() {
       ],
       allowCustomModel: true,
     },
-    {
-      id: 'codex',
-      label: 'Codex (OpenAI)',
-      cli: 'codex',
-      available: Boolean(which('codex')),
-      defaultModel: '',
-      note: 'Uses your Codex account default model unless overridden.',
-      models: [
-        { id: '', label: 'Account default (recommended)' },
-        { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol' },
-        { id: 'gpt-5.5-sol', label: 'gpt-5.5-sol' },
-      ],
-      allowCustomModel: true,
-    },
+    (() => {
+      const codexDefault = codexDefaultModel();
+      const models = [{ id: '', label: `Account default${codexDefault ? ` (${codexDefault})` : ''}` }];
+      if (codexDefault) models.push({ id: codexDefault, label: codexDefault });
+      return {
+        id: 'codex',
+        label: 'Codex (OpenAI)',
+        cli: 'codex',
+        available: Boolean(which('codex')),
+        defaultModel: '',
+        note: codexDefault ? `Account default: ${codexDefault} (from ~/.codex/config.toml). CLI has no model-list.` : 'CLI exposes no model list — type a model id if needed.',
+        models,
+        allowCustomModel: true,
+      };
+    })(),
   ];
 }
 
