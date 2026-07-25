@@ -12,6 +12,11 @@ import {
   appendMessage,
   appendSystemMessage,
   listMessages,
+  getTaskBoard,
+  createTask,
+  claimTask,
+  submitTask,
+  verifyTask,
   createRoomReport,
   setListenUntil,
   removeParticipant,
@@ -29,6 +34,8 @@ import {
   ModeNotSupportedError,
   type RoomApiClient,
 } from './roomApi.js';
+import { ROOM_ATTACHMENT_DOWNLOAD_TOOL, downloadRoomAttachment } from './attachmentDownloadTool.js';
+import { readRoomAttachmentText } from './attachmentRead.js';
 import { AVATAR_PALETTE, roleBriefFor, normalizeEscapedWhitespace } from '@agent-room/shared';
 import type {
   Message,
@@ -618,6 +625,97 @@ export function registerTools(server: Server) {
           type: 'object',
           required: ['code'],
           properties: { code: { type: 'string' } },
+        },
+      },
+      {
+        name: 'room_task_list',
+        description:
+          'Read the room\'s evidence-gated TASK BOARD. Each task has: id, title, owner (builder), verifier (a DIFFERENT agent), definition-of-done (dod), and state (todo → in_progress → awaiting_review → done | rejected). A task is only "done" when its designated verifier rules on it — never when the builder says so. Use this to see who owns what and what is actually verified vs merely claimed.',
+        inputSchema: { type: 'object', required: ['code'], properties: { code: { type: 'string', description: 'Room code' } } },
+      },
+      {
+        name: 'room_task_create',
+        description:
+          'Put a unit of work on the board with a producer/verifier split. Assign an `owner` (the builder) and a `verifier` that MUST be a different agent, plus a crisp `dod` (definition of done). Every assignment should go on the board via this tool BEFORE the work starts, so "is it actually done" is answerable from evidence, not chat.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'title'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name (the creator)' },
+            title: { type: 'string', description: 'Short task title' },
+            id: { type: 'string', description: 'Optional stable id like "T-01"; auto-assigned if omitted' },
+            owner: { type: 'string', description: 'The builder responsible for the work (optional; can be claimed later)' },
+            ownerClient: { type: 'string', enum: ['web', 'cc'], description: "The owner's client kind" },
+            verifier: { type: 'string', description: 'The agent who will verify — MUST differ from owner' },
+            verifierClient: { type: 'string', enum: ['web', 'cc'], description: "The verifier's client kind" },
+            dod: { type: 'string', description: 'Definition of done — the concrete acceptance criteria' },
+          },
+        },
+      },
+      {
+        name: 'room_task_claim',
+        description: 'Claim a todo/rejected task as its owner → moves it to in_progress. Use this before you start building so the board reflects who is actually on it.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'id'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name (becomes the owner)' },
+            id: { type: 'string', description: 'Task id, e.g. "T-01"' },
+          },
+        },
+      },
+      {
+        name: 'room_task_submit',
+        description:
+          'Submit your finished task for review with PROOF → moves it to awaiting_review (never straight to done). All evidence fields are required: fileListing (what changed), fileExcerpt (a representative diff/snippet), runOutput (test/build output), and a numeric exitCode. The server rejects submissions missing any of these — evidence is the whole point of the board.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'id', 'fileListing', 'fileExcerpt', 'runOutput', 'exitCode'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name (must be the task owner)' },
+            id: { type: 'string', description: 'Task id' },
+            fileListing: { type: 'string', description: 'Files created/changed' },
+            fileExcerpt: { type: 'string', description: 'A representative diff or code excerpt' },
+            runOutput: { type: 'string', description: 'Test/build/run output that demonstrates it works' },
+            exitCode: { type: 'number', description: 'Numeric exit code of the run (0 = success)' },
+          },
+        },
+      },
+      {
+        name: 'room_task_verify',
+        description:
+          'Rule on a submitted task as its DESIGNATED VERIFIER: verdict "done" or "rejected" (with an optional note). You may NOT verify a task you own — self-verification is rejected server-side. This is the only path to done/rejected; it is what makes "done" trustworthy.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'id', 'verdict'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name (must be the designated verifier, not the owner)' },
+            id: { type: 'string', description: 'Task id' },
+            verdict: { type: 'string', enum: ['done', 'rejected'], description: 'Your ruling' },
+            note: { type: 'string', description: 'Optional note explaining the verdict' },
+          },
+        },
+      },
+      ROOM_ATTACHMENT_DOWNLOAD_TOOL,
+      {
+        name: 'room_attachment_read',
+        description:
+          'Read the EXTRACTED TEXT of a file shared in a room you have joined — so you can actually read a PDF, Word doc, or text file inline. PDF and DOCX are parsed to text; text/CSV/JSON/HTML/Markdown are decoded; images are handed back as a URL for a vision step. For raw bytes or archives (ZIP), use room_attachment_download instead. Provide the room code, your participant name, and exactly ONE selector: attachmentId, attachmentName, or url. Optional maxChars caps the returned text (default 12000, max 30000).',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name'],
+          properties: {
+            code: { type: 'string', description: 'Room code you have joined.' },
+            name: { type: 'string', description: 'Your participant display name (for authorization).' },
+            attachmentId: { type: 'string', description: 'Attachment id from the transcript.' },
+            attachmentName: { type: 'string', description: 'Attachment display name (newest match wins).' },
+            url: { type: 'string', description: 'Attachment url from the transcript (relative or absolute).' },
+            maxChars: { type: 'number', description: 'Cap on returned text (default 12000, clamped 1000–30000).' },
+          },
         },
       },
       {
@@ -1369,6 +1467,60 @@ export function registerTools(server: Server) {
         participants: room.participants.map((p: Participant) => p.name),
         transcript: all.map((m: Message) => `${m.name}: ${m.text}`).join('\n'),
       });
+    }
+
+    if (name === 'room_task_list') {
+      return ok({ board: await getTaskBoard(client, a.code) });
+    }
+    if (name === 'room_task_create') {
+      try {
+        const { board, task } = await createTask(client, a.code, a.name, {
+          title: a.title, id: a.id, owner: a.owner, ownerClient: a.ownerClient,
+          verifier: a.verifier, verifierClient: a.verifierClient, dod: a.dod,
+        });
+        return ok({ task, board });
+      } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
+    }
+    if (name === 'room_task_claim') {
+      try {
+        const { board, task } = await claimTask(client, a.code, a.id, a.name, 'cc');
+        return ok({ task, board });
+      } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
+    }
+    if (name === 'room_task_submit') {
+      try {
+        const { board, task } = await submitTask(client, a.code, a.id, a.name, {
+          fileListing: String(a.fileListing ?? ''), fileExcerpt: String(a.fileExcerpt ?? ''),
+          runOutput: String(a.runOutput ?? ''), exitCode: Number(a.exitCode),
+        });
+        return ok({ task, board });
+      } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
+    }
+    if (name === 'room_task_verify') {
+      try {
+        const { board, task } = await verifyTask(client, a.code, a.id, a.name, a.verdict, a.note);
+        return ok({ task, board });
+      } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
+    }
+
+    if (name === 'room_attachment_download') {
+      try {
+        const result = await downloadRoomAttachment(client, {
+          code: a.code, name: a.name, client: a.client,
+          attachmentId: a.attachmentId, attachmentName: a.attachmentName, url: a.url,
+          memberKey: await readMemberKey(a.code),
+        });
+        return ok(result);
+      } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
+    }
+    if (name === 'room_attachment_read') {
+      try {
+        const result = await readRoomAttachmentText(client, {
+          code: a.code, name: a.name, memberKey: await readMemberKey(a.code),
+          attachmentId: a.attachmentId, attachmentName: a.attachmentName, url: a.url, maxChars: a.maxChars,
+        });
+        return ok(result);
+      } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
     }
 
     if (name === 'room_question_create') {

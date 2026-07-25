@@ -155,6 +155,39 @@ export async function joinRoom(
   };
 }
 
+// ---- Evidence-gated task board (server actions taskBoard/Create/Claim/
+// Submit/Verify). The board is passed through to the agent as-is; it is loosely
+// typed here because the authoritative BoardTask shape lives server-side. ----
+export interface BoardTaskView {
+  id: string; title: string; state: 'todo' | 'in_progress' | 'awaiting_review' | 'done' | 'rejected';
+  owner?: string; verifier?: string; dod?: string;
+  evidence?: { fileListing: string; fileExcerpt: string; runOutput: string; exitCode: number };
+  verdict?: string; note?: string; [k: string]: unknown;
+}
+export interface TaskBoardView { tasks: BoardTaskView[]; [k: string]: unknown }
+
+export async function getTaskBoard(client: RoomApiClient, code: string): Promise<TaskBoardView> {
+  const body = await client.post<{ board: TaskBoardView }>({ action: 'taskBoard', code });
+  return body.board;
+}
+export async function createTask(client: RoomApiClient, code: string, requesterName: string, fields: {
+  title: string; id?: string; owner?: string; ownerClient?: 'web' | 'cc';
+  verifier?: string; verifierClient?: 'web' | 'cc'; dod?: string;
+}): Promise<{ board: TaskBoardView; task: BoardTaskView }> {
+  return client.post({ action: 'taskCreate', code, requesterName, ...fields });
+}
+export async function claimTask(client: RoomApiClient, code: string, id: string, name: string, clientKind: 'web' | 'cc'): Promise<{ board: TaskBoardView; task: BoardTaskView }> {
+  return client.post({ action: 'taskClaim', code, id, name, client: clientKind });
+}
+export async function submitTask(client: RoomApiClient, code: string, id: string, name: string, evidence: {
+  fileListing: string; fileExcerpt: string; runOutput: string; exitCode: number;
+}): Promise<{ board: TaskBoardView; task: BoardTaskView }> {
+  return client.post({ action: 'taskSubmit', code, id, name, evidence });
+}
+export async function verifyTask(client: RoomApiClient, code: string, id: string, name: string, verdict: 'done' | 'rejected', note?: string): Promise<{ board: TaskBoardView; task: BoardTaskView }> {
+  return client.post({ action: 'taskVerify', code, id, name, verdict, ...(note ? { note } : {}) });
+}
+
 export async function listMessages(client: RoomApiClient, code: string, since: number): Promise<Message[]> {
   const body = await client.post<{ messages: Message[] }>({ action: 'messages', code, cursor: since });
   return body.messages;
