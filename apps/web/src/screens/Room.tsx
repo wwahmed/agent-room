@@ -50,6 +50,7 @@ import {
   unmarkSelfMessageSeen,
 } from '../lib/unread.js';
 import { withinAnchoredMutation } from '../lib/readingAnchor.js';
+import { scrollReadCount } from '../lib/scrollRead.js';
 import { startReadingHeartbeat } from '../lib/readSync.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
@@ -629,10 +630,6 @@ export function Room() {
   // advances the stored marker the moment we're at the bottom, so we have to
   // snapshot it first or "first unread" would always resolve to "nothing".
   const arrivalReadRef = useRef<number | null>(null);
-  // T-22: opening a room acknowledges the badge once, after the arrival marker
-  // above has been snapshotted for first-unread positioning. Later arrivals are
-  // only acknowledged while the reader is actually at the bottom.
-  const arrivalMarkedRef = useRef(false);
   // T-140: the account read marker can resolve a beat AFTER the first render.
   // Capturing `messageTotal` (all-read) before it lands is what dropped the
   // reader at the bottom instead of the first-unread divider. So capture only
@@ -657,23 +654,20 @@ export function Room() {
   const firstUnreadIdRef = useRef<number | null>(null);
   if (firstUnreadIdRef.current === null && firstUnreadId != null) firstUnreadIdRef.current = firstUnreadId;
 
-  // T-22: opening the room clears its home-card badge, but only after the old
-  // marker was captured above so first-unread navigation remains stable. From
-  // then on, new traffic advances the marker only while parked at the bottom.
+  // Scroll-past-read (host order, reverts T-22's open-acknowledge): opening a
+  // room no longer marks anything read by itself. The marker advances only as
+  // the reader actually consumes messages — scrolling past rows (onFeedScroll),
+  // new traffic while parked at the bottom (here), or the explicit Latest jump
+  // (scrollToBottom). Leaving mid-history therefore preserves the reading
+  // position, and the next visit lands on the true first-unread divider.
   useEffect(() => {
     if (messageTotal <= 0) return;
-    if (!arrivalMarkedRef.current) {
-      // T-140: hold the first acknowledgement until the arrival marker has
-      // actually been snapshotted. Marking read here advances the stored
-      // marker to messageTotal, and doing that before a late-resolving marker
-      // lands would poison the snapshot (line ~598) into reading "all-read",
-      // dropping the reader at the bottom instead of the first-unread divider.
-      if (arrivalReadRef.current === null) return;
-      arrivalMarkedRef.current = true;
-      markRoomRead(code, messageTotal, self?.name);
-    } else if (atBottomRef.current) {
-      markRoomRead(code, messageTotal, self?.name);
-    }
+    // T-140 gate: never mark before the arrival snapshot is locked AND the
+    // first-unread landing has committed — the provisional bottom-land leaves
+    // atBottom=true while the account marker may still be resolving, and
+    // marking then would poison the snapshot into "all-read".
+    if (!landedRef.current || arrivalReadRef.current === null) return;
+    if (atBottomRef.current) markRoomRead(code, messageTotal, self?.name);
   }, [messageTotal, code, self?.name, markerNonce]);
 
   // T-118 all-messages mode: while this room is open, keep the server's
@@ -1010,15 +1004,29 @@ export function Room() {
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     atBottomRef.current = distanceFromBottom < 80;
     setAtBottom(atBottomRef.current);
+    // T-140: mark read only after the arrival snapshot is locked AND the
+    // first-unread landing committed — the provisional bottom-land on open
+    // fires scroll events, and marking then would poison the snapshot into
+    // all-read before a late marker can resolve.
+    const canMark = landedRef.current && arrivalReadRef.current !== null;
     if (atBottomRef.current) {
       // messageTotal does not change when the reader scrolls, so the effect
       // above cannot observe this transition. Persist it here immediately.
-      // T-140: but only after the arrival snapshot is locked — the provisional
-      // bottom-land on open fires a scroll event, and marking read here would
-      // poison the snapshot into all-read before a late marker can resolve.
-      if (arrivalReadRef.current !== null) markRoomRead(code, messageTotal, self?.name);
+      if (canMark) markRoomRead(code, messageTotal, self?.name);
       setUnseenCount(0);
       setUnseenMentions(0);
+    } else if (canMark) {
+      // Scroll-past-read: away from the bottom, advance the marker to the
+      // furthest row fully above the viewport bottom. markRoomRead is
+      // monotonic, so scrolling back up never resurrects read messages.
+      const feedRect = el.getBoundingClientRect();
+      const count = scrollReadCount(
+        messages,
+        messageTotal,
+        feedRect.bottom + 1,
+        (id) => document.getElementById(`msg-${id}`)?.getBoundingClientRect().bottom ?? null,
+      );
+      if (count !== null) markRoomRead(code, count, self?.name);
     }
     // T-82: one rAF per frame samples direction for the contextual chrome.
     if (!chromeRafRef.current) {
