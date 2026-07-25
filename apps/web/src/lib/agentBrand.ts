@@ -3,7 +3,7 @@
 // never from the display name — name parsing is exactly how a human called
 // "Claude Smith" would get mis-branded. Humans are never brand-marked.
 
-export type BrandMark = 'claude' | 'codex' | 'generic';
+export type BrandMark = 'claude' | 'codex' | 'copilot' | 'generic';
 
 export interface AgentBrand {
   mark: BrandMark;
@@ -15,6 +15,7 @@ export function brandFor(p: { client: string; harness?: string }): AgentBrand | 
   const harness = (p.harness ?? '').toLowerCase();
   if (harness.startsWith('claude')) return { mark: 'claude', label: 'Claude Code' };
   if (harness === 'codex') return { mark: 'codex', label: 'Codex' };
+  if (harness.startsWith('copilot')) return { mark: 'copilot', label: 'GitHub Copilot' };
   // Agent with no or unrecognized harness metadata: generic agent mark, so
   // humans and agents stay distinguishable even without provider info.
   return { mark: 'generic', label: 'Agent' };
@@ -42,5 +43,6 @@ export function brandForSender(
   const base = sender.name.trim().toLowerCase().replace(/\s*\(\d+\)$/, '');
   if (base === 'claude') return { mark: 'claude', label: 'Claude Code' };
   if (base === 'codex') return { mark: 'codex', label: 'Codex' };
+  if (base === 'copilot') return { mark: 'copilot', label: 'GitHub Copilot' };
   return { mark: 'generic', label: 'Agent' };
 }

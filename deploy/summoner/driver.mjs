@@ -88,7 +88,7 @@ async function main() {
   log(`summoned: ${cfg.name} (${cfg.provider}/${cfg.model}) in ${cfg.workspace} -> room ${cfg.code} [mode=${cfg.mode}]`);
   beat();
 
-  await joinMint({ code: cfg.code, name: cfg.name, role: cfg.role, color: cfg.color, keyfile: cfg.keyfile });
+  await joinMint({ code: cfg.code, name: cfg.name, role: cfg.role, color: cfg.color, keyfile: cfg.keyfile, harness: cfg.provider });
   await presence({ code: cfg.code, name: cfg.name, keyfile: cfg.keyfile });
 
   // Start after the current tail so we only react to messages from now on.

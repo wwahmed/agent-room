@@ -12,9 +12,10 @@ import { brandFor, type AgentBrand } from '../lib/agentBrand.js';
 // Chip initials render at 9px — the floor for avatar-internal text (T-47);
 // text-fixed opts them out of the T-61 prose floor, same as Avatar itself.
 
-export const BRAND_LOGOS: Record<'claude' | 'codex', string> = {
+export const BRAND_LOGOS: Record<'claude' | 'codex' | 'copilot', string> = {
   claude: '/brand/agents/claude.png',
   codex: '/brand/agents/codex.png',
+  copilot: '/brand/agents/copilot.svg',
 };
 
 const GENERIC_MARK = (
@@ -54,7 +55,7 @@ export function BrandedLogoAvatar({ brand, initials, color, sizeClass }: { brand
   return (
     <span className={`relative inline-flex ${sizeClass} flex-shrink-0`} title={brand.label}>
       <img
-        src={BRAND_LOGOS[brand.mark as 'claude' | 'codex']}
+        src={BRAND_LOGOS[brand.mark as 'claude' | 'codex' | 'copilot']}
         alt=""
         className={`${sizeClass} select-none rounded-lg object-cover`}
         aria-hidden="true"
@@ -72,10 +73,11 @@ interface Props {
 export function AgentAvatar({ participant, size = 'md' }: Props) {
   const brand = brandFor(participant);
   if (!brand) return <Avatar initials={participant.initials} color={participant.color} size={size} />;
-  if (brand.mark === 'claude' || brand.mark === 'codex') {
+  if (brand.mark === 'claude' || brand.mark === 'codex' || brand.mark === 'copilot') {
     const sizeClass = size === 'lg' ? 'h-8 w-8' : size === 'md' ? 'h-6 w-6' : 'h-5 w-5';
-    // Below 28px the overlay is illegible: invert to monogram-only.
-    if (size !== 'lg') return <Avatar initials={participant.initials} color={participant.color} size={size} />;
+    // Waqas: show the provider logo at md+ too (only the tiny sm chip inverts to
+    // monogram, where a logo+overlay would be illegible).
+    if (size === 'sm') return <Avatar initials={participant.initials} color={participant.color} size={size} />;
     return <BrandedLogoAvatar brand={brand} initials={participant.initials} color={participant.color} sizeClass={sizeClass} />;
   }
   return (

@@ -63,7 +63,7 @@ export function isSameGroup(prev: Message | undefined, m: Message): boolean {
 // humans stay the plain monogram.
 function SenderAvatar({ message, brand, sizeClass = 'h-9 w-9', textClass = 'text-[12px]' }: { message: Message; brand?: AgentBrand | null; sizeClass?: string; textClass?: string }) {
   const agent = message.client === 'cc';
-  if (brand && (brand.mark === 'claude' || brand.mark === 'codex')) {
+  if (brand && (brand.mark === 'claude' || brand.mark === 'codex' || brand.mark === 'copilot')) {
     return <BrandedLogoAvatar brand={brand} initials={message.initials} color={message.color} sizeClass={sizeClass} />;
   }
   return (

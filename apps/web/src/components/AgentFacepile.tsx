@@ -145,8 +145,8 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
             // (compact) it inverts to monogram-only. Unknown providers keep
             // the monogram fallback at every size.
             const brand = !compact && agent.harness ? brandFor({ client: 'cc', harness: agent.harness }) : null;
-            const logo = brand && (brand.mark === 'claude' || brand.mark === 'codex')
-              ? BRAND_LOGOS[brand.mark as 'claude' | 'codex']
+            const logo = brand && (brand.mark === 'claude' || brand.mark === 'codex' || brand.mark === 'copilot')
+              ? BRAND_LOGOS[brand.mark as 'claude' | 'codex' | 'copilot']
               : null;
             return (
               <span

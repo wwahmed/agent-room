@@ -35,7 +35,7 @@ function writeKey(keyfile, key) {
 }
 
 // Join the room, minting (or reclaiming) a memberKey stored at keyfile.
-export async function joinMint({ code, name, role, color, keyfile }) {
+export async function joinMint({ code, name, role, color, keyfile, harness }) {
   const now = Date.now();
   const out = await api({
     action: 'join', code, wantMemberKey: true,
@@ -43,6 +43,8 @@ export async function joinMint({ code, name, role, color, keyfile }) {
     participant: {
       name, role: role || 'AI Agent', color: color || '#4F46E5',
       initials: name.slice(0, 2).toUpperCase(), client: 'cc',
+      // harness = provider, so the app shows the provider's logo as the avatar.
+      ...(harness ? { harness } : {}),
       joinedAt: now, lastSeenAt: now,
     },
   });

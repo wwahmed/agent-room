@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="GitHub Copilot">
+  <rect width="256" height="256" rx="60" fill="#0D1117"/>
+  <g fill="#FFFFFF">
+    <!-- Copilot head/helmet -->
+    <path d="M128 60c-30 0-46 8-56 20-8-3-18-3-24 2-7 6-8 17-4 27-6 8-9 18-9 30 0 34 30 55 93 55s93-21 93-55c0-12-3-22-9-30 4-10 3-21-4-27-6-5-16-5-24-2-10-12-26-20-56-20z"/>
+  </g>
+  <!-- eyes (visor) -->
+  <g fill="#0D1117">
+    <rect x="86" y="150" width="26" height="34" rx="13" transform="rotate(14 99 167)"/>
+    <rect x="144" y="150" width="26" height="34" rx="13" transform="rotate(-14 157 167)"/>
+  </g>
+</svg>
