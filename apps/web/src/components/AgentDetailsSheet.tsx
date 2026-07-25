@@ -7,6 +7,11 @@ interface DetailParticipant {
   role?: string;
   client: string;
   harness?: string;
+  // T-47b: self-reported metadata a manually-joined agent supplies at join.
+  model?: string;
+  account?: string;
+  workspace?: string;
+  capabilities?: string;
   joinedAt?: number;
   lastSeenAt?: number;
 }
@@ -35,11 +40,11 @@ export function AgentDetailsSheet({ code, participant, onClose }: { code: string
   const resumeCmd = resume ? resume.split(':  ').slice(1).join(':  ') : '';
 
   const rows: Array<[string, ReactNode]> = [
-    ['Provider', agent ? agent.provider : (brand?.label ?? 'Agent')],
-    ['Model', agent ? (agent.model || 'account-default') : '—'],
-    ['Account', agent?.account || '—'],
-    ['Workspace', agent?.workspace || '—'],
-    ['Capabilities', agent ? (agent.mode === 'build' ? 'Build — can edit files' : 'Chat — responds only') : '—'],
+    ['Provider', agent ? agent.provider : (brand?.label ?? participant.harness ?? 'Agent')],
+    ['Model', agent ? (agent.model || 'account-default') : (participant.model || '—')],
+    ['Account', agent?.account || participant.account || '—'],
+    ['Workspace', agent?.workspace || participant.workspace || '—'],
+    ['Capabilities', agent ? (agent.mode === 'build' ? 'Build — can edit files' : 'Chat — responds only') : (participant.capabilities || '—')],
     ['Persistent', agent ? (agent.persistent ? 'Yes — resumable' : 'No — one-shot') : '—'],
     ['Role', participant.role || agent?.role || '—'],
     ['Joined', fmt(agent?.createdAt ?? participant.joinedAt)],

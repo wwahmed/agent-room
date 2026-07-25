@@ -11,6 +11,17 @@ export interface Participant {
   // environment — NEVER derived from the display name. Display-only metadata:
   // absent on humans, web rows, and rows joined before this field existed.
   harness?: string;
+  // T-47b: self-reported agent metadata supplied at join, so a manually-joined
+  // agent is as legible in the People pane / agent-details view as a summoned
+  // one — which account it runs on, its model, its workspace, and what it can
+  // do. Display-only and UNTRUSTED (same trust class as `name`/`harness`):
+  // never used for auth or gating. Absent on humans, web rows, and rows joined
+  // before these fields existed. `account` is a human-readable label (a login
+  // email / org name), NEVER a secret or token.
+  model?: string;
+  account?: string;
+  workspace?: string;
+  capabilities?: string;
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally
