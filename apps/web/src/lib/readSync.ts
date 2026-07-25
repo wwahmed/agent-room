@@ -82,3 +82,27 @@ export function installReadMarkerSync(): void {
     }, 1000));
   });
 }
+
+// T-118 all-messages mode: the server suppresses 'all'-level pushes only while
+// the account's marker stamp is fresh (~90s). The stamp normally moves when a
+// marker advances — but a QUIET room advances nothing, so without a heartbeat
+// the first message after a lull would push even mid-stare. Re-confirming the
+// unchanged marker is enough: the server stamps time on every sync.
+export const READING_HEARTBEAT_MS = 45_000;
+
+/**
+ * While a room screen is mounted, re-confirm its read marker on a throttled
+ * interval. Ticks only while the tab is visible — a hidden tab must not count
+ * as reading. Returns a stop function for the caller's unmount cleanup.
+ */
+export function startReadingHeartbeat(code: string): () => void {
+  if (typeof window === 'undefined' || !code) return () => {};
+  const tick = () => {
+    if (document.visibilityState !== 'visible') return;
+    const count = getReadCount(code);
+    if (count !== null) void pushReadMarker(code, count);
+  };
+  const timer = setInterval(tick, READING_HEARTBEAT_MS);
+  tick(); // opening the room confirms presence immediately
+  return () => clearInterval(timer);
+}

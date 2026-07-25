@@ -67,6 +67,34 @@ export async function sendTestPush(): Promise<{ ok: boolean; detail: string }> {
   return { ok: true, detail: `Delivered to ${body.sent} device${body.sent === 1 ? '' : 's'}.` };
 }
 
+// ---------- notify level (T-118 follow-up: "All messages" mode) ----------
+// Per-account server-side preference: 'mentions' (default) pushes only
+// @mentions and questions; 'all' also pushes every teammate message (the
+// server suppresses those while you're actively reading the room).
+
+export type NotifyLevel = 'mentions' | 'all';
+
+export async function getNotifyLevel(): Promise<NotifyLevel> {
+  try {
+    const resp = await fetch('/api/push/prefs');
+    if (!resp.ok) return 'mentions';
+    const body = (await resp.json()) as { level?: unknown };
+    return body.level === 'all' ? 'all' : 'mentions';
+  } catch {
+    return 'mentions';
+  }
+}
+
+export async function setNotifyLevel(level: NotifyLevel): Promise<{ ok: boolean; reason?: string }> {
+  const resp = await fetch('/api/push/prefs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ level }),
+  });
+  if (!resp.ok) return { ok: false, reason: `The server rejected the preference (${resp.status}).` };
+  return { ok: true };
+}
+
 /** The app icon badge clears whenever the app comes to the foreground. */
 export function installBadgeClearing(): void {
   if (!('clearAppBadge' in navigator)) return;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { enablePush, isSubscribed, pushSupport, sendTestPush, type PushPermission } from '../lib/push.js';
+import { enablePush, getNotifyLevel, isSubscribed, pushSupport, sendTestPush, setNotifyLevel, type NotifyLevel, type PushPermission } from '../lib/push.js';
 
 // T-118 (host order): the TOP of Settings states plainly whether phone
 // notifications are enabled or blocked — the LIVE browser permission, never
@@ -18,10 +18,13 @@ export function NotificationSettings() {
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  // Server-side truth; null until loaded so the toggle never flashes a guess.
+  const [level, setLevel] = useState<NotifyLevel | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void isSubscribed().then(v => { if (!cancelled) setRegistered(v); });
+    void getNotifyLevel().then(v => { if (!cancelled) setLevel(v); });
     // Live truth: re-read the permission whenever the page regains focus —
     // the user may have flipped it in system settings.
     const refresh = () => setPermission(pushSupport().permission);
@@ -53,6 +56,24 @@ export function NotificationSettings() {
     try {
       const outcome = await sendTestPush();
       setFeedback(outcome.detail);
+    } finally { setBusy(false); }
+  }
+
+  async function onLevel(next: NotifyLevel) {
+    if (busy || level === next) return;
+    setBusy(true);
+    setFeedback(null);
+    const prev = level;
+    setLevel(next);
+    try {
+      const outcome = await setNotifyLevel(next);
+      if (!outcome.ok) {
+        setLevel(prev);
+        setFeedback(outcome.reason ?? 'Could not save the preference.');
+      }
+    } catch {
+      setLevel(prev);
+      setFeedback('Could not reach the server to save the preference.');
     } finally { setBusy(false); }
   }
 
@@ -89,6 +110,36 @@ export function NotificationSettings() {
           </button>
         )}
       </div>
+      {enabled && (
+        <div className="mt-4" data-gate="notification-level">
+          <p className="text-[13px] font-semibold text-ink-soft">Notify me about</p>
+          <div role="radiogroup" aria-label="Notification level" className="mt-2 inline-flex overflow-hidden rounded-lg border border-border">
+            {([
+              { value: 'mentions', label: 'Mentions only' },
+              { value: 'all', label: 'Every message' },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={level === opt.value}
+                disabled={busy || level === null}
+                onClick={() => { void onLevel(opt.value); }}
+                className={`min-h-11 px-4 text-sm font-semibold transition disabled:opacity-50 ${
+                  level === opt.value ? 'bg-accent text-white' : 'bg-surface-softer text-ink-soft hover:text-ink'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[13px] text-ink-soft">
+            {level === 'all'
+              ? 'Every teammate message pushes — except while you are actively reading that room.'
+              : 'Only @mentions and questions addressed to you push to this account.'}
+          </p>
+        </div>
+      )}
       {feedback && <p role="status" className="mt-2 text-[13px] text-ink-soft">{feedback}</p>}
     </section>
   );

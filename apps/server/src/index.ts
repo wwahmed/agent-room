@@ -72,7 +72,7 @@ import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
 import { stampMessageEnvelope } from './envelope.js';
-import { listReadMarkers, resolveMarkerAccount, setReadMarker } from './readmarkers.js';
+import { getReadMarkerState, listReadMarkers, resolveMarkerAccount, setReadMarker, stampReadMarkerTime } from './readmarkers.js';
 import {
   selectAttachment, storageKeyFor, verifyIntegrity,
   signDownloadToken, verifyDownloadToken, AttachmentDownloadError,
@@ -81,13 +81,18 @@ import {
 } from './attachmentDownload.js';
 import {
   initPush,
+  isTeammateMessage,
+  normalizeNotifyLevel,
   ownerEmail,
+  parseNotifyPrefs,
   pushEnabled,
   readPushEnv,
   sendToAccount,
   shouldNotifyOwner,
+  shouldSuppressAllPush,
   upsertSubscription,
   vapidPublicKey,
+  type NotifyLevel,
   type StoredSubscription,
   type SubscriptionStore,
 } from './push.js';
@@ -164,6 +169,47 @@ function notifyOwnerAsync(payload: { title: string; body: string; url: string; t
   if (!pushEnabled()) return;
   void sendToAccount(pushStore, ownerEmail(), payload).catch(err => {
     console.error('[push] owner dispatch failed:', (err as Error).message);
+  });
+}
+
+// T-118 follow-up: per-account notify level, push:prefs:<email>.
+async function readNotifyLevel(email: string): Promise<NotifyLevel> {
+  return parseNotifyPrefs(await redis.get(`push:prefs:${email}`));
+}
+async function writeNotifyLevel(email: string, level: NotifyLevel): Promise<void> {
+  await redis.set(`push:prefs:${email}`, JSON.stringify({ level }));
+}
+
+/**
+ * 'all'-level owner notification for an ordinary teammate message. Entirely
+ * fire-and-forget: the level lookup, marker read, and total read all happen
+ * off the send hot path. Skipped when the owner's read marker shows them
+ * caught up in this room within the reading window (mentions never route
+ * through here, so they always deliver).
+ */
+function notifyOwnerAllLevelAsync(code: string, message: Message): void {
+  if (!pushEnabled() || !isTeammateMessage(message)) return;
+  void (async () => {
+    const owner = ownerEmail();
+    if ((await readNotifyLevel(owner)) !== 'all') return;
+    const [marker, total] = await Promise.all([
+      getReadMarkerState(redis, owner, code),
+      getMessageTotalCount(client, code),
+    ]);
+    if (shouldSuppressAllPush({
+      markerCount: marker.count,
+      markerMovedAt: marker.movedAt,
+      totalAfterAppend: total,
+      now: Date.now(),
+    })) return;
+    await sendToAccount(pushStore, owner, {
+      title: `${message.name} sent a message`,
+      body: String(message.text || '').slice(0, 140),
+      url: `/r/${code}`,
+      tag: `all-${code}`,
+    });
+  })().catch(err => {
+    console.error('[push] all-level dispatch failed:', (err as Error).message);
   });
 }
 
@@ -1024,7 +1070,9 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       }
       const appendResult = await appendMessage(client, code, stamped);
       // T-118: a message that @mentions the owner taps them on the shoulder —
-      // app badge + push on every registered device. Fire-and-forget.
+      // app badge + push on every registered device. Fire-and-forget. At the
+      // 'all' notify level, ordinary teammate messages push too (suppressed
+      // while the owner is demonstrably reading the room).
       if (shouldNotifyOwner(stamped)) {
         notifyOwnerAsync({
           title: `${stamped.name} mentioned you`,
@@ -1032,6 +1080,11 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           url: `/r/${code}`,
           tag: `mention-${code}`,
         });
+      } else if (appendResult.appended) {
+        // Only the immediate-append path pushes: turn-gated messages that come
+        // back appended:false and flush later never re-enter this dispatch.
+        // Mentions behave the same way today, so the channel is consistent.
+        notifyOwnerAllLevelAsync(code, stamped);
       }
       return { result: appendResult };
     }
@@ -1040,6 +1093,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // this room (monotonic; a stale device can never regress it).
       const account = resolveMarkerAccount(caller, payload.account);
       const stored = await setReadMarker(redis, account, code, Number(payload.count));
+      // Every marker sync is proof the account has the room open right now —
+      // stamp the time so the push channel can suppress 'all'-level pings
+      // while the owner is actively reading. Never fail the sync on this.
+      void stampReadMarkerTime(redis, account, code, Date.now()).catch(() => {});
       return { result: { code, count: stored } };
     }
     case 'readMarkerList': {
@@ -2111,6 +2168,25 @@ const server = createServer(async (req, res) => {
         tag: 'push-test',
       });
       return sendJson(res, 200, outcome);
+    }
+    if (path === '/api/push/prefs' && (req.method === 'GET' || req.method === 'POST')) {
+      if (!pushEnabled()) return sendJson(res, 503, { error: 'push_disabled' });
+      const caller = await resolveCaller(req);
+      // Same auth bar as /api/push/subscribe: users act on their own account,
+      // trusted local tooling acts for the owner, anonymous gets nothing.
+      const email = caller.kind === 'user' ? caller.email : caller.kind === 'local' ? ownerEmail() : null;
+      if (!email) return sendJson(res, 401, { error: 'unauthorized' });
+      if (req.method === 'GET') {
+        return sendJson(res, 200, { level: await readNotifyLevel(email) });
+      }
+      let body: { level?: unknown };
+      try { body = JSON.parse(await readBody(req)); } catch { return sendJson(res, 400, { error: 'invalid JSON body' }); }
+      if (body.level !== 'all' && body.level !== 'mentions') {
+        return sendJson(res, 400, { error: "level must be 'mentions' or 'all'" });
+      }
+      const level = normalizeNotifyLevel(body.level);
+      await writeNotifyLevel(email, level);
+      return sendJson(res, 200, { level });
     }
 
     if (path === '/api/rooms' && req.method === 'GET') {

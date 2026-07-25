@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listReadMarkers, resolveMarkerAccount, setReadMarker, type MarkerRedis } from './readmarkers.js';
+import { getReadMarkerState, listReadMarkers, resolveMarkerAccount, setReadMarker, stampReadMarkerTime, type MarkerRedis } from './readmarkers.js';
 
 // T-126 READ-STATE IS USER-STATE: account-level markers, monotonic writes.
 function fakeRedis(): MarkerRedis & { store: Map<string, Map<string, string>> } {
@@ -70,5 +70,36 @@ describe('T-126 setReadMarker / listReadMarkers', () => {
     await redis.hset('readmarkers:a@b.com', 'abc-def-ghj', 'garbage');
     await redis.hset('readmarkers:a@b.com', 'kkk-lll-mmm', '12');
     expect(await listReadMarkers(redis, 'a@b.com')).toEqual({ 'kkk-lll-mmm': 12 });
+  });
+});
+
+describe('marker move timestamps (push suppress-when-reading)', () => {
+  it('stamps and reads back count + movedAt together', async () => {
+    const redis = fakeRedis();
+    await setReadMarker(redis, 'a@b.com', 'abc-def-ghj', 42);
+    await stampReadMarkerTime(redis, 'a@b.com', 'abc-def-ghj', 1_000_000);
+    expect(await getReadMarkerState(redis, 'a@b.com', 'abc-def-ghj'))
+      .toEqual({ count: 42, movedAt: 1_000_000 });
+  });
+
+  it('returns null fields when the account never touched the room', async () => {
+    const redis = fakeRedis();
+    expect(await getReadMarkerState(redis, 'a@b.com', 'abc-def-ghj'))
+      .toEqual({ count: null, movedAt: null });
+  });
+
+  it('reports a count with a null movedAt for pre-timestamp markers', async () => {
+    const redis = fakeRedis();
+    await setReadMarker(redis, 'a@b.com', 'abc-def-ghj', 7);
+    expect(await getReadMarkerState(redis, 'a@b.com', 'abc-def-ghj'))
+      .toEqual({ count: 7, movedAt: null });
+  });
+
+  it('nulls corrupt stored values instead of returning NaN', async () => {
+    const redis = fakeRedis();
+    await redis.hset('readmarkers:a@b.com', 'abc-def-ghj', 'junk');
+    await redis.hset('readmarkers:ts:a@b.com', 'abc-def-ghj', 'junk');
+    expect(await getReadMarkerState(redis, 'a@b.com', 'abc-def-ghj'))
+      .toEqual({ count: null, movedAt: null });
   });
 });

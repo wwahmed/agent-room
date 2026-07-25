@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { readPushEnv, shouldNotifyOwner, upsertSubscription, type StoredSubscription } from './push.js';
+import {
+  isTeammateMessage,
+  normalizeNotifyLevel,
+  parseNotifyPrefs,
+  readPushEnv,
+  shouldNotifyOwner,
+  shouldSuppressAllPush,
+  upsertSubscription,
+  READING_WINDOW_MS,
+  type StoredSubscription,
+} from './push.js';
 
 // T-118: owner notification channel — dispatch predicate and subscription
 // bookkeeping.
@@ -33,6 +43,63 @@ describe('subscription bookkeeping (T-118)', () => {
     const a = merged.find(s => s.endpoint === 'https://a')!;
     expect(a.addedAt).toBe(99);
     expect(a.keys.p256dh).toBe('k2');
+  });
+});
+
+describe('notify level (T-118 all-messages mode)', () => {
+  it('normalizes anything unrecognized to mentions', () => {
+    expect(normalizeNotifyLevel('all')).toBe('all');
+    expect(normalizeNotifyLevel('mentions')).toBe('mentions');
+    expect(normalizeNotifyLevel('ALL')).toBe('mentions');
+    expect(normalizeNotifyLevel(undefined)).toBe('mentions');
+    expect(normalizeNotifyLevel(42)).toBe('mentions');
+  });
+
+  it('parses stored prefs defensively', () => {
+    expect(parseNotifyPrefs('{"level":"all"}')).toBe('all');
+    expect(parseNotifyPrefs('{"level":"mentions"}')).toBe('mentions');
+    expect(parseNotifyPrefs(null)).toBe('mentions');
+    expect(parseNotifyPrefs('not json')).toBe('mentions');
+    expect(parseNotifyPrefs('{"level":"shout"}')).toBe('mentions');
+  });
+});
+
+describe('all-level teammate predicate (T-118 all-messages mode)', () => {
+  const names = ['Waqas'];
+
+  it('fires on ordinary teammate chat messages', () => {
+    expect(isTeammateMessage({ text: 'deploying the hotfix now', name: 'Claude' }, names)).toBe(true);
+  });
+
+  it('stays quiet on status rows, empty text, and the owner speaking', () => {
+    expect(isTeammateMessage({ text: 'working…', name: 'Claude', metadata: { kind: 'status' } as never }, names)).toBe(false);
+    expect(isTeammateMessage({ text: '', name: 'Claude' }, names)).toBe(false);
+    expect(isTeammateMessage({ text: '   ', name: 'Claude' }, names)).toBe(false);
+    expect(isTeammateMessage({ text: 'my own note', name: 'Waqas' }, names)).toBe(false);
+    expect(isTeammateMessage({ text: 'my own note', name: 'WAQAS' }, names)).toBe(false);
+  });
+});
+
+describe('suppress-when-reading (T-118 all-messages mode)', () => {
+  const now = 10_000_000;
+
+  it('suppresses when caught up and the marker moved inside the window', () => {
+    expect(shouldSuppressAllPush({ markerCount: 41, markerMovedAt: now - 5_000, totalAfterAppend: 42, now })).toBe(true);
+    expect(shouldSuppressAllPush({ markerCount: 42, markerMovedAt: now - READING_WINDOW_MS, totalAfterAppend: 42, now })).toBe(true);
+  });
+
+  it('delivers when the reader is behind', () => {
+    expect(shouldSuppressAllPush({ markerCount: 40, markerMovedAt: now - 5_000, totalAfterAppend: 42, now })).toBe(false);
+  });
+
+  it('delivers when the marker went stale', () => {
+    expect(shouldSuppressAllPush({ markerCount: 41, markerMovedAt: now - READING_WINDOW_MS - 1, totalAfterAppend: 42, now })).toBe(false);
+  });
+
+  it('delivers on missing data — suppression must be earned', () => {
+    expect(shouldSuppressAllPush({ markerCount: null, markerMovedAt: now, totalAfterAppend: 42, now })).toBe(false);
+    expect(shouldSuppressAllPush({ markerCount: 41, markerMovedAt: null, totalAfterAppend: 42, now })).toBe(false);
+    expect(shouldSuppressAllPush({ markerCount: 41, markerMovedAt: now, totalAfterAppend: null, now })).toBe(false);
   });
 });
 

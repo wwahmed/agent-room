@@ -50,6 +50,66 @@ export function shouldNotifyOwner(message: Pick<Message, 'text' | 'name' | 'meta
   return ownerNames.some(name => new RegExp(`(^|[^\\w])@?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w])`, 'i').test(text));
 }
 
+// ---------- notify level (T-118 follow-up: "All messages" mode) ----------
+//
+// Per-account preference for how chatty the push channel is:
+//   'mentions' (default) — @mentions of the owner and owner questions only.
+//   'all'                — every teammate chat message also pushes, unless the
+//                          owner is demonstrably reading the room right now.
+// Stored in redis under push:prefs:<email> as JSON { level }. Anything
+// unrecognized normalizes to 'mentions' so a corrupt value can never spam.
+
+export type NotifyLevel = 'mentions' | 'all';
+
+export function normalizeNotifyLevel(raw: unknown): NotifyLevel {
+  return raw === 'all' ? 'all' : 'mentions';
+}
+
+export function parseNotifyPrefs(raw: string | null): NotifyLevel {
+  if (!raw) return 'mentions';
+  try { return normalizeNotifyLevel((JSON.parse(raw) as { level?: unknown }).level); } catch { return 'mentions'; }
+}
+
+/**
+ * 'all'-level candidate: an ordinary teammate chat message. Status rows and
+ * the owner's own messages never qualify; mention/question traffic is handled
+ * by shouldNotifyOwner and must not double-fire through this predicate.
+ */
+export function isTeammateMessage(
+  message: Pick<Message, 'text' | 'name' | 'metadata'>,
+  ownerNames: string[] = configured?.ownerNames ?? [],
+): boolean {
+  if ((message.metadata as { kind?: string } | undefined)?.kind === 'status') return false;
+  const text = typeof message.text === 'string' ? message.text : '';
+  if (!text.trim()) return false;
+  if (ownerNames.some(n => n.toLowerCase() === String(message.name || '').toLowerCase())) return false;
+  return true;
+}
+
+/** How recently the owner's read marker must have moved to count as "reading". */
+export const READING_WINDOW_MS = 90_000;
+
+/**
+ * Suppress an 'all'-level push when the owner is demonstrably reading the
+ * room: their read marker covers every message before this one AND it moved
+ * within the reading window. Missing data (no marker, no timestamp, unknown
+ * total) always delivers — suppression must be earned, never assumed.
+ * Mentions/questions bypass this entirely (they use shouldNotifyOwner).
+ */
+export function shouldSuppressAllPush(opts: {
+  markerCount: number | null;
+  markerMovedAt: number | null;
+  totalAfterAppend: number | null;
+  now: number;
+  windowMs?: number;
+}): boolean {
+  const { markerCount, markerMovedAt, totalAfterAppend, now } = opts;
+  const windowMs = opts.windowMs ?? READING_WINDOW_MS;
+  if (markerCount === null || markerMovedAt === null || totalAfterAppend === null) return false;
+  if (markerCount < totalAfterAppend - 1) return false; // not caught up
+  return now - markerMovedAt <= windowMs;
+}
+
 export interface StoredSubscription extends PushSubscription { addedAt: number }
 
 export interface SubscriptionStore {

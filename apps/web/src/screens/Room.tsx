@@ -50,6 +50,7 @@ import {
   unmarkSelfMessageSeen,
 } from '../lib/unread.js';
 import { withinAnchoredMutation } from '../lib/readingAnchor.js';
+import { startReadingHeartbeat } from '../lib/readSync.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
@@ -674,6 +675,11 @@ export function Room() {
       markRoomRead(code, messageTotal, self?.name);
     }
   }, [messageTotal, code, self?.name, markerNonce]);
+
+  // T-118 all-messages mode: while this room is open, keep the server's
+  // read-marker stamp fresh so 'all'-level pushes stay suppressed during a
+  // quiet stretch. Visibility-gated inside the heartbeat itself.
+  useEffect(() => startReadingHeartbeat(code), [code]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

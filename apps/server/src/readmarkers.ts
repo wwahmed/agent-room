@@ -24,6 +24,10 @@ export interface MarkerRedis {
 }
 
 const markersKey = (email: string) => `readmarkers:${email.trim().toLowerCase()}`;
+// Companion hash: when each room's marker last moved (epoch ms). Powers the
+// push channel's suppress-when-reading check — a marker COUNT alone cannot
+// distinguish "caught up an hour ago" from "reading right now".
+const markerTimesKey = (email: string) => `readmarkers:ts:${email.trim().toLowerCase()}`;
 
 export function resolveMarkerAccount(
   caller: { kind: 'local' } | { kind: 'user'; email: string } | { kind: 'anonymous' },
@@ -63,6 +67,40 @@ export async function setReadMarker(
   const next = Math.max(Number.isFinite(prev) ? prev : -1, Math.floor(count));
   if (next !== prev) await redis.hset(key, code, String(next));
   return next;
+}
+
+/**
+ * Record that the account's marker for this room moved (or was re-confirmed)
+ * at `now`. Every readMarkerSet call stamps — even a no-op write is proof the
+ * user has the room open — so the push channel can tell active reading from
+ * a stale caught-up marker.
+ */
+export async function stampReadMarkerTime(
+  redis: MarkerRedis,
+  email: string,
+  code: string,
+  now: number,
+): Promise<void> {
+  if (!code || !Number.isFinite(now)) return;
+  await redis.hset(markerTimesKey(email), code, String(Math.floor(now)));
+}
+
+/** One room's marker state: { count, movedAt } — null fields when unknown. */
+export async function getReadMarkerState(
+  redis: MarkerRedis,
+  email: string,
+  code: string,
+): Promise<{ count: number | null; movedAt: number | null }> {
+  const [countRaw, movedRaw] = await Promise.all([
+    redis.hget(markersKey(email), code),
+    redis.hget(markerTimesKey(email), code),
+  ]);
+  const count = countRaw === null ? null : Number(countRaw);
+  const movedAt = movedRaw === null ? null : Number(movedRaw);
+  return {
+    count: count !== null && Number.isFinite(count) && count >= 0 ? count : null,
+    movedAt: movedAt !== null && Number.isFinite(movedAt) && movedAt > 0 ? movedAt : null,
+  };
 }
 
 /** The account's full marker map, { code: count }. */
