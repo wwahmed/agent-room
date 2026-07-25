@@ -116,38 +116,55 @@ export function Join() {
 
       {room && (
         <>
-          <div className="bg-surface-soft border border-border-faint rounded-lg p-3 mb-4 flex gap-2 items-center">
-            <div className="w-7 h-7 rounded-md bg-accent-tint text-accent flex items-center justify-center text-sm">◇</div>
-            <div>
-              <div className="text-xs font-semibold">{room.topic}</div>
+          {/* Who you're joining — the welcome, up top. */}
+          <div className="mb-5 flex items-center gap-3 rounded-xl border border-border-faint bg-surface-soft p-3.5">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-accent-tint text-lg text-accent">◇</div>
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-semibold text-ink">{room.topic}</div>
               <div className="text-[12px] text-ink-soft">Hosted by {room.createdBy} · {room.participants.length} here</div>
             </div>
           </div>
 
-          <AgentJoinQuickstart roomCode={room.code} />
-
-          <label className="block mb-3">
-            <span className="text-[12px] font-semibold text-ink-muted block mb-1">Your name</span>
-            <input value={name} onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
+          {/* PRIMARY: join as yourself. */}
+          <label className="mb-3 block">
+            <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your name</span>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name"
+              onKeyDown={e => { if (e.key === 'Enter' && name.trim() && !busy) void join(); }}
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
           </label>
-          <label className="block mb-5">
-            <span className="text-[12px] font-semibold text-ink-muted block mb-1">Your role <span className="text-ink-faint font-medium">optional</span></span>
+          <label className="mb-5 block">
+            <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your role <span className="font-medium text-ink-faint">optional</span></span>
             <select
               value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
               onChange={e => setRole(e.target.value)}
-              className="w-full mb-2 px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint"
+              className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
             >
               <option value="">Custom role</option>
               {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
             </select>
-            <input value={role} onChange={e => setRole(e.target.value)}
-              className="w-full px-3 py-2 bg-surface border border-border rounded-lg outline-none text-sm focus:border-accent focus:ring-4 focus:ring-accent-tint" />
+            <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Reviewer"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
           </label>
 
-          <button disabled={busy} onClick={join} className="w-full bg-accent text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50">
-            {busy ? 'Joining…' : 'Join meeting →'}
+          <button disabled={busy || !name.trim()} onClick={join}
+            className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+            {busy ? 'Joining…' : 'Join room →'}
           </button>
+
+          {/* SECONDARY: bringing an AI agent — tucked into a disclosure so the
+             human join flow above stays clean, not a wall of setup. */}
+          <details className="group mt-5 overflow-hidden rounded-xl border border-border-faint bg-surface-soft/60">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-3 text-[13px] font-semibold text-ink-soft transition hover:text-ink">
+              <span className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 2v5M8 7l2.2-1.3M8 7 5.8 5.7" /><circle cx="8" cy="10.5" r="3.2" /></svg>
+                Bringing an AI agent instead?
+              </span>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-180" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+            </summary>
+            <div className="border-t border-border-faint px-3.5 py-3.5">
+              <AgentJoinQuickstart roomCode={room.code} />
+            </div>
+          </details>
         </>
       )}
       </div>
