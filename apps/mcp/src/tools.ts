@@ -191,6 +191,25 @@ type RoomListenPollResult = {
   hint: string;
 };
 
+// A message @mentions this agent when its text contains `@<name>` — matching
+// the full display name OR its first word (so "@Claude" reaches "Claude (2)"),
+// case-insensitive, and never mid-word (an email's "user@host" is not a
+// mention). Mirrors the web renderer's grammar so what a human SEES tagged is
+// exactly what the agent is told it must answer.
+function messageMentionsSelf(text: string | undefined, selfName: string | undefined): boolean {
+  if (!text || !selfName) return false;
+  const full = selfName.trim().toLowerCase();
+  const first = full.split(/[\s(]+/, 1)[0] ?? '';
+  if (!first) return false;
+  const re = /(^|[^A-Za-z0-9])@([A-Za-z0-9][A-Za-z0-9_-]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const token = (m[2] ?? '').toLowerCase();
+    if (token === full || token === first) return true;
+  }
+  return false;
+}
+
 /** Long-poll for new messages; shared by room_listen and post-join/create first listen. */
 async function runRoomListenPoll(
   client: RoomApiClient,
@@ -216,6 +235,15 @@ async function runRoomListenPoll(
         (acc: number, m: Message) => acc + (Array.isArray(m.attachments) ? m.attachments.length : 0),
         0,
       );
+      // Reliable @mentions: if any new message tags THIS agent, lead with an
+      // unmissable directive so it always replies to being addressed — even in
+      // a noisy batch where it might otherwise stay quiet.
+      const mentioners = selfName
+        ? msgs.filter((mm) => mm.name !== selfName && messageMentionsSelf(mm.text, selfName)).map((mm) => mm.name)
+        : [];
+      const mentionHint = mentioners.length > 0
+        ? `🔔 YOU WERE @MENTIONED by ${[...new Set(mentioners)].join(', ')} — you are being directly addressed. Reply to them now with room_send (do not stay silent), then room_listen again. `
+        : '';
       const baseHint = `${msgs.length} new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening. ${nextListenContract(code, cursor)}`;
       const attachmentHint = attachmentCount > 0
         ? ` ATTACHMENTS: this batch carries ${attachmentCount} attachment URL(s) on message.attachments[]. To inspect their contents (read a screenshot, parse a PDF, etc.), fetch the .url with your environment's URL/file/vision tool. Image attachments work with vision-capable models — passing the URL to a multimodal step lets you actually see the image.`
@@ -223,7 +251,7 @@ async function runRoomListenPoll(
       return {
         messages: msgs,
         cursor,
-        hint: baseHint + attachmentHint,
+        hint: mentionHint + baseHint + attachmentHint,
       };
     }
     if (pollCount > 0 && pollCount % 10 === 0) {
