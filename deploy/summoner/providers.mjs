@@ -315,53 +315,87 @@ export function accessInstructions({ provider, model, workspace, tmuxSession, tm
 // in the CLI/app session list. The summoner's job shrinks to launch + supervise
 // + kill; room membership, presence, and the loop belong to the harness.
 //
-// Returns { bin, args, env, files } for providers wired for native, or null so
-// the caller falls back to the proven headless driver (codex/copilot for now).
+// Returns { bin, args, env, files, seedKeys } for providers wired for native, or
+// null so the caller falls back to the headless driver. `seedKeys` (copilot) is
+// a prompt to type into the interactive REPL via tmux send-keys once it boots,
+// for harnesses that take no positional/system prompt.
 export function nativeLaunchSpec(cfg) {
   const { provider, model, workspace, mode, name, role, code, sessionId,
           account, mcpConfigPath } = cfg;
+  const build = mode === 'build';
+  const mcp = agentRoomMcpServer(); // { command, args, env } — our fork MCP, local server
 
+  // Shared identity + room-loop contract every native harness receives.
+  const contract = [
+    `You are "${name}" (role: ${role || 'AI Agent'}), an AI teammate in a live Agent Room chat with Waqas and other agents.`,
+    `You are working natively in ${workspace}${account ? ` on ${account}` : ''}${model ? ` (${model})` : ''}.`,
+    `The room code is EXACTLY "${code}" — pass it verbatim to room_join. Room codes are word-style (e.g. cafe-ham-clog); do NOT reject or "correct" it for not being a 9-character dashed code, and do not ask for a different code.`,
+    `CONTRACT: after you join, STAY in the room loop — keep calling room_listen; when a message needs you, reply with room_send, then room_listen again. Never end your turn while the room is active. Leave only if the room ends, you are removed from participants, or the host tells you to stop.`,
+    build ? `You MAY edit files in this workspace when the room asks you to.`
+          : `You are a CHAT participant: discuss, review, and advise — do not edit files.`,
+  ].join(' ');
+  const joinMsg =
+    `Call room_join now with code exactly "${code}" (pass it verbatim — it is a valid word-style code, not a 9-char dashed one) ` +
+    `and name "${name}" (role: ${role || 'AI Agent'}, model: ${model || 'default'}, ` +
+    `account: ${account || 'me'}, capabilities: ${build ? 'can edit files' : 'chat only'}). Then follow the room loop.`;
+
+  // ---- Claude: --mcp-config file + --append-system-prompt + positional prompt ----
   if (provider.startsWith('claude')) {
     const cdir = claudeConfigDir(provider);
-    // Explicit, lane-independent MCP config: the agent gets exactly the
-    // agent-room server (our fork build, pointed at the local server),
-    // regardless of which config dir / account lane it runs in.
-    // --strict-mcp-config below means ONLY this server is loaded.
-    const mcpCfg = { mcpServers: { 'agent-room': agentRoomMcpServer() } };
-    const build = mode === 'build';
-    const contract = [
-      `You are "${name}" (role: ${role || 'AI Agent'}), an AI teammate in a live Agent Room chat with Waqas and other agents.`,
-      `You are working natively in ${workspace}${account ? ` on ${account}` : ''}${model ? ` (${model})` : ''}.`,
-      `The room code is EXACTLY "${code}" — pass it verbatim to room_join. Room codes are word-style (e.g. cafe-ham-clog); do NOT reject or "correct" it for not being a 9-character dashed code, and do not ask for a different code.`,
-      `CONTRACT: after you join, STAY in the room loop — keep calling room_listen; when a message needs you, reply with room_send, then room_listen again. Never end your turn while the room is active. Leave only if the room ends, you are removed from participants, or the host tells you to stop.`,
-      build
-        ? `You MAY edit files in this workspace when the room asks you to.`
-        : `You are a CHAT participant: discuss, review, and advise — do not edit files.`,
-    ].join(' ');
-    const joinMsg =
-      `Call room_join now with code exactly "${code}" (pass it verbatim — it is a valid word-style code, not a 9-char dashed one) ` +
-      `and name "${name}" (role: ${role || 'AI Agent'}, model: ${model || 'default'}, ` +
-      `account: ${account || 'me'}, capabilities: ${build ? 'can edit files' : 'chat only'}). Then follow the room loop.`;
+    const mcpCfg = { mcpServers: { 'agent-room': mcp } };
     const args = [
-      '--mcp-config', mcpConfigPath,
-      '--strict-mcp-config',
+      '--mcp-config', mcpConfigPath, '--strict-mcp-config',
       '--session-id', sessionId,
       ...(model ? ['--model', model] : []),
-      // Pre-approve the whole agent-room MCP server so join/listen/send never
-      // block an unattended agent. File edits (build) auto-accept but stay
-      // visible in the transcript; anything else still prompts (attach to see).
+      // Pre-approve the whole agent-room server so join/listen/send never block
+      // an unattended agent. Build edits auto-accept but stay visible.
       '--allowedTools', 'mcp__agent-room',
       ...(build ? ['--add-dir', workspace, '--permission-mode', 'acceptEdits'] : []),
       '--append-system-prompt', contract,
       joinMsg,
     ];
     return {
-      bin: 'claude',
-      args,
+      bin: 'claude', args,
       env: cdir ? { CLAUDE_CONFIG_DIR: cdir } : {},
       files: [{ path: mcpConfigPath, content: JSON.stringify(mcpCfg, null, 2), mode: 0o600 }],
     };
   }
 
-  return null; // codex / copilot / gemini — native path not wired yet.
+  // ---- Codex: strong-loop harness. MCP injected via -c TOML overrides; contract
+  //      folded into the positional prompt (codex has no system-prompt flag). ----
+  if (provider === 'codex') {
+    const toml = (v) => JSON.stringify(v); // JSON encodes TOML strings/arrays fine
+    const args = [
+      '-C', workspace,
+      ...(model ? ['-m', model] : []),
+      '-c', `mcp_servers.agent-room.command=${toml(mcp.command)}`,
+      '-c', `mcp_servers.agent-room.args=${toml(mcp.args)}`,
+      ...Object.entries(mcp.env || {}).flatMap(([k, val]) =>
+        ['-c', `mcp_servers.agent-room.env.${k}=${toml(val)}`]),
+      '-s', build ? 'workspace-write' : 'read-only',
+      '-a', 'never', // no approval prompts (unattended); attach to watch
+      '--dangerously-bypass-hook-trust', // else codex blocks on a hooks-trust prompt, never joining
+      `${contract}\n\n${joinMsg}`,
+    ];
+    return { bin: 'codex', args, env: {}, files: [] };
+  }
+
+  // ---- Copilot: weak-loop harness. MCP via --additional-mcp-config; interactive
+  //      takes no positional/system prompt, so seed the join instruction into the
+  //      REPL via tmux send-keys once it boots. Experimental (looping is weaker). ----
+  if (provider === 'copilot') {
+    const mcpJson = JSON.stringify({ mcpServers: { 'agent-room': mcp } });
+    const args = [
+      '--additional-mcp-config', mcpJson,
+      ...(model ? ['--model', model] : []),
+      '--add-dir', workspace,
+      '--allow-all-tools', // unattended
+      '--no-color',
+      '-n', name,
+    ];
+    // Single line (no newlines) — send-keys types it straight into the REPL.
+    return { bin: 'copilot', args, env: {}, files: [], seedKeys: `${contract} ${joinMsg}` };
+  }
+
+  return null; // gemini etc. — headless fallback.
 }

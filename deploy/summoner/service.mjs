@@ -12,7 +12,7 @@
 //
 // CLI (for testing): node service.mjs <workspaces|providers|agents|summon '<json>'|dismiss <id>>
 import http from 'node:http';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, statSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -180,6 +180,20 @@ function doSummon(body) {
   // Launch in a detached tmux session.
   const res = tmux(['new-session', '-d', '-s', tmuxSession, '-c', workspace, 'bash', launch]);
   if (res.status !== 0) throw httpErr(500, `tmux launch failed: ${(res.stderr || '').trim()}`);
+
+  // Copilot (and other REPL-only harnesses) take no positional/system prompt, so
+  // type the join instruction into the interactive REPL once it has booted.
+  if (native && native.seedKeys) {
+    const seedCmd =
+      `sleep 12; tmux send-keys -t ${shq(tmuxSession)} -l ${shq(native.seedKeys)}; ` +
+      `sleep 1; tmux send-keys -t ${shq(tmuxSession)} Enter`;
+    try {
+      spawn('bash', ['-c', seedCmd], {
+        detached: true, stdio: 'ignore',
+        env: { ...process.env, PATH: AUG_PATH, TMUX_TMPDIR },
+      }).unref();
+    } catch { /* best-effort seed */ }
+  }
 
   const agent = {
     agentId, name, role, provider: provider.id, model, workspace, room, mode, persistent,
