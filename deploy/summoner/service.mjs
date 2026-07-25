@@ -86,7 +86,7 @@ function publicAgent(a) {
 
 // ---------- core actions ----------
 function doListWorkspaces() { return { groups: listGrouped() }; }
-function doListProviders() { return { providers: catalog() }; }
+function doListProviders(force = false) { return { providers: catalog(force) }; }
 
 function doListAgents() {
   const r = loadRegistry();
@@ -170,9 +170,17 @@ async function doDismiss(body) {
   const a = r.agents[body.agentId];
   if (!a) throw httpErr(404, 'unknown agentId');
   killSession(a.tmuxSession);
-  // Free the participant row + presence so the name can be re-used cleanly.
-  try { await leave({ code: a.room, name: a.name, keyfile: a.keyfile }); } catch {}
-  try { if (a.keyfile && existsSync(a.keyfile)) unlinkSync(a.keyfile); } catch {}
+  // Only free the shared (room,name) participant row + key if NO OTHER active
+  // agent still uses that name in the room — otherwise dismissing an old agent
+  // would yank the live agent's row out from under it (the "vanished from the
+  // room" bug).
+  const nameStillLive = Object.values(r.agents).some((x) =>
+    x.agentId !== a.agentId && x.room === a.room && x.name === a.name
+    && x.status === 'active' && sessionAlive(x.tmuxSession));
+  if (!nameStillLive) {
+    try { await leave({ code: a.room, name: a.name, keyfile: a.keyfile }); } catch {}
+    try { if (a.keyfile && existsSync(a.keyfile)) unlinkSync(a.keyfile); } catch {}
+  }
   a.status = body.archived ? 'archived' : 'dismissed';
   a.dismissedAt = Date.now();
   saveRegistry(r);
@@ -180,7 +188,7 @@ async function doDismiss(body) {
 }
 
 // ---------- small utils ----------
-function colorFor(p) { return p === 'claude' ? '#B4592F' : p === 'copilot' ? '#1F883D' : '#6E40C9'; }
+function colorFor(p) { return p.startsWith('claude') ? '#B4592F' : p === 'copilot' ? '#1F883D' : '#6E40C9'; }
 function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
 function httpErr(status, message) { const e = new Error(message); e.status = status; return e; }
 
@@ -201,7 +209,7 @@ async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
     if (req.method === 'GET' && url.pathname === '/workspaces') return json(res, 200, doListWorkspaces());
-    if (req.method === 'GET' && url.pathname === '/providers') return json(res, 200, doListProviders());
+    if (req.method === 'GET' && url.pathname === '/providers') return json(res, 200, doListProviders(url.searchParams.get('refresh') === '1'));
     if (req.method === 'GET' && url.pathname === '/agents') return json(res, 200, doListAgents());
     if (req.method === 'POST' && url.pathname === '/summon') {
       const body = JSON.parse((await readBody(req)) || '{}');
@@ -231,5 +239,7 @@ if (verb) {
 } else {
   http.createServer(handle).listen(PORT, '127.0.0.1', () => {
     console.log(`[summoner] listening on 127.0.0.1:${PORT}  driver=${DRIVER}`);
+    // Warm the provider catalog so the first Summon dialog opens instantly.
+    try { catalog(); } catch { /* best-effort */ }
   });
 }

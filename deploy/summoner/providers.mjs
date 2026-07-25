@@ -23,13 +23,25 @@ export const AUG_PATH = [...new Set([...(process.env.PATH || '').split(':'), ...
 export const AGENT_CLAUDE_DIR = join(homedir(), '.agent-room', 'claude-agents');
 export const AGENT_CLAUDE_LOGIN_CMD = `CLAUDE_CONFIG_DIR=${AGENT_CLAUDE_DIR} claude auth login`;
 
-// Which account the agent Claude lane is signed into (for the UI + guidance).
-export function claudeAgentAccount() {
+// Claude "lanes" = separate config dirs, each its own account/login. Explicit,
+// email-labeled providers so you always know which account an agent runs on;
+// add more lanes here to accommodate more accounts. '' = the default ~/.claude.
+export const CLAUDE_LANES = [
+  { id: 'claude-personal', dir: '' },
+  { id: 'claude-corporate', dir: AGENT_CLAUDE_DIR },
+];
+
+export function claudeConfigDir(providerId) {
+  const lane = CLAUDE_LANES.find((l) => l.id === providerId);
+  return lane ? lane.dir : '';
+}
+
+// Account (email + loggedIn) for a given Claude config dir. '' = default.
+export function claudeAccountFor(dir) {
   try {
-    const out = execFileSync('claude', ['auth', 'status'], {
-      env: { ...process.env, PATH: AUG_PATH, CLAUDE_CONFIG_DIR: AGENT_CLAUDE_DIR },
-      encoding: 'utf8', timeout: 10000,
-    });
+    const env = { ...process.env, PATH: AUG_PATH };
+    if (dir) env.CLAUDE_CONFIG_DIR = dir;
+    const out = execFileSync('claude', ['auth', 'status'], { env, encoding: 'utf8', timeout: 10000 });
     const j = JSON.parse(out);
     return { loggedIn: Boolean(j.loggedIn), email: j.email || '' };
   } catch { return { loggedIn: false, email: '' }; }
@@ -74,9 +86,15 @@ function claudeModelsLive() {
 // Provider catalog. Model ids can drift per account/org, so each provider
 // exposes suggested presets + allows a custom id from the UI. Copilot defaults
 // to the latest GPT per Waqas's standing rule.
-export function catalog() {
+let _catalogCache = null;
+let _catalogAt = 0;
+
+export function catalog(force = false) {
+  const now = Date.now();
+  // Serve the cached catalog instantly; refresh on demand (or after 5 min).
+  if (!force && _catalogCache && now - _catalogAt < 300000) return _catalogCache;
+
   const claudeAvailable = Boolean(which('claude'));
-  const claudeAcct = claudeAvailable ? claudeAgentAccount() : { loggedIn: false, email: '' };
   const claudeLive = claudeAvailable ? claudeModelsLive() : null;
   const claudeModels = claudeLive || [
     // Fallback only if `claude models` can't be read.
@@ -85,24 +103,30 @@ export function catalog() {
     { id: 'claude-sonnet-5', label: 'Sonnet 5 — balanced' },
     { id: 'claude-haiku-4-5', label: 'Haiku 4.5 — fast / cheap' },
   ];
-  return [
-    {
-      id: 'claude',
-      label: 'Claude (Anthropic)',
+  const claudeDefault = (claudeModels.find((m) => /opus/i.test(m.id)) || claudeModels[0]).id;
+
+  // ONE provider per Claude account lane, labeled by the signed-in EMAIL — so
+  // you always pick the account explicitly. Add lanes in CLAUDE_LANES for more.
+  const claudeProviders = claudeAvailable ? CLAUDE_LANES.map((lane) => {
+    const acct = claudeAccountFor(lane.dir);
+    const loginCmd = lane.dir ? `CLAUDE_CONFIG_DIR=${lane.dir} claude auth login` : 'claude auth login';
+    return {
+      id: lane.id,
+      label: acct.loggedIn ? `Claude (${acct.email})` : `Claude — sign in (${lane.dir ? 'new account lane' : 'default'})`,
       cli: 'claude',
-      available: claudeAvailable,
-      // Prefer Opus-tier default if present, else the first listed model.
-      defaultModel: (claudeModels.find((m) => /opus/i.test(m.id)) || claudeModels[0]).id,
-      note: claudeAcct.loggedIn
-        ? `Agents run on the isolated corporate lane (${claudeAcct.email}) — your personal claude CLI is untouched.`
-        : 'Claude agent account not set up yet — see setupCmd.',
-      // The dedicated agent lane's account + one-time setup command.
-      account: claudeAcct,
-      accountReady: claudeAcct.loggedIn,
-      setupCmd: claudeAcct.loggedIn ? undefined : AGENT_CLAUDE_LOGIN_CMD,
+      available: true,
+      defaultModel: claudeDefault,
+      note: acct.loggedIn ? `Runs on ${acct.email}${lane.dir ? '' : ' — default ~/.claude'}.` : 'This account lane is not signed in — see setupCmd.',
+      account: acct,
+      accountReady: acct.loggedIn,
+      setupCmd: acct.loggedIn ? undefined : loginCmd,
       models: claudeModels,
       allowCustomModel: true,
-    },
+    };
+  }) : [];
+
+  const result = [
+    ...claudeProviders,
     {
       id: 'copilot',
       label: 'GitHub Copilot (corporate seat)',
@@ -133,6 +157,9 @@ export function catalog() {
       };
     })(),
   ];
+  _catalogCache = result;
+  _catalogAt = now;
+  return result;
 }
 
 export function providerById(id) {
@@ -147,7 +174,7 @@ export function providerById(id) {
 function buildArgv({ provider, model, workspace, mode, outFile, persistent, sessionId, resume }) {
   const build = mode === 'build';
   const persist = persistent && sessionId;
-  if (provider === 'claude') {
+  if (provider.startsWith('claude')) {
     // NOTE: --add-dir is VARIADIC (<directories...>), so it must be followed by
     // another flag — never placed right before the positional prompt, or it
     // swallows the prompt and Claude errors "input must be provided". Keep it
@@ -199,9 +226,10 @@ export function invokeModel({ provider, model, workspace, mode, prompt, persiste
       cwd: workspace,
       env: {
         ...process.env, PATH: AUG_PATH,
-        // Claude agents use the isolated (corporate) config dir, never the
-        // human's personal ~/.claude login.
-        ...(provider === 'claude' ? { CLAUDE_CONFIG_DIR: AGENT_CLAUDE_DIR } : {}),
+        // Each Claude account lane authenticates from its own config dir
+        // (corporate lane => isolated dir; personal => default ~/.claude).
+        ...(provider.startsWith('claude') && claudeConfigDir(provider)
+          ? { CLAUDE_CONFIG_DIR: claudeConfigDir(provider) } : {}),
       },
       stdio: [usesStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
@@ -242,12 +270,14 @@ function cleanOutput(provider, raw) {
 
 // Instructions the app shows so Waqas can reach the agent directly.
 export function accessInstructions({ provider, model, workspace, tmuxSession, tmuxTmpdir, persistent, sessionId }) {
-  const cli = provider === 'claude' ? 'claude' : provider === 'copilot' ? 'copilot' : 'codex';
+  const cli = provider.startsWith('claude') ? 'claude' : provider === 'copilot' ? 'copilot' : 'codex';
   const tmuxPrefix = tmuxTmpdir ? `TMUX_TMPDIR=${tmuxTmpdir} ` : '';
+  const cdir = provider.startsWith('claude') ? claudeConfigDir(provider) : '';
+  const claudePrefix = cdir ? `CLAUDE_CONFIG_DIR=${cdir} ` : '';
   // With a persistent session you can RESUME the exact same agent conversation
   // (and it shows up in the CLI/app session list). Otherwise, open a fresh CLI.
   let attach;
-  if (persistent && sessionId && provider === 'claude') attach = `Resume this exact agent:  cd ${workspace} && claude --resume ${sessionId}`;
+  if (persistent && sessionId && provider.startsWith('claude')) attach = `Resume this exact agent:  cd ${workspace} && ${claudePrefix}claude --resume ${sessionId}`;
   else if (persistent && sessionId && provider === 'copilot') attach = `Resume this exact agent:  cd ${workspace} && copilot --resume=${sessionId}`;
   else if (persistent && provider === 'codex') attach = `Resume this agent:  cd ${workspace} && codex resume   (pick the newest session)`;
   else attach = `Chat directly in its workspace:  cd ${workspace} && ${cli}`;

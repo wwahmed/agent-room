@@ -691,8 +691,8 @@ export interface SummonedAgent {
   tmuxSession: string; access: string[]; createdAt: number;
 }
 
-export async function summonProviders(): Promise<SummonProvider[]> {
-  const res = await fetch('/api/summon/providers', { credentials: 'same-origin' });
+export async function summonProviders(refresh = false): Promise<SummonProvider[]> {
+  const res = await fetch(`/api/summon/providers${refresh ? '?refresh=1' : ''}`, { credentials: 'same-origin' });
   if (!res.ok) return [];
   return ((await res.json()) as { providers?: SummonProvider[] }).providers ?? [];
 }

@@ -17,6 +17,7 @@ export function SummonAgentSheet({ code, onClose }: Props) {
   const [groups, setGroups] = useState<SummonWorkspaceGroup[]>([]);
   const [agents, setAgents] = useState<SummonedAgent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [providerId, setProviderId] = useState('');
   const [modelChoice, setModelChoice] = useState('');   // an id from the list, or CUSTOM
@@ -41,6 +42,21 @@ export function SummonAgentSheet({ code, onClose }: Props) {
   async function refreshAgents() {
     try { setAgents((await listSummonedAgents()).filter((a) => a.room === code && a.status === 'active')); }
     catch { /* ignore */ }
+  }
+
+  // Refresh the provider catalog (accounts + live model lists) on demand.
+  async function reloadCatalog() {
+    setRefreshing(true);
+    try {
+      const [ps, gs] = await Promise.all([summonProviders(true), summonWorkspaces()]);
+      setProviders(ps);
+      setGroups(gs);
+      if (!ps.find((p) => p.id === providerId)) {
+        const first = ps.find((p) => p.available) || ps[0];
+        if (first) { setProviderId(first.id); setModelChoice(first.defaultModel); }
+      }
+      await refreshAgents();
+    } finally { setRefreshing(false); }
   }
 
   useEffect(() => {
@@ -119,9 +135,18 @@ export function SummonAgentSheet({ code, onClose }: Props) {
             <div className="text-[13px] font-semibold uppercase tracking-wide text-accent">Summon agent</div>
             <h2 id="summon-title" className="mt-0.5 text-lg font-semibold text-ink">Bring a coding agent into this room</h2>
           </div>
-          <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface-softer" aria-label="Close">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="m4 4 8 8M12 4l-8 8" /></svg>
-          </button>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => void reloadCatalog()} disabled={refreshing}
+              title="Refresh accounts & model lists"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft transition hover:bg-surface-softer disabled:opacity-50" aria-label="Refresh">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? 'animate-spin' : ''}>
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" />
+              </svg>
+            </button>
+            <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface-softer" aria-label="Close">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+            </button>
+          </div>
         </header>
 
         <div className="overflow-y-auto p-4 sm:p-6">
@@ -243,15 +268,31 @@ export function SummonAgentSheet({ code, onClose }: Props) {
                 {busy ? 'Summoning…' : 'Create & Summon'}
               </button>
 
-              {/* Access instructions for the just-summoned agent */}
+              {/* Confirmation + how to reach the just-summoned agent directly. */}
               {justSummoned && (
-                <div className="mt-4 rounded-xl border border-success/40 bg-success/10 p-3">
-                  <div className="text-[13px] font-semibold text-ink">✅ {justSummoned.name} summoned — reach it directly:</div>
-                  <ul className="mt-1.5 space-y-1">
-                    {justSummoned.access.map((line, i) => (
-                      <li key={i} className="font-mono text-[11.5px] leading-relaxed text-ink-soft break-all">{line}</li>
-                    ))}
+                <div className="mt-4 rounded-xl border border-success/40 bg-success/10 p-3.5">
+                  <div className="flex items-center gap-2 text-[14px] font-semibold text-ink">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-success text-[12px] font-bold text-white">✓</span>
+                    {justSummoned.name} is live in this room
+                  </div>
+                  <div className="mt-1 text-[12px] text-ink-soft">{justSummoned.provider} / {justSummoned.model || 'account-default'} · reach it directly anytime:</div>
+                  <ul className="mt-2 space-y-1.5">
+                    {justSummoned.access.map((line, i) => {
+                      const parts = line.split(':  ');
+                      const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
+                      return (
+                        <li key={i} className="flex items-start gap-2">
+                          <code className="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
+                          <button type="button" onClick={() => { try { void navigator.clipboard.writeText(cmd); } catch { /* no clipboard */ } }}
+                            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10">Copy</button>
+                        </li>
+                      );
+                    })}
                   </ul>
+                  <button type="button" onClick={() => { setJustSummoned(null); setName(''); }}
+                    className="mt-3 w-full rounded-lg border border-border px-3 py-2 text-[13px] font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink">
+                    ＋ Summon another
+                  </button>
                 </div>
               )}
 

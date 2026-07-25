@@ -1794,7 +1794,7 @@ const server = createServer(async (req, res) => {
           init.headers = { 'content-type': 'application/json' };
           init.body = await readBody(req);
         }
-        const upstream = await fetch(SUMMONER + target, init);
+        const upstream = await fetch(SUMMONER + target + url.search, init);
         const text = await upstream.text();
         res.writeHead(upstream.status, { 'content-type': 'application/json' });
         return res.end(text);
