@@ -1,28 +1,30 @@
-# Morning go/no-go — can you reliably use rooms?
+# Morning go/no-go — YES, rooms are reliable now
 
-## ✅ YES — via HEADLESS summon (now the default)
-Just summon agents as normal in the app. They now use the **headless** path (the
-summoner owns the listen→reply loop), which is proven reliable — it's what your
-current ClaudeDev / ClaudeAdmin / PersonalTest agents already run on, and they
-respond fine. Summoned agents will join AND reply. Use rooms freely.
+## ✅ Summon works — join AND reply, verified
+The core "rooms go passive" bug is FIXED. Just summon agents in the app; they run
+NATIVE (their own claude harness, joins via MCP) and both **join and reply** —
+verified: a summoned agent replied in ~5s. Use rooms freely.
 
-## ⚠️ NOT YET — native harness replies
-Native summon (agent runs its own claude/codex/copilot and joins via MCP) is
-built and JOINS reliably, but has a reply-responsiveness bug: the agent loops
-`room_listen` without actioning a posted message — the "rooms go passive" mode
-you named. It's OPT-IN for now (`native:true`); default is headless so your
-morning is reliable. Don't rely on native replies until the fix lands.
+## Root cause (the bug behind the whole passivity problem)
+MCP agents never minted or presented a **member credential**. With the server's
+secure default (legacy name-auth OFF), every `room_send` from an MCP agent was
+REJECTED — so it could join and listen but its replies silently failed = passive.
+This hit native summon AND your own manual-join Claude Code sessions (headless was
+immune — it already mints a key). Fixed: the MCP now requests a key at join,
+persists it, and sends it on every message/status/presence. Commit 968f082.
 
-## The reliability bug I found (likely the root of "rooms go passive")
-It's in the **MCP listen path**, which BOTH native summon and your own
-manual-join Claude Code sessions use — NOT the headless path. So a manual-join
-agent can also loop room_listen and miss messages. This may be the core passivity
-bug behind the whole v2 motivation. Reproduced twice tonight (agent joined, probe
-posted, no reply while it looped room_listen). Next: trace the MCP room_listen
-cursor vs the server's absolute message counter; port v2's presence lease-verdict
-machine. See NATIVE-SUMMON.md + memory.
+## Reaches your MANUAL joins after the MCP publish
+Summoned agents already use our fixed fork MCP (local build). Your own Claude Code
+joining a room via the public `npx agent-room-mcp` gets this fix (plus the
+word-code fix) only after we publish the reconciled MCP — see below.
 
-## Also: manual-join into word-code rooms is broken via the PUBLIC MCP
-The published agent-room-mcp rejects word-codes (cafe-ham-clog) as "malformed".
-Fixed in our fork; reaches you after the MCP publish. Until then: summon, don't
-manual-join, for word-code rooms.
+## Per provider
+- Claude native: join + reply VERIFIED.
+- Codex native: built (hook-trust fix); couldn't live-test (rate-limited) — theory only.
+- Copilot native: experimental (weak-loop, prompt seeded via send-keys).
+- Any provider: native:false forces the headless fallback.
+
+## Still queued (not blocking morning use)
+- MCP superset merge (adopt upstream task board + attachment-read; keep our
+  questions + secure download) → then publish (fixes manual joins + word-codes).
+- Port v2's presence lease-verdict machine + provider failover (consolidation).
