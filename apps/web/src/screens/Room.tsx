@@ -2298,7 +2298,9 @@ export function Room() {
             className="pane-resize-handle absolute -left-1 top-0 z-20 h-full w-2"
           />
           <section aria-label="Active agents">
-            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
+            <h3 className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70" aria-hidden="true" />Agents
+            </h3>
             <div className="space-y-1">
               {headerAgents.slice(0, 6).map(a => (
                 <button
@@ -2327,8 +2329,10 @@ export function Room() {
             const doneCount = taskPulse.filter(t => t.state === 'done').length;
             const reviewCount = taskPulse.filter(t => t.state === 'awaiting_review').length;
             return (
-              <section aria-label="Project pulse">
-                <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Project pulse</h3>
+              <section aria-label="Project pulse" className="border-t border-border-faint pt-4">
+                <h3 className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent/70" aria-hidden="true" />Project pulse
+                </h3>
                 <button
                   type="button"
                   onClick={() => selectTab('project')}
@@ -2344,8 +2348,10 @@ export function Room() {
               </section>
             );
           })()}
-          <section aria-label="Recent outputs">
-            <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Recent outputs</h3>
+          <section aria-label="Recent outputs" className="border-t border-border-faint pt-4">
+            <h3 className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
+              <span className="h-1.5 w-1.5 rounded-full bg-ink-faint" aria-hidden="true" />Recent outputs
+            </h3>
             {producedWork.length > 0 ? (
               <ul className="space-y-1">
                 {producedWork.slice(-3).reverse().map(a => (
