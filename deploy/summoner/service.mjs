@@ -262,6 +262,11 @@ async function doRelaunch(body) {
   const reg = loadRegistry();
   const a = reg.agents[String(body.agentId || '')];
   if (!a) throw httpErr(404, 'unknown agentId');
+  // Loud on misuse: a relaunch is disruptive, so an unrecognized level is a
+  // 400, never a silent fall-through to the normalize default.
+  if (!['chat', 'edit', 'build'].includes(body.mode)) {
+    throw httpErr(400, `mode must be chat, edit, or build (got: ${body.mode ?? '(none)'})`);
+  }
   const mode = normalizeAccess(body.mode);
   if (mode === normalizeAccess(a.mode) && a.status === 'active' && sessionAlive(a.tmuxSession)) {
     return { agent: publicAgent(a), status: 'unchanged' };
