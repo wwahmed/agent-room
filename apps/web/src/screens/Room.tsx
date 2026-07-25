@@ -273,6 +273,29 @@ export function Room() {
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Resizable right "Room context" rail (house taste), persisted; drag left edge.
+  const rightAsideRef = useRef<HTMLElement>(null);
+  const rightDragRef = useRef(false);
+  const [rightPaneWidth, setRightPaneWidth] = useState<number>(() => {
+    try { const v = Number(localStorage.getItem('roomctx:width')); if (v >= 240 && v <= 520) return v; } catch { /* private mode */ }
+    return 300;
+  });
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      if (!rightDragRef.current || !rightAsideRef.current) return;
+      const right = rightAsideRef.current.getBoundingClientRect().right;
+      setRightPaneWidth(Math.min(520, Math.max(240, right - e.clientX)));
+    };
+    const up = () => {
+      if (!rightDragRef.current) return;
+      rightDragRef.current = false;
+      document.body.style.userSelect = '';
+      setRightPaneWidth(w => { try { localStorage.setItem('roomctx:width', String(Math.round(w))); } catch { /* ignore */ } return w; });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  }, []);
   // T-71: Offline people are collapsed out of the way by default.
   const [showOffline, setShowOffline] = useState(false);
   // T-71: light task pulse for the desktop contextual rail (60s cadence —
@@ -2264,7 +2287,16 @@ export function Room() {
   // via the two-populated-sections rule.
   const contextRail = railSectionCount(headerAgents.length, taskPulse?.length ?? 0, serverArtifacts) >= 2 ? (
 
-        <aside aria-label="Room context" className="hidden w-[300px] flex-shrink-0 flex-col gap-5 border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
+        <aside ref={rightAsideRef} style={{ width: rightPaneWidth }} aria-label="Room context" className="modern-scrollbar relative hidden flex-shrink-0 flex-col gap-5 overflow-y-auto border-l border-border-faint bg-surface px-4 py-5 min-[1440px]:flex">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize room context"
+            onPointerDown={(e) => { rightDragRef.current = true; document.body.style.userSelect = 'none'; (e.currentTarget as HTMLElement).classList.add('dragging'); }}
+            onPointerUp={(e) => (e.currentTarget as HTMLElement).classList.remove('dragging')}
+            onDoubleClick={() => { setRightPaneWidth(300); try { localStorage.setItem('roomctx:width', '300'); } catch { /* ignore */ } }}
+            className="pane-resize-handle absolute -left-1 top-0 z-20 h-full w-2"
+          />
           <section aria-label="Active agents">
             <h3 className="mb-2 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">Agents</h3>
             <div className="space-y-1">
