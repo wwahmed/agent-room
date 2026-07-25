@@ -16,6 +16,25 @@ const EXTRA_PATH = [
 export const AUG_PATH = [...new Set([...(process.env.PATH || '').split(':'), ...EXTRA_PATH])]
   .filter(Boolean).join(':');
 
+// Summoned Claude agents authenticate from a DEDICATED config dir, isolated
+// from the human's personal `claude` CLI (~/.claude). Log this one into the
+// CORPORATE account once and agents run on corporate compute forever, while the
+// personal CLI is never touched. Matches the model-compute-governance lane split.
+export const AGENT_CLAUDE_DIR = join(homedir(), '.agent-room', 'claude-agents');
+export const AGENT_CLAUDE_LOGIN_CMD = `CLAUDE_CONFIG_DIR=${AGENT_CLAUDE_DIR} claude auth login`;
+
+// Which account the agent Claude lane is signed into (for the UI + guidance).
+export function claudeAgentAccount() {
+  try {
+    const out = execFileSync('claude', ['auth', 'status'], {
+      env: { ...process.env, PATH: AUG_PATH, CLAUDE_CONFIG_DIR: AGENT_CLAUDE_DIR },
+      encoding: 'utf8', timeout: 10000,
+    });
+    const j = JSON.parse(out);
+    return { loggedIn: Boolean(j.loggedIn), email: j.email || '' };
+  } catch { return { loggedIn: false, email: '' }; }
+}
+
 function which(bin) {
   try {
     return execFileSync('/usr/bin/which', [bin], {
@@ -57,6 +76,7 @@ function claudeModelsLive() {
 // to the latest GPT per Waqas's standing rule.
 export function catalog() {
   const claudeAvailable = Boolean(which('claude'));
+  const claudeAcct = claudeAvailable ? claudeAgentAccount() : { loggedIn: false, email: '' };
   const claudeLive = claudeAvailable ? claudeModelsLive() : null;
   const claudeModels = claudeLive || [
     // Fallback only if `claude models` can't be read.
@@ -73,7 +93,13 @@ export function catalog() {
       available: claudeAvailable,
       // Prefer Opus-tier default if present, else the first listed model.
       defaultModel: (claudeModels.find((m) => /opus/i.test(m.id)) || claudeModels[0]).id,
-      note: claudeLive ? 'Live list from `claude models`.' : undefined,
+      note: claudeAcct.loggedIn
+        ? `Agents run on the isolated corporate lane (${claudeAcct.email}) — your personal claude CLI is untouched.`
+        : 'Claude agent account not set up yet — see setupCmd.',
+      // The dedicated agent lane's account + one-time setup command.
+      account: claudeAcct,
+      accountReady: claudeAcct.loggedIn,
+      setupCmd: claudeAcct.loggedIn ? undefined : AGENT_CLAUDE_LOGIN_CMD,
       models: claudeModels,
       allowCustomModel: true,
     },
@@ -171,7 +197,12 @@ export function invokeModel({ provider, model, workspace, mode, prompt, persiste
     let out = '', err = '';
     const child = spawn(spec.cmd, args, {
       cwd: workspace,
-      env: { ...process.env, PATH: AUG_PATH },
+      env: {
+        ...process.env, PATH: AUG_PATH,
+        // Claude agents use the isolated (corporate) config dir, never the
+        // human's personal ~/.claude login.
+        ...(provider === 'claude' ? { CLAUDE_CONFIG_DIR: AGENT_CLAUDE_DIR } : {}),
+      },
       stdio: [usesStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
     const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, timeoutMs);

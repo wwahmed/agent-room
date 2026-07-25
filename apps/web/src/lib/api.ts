@@ -679,6 +679,9 @@ export interface SummonModelOption { id: string; label: string }
 export interface SummonProvider {
   id: string; label: string; cli: string; available: boolean;
   defaultModel: string; note?: string; models: SummonModelOption[]; allowCustomModel?: boolean;
+  account?: { loggedIn: boolean; email: string };
+  accountReady?: boolean;
+  setupCmd?: string;
 }
 export interface SummonWorkspaceItem { name: string; path: string; git: boolean; pkg: boolean }
 export interface SummonWorkspaceGroup { group: string; items: SummonWorkspaceItem[] }

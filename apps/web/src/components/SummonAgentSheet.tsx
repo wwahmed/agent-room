@@ -155,7 +155,17 @@ export function SummonAgentSheet({ code, onClose }: Props) {
                 <input value={customModel} onChange={(e) => setCustomModel(e.target.value)} placeholder="e.g. gpt-5.5"
                   className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink" />
               )}
-              {provider?.note && <div className="mt-1.5 text-[11px] text-ink-soft">{provider.note}</div>}
+              {provider?.setupCmd ? (
+                <div className="mt-2 rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-[11.5px] text-ink-soft">
+                  <div className="font-semibold text-ink">One-time setup — run Claude agents on your corporate account:</div>
+                  <code className="mt-1 block break-all rounded bg-surface px-2 py-1 font-mono text-[11px] text-ink">{provider.setupCmd}</code>
+                  <div className="mt-1">Run once in a terminal, sign in with your corporate login. Your personal <span className="font-mono">claude</span> CLI stays completely separate.</div>
+                </div>
+              ) : provider?.account?.email ? (
+                <div className="mt-1.5 text-[11px] text-ink-soft">Claude agents run on <span className="font-medium text-ink">{provider.account.email}</span> — isolated corporate lane, your personal CLI untouched.</div>
+              ) : provider?.note ? (
+                <div className="mt-1.5 text-[11px] text-ink-soft">{provider.note}</div>
+              ) : null}
               <div className="mb-4" />
 
               {/* Workspace — belongs to the room; the agent inherits it. */}

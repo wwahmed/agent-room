@@ -33,6 +33,7 @@ function beat() {
 
 let turns = 0;
 let stopping = false;
+let authHelpPosted = false;
 
 async function respondTo(newMsgs) {
   // Only react to messages from OTHERS that are real chat (not status/system).
@@ -60,6 +61,17 @@ async function respondTo(newMsgs) {
   turns += 1;
   const reply = (text || '').trim();
   log(`model turn: code=${code} len=${reply.length} head=${JSON.stringify(reply.slice(0, 100))}${err ? ' err=' + err.slice(0, 160) : ''}`);
+  // Claude agent lane not signed in → post the real one-time setup command
+  // (not the CLI's generic "/login"), once.
+  if (cfg.provider === 'claude' && /not logged in|please run \/login/i.test(reply)) {
+    if (!authHelpPosted) {
+      authHelpPosted = true;
+      await send({ code: cfg.code, name: cfg.name, color: cfg.color, keyfile: cfg.keyfile,
+        text: `⚠️ My Claude account isn't set up on the agent lane yet. One-time fix — run in a terminal, sign in with the CORPORATE account:\n\n  sh ~/workspaces/agent-room/deploy/summoner/login-claude-agents.sh\n\nThen dismiss + re-summon me. (Your personal claude CLI stays separate.)` });
+    }
+    log('-> claude agent lane not logged in; posted setup guidance');
+    return;
+  }
   if (!reply || /^\(no reply\)\.?$/i.test(reply)) {
     log(`-> suppressed (empty or no-reply)`);
     return;
