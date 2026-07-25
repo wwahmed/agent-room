@@ -51,7 +51,6 @@ import {
 } from '../lib/unread.js';
 import { withinAnchoredMutation } from '../lib/readingAnchor.js';
 import { startReadingHeartbeat } from '../lib/readSync.js';
-import { installHomeBackstop } from '../lib/historyBackstop.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
@@ -681,11 +680,6 @@ export function Room() {
   // read-marker stamp fresh so 'all'-level pushes stay suppressed during a
   // quiet stretch. Visibility-gated inside the heartbeat itself.
   useEffect(() => startReadingHeartbeat(code), [code]);
-
-  // Phone back button: a deep entry into this room (notification tap, PWA
-  // cold start) leaves nothing under it in session history, so hardware back
-  // minimizes the app. Slip a Home entry underneath so back goes Home.
-  useEffect(() => { installHomeBackstop(); }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

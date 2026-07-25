@@ -10,12 +10,13 @@ describe('home backstop for deep room entries', () => {
     window.history.replaceState(null, '', '/');
   });
 
-  it('wants a backstop only for a room at history index 0', () => {
+  it('wants a backstop for any non-Home path at history index 0', () => {
     expect(needsBackstop(null, '/r/abc-def-ghj')).toBe(true);
     expect(needsBackstop({ idx: 0 }, '/r/abc-def-ghj')).toBe(true);
+    expect(needsBackstop({ idx: 0 }, '/j/abc-def-ghj')).toBe(true); // invite link
+    expect(needsBackstop({ idx: 0 }, '/settings')).toBe(true);
     expect(needsBackstop({ idx: 3 }, '/r/abc-def-ghj')).toBe(false); // entered from Home — back already works
-    expect(needsBackstop({ idx: 0 }, '/')).toBe(false);
-    expect(needsBackstop({ idx: 0 }, '/settings')).toBe(false);
+    expect(needsBackstop({ idx: 0 }, '/')).toBe(false); // Home IS the bottom
   });
 
   it('slips a Home entry underneath and keeps the room on top, query intact', () => {
