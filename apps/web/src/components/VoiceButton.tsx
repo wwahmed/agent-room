@@ -84,6 +84,12 @@ interface Props {
   hideTriggerWhileActive?: boolean;
   /** Called once with the final transcript when the user Stops (accepts). */
   onTranscript: (text: string) => void;
+  /** The overlay's accept control SENDS in one tap (Waqas: no two-stage
+   *  use-draft-then-send). Called instead of onTranscript when the user taps
+   *  Send — with the final transcript, AFTER any pending server-STT segments
+   *  finish, so the composer can merge and dispatch the message itself. May be
+   *  '' (e.g. base-only draft); the composer decides whether there is a body. */
+  onSendTranscript?: (text: string) => void;
   /** T-59: called continuously while recording with the live (final+interim)
    *  transcript, so the words stream straight into the message box as they're
    *  spoken and nothing is ever lost if the session ends unexpectedly. */
@@ -144,7 +150,7 @@ function noSignalMessage(s: DictationSnapshot): string {
 }
 
 export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceButton(
-  { onTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive, resumeMode }: Props,
+  { onTranscript, onSendTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive, resumeMode }: Props,
   ref,
 ) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
@@ -165,9 +171,15 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   // The controller is created once; keep the latest callbacks in refs so its
   // long-lived onChange/onFinalize always call the current handlers.
   const onTranscriptRef = useRef(onTranscript);
+  const onSendRef = useRef(onSendTranscript);
   const onLiveRef = useRef(onLiveTranscript);
   onTranscriptRef.current = onTranscript;
+  onSendRef.current = onSendTranscript;
   onLiveRef.current = onLiveTranscript;
+  // Whether the session was ended by the overlay's Send control. Routes the
+  // (possibly async — server-STT segments may still be draining) finalize to
+  // onSendTranscript instead of the insert-only onTranscript.
+  const sendOnStopRef = useRef(false);
 
   const recording = snap.state === 'recording';
   const active = snap.state !== 'idle';
@@ -221,7 +233,17 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   if (!SpeechRecognitionImpl && !CAPTURE_SUPPORTED) return null;
 
   const onChange = (s: DictationSnapshot) => { setSnap(s); if (s.state !== 'idle') onLiveRef.current?.(liveText(s)); };
-  const onFinalize = (text: string) => { if (text) onTranscriptRef.current?.(text); };
+  const onFinalize = (text: string) => {
+    if (sendOnStopRef.current && onSendRef.current) {
+      // Even an empty transcript goes through: the composer may hold a typed
+      // base draft the user expects this Send to dispatch.
+      sendOnStopRef.current = false;
+      onSendRef.current(text);
+      return;
+    }
+    sendOnStopRef.current = false;
+    if (text) onTranscriptRef.current?.(text);
+  };
 
   // Built fresh at each start so a late engine probe is honored on the next
   // session, not frozen to what was known at first click. Prefer the silent
@@ -257,6 +279,7 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
         disabled={disabled}
         onClick={() => {
           if (active) { playSendCue(); ctrlRef.current?.stop(); return; }
+          sendOnStopRef.current = false; // a new session never inherits a Send intent
           onStart?.(); // snapshot the composer's base draft before words stream in
           const c = buildController();
           ctrlRef.current = c;
@@ -296,7 +319,7 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
           <div className="flex w-full items-center gap-3">
             <button
               type="button"
-              onClick={() => { ctrlRef.current?.cancel(); onCancel?.(); }}
+              onClick={() => { sendOnStopRef.current = false; ctrlRef.current?.cancel(); onCancel?.(); }}
               aria-label="Discard recording"
               title="Discard"
               className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
@@ -371,17 +394,39 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
             </span>
             )}
 
+            {/* One-tap finish (Waqas): the old two-stage Use-draft-then-Send
+                collapses into a single Send — stop, finalize, dispatch. The
+                live transcript already streams into the textarea above, so
+                anyone who wants to edit first just taps the text and types
+                (T-138 pauses dictation), then uses the composer's own Send. */}
             <button
               type="button"
-              onClick={() => { playSendCue(); ctrlRef.current?.stop(); }}
-              aria-label="Use voice draft"
-              title="Use draft (does not send the message)"
+              onClick={() => {
+                if (onSendTranscript) {
+                  // No cue here: the composer's send path plays the send
+                  // chime once the message actually dispatches — one tap,
+                  // one cue.
+                  sendOnStopRef.current = true;
+                  ctrlRef.current?.stop();
+                  return;
+                }
+                playSendCue();
+                ctrlRef.current?.stop();
+              }}
+              aria-label={onSendTranscript ? 'Send message' : 'Use voice draft'}
+              title={onSendTranscript ? 'Send' : 'Use draft (does not send the message)'}
               className="flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-white transition hover:opacity-90"
             >
-              <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m3 8.5 3.1 3.1L13 4.7" />
-              </svg>
-              <span className="text-sm font-semibold">Use draft</span>
+              {onSendTranscript ? (
+                <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+                  <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m3 8.5 3.1 3.1L13 4.7" />
+                </svg>
+              )}
+              <span className="text-sm font-semibold">{onSendTranscript ? 'Send' : 'Use draft'}</span>
             </button>
           </div>
           {/* No transcript preview here anymore: the live text streams into the

@@ -1541,10 +1541,12 @@ export function Room() {
     }
   }
 
-  async function send() {
+  async function send(bodyOverride?: string) {
     // T-142: read the LIVE composer value so a fast type+Enter parses exactly
     // what is in the box, never a React state that has not committed yet.
-    const body = (textareaRef.current?.value ?? text).trim();
+    // bodyOverride: the recorder's one-tap Send passes the merged transcript
+    // directly — the textarea has not re-rendered with it yet.
+    const body = (bodyOverride ?? textareaRef.current?.value ?? text).trim();
     if ((!body && attachments.length === 0) || ended || sendingRef.current) return;
 
     // T-139: the /brief command family. A brief COMPOSES a room artifact from
@@ -3179,6 +3181,20 @@ export function Room() {
                       setDictationPaused(false);
                       requestAnimationFrame(() => textareaRef.current?.focus());
                     }}
+                    onSendTranscript={(t) => {
+                      // One-tap Send from the recorder: merge exactly like
+                      // onTranscript, then dispatch with the body passed
+                      // explicitly — state set here hasn't reached the
+                      // textarea yet, so send() must not read the DOM.
+                      const base = (dictationBaseRef.current ?? '').trim();
+                      const body = base && t ? `${base} ${t}` : t || base;
+                      dictationBaseRef.current = null;
+                      setText(body);
+                      setDictationDraft(true);
+                      setDictating(false);
+                      setDictationPaused(false);
+                      void send(body);
+                    }}
                     onCancel={() => {
                       if (dictationBaseRef.current !== null) setText(dictationBaseRef.current);
                       dictationBaseRef.current = null;
@@ -3206,7 +3222,7 @@ export function Room() {
                   {/* Icon-only send (Teams parity). Stays 44px — a big tap target,
                       just not a wide labelled slab eating the row. */}
                   <button
-                    onClick={send}
+                    onClick={() => void send()}
                     disabled={!text.trim() && attachments.length === 0}
                     title="Send"
                     aria-label="Send message"
