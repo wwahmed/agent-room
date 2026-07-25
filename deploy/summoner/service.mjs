@@ -203,16 +203,20 @@ function doSummon(body) {
     // reaches the input box at all; (b) the text lands but the TUI's paste
     // debounce absorbs a fast-following Enter as a newline, stranding the
     // prompt unsubmitted. So each round VERIFIES the pane before acting:
-    // done once the model is running ("esc interrupt") or usage ticked off
-    // zero; re-send the text whenever the pane doesn't show it; then Enter.
-    // A stray Enter on an empty prompt is a no-op, so retries are safe.
+    // no status bar at all means a boot/trust dialog still owns the screen
+    // (not ready — wait, don't conclude); done once the model is running
+    // ("esc interrupt") or usage ticked off zero (leading space so "10 AIC
+    // used" doesn't false-match); re-send the text whenever the pane doesn't
+    // show it; then Enter. A stray Enter on an empty prompt is a no-op, so
+    // retries are safe.
     const t = shq(tmuxSession);
     const seedCmd =
       `sleep 12; ` +
       `for i in 1 2 3 4 5 6; do ` +
       `pane=$(tmux capture-pane -p -t ${t}); ` +
       `case "$pane" in *'esc interrupt'*) break;; esac; ` +
-      `printf %s "$pane" | grep -q '0 AIC used' || break; ` +
+      `printf %s "$pane" | grep -q 'AIC used' || { sleep 4; continue; }; ` +
+      `printf %s "$pane" | grep -q ' 0 AIC used' || break; ` +
       `printf %s "$pane" | grep -q 'room_join' || { tmux send-keys -t ${t} -l ${shq(native.seedKeys)}; sleep 2; }; ` +
       `tmux send-keys -t ${t} Enter; sleep 5; ` +
       `done`;
