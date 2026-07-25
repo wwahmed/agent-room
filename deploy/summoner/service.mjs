@@ -8,6 +8,7 @@
 //        GET  /providers            -> provider + model catalog
 //        GET  /agents               -> live roster (+ health)
 //        POST /summon  {room,provider,model,workspace,name,role,mode}
+//        POST /relaunch {agentId,mode}   -> dismiss + summon at a new level
 //        POST /dismiss {agentId}
 //
 // CLI (for testing): node service.mjs <workspaces|providers|agents|summon '<json>'|dismiss <id>>
@@ -253,6 +254,27 @@ function doResummon(body) {
   return { room, agents: results };
 }
 
+// Change a live agent's permission level. Levels map to how the process is
+// LAUNCHED (native permission flags), so an in-place flip is impossible —
+// relaunch = dismiss + summon with the same config at the new level. The
+// same-name key reuse in doSummon means the agent reclaims its row.
+async function doRelaunch(body) {
+  const reg = loadRegistry();
+  const a = reg.agents[String(body.agentId || '')];
+  if (!a) throw httpErr(404, 'unknown agentId');
+  const mode = normalizeAccess(body.mode);
+  if (mode === normalizeAccess(a.mode) && a.status === 'active' && sessionAlive(a.tmuxSession)) {
+    return { agent: publicAgent(a), status: 'unchanged' };
+  }
+  await doDismiss({ agentId: a.agentId });
+  const r = doSummon({
+    room: a.room, provider: a.provider, model: a.model, workspace: a.workspace,
+    name: a.name, role: a.role, mode,
+    persistent: a.persistent !== false, native: Boolean(a.native),
+  });
+  return { agent: r.agent, status: 'relaunched' };
+}
+
 async function doDismiss(body) {
   const r = loadRegistry();
   const a = r.agents[body.agentId];
@@ -306,6 +328,10 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/resummon') {
       const body = JSON.parse((await readBody(req)) || '{}');
       return json(res, 200, doResummon(body));
+    }
+    if (req.method === 'POST' && url.pathname === '/relaunch') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      return json(res, 200, await doRelaunch(body));
     }
     if (req.method === 'POST' && url.pathname === '/dismiss') {
       const body = JSON.parse((await readBody(req)) || '{}');

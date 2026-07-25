@@ -744,6 +744,21 @@ export async function resummonRoomAgents(room: string): Promise<{ name: string; 
   return j.agents ?? [];
 }
 
+// Change a summoned agent's permission level. Levels map to launch flags, so
+// the summoner relaunches the agent (dismiss + summon, same config) at the
+// new level; it drops from the room and returns within a few seconds.
+export async function relaunchAgentWithMode(agentId: string, mode: 'chat' | 'edit' | 'build'): Promise<SummonedAgent> {
+  const res = await fetch('/api/summon/relaunch', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ agentId, mode }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { agent?: SummonedAgent; error?: string; message?: string };
+  if (!res.ok || !j.agent) {
+    throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Relaunch failed (${res.status})`), res.status);
+  }
+  return j.agent;
+}
+
 export async function dismissSummonedAgent(agentId: string, archived = false): Promise<void> {
   const res = await fetch('/api/summon/dismiss', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

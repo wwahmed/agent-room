@@ -1,6 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { listRoomAgentHistory, type SummonedAgent } from '../lib/api.js';
+import { listRoomAgentHistory, relaunchAgentWithMode, type SummonedAgent } from '../lib/api.js';
 import { brandFor } from '../lib/agentBrand.js';
+
+// Permission levels a summoned agent can be relaunched at. Labels mirror the
+// SummonAgentSheet copy so both surfaces describe the same contract.
+const PERMISSION_LEVELS = [
+  { value: 'chat', label: 'Chat', detail: 'Responds in the room only (no file access)' },
+  { value: 'edit', label: 'Edit', detail: 'Can create/modify files in the workspace' },
+  { value: 'build', label: 'Build', detail: 'Edits files and runs commands autonomously' },
+] as const;
+type PermissionLevel = (typeof PERMISSION_LEVELS)[number]['value'];
 
 interface DetailParticipant {
   name: string;
@@ -22,6 +31,12 @@ interface DetailParticipant {
 export function AgentDetailsSheet({ code, participant, onClose }: { code: string; participant: DetailParticipant; onClose: () => void }) {
   const [agent, setAgent] = useState<SummonedAgent | null>(null);
   const [loading, setLoading] = useState(true);
+  // Permission-change flow: closed → picking a level → confirming the
+  // relaunch → busy while the summoner swaps the process.
+  const [picking, setPicking] = useState(false);
+  const [pendingLevel, setPendingLevel] = useState<PermissionLevel | null>(null);
+  const [relaunching, setRelaunching] = useState(false);
+  const [permissionNote, setPermissionNote] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -36,6 +51,28 @@ export function AgentDetailsSheet({ code, participant, onClose }: { code: string
 
   const brand = brandFor({ client: participant.client, harness: participant.harness });
   const fmt = (t?: number) => (t ? new Date(t).toLocaleString() : '—');
+  // Only a live, summoned agent can have its level changed — the level maps to
+  // launch flags, so the summoner relaunches it. Join-code agents are managed
+  // wherever they were started and stay read-only here.
+  const currentLevel = ((agent?.accessLevel || agent?.mode) ?? 'chat') as PermissionLevel;
+  const canChangePermissions = Boolean(agent && agent.status === 'active');
+
+  async function onConfirmRelaunch() {
+    if (!agent || !pendingLevel || relaunching) return;
+    setRelaunching(true);
+    setPermissionNote(null);
+    try {
+      const next = await relaunchAgentWithMode(agent.agentId, pendingLevel);
+      setAgent(next);
+      setPicking(false);
+      setPendingLevel(null);
+      setPermissionNote(`${participant.name} is relaunching with ${pendingLevel} access — back in the room in a few seconds.`);
+    } catch (e) {
+      setPermissionNote(e instanceof Error ? e.message : 'Could not relaunch the agent.');
+    } finally {
+      setRelaunching(false);
+    }
+  }
   const resume = agent?.access?.find((l) => /Resume this|Chat directly/i.test(l));
   const resumeCmd = resume ? resume.split(':  ').slice(1).join(':  ') : '';
 
@@ -44,12 +81,27 @@ export function AgentDetailsSheet({ code, participant, onClose }: { code: string
     ['Model', agent ? (agent.model || 'account-default') : (participant.model || '—')],
     ['Account', agent?.account || participant.account || '—'],
     ['Workspace', agent?.workspace || participant.workspace || '—'],
-    ['Permissions', agent
-      ? (agent.accessLabel
-          || (agent.mode === 'build' ? 'Build — edits files and runs commands autonomously'
-            : agent.mode === 'edit' ? 'Edit — can create/modify files in the workspace'
-            : 'Chat — responds in the room only (no file access)'))
-      : (participant.capabilities || '—')],
+    ['Permissions', (
+      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+        <span>
+          {agent
+            ? (agent.accessLabel
+                || (currentLevel === 'build' ? 'Build — edits files and runs commands autonomously'
+                  : currentLevel === 'edit' ? 'Edit — can create/modify files in the workspace'
+                  : 'Chat — responds in the room only (no file access)'))
+            : (participant.capabilities || '—')}
+        </span>
+        {canChangePermissions && (
+          <button
+            type="button"
+            onClick={() => { setPicking(p => !p); setPendingLevel(null); setPermissionNote(null); }}
+            className="rounded-md px-2 py-1 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
+          >
+            {picking ? 'Cancel' : 'Change'}
+          </button>
+        )}
+      </span>
+    )],
     ['Persistent', agent ? (agent.persistent ? 'Yes — resumable' : 'No — one-shot') : '—'],
     ['Role', participant.role || agent?.role || '—'],
     ['Joined', fmt(agent?.createdAt ?? participant.joinedAt)],
@@ -85,6 +137,65 @@ export function AgentDetailsSheet({ code, participant, onClose }: { code: string
                   </div>
                 ))}
               </dl>
+
+              {permissionNote && (
+                <p role="status" className="mt-3 rounded-lg bg-surface-softer px-3 py-2 text-[13px] text-ink-soft">{permissionNote}</p>
+              )}
+
+              {picking && canChangePermissions && (
+                <div className="mt-3 rounded-xl border border-border p-3" data-gate="permission-picker">
+                  <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Change permissions</div>
+                  <div role="radiogroup" aria-label="Permission level" className="flex flex-col gap-1.5">
+                    {PERMISSION_LEVELS.map(lvl => {
+                      const selected = (pendingLevel ?? currentLevel) === lvl.value;
+                      return (
+                        <button
+                          key={lvl.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          disabled={relaunching}
+                          onClick={() => setPendingLevel(lvl.value)}
+                          className={`min-h-11 rounded-lg border px-3 py-2 text-left transition disabled:opacity-50 ${
+                            selected ? 'border-accent bg-accent/10' : 'border-border hover:border-accent/50'
+                          }`}
+                        >
+                          <span className="text-sm font-semibold text-ink">
+                            {lvl.label}{lvl.value === currentLevel ? ' (current)' : ''}
+                          </span>
+                          <span className="block text-[13px] text-ink-soft">{lvl.detail}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {pendingLevel && pendingLevel !== currentLevel && (
+                    <div className="mt-3">
+                      <p className="text-[13px] text-ink">
+                        Relaunch <span className="font-semibold">{participant.name}</span> with {pendingLevel} access? It will
+                        leave the room briefly and rejoin in a few seconds with the new level.
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          disabled={relaunching}
+                          onClick={() => { void onConfirmRelaunch(); }}
+                          className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                        >
+                          {relaunching ? 'Relaunching…' : 'Relaunch'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={relaunching}
+                          onClick={() => setPendingLevel(null)}
+                          className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold transition hover:border-accent disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {resumeCmd && (
                 <div className="mt-4">
