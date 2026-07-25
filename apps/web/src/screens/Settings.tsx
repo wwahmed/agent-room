@@ -4,6 +4,7 @@ import { fetchIdentity, type WhoAmI } from '../lib/identity.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { AppearanceChoices, ReadingScaleChoices } from '../components/PreferenceControls.js';
 import { NotificationSettings } from '../components/NotificationSettings.js';
+import { getTranscribeModel, setTranscribeModel, type TranscribeModelOption } from '../lib/api.js';
 
 // T-26/T-27: the app-level Settings destination behind the Home account
 // menu's Settings row. Room-scoped settings stay on the room's Settings
@@ -19,12 +20,32 @@ function sectionHead(label: string) {
 export function Settings() {
   const navigate = useNavigate();
   const [identity, setIdentity] = useState<WhoAmI | null>(null);
+  const [sttModels, setSttModels] = useState<TranscribeModelOption[]>([]);
+  const [sttCurrent, setSttCurrent] = useState('');
+  const [sttMsg, setSttMsg] = useState('');
+  const [sttBusy, setSttBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void fetchIdentity().then(me => { if (!cancelled) setIdentity(me); });
+    void getTranscribeModel().then(r => { if (!cancelled) { setSttModels(r.available); setSttCurrent(r.current); } });
     return () => { cancelled = true; };
   }, []);
+
+  async function onPickModel(id: string) {
+    setSttMsg(''); setSttBusy(true);
+    const prev = sttCurrent;
+    setSttCurrent(id);
+    try {
+      await setTranscribeModel(id);
+      setSttMsg('Saved — voice transcription now uses this model.');
+    } catch (e) {
+      setSttCurrent(prev);
+      setSttMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSttBusy(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-surface-sunken text-ink">
@@ -80,6 +101,26 @@ export function Settings() {
           <p className="mb-2 text-[13px] text-ink-soft">Message text size on phones. Comfortable is the default.</p>
           <ReadingScaleChoices />
         </section>
+
+        {sttModels.length > 0 && (
+          <section aria-label="Voice transcription" className="rounded-xl border border-border-faint bg-surface p-4">
+            {sectionHead('Voice transcription')}
+            <p className="mb-2 text-[13px] text-ink-soft">Local speech-to-text model for dictation. Bigger is more accurate, slightly slower. All run on-device.</p>
+            <select
+              value={sttCurrent}
+              disabled={sttBusy}
+              onChange={e => void onPickModel(e.target.value)}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink disabled:opacity-50"
+            >
+              {sttModels.map(m => (
+                <option key={m.id} value={m.id} disabled={!m.downloaded}>
+                  {m.label} — {m.note}{m.downloaded ? '' : ' (not downloaded)'}
+                </option>
+              ))}
+            </select>
+            {sttMsg && <p className="mt-2 text-[12px] text-ink-soft">{sttMsg}</p>}
+          </section>
+        )}
 
         {identity && (
           <section aria-label="Sign out" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">

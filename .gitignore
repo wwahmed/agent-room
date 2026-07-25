@@ -48,3 +48,6 @@ tmp/builder-standing-watch*
 
 # T-95 immutable release artifacts + pointers (machine-local, never committed)
 releases/
+
+# agent-summoner runtime logs
+deploy/summoner/*.log

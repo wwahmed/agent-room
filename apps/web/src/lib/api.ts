@@ -743,3 +743,23 @@ export async function unarchiveRoomAction(_client: ApiClient, code: string, auth
     action: 'unarchiveRoom', code, hostKey: auth.hostKey ?? storedHostKey(code),
   })).room;
 }
+
+// ---------- Transcription model selector (Settings) ----------
+export interface TranscribeModelOption {
+  id: string; label: string; note: string; sizeMB: number; downloaded: boolean;
+}
+export async function getTranscribeModel(): Promise<{ current: string; available: TranscribeModelOption[] }> {
+  const res = await fetch('/api/transcribe/model', { credentials: 'same-origin' });
+  if (!res.ok) return { current: '', available: [] };
+  return (await res.json()) as { current: string; available: TranscribeModelOption[] };
+}
+export async function setTranscribeModel(model: string): Promise<void> {
+  const res = await fetch('/api/transcribe/model', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ model }),
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Failed (${res.status})`), res.status);
+  }
+}

@@ -32,6 +32,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomUUID, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1852,6 +1853,42 @@ const server = createServer(async (req, res) => {
     if (path === '/api/transcribe/status' && req.method === 'GET') {
       const s = await engineStatus();
       return sendJson(res, 200, { ok: s.ok, engine: s.ok ? 'whisper-local' : 'none', reason: s.reason });
+    }
+    // Transcription model selector (Settings): choose the local Whisper model.
+    // Bigger = more accurate, a touch slower. Stored in a config file the
+    // whisper-launch wrapper reads; changing it restarts the whisper service.
+    if (path === '/api/transcribe/model' && (req.method === 'GET' || req.method === 'POST')) {
+      const caller = await resolveCaller(req);
+      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
+      const whisperDir = join(homedir(), '.cache', 'whisper');
+      const cfgPath = join(homedir(), '.agent-room', 'whisper-model');
+      const catalog = [
+        { id: 'ggml-base.en.bin', label: 'Fast (base)', note: 'quickest, lower accuracy', sizeMB: 148 },
+        { id: 'ggml-small.en.bin', label: 'Balanced (small)', note: 'good accuracy, fast', sizeMB: 466 },
+        { id: 'ggml-medium.en.bin', label: 'Best (medium)', note: 'highest accuracy', sizeMB: 1500 },
+      ];
+      const readCurrent = () => {
+        try { const c = readFileSync(cfgPath, 'utf8').trim(); if (c) return c; } catch { /* default below */ }
+        return 'ggml-medium.en.bin';
+      };
+      if (req.method === 'GET') {
+        const available = catalog.map(m => ({ ...m, downloaded: existsSync(join(whisperDir, m.id)) }));
+        return sendJson(res, 200, { current: readCurrent(), available });
+      }
+      // POST — switch the model.
+      let body: Record<string, unknown> = {};
+      try { body = JSON.parse(await readBody(req)); } catch { /* empty */ }
+      const model = String(body.model || '');
+      const entry = catalog.find(m => m.id === model);
+      if (!entry) return sendJson(res, 400, { error: 'bad_model', message: 'unknown transcription model' });
+      if (!existsSync(join(whisperDir, model))) {
+        return sendJson(res, 409, { error: 'not_downloaded', message: `${entry.label} isn't downloaded on this machine yet.` });
+      }
+      try { mkdirSync(dirname(cfgPath), { recursive: true }); } catch { /* exists */ }
+      writeFileSync(cfgPath, model);
+      // Restart whisper so the wrapper re-reads the model (best-effort).
+      try { execFile('/bin/launchctl', ['kickstart', '-k', `gui/${process.getuid?.() ?? 0}/com.wakilabs.whisper`], () => {}); } catch { /* non-fatal */ }
+      return sendJson(res, 200, { current: model, restarted: true });
     }
     if (path === '/api/transcribe' && req.method === 'POST') {
       const caller = await resolveCaller(req);
