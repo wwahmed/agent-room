@@ -65,11 +65,11 @@ export function Join() {
         ?? undefined;
       await verifyHostKey(client, room.code, hostKey);
       const participant = {
-        name: hostName, role: role.trim() || 'Host', color: colorForName(hostName),
+        name: hostName, role: 'Host', color: colorForName(hostName),
         initials: initialsFor(hostName), client: 'web' as const, joinedAt: Date.now(), lastSeenAt: Date.now(),
       };
       const result = await joinRoom(client, room.code, participant, { priorIdentity: { name: hostName, client: 'web' } });
-      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify({ name: result.participant.name, role: role.trim() }));
+      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify({ name: result.participant.name, role: 'Host' }));
       rememberRole(role);
       navigate(`/r/${room.code}`);
     } catch (e) {
