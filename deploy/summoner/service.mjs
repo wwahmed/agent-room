@@ -198,9 +198,18 @@ function doSummon(body) {
   // Copilot (and other REPL-only harnesses) take no positional/system prompt, so
   // type the join instruction into the interactive REPL once it has booted.
   if (native && native.seedKeys) {
+    // Copilot's TUI paste-detects rapid input: an Enter arriving inside the
+    // paste debounce becomes a newline in the buffer instead of a submit,
+    // stranding the seed prompt in the input box (agent never joins). Wait out
+    // the debounce, then retry Enter while the session still shows zero usage
+    // — a stray Enter on an empty prompt is a no-op, so retries are safe.
     const seedCmd =
       `sleep 12; tmux send-keys -t ${shq(tmuxSession)} -l ${shq(native.seedKeys)}; ` +
-      `sleep 1; tmux send-keys -t ${shq(tmuxSession)} Enter`;
+      `sleep 3; ` +
+      `for i in 1 2 3 4 5; do ` +
+      `tmux send-keys -t ${shq(tmuxSession)} Enter; sleep 4; ` +
+      `tmux capture-pane -p -t ${shq(tmuxSession)} | grep -q '0 AIC used' || break; ` +
+      `done`;
     try {
       spawn('bash', ['-c', seedCmd], {
         detached: true, stdio: 'ignore',
