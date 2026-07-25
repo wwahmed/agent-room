@@ -24,22 +24,47 @@ function which(bin) {
   } catch { return ''; }
 }
 
+// Live Claude model list from `claude models` (so Fable 5 / Opus / Sonnet 5
+// always appear as they ship — no hardcoded staleness). Returns null on failure
+// so the caller can fall back.
+function claudeModelsLive() {
+  try {
+    const out = execFileSync('claude', ['models'], {
+      env: { ...process.env, PATH: AUG_PATH }, encoding: 'utf8', timeout: 15000,
+    });
+    const rows = [...out.matchAll(/\|\s*\*\*(.+?)\*\*([^|]*)\|\s*`([^`]+)`/g)];
+    const models = rows.map((m) => {
+      const name = m[1].trim();
+      const desc = (m[2] || '').replace(/^[\s—-]+/, '').trim();
+      return { id: m[3].trim(), label: desc ? `${name} — ${desc}` : name };
+    });
+    return models.length ? models : null;
+  } catch { return null; }
+}
+
 // Provider catalog. Model ids can drift per account/org, so each provider
 // exposes suggested presets + allows a custom id from the UI. Copilot defaults
 // to the latest GPT per Waqas's standing rule.
 export function catalog() {
+  const claudeAvailable = Boolean(which('claude'));
+  const claudeLive = claudeAvailable ? claudeModelsLive() : null;
+  const claudeModels = claudeLive || [
+    // Fallback only if `claude models` can't be read.
+    { id: 'claude-fable-5', label: 'Fable 5 — most capable' },
+    { id: 'claude-opus-4-8', label: 'Opus 4.8 — default' },
+    { id: 'claude-sonnet-5', label: 'Sonnet 5 — balanced' },
+    { id: 'claude-haiku-4-5', label: 'Haiku 4.5 — fast / cheap' },
+  ];
   return [
     {
       id: 'claude',
       label: 'Claude (Anthropic)',
       cli: 'claude',
-      available: Boolean(which('claude')),
-      defaultModel: 'sonnet',
-      models: [
-        { id: 'sonnet', label: 'Sonnet 5 — balanced (default)' },
-        { id: 'opus', label: 'Opus 4.8 — most capable' },
-        { id: 'haiku', label: 'Haiku 4.5 — fast / cheap' },
-      ],
+      available: claudeAvailable,
+      // Prefer Opus-tier default if present, else the first listed model.
+      defaultModel: (claudeModels.find((m) => /opus/i.test(m.id)) || claudeModels[0]).id,
+      note: claudeLive ? 'Live list from `claude models`.' : undefined,
+      models: claudeModels,
       allowCustomModel: true,
     },
     {
@@ -85,8 +110,13 @@ export function providerById(id) {
 function buildArgv({ provider, model, workspace, mode, outFile }) {
   const build = mode === 'build';
   if (provider === 'claude') {
-    const a = ['-p', '--model', model, '--output-format', 'text', '--strict-mcp-config'];
-    if (build) a.push('--dangerously-skip-permissions', '--add-dir', workspace);
+    // NOTE: --add-dir is VARIADIC (<directories...>), so it must be followed by
+    // another flag — never placed right before the positional prompt, or it
+    // swallows the prompt and Claude errors "input must be provided". Keep it
+    // early, ahead of the boolean/value flags.
+    const a = ['-p'];
+    if (build) a.push('--add-dir', workspace, '--dangerously-skip-permissions');
+    a.push('--model', model, '--output-format', 'text', '--strict-mcp-config');
     return { cmd: 'claude', args: a, promptVia: 'arg' };
   }
   if (provider === 'copilot') {
