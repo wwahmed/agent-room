@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { createClient, createProject, createRoom, listProjectCandidates, listProjects, summonWorkspaces, type ProjectCandidate, type ProjectSummary, type SummonWorkspaceGroup } from '../lib/api.js';
+import { createClient, createRoom, summonWorkspaces, type SummonWorkspaceGroup } from '../lib/api.js';
 import { normalizeRoomTopic, ROLE_PRESETS, roomTopicIssue } from '@agent-room/shared';
 import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
 import { fetchIdentity, lastRole } from '../lib/identity.js';
@@ -26,21 +26,13 @@ export function CreateMeeting() {
   const [editIdentity, setEditIdentity] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // T-18: project attachment is required for new web-created rooms when
-  // the registry (or the candidate scan) has anything to offer.
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
-  const [projectId, setProjectId] = useState('');
+  // The room is based in a single grouped Workspace (unified — the old separate
+  // Project/repo picker was folded into this per Waqas).
   const [wsGroups, setWsGroups] = useState<SummonWorkspaceGroup[]>([]);
   const [workspace, setWorkspace] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    void listProjects().then(list => {
-      setProjects(list);
-      if (list.length === 1 && list[0]) setProjectId(list[0].id);
-    });
-    void listProjectCandidates().then(setCandidates);
     void summonWorkspaces().then(gs => {
       setWsGroups(gs);
       setWorkspace(prev => prev || gs[0]?.items[0]?.path || '');
@@ -66,24 +58,14 @@ export function CreateMeeting() {
     const topicIssue = roomTopicIssue(topic);
     if (topicIssue) { setError(topicIssue); return; }
     if (!name.trim()) return;
-    if ((projects.length > 0 || candidates.length > 0) && !projectId) {
-      setError('Pick a project — new rooms need a durable home for their task board.');
-      return;
-    }
     setBusy(true); setError(null);
     try {
       const client = createClient();
-      let resolvedProjectId = projectId;
-      if (projectId.startsWith('new:')) {
-        // Server-issued candidate key -> real registry entry, then use it.
-        resolvedProjectId = (await createProject(projectId.slice(4))).id;
-      }
       // The server allocates the room code (it can check collisions
       // against Redis; the browser can't).
       const created = await createRoom(client, {
         topic: normalizeRoomTopic(topic),
         createdBy: name.trim(),
-        projectId: resolvedProjectId || undefined,
         workspace: workspace || undefined,
       });
       const code = created.code;
@@ -121,32 +103,10 @@ export function CreateMeeting() {
 
       <form onSubmit={submit} className="mx-auto w-full max-w-[720px] px-4 py-6">
         <h1 className="text-xl font-bold tracking-tight">Start a room</h1>
-        <p className="mt-1 mb-5 text-[13px] text-ink-soft">A clear room name, a project to keep its work in, and you're live.</p>
+        <p className="mt-1 mb-5 text-[13px] text-ink-soft">A clear room name, the workspace it's based in, and you're live.</p>
 
         {error && <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">{error}</div>}
 
-        {(projects.length > 0 || candidates.length > 0) && (
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Project</span>
-            <select
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              required
-              className={fieldClass}
-            >
-              <option value="">Choose a project…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
-              {candidates.length > 0 && (
-                <optgroup label="Create from a repo on this machine">
-                  {candidates.map(c => <option key={c.key} value={`new:${c.key}`}>{c.dirName} — new project</option>)}
-                </optgroup>
-              )}
-            </select>
-            <span className="mt-1 block text-[12px] text-ink-faint">
-              The room's task board lives durably in this project's repo.
-            </span>
-          </label>
-        )}
 
         <label className="mb-4 block">
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Room name</span>

@@ -25,8 +25,6 @@ interface Props {
   agents: AgentFace[];
   agentStaleCount: number;
   mentionNav?: React.ReactNode;
-  /** T-134: the owner "Brief me" control, rendered in the header action row. */
-  briefControl?: React.ReactNode;
   /** T-71: the workspace switcher. Centered inside the bar at lg+; rendered
    *  as the second row of the SAME header shell below lg (52 + 44 = 96px). */
   workspaceNav?: React.ReactNode;
@@ -53,7 +51,6 @@ export function RoomHeader({
   agents,
   agentStaleCount,
   mentionNav,
-  briefControl,
   workspaceNav,
   mobileNavHidden,
   backOverride,
@@ -199,7 +196,6 @@ export function RoomHeader({
               <kbd className="rounded-md border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">⌘K</kbd>
             </button>
           )}
-          {briefControl}
           <div className="hidden sm:block">{mentionNav}</div>
           {agentCount > 0 && (
             <>

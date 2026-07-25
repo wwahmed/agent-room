@@ -9,7 +9,6 @@ import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { SummonAgentSheet } from '../components/SummonAgentSheet.js';
-import { OwnerBrief } from '../components/OwnerBrief.js';
 import { BriefCard } from '../components/BriefCard.js';
 import { CommandPalette } from '../components/CommandPalette.js';
 import { parseBriefCommand } from '../lib/briefCommand.js';
@@ -2381,7 +2380,6 @@ export function Room() {
           selfName={self.name}
           agents={headerAgents}
           agentStaleCount={headerAgentStaleCount}
-          briefControl={<OwnerBrief code={code} selfName={self.name} />}
           mentionNav={selfMentionIds.length > 0 ? (
             // T-18 rev2 + T-42 (UX: "@↑ 29 @↓ is cryptic"): the counter now
             // SAYS what it counts — "3 mentions" / "1/3 mentions" — and the
