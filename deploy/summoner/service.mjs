@@ -198,17 +198,23 @@ function doSummon(body) {
   // Copilot (and other REPL-only harnesses) take no positional/system prompt, so
   // type the join instruction into the interactive REPL once it has booted.
   if (native && native.seedKeys) {
-    // Copilot's TUI paste-detects rapid input: an Enter arriving inside the
-    // paste debounce becomes a newline in the buffer instead of a submit,
-    // stranding the seed prompt in the input box (agent never joins). Wait out
-    // the debounce, then retry Enter while the session still shows zero usage
-    // — a stray Enter on an empty prompt is a no-op, so retries are safe.
+    // Seeding a REPL-only TUI fails two ways, both observed live: (a) the TUI
+    // isn't ready (or a boot dialog steals focus) and the typed text never
+    // reaches the input box at all; (b) the text lands but the TUI's paste
+    // debounce absorbs a fast-following Enter as a newline, stranding the
+    // prompt unsubmitted. So each round VERIFIES the pane before acting:
+    // done once the model is running ("esc interrupt") or usage ticked off
+    // zero; re-send the text whenever the pane doesn't show it; then Enter.
+    // A stray Enter on an empty prompt is a no-op, so retries are safe.
+    const t = shq(tmuxSession);
     const seedCmd =
-      `sleep 12; tmux send-keys -t ${shq(tmuxSession)} -l ${shq(native.seedKeys)}; ` +
-      `sleep 3; ` +
-      `for i in 1 2 3 4 5; do ` +
-      `tmux send-keys -t ${shq(tmuxSession)} Enter; sleep 4; ` +
-      `tmux capture-pane -p -t ${shq(tmuxSession)} | grep -q '0 AIC used' || break; ` +
+      `sleep 12; ` +
+      `for i in 1 2 3 4 5 6; do ` +
+      `pane=$(tmux capture-pane -p -t ${t}); ` +
+      `case "$pane" in *'esc interrupt'*) break;; esac; ` +
+      `printf %s "$pane" | grep -q '0 AIC used' || break; ` +
+      `printf %s "$pane" | grep -q 'room_join' || { tmux send-keys -t ${t} -l ${shq(native.seedKeys)}; sleep 2; }; ` +
+      `tmux send-keys -t ${t} Enter; sleep 5; ` +
       `done`;
     try {
       spawn('bash', ['-c', seedCmd], {
