@@ -44,7 +44,12 @@ export function AgentDetailsSheet({ code, participant, onClose }: { code: string
     ['Model', agent ? (agent.model || 'account-default') : (participant.model || '—')],
     ['Account', agent?.account || participant.account || '—'],
     ['Workspace', agent?.workspace || participant.workspace || '—'],
-    ['Capabilities', agent ? (agent.mode === 'build' ? 'Build — can edit files' : 'Chat — responds only') : (participant.capabilities || '—')],
+    ['Permissions', agent
+      ? (agent.accessLabel
+          || (agent.mode === 'build' ? 'Build — edits files and runs commands autonomously'
+            : agent.mode === 'edit' ? 'Edit — can create/modify files in the workspace'
+            : 'Chat — responds in the room only (no file access)'))
+      : (participant.capabilities || '—')],
     ['Persistent', agent ? (agent.persistent ? 'Yes — resumable' : 'No — one-shot') : '—'],
     ['Role', participant.role || agent?.role || '—'],
     ['Joined', fmt(agent?.createdAt ?? participant.joinedAt)],

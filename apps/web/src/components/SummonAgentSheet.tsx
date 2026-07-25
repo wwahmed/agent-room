@@ -30,7 +30,7 @@ export function SummonAgentSheet({ code, onClose }: Props) {
   const client = useRef(createClient()).current;
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-  const [mode, setMode] = useState<'chat' | 'build'>('chat');
+  const [mode, setMode] = useState<'chat' | 'edit' | 'build'>('chat');
   const [persistent, setPersistent] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -268,16 +268,23 @@ export function SummonAgentSheet({ code, onClose }: Props) {
               </div>
 
               {/* Mode */}
-              <label className="mb-1 block text-[13px] font-semibold text-ink">Capabilities</label>
-              <div className="mb-4 flex gap-2">
-                <button type="button" onClick={() => setMode('chat')}
-                  className={`flex-1 rounded-xl border px-3 py-2 text-[13px] transition ${mode === 'chat' ? 'border-accent bg-accent/10 text-ink' : 'border-border text-ink-soft'}`}>
-                  <div className="font-semibold">Chat</div><div className="text-[11px] text-ink-soft">Responds in the room only</div>
-                </button>
-                <button type="button" onClick={() => setMode('build')}
-                  className={`flex-1 rounded-xl border px-3 py-2 text-[13px] transition ${mode === 'build' ? 'border-accent bg-accent/10 text-ink' : 'border-border text-ink-soft'}`}>
-                  <div className="font-semibold">Build</div><div className="text-[11px] text-ink-soft">Can edit files in the workspace</div>
-                </button>
+              <label className="mb-1 block text-[13px] font-semibold text-ink">Permissions</label>
+              <div className="mb-1 grid grid-cols-3 gap-2">
+                {([
+                  ['chat', 'Chat', 'Room only'],
+                  ['edit', 'Edit', 'Edit files'],
+                  ['build', 'Build', 'Edit + run cmds'],
+                ] as const).map(([val, title, sub]) => (
+                  <button key={val} type="button" onClick={() => setMode(val)}
+                    className={`rounded-xl border px-2 py-2 text-[13px] transition ${mode === val ? 'border-accent bg-accent/10 text-ink' : 'border-border text-ink-soft hover:border-border-strong'}`}>
+                    <div className="font-semibold">{title}</div><div className="text-[11px] text-ink-soft">{sub}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="mb-4 text-[11px] text-ink-soft">
+                {mode === 'build' ? 'Full autonomy in the workspace — edits files and runs commands (git, tests, builds) without prompting. For agents that ship changes.'
+                  : mode === 'edit' ? 'Can create and modify files in the workspace (auto-accepted). No shell commands.'
+                  : 'Discusses and advises in the room. No file access.'}
               </div>
 
               {/* Persistent session — resumable + shows in your CLI/app session list. */}

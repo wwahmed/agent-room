@@ -19,7 +19,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { listGrouped, isValidWorkspace } from './workspaces.mjs';
-import { catalog, providerById, accessInstructions, nativeLaunchSpec, AUG_PATH } from './providers.mjs';
+import { catalog, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, AUG_PATH } from './providers.mjs';
 import { leave } from './roomcli.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -81,7 +81,8 @@ function health(agent) {
 function publicAgent(a) {
   return {
     agentId: a.agentId, name: a.name, role: a.role, provider: a.provider,
-    model: a.model, workspace: a.workspace, room: a.room, mode: a.mode, persistent: a.persistent,
+    model: a.model, workspace: a.workspace, room: a.room, mode: a.mode,
+    accessLevel: normalizeAccess(a.mode), accessLabel: accessLabel(a.mode), persistent: a.persistent,
     account: a.account || '', sessionId: a.sessionId, native: Boolean(a.native),
     createdAt: a.createdAt, dismissedAt: a.dismissedAt, status: a.status, health: health(a),
     tmuxSession: a.tmuxSession,
@@ -117,7 +118,7 @@ function doSummon(body) {
 
   const model = String(body.model || '').trim() || provider.defaultModel;
   const role = sanitizeName(body.role) || 'AI Agent';
-  const mode = body.mode === 'build' ? 'build' : 'chat';
+  const mode = normalizeAccess(body.mode); // chat | edit | build
   const persistent = body.persistent !== false; // default ON — resumable/attachable
 
   // Reject a duplicate live agent with the same name in the same room.

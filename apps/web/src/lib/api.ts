@@ -690,6 +690,8 @@ export interface SummonedAgent {
   workspace: string; room: string; mode: string; status: string; health: string;
   tmuxSession: string; access: string[]; createdAt: number;
   account?: string; sessionId?: string; dismissedAt?: number; persistent?: boolean;
+  /** Permission level (chat|edit|build) + a human label — what the agent can do. */
+  accessLevel?: string; accessLabel?: string; native?: boolean;
 }
 
 /** All summoner records for a room, incl. dismissed (for join/leave history). */

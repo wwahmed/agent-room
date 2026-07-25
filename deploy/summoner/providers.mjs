@@ -182,13 +182,33 @@ export function providerById(id) {
   return catalog().find((p) => p.id === id) || null;
 }
 
+// ---------------------------------------------------------------------------
+// PERMISSION LEVELS for summoned agents — chosen at launch and surfaced in the
+// app's agent-details view so it's always clear what an agent can do:
+//   chat  — responds in the room only; NO file access.
+//   edit  — can create/modify files in the workspace (auto-accepted); no shell.
+//   build — full autonomy in the workspace: edit AND run commands (git, tests,
+//           builds) unattended. Needed for agents that actually ship changes.
+// Legacy 'build' stays 'build'; anything unknown is the safe 'chat'.
+export function normalizeAccess(mode) {
+  return mode === 'build' ? 'build' : mode === 'edit' ? 'edit' : 'chat';
+}
+export function accessLabel(mode) {
+  const a = normalizeAccess(mode);
+  return a === 'build' ? 'Build — edits files and runs commands (git/tests) autonomously'
+       : a === 'edit'  ? 'Edit — can create/modify files in the workspace (no shell)'
+       :                 'Chat — responds in the room only (no file access)';
+}
+
 // Build the argv for a single non-interactive model turn.
-// mode: 'chat' (respond only, no workspace writes) | 'build' (full tools).
+// mode: 'chat' | 'edit' | 'build' (see PERMISSION LEVELS above).
 // NOTE: turns are stateless (no --session-id). With --session-id, Claude Code
 // loads full session/CLAUDE.md context and reliably answers "(no reply)"; the
 // room transcript is the shared memory instead. Continuity is a future add.
 function buildArgv({ provider, model, workspace, mode, outFile, persistent, sessionId, resume }) {
-  const build = mode === 'build';
+  const access = normalizeAccess(mode);
+  const build = access === 'build';
+  const write = access !== 'chat';
   const persist = persistent && sessionId;
   if (provider.startsWith('claude')) {
     // NOTE: --add-dir is VARIADIC (<directories...>), so it must be followed by
@@ -197,6 +217,7 @@ function buildArgv({ provider, model, workspace, mode, outFile, persistent, sess
     // early, ahead of the boolean/value flags.
     const a = ['-p'];
     if (build) a.push('--add-dir', workspace, '--dangerously-skip-permissions');
+    else if (access === 'edit') a.push('--add-dir', workspace, '--permission-mode', 'acceptEdits');
     a.push('--model', model, '--output-format', 'text', '--strict-mcp-config');
     if (persist) {
       // --setting-sources project keeps the global ~/.claude/CLAUDE.md (the
@@ -208,7 +229,7 @@ function buildArgv({ provider, model, workspace, mode, outFile, persistent, sess
   }
   if (provider === 'copilot') {
     const a = ['--model', model, '-s', '--no-color', '-C', workspace];
-    if (build) a.push('--allow-all-tools');
+    if (write) a.push('--allow-all-tools');
     // Copilot's --session-id resumes an existing session or sets the UUID for a
     // new one, so the same id each turn continues the same durable session.
     if (persist) a.push('--session-id', sessionId);
@@ -219,7 +240,7 @@ function buildArgv({ provider, model, workspace, mode, outFile, persistent, sess
     // Codex has no fixed --session-id; it persists in its own session store, so
     // attach with `codex resume` (picker). resume --last continues the newest.
     const a = ['exec', '--skip-git-repo-check', '-C', workspace,
-      '--sandbox', build ? 'workspace-write' : 'read-only'];
+      '--sandbox', write ? 'workspace-write' : 'read-only'];
     if (model) a.push('-m', model);
     if (outFile) a.push('-o', outFile); // clean final message, avoids parsing the preamble
     return { cmd: 'codex', args: a, promptVia: 'arg' };
@@ -322,22 +343,27 @@ export function accessInstructions({ provider, model, workspace, tmuxSession, tm
 export function nativeLaunchSpec(cfg) {
   const { provider, model, workspace, mode, name, role, code, sessionId,
           account, mcpConfigPath } = cfg;
-  const build = mode === 'build';
+  const access = normalizeAccess(mode);
+  const build = access === 'build';
+  const canWrite = access !== 'chat';
   const mcp = agentRoomMcpServer(); // { command, args, env } — our fork MCP, local server
 
   // Shared identity + room-loop contract every native harness receives.
+  const capText = build ? 'You MAY edit files in this workspace AND run commands (git, tests, builds) to actually ship changes when the room asks.'
+                : access === 'edit' ? 'You MAY create and modify files in this workspace when the room asks (no shell commands).'
+                : 'You are a CHAT participant: discuss, review, and advise — do not edit files.';
   const contract = [
     `You are "${name}" (role: ${role || 'AI Agent'}), an AI teammate in a live Agent Room chat with Waqas and other agents.`,
     `You are working natively in ${workspace}${account ? ` on ${account}` : ''}${model ? ` (${model})` : ''}.`,
     `The room code is EXACTLY "${code}" — pass it verbatim to room_join. Room codes are word-style (e.g. cafe-ham-clog); do NOT reject or "correct" it for not being a 9-character dashed code, and do not ask for a different code.`,
     `CONTRACT: after you join, STAY in the room loop — keep calling room_listen; when a message needs you, reply with room_send, then room_listen again. Never end your turn while the room is active. Leave only if the room ends, you are removed from participants, or the host tells you to stop.`,
-    build ? `You MAY edit files in this workspace when the room asks you to.`
-          : `You are a CHAT participant: discuss, review, and advise — do not edit files.`,
+    capText,
   ].join(' ');
+  const capLabel = build ? 'can edit files + run commands' : access === 'edit' ? 'can edit files' : 'chat only';
   const joinMsg =
     `Call room_join now with code exactly "${code}" (pass it verbatim — it is a valid word-style code, not a 9-char dashed one) ` +
     `and name "${name}" (role: ${role || 'AI Agent'}, model: ${model || 'default'}, ` +
-    `account: ${account || 'me'}, capabilities: ${build ? 'can edit files' : 'chat only'}). Then follow the room loop.`;
+    `account: ${account || 'me'}, capabilities: ${capLabel}). Then follow the room loop.`;
 
   // ---- Claude: --mcp-config file + --append-system-prompt + positional prompt ----
   if (provider.startsWith('claude')) {
@@ -350,7 +376,13 @@ export function nativeLaunchSpec(cfg) {
       // Pre-approve the whole agent-room server so join/listen/send never block
       // an unattended agent. Build edits auto-accept but stay visible.
       '--allowedTools', 'mcp__agent-room',
-      ...(build ? ['--add-dir', workspace, '--permission-mode', 'acceptEdits'] : []),
+      // Permission level → real, EFFECTIVE flags (unattended, so it can't
+      // answer prompts): build = full autonomy in the workspace (edit + shell +
+      // git, so it can actually ship); edit = auto-accept edits only; chat = no
+      // workspace access. This is what fixes "everything's gated by a prompt".
+      ...(build ? ['--add-dir', workspace, '--permission-mode', 'bypassPermissions']
+        : access === 'edit' ? ['--add-dir', workspace, '--permission-mode', 'acceptEdits']
+        : []),
       '--append-system-prompt', contract,
       joinMsg,
     ];
@@ -372,7 +404,7 @@ export function nativeLaunchSpec(cfg) {
       '-c', `mcp_servers.agent-room.args=${toml(mcp.args)}`,
       ...Object.entries(mcp.env || {}).flatMap(([k, val]) =>
         ['-c', `mcp_servers.agent-room.env.${k}=${toml(val)}`]),
-      '-s', build ? 'workspace-write' : 'read-only',
+      '-s', canWrite ? 'workspace-write' : 'read-only',
       '-a', 'never', // no approval prompts (unattended); attach to watch
       '--dangerously-bypass-hook-trust', // else codex blocks on a hooks-trust prompt, never joining
       `${contract}\n\n${joinMsg}`,
@@ -388,8 +420,7 @@ export function nativeLaunchSpec(cfg) {
     const args = [
       '--additional-mcp-config', mcpJson,
       ...(model ? ['--model', model] : []),
-      '--add-dir', workspace,
-      '--allow-all-tools', // unattended
+      ...(canWrite ? ['--add-dir', workspace, '--allow-all-tools'] : []), // write perms only when granted
       '--no-color',
       '-n', name,
     ];
