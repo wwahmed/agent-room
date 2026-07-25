@@ -7,7 +7,7 @@ import {
   type RecorderLike,
   type SegmentStoreLike,
 } from '../lib/voiceCapture.js';
-import { playStartCue } from '../lib/audioCue.js';
+import { playStartCue, playSendCue } from '../lib/audioCue.js';
 import { ScreenWakeLockController } from '../lib/screenWakeLock.js';
 
 // A controller the button can drive uniformly, whether it is the built-in
@@ -256,12 +256,14 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
         type="button"
         disabled={disabled}
         onClick={() => {
-          if (active) { ctrlRef.current?.stop(); return; }
+          if (active) { playSendCue(); ctrlRef.current?.stop(); return; }
           onStart?.(); // snapshot the composer's base draft before words stream in
           const c = buildController();
           ctrlRef.current = c;
-          playStartCue(); // T-131: the one app cue that replaces the OS chime
-          void c.start();
+          // Two cues only (Waqas): a rising "ready" tone once the recorder is
+          // actually warmed up + live (fires when start() resolves), and a
+          // single "send" tone on stop — silent in between.
+          void Promise.resolve(c.start()).then(() => playStartCue()).catch(() => {});
         }}
         aria-label={active ? 'Stop dictation and insert text' : resumeMode ? 'Resume dictation' : 'Start voice dictation'}
         title={active ? 'Stop dictation' : resumeMode ? 'Resume dictation (paused)' : 'Start voice dictation'}
@@ -369,7 +371,7 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
 
             <button
               type="button"
-              onClick={() => ctrlRef.current?.stop()}
+              onClick={() => { playSendCue(); ctrlRef.current?.stop(); }}
               aria-label="Use voice draft"
               title="Use draft (does not send the message)"
               className="flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-white transition hover:opacity-90"
