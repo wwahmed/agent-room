@@ -119,11 +119,23 @@ export async function joinRoom(
   client: RoomApiClient,
   code: string,
   participant: Participant,
-  options: { hostKey?: string; priorIdentity?: { name: string; client: 'web' | 'cc' } } = {},
-): Promise<Room & { participant: Participant; removalNotice?: RemovalRecord & { name: string } }> {
+  options: {
+    hostKey?: string;
+    priorIdentity?: { name: string; client: 'web' | 'cc' };
+    // T-30: request a member credential for this row (server issues one and
+    // returns it as `memberKey`). Without it, sends are rejected once the
+    // server disables legacy name-auth.
+    wantMemberKey?: boolean;
+    // T-25: a member key we already hold, presented to reclaim the same row on
+    // rejoin instead of being suffixed into a new "(2)" one.
+    reclaimMemberKey?: string;
+  } = {},
+): Promise<Room & { participant: Participant; memberKey?: string; removalNotice?: RemovalRecord & { name: string } }> {
   const body = await client.post<{
     room: Room;
     participant: Participant;
+    // T-30: the freshly issued member credential (present when wantMemberKey).
+    memberKey?: string;
     // T-32: why this identity's previous row was removed (delivered once).
     removalNotice?: RemovalRecord & { name: string };
   }>({
@@ -132,10 +144,13 @@ export async function joinRoom(
     participant,
     hostKey: options.hostKey,
     priorIdentity: options.priorIdentity,
+    ...(options.wantMemberKey ? { wantMemberKey: true } : {}),
+    ...(options.reclaimMemberKey ? { memberKey: options.reclaimMemberKey } : {}),
   });
   return {
     ...body.room,
     participant: body.participant,
+    ...(body.memberKey ? { memberKey: body.memberKey } : {}),
     ...(body.removalNotice ? { removalNotice: body.removalNotice } : {}),
   };
 }
@@ -159,8 +174,12 @@ export async function appendMessage(
   message: Message,
   hostKey?: string,
   kind: 'message' | 'status' = 'message',
+  memberKey?: string,
 ): Promise<AppendResult> {
-  const body = await client.post<{ result: AppendResult }>({ action: 'send', code, message, hostKey, kind });
+  const body = await client.post<{ result: AppendResult }>({
+    action: 'send', code, message, hostKey, kind,
+    ...(memberKey ? { memberKey } : {}),
+  });
   return body.result;
 }
 
@@ -179,8 +198,9 @@ export async function setListenUntil(
   code: string,
   name: string,
   until: number,
+  memberKey?: string,
 ): Promise<void> {
-  await client.post({ action: 'presence', code, name, until });
+  await client.post({ action: 'presence', code, name, until, ...(memberKey ? { memberKey } : {}) });
 }
 
 export async function getTurnState(client: RoomApiClient, code: string): Promise<TurnState | null> {

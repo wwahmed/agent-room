@@ -203,7 +203,7 @@ async function runRoomListenPoll(
   const start = Date.now();
   if (selfName) {
     try {
-      await setListenUntil(client, code, selfName, start + cappedMs);
+      await setListenUntil(client, code, selfName, start + cappedMs, await readMemberKey(code));
     } catch { /* presence is non-essential */ }
   }
   let pollCount = 0;
@@ -285,6 +285,18 @@ function resolvedListenTimeoutMs(raw: unknown, maxListenMs: number): number {
 // session can perform host actions (end / reactivate / set mode / skip /
 // host direct-invoke). A session that merely joined someone else's room has
 // no hostKey and the server will reject the host action with NotHostError.
+// T-30: the member credential this session holds for a room (issued at join).
+// Threaded into every room_send / room_status / presence call so the server
+// accepts the write when legacy name-auth is disabled (the secure default).
+async function readMemberKey(code: string): Promise<string | undefined> {
+  try {
+    const state = await readState();
+    return state.rooms[code]?.memberKey;
+  } catch {
+    return undefined;
+  }
+}
+
 async function readHostKey(code: string): Promise<string | undefined> {
   try {
     const state = await readState();
@@ -317,7 +329,7 @@ export function registerTools(server: Server) {
       while (running) {
         try {
           if (selfName) {
-            await setListenUntil(client, code, selfName, Date.now() + 5000);
+            await setListenUntil(client, code, selfName, Date.now() + 5000, await readMemberKey(code));
           }
           const msgs = await listMessages(client, code, cursor);
           if (msgs.length > 0) {
@@ -727,15 +739,20 @@ export function registerTools(server: Server) {
         joinedAt: Date.now(),
         lastSeenAt: Date.now(),
       };
-      await joinRoom(client, code, participant, {
+      const createdJoin = await joinRoom(client, code, participant, {
         hostKey: created.hostKey,
         priorIdentity: { name: a.name, client: 'cc' },
+        wantMemberKey: true,
       });
       const msgs = await listMessages(client, code, 0);
-      // Save hostKey alongside cursor so a future room_join from this same
-      // PPID can re-claim the host slot. State is PPID-scoped so two
-      // parallel sessions don't share keys.
-      await setRoom(code, { name: a.name, cursor: msgs.length, joinedAt: Date.now(), hostKey: created.hostKey });
+      // Save hostKey + memberKey alongside cursor so a future room_join from
+      // this same PPID can re-claim the host slot, and every send/presence this
+      // session makes authenticates. State is PPID-scoped so two parallel
+      // sessions don't share keys.
+      await setRoom(code, {
+        name: a.name, cursor: msgs.length, joinedAt: Date.now(),
+        hostKey: created.hostKey, memberKey: createdJoin.memberKey,
+      });
 
       const listenAfterJoin = defaultListenAfterJoin(harness, a.listenAfterJoin);
       const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs, harness.maxListenMs);
@@ -820,6 +837,10 @@ export function registerTools(server: Server) {
         updated = await joinRoom(client, a.code, participant, {
           hostKey: storedStateRoom?.hostKey,
           ...(priorIdentity ? { priorIdentity } : {}),
+          // T-30: mint a member credential so this agent can actually SEND;
+          // re-present a stored one to reclaim the same row on rejoin.
+          wantMemberKey: true,
+          ...(storedStateRoom?.memberKey ? { reclaimMemberKey: storedStateRoom.memberKey } : {}),
         });
       } catch (e) {
         if (e instanceof HostNameTakenError) {
@@ -847,11 +868,17 @@ export function registerTools(server: Server) {
           time: Date.now(),
         };
         try {
-          await appendMessage(client, a.code, greeting);
+          await appendMessage(client, a.code, greeting, undefined, 'message', updated.memberKey);
         } catch { /* greeting is nice-to-have; join/listen must still proceed */ }
       }
       const msgs = await listMessages(client, a.code, 0);
-      await setRoom(a.code, { name: finalName, cursor: msgs.length, joinedAt: Date.now() });
+      // Persist the member credential so every later room_send/presence from
+      // this session (across turns) authenticates. Keep any prior key if the
+      // server didn't reissue one.
+      await setRoom(a.code, {
+        name: finalName, cursor: msgs.length, joinedAt: Date.now(),
+        memberKey: updated.memberKey ?? storedStateRoom?.memberKey,
+      });
       const recentMessages = msgs.slice(-20).map((m: Message) => ({
         name: m.name,
         role: m.role,
@@ -1016,7 +1043,8 @@ export function registerTools(server: Server) {
       // supplement takes the Lead's floor) is emitted server-side by the
       // send endpoint, so the MCP no longer posts it here.
       try {
-        appendResult = await appendMessage(client, a.code, msg, await readHostKey(a.code));
+        appendResult = await appendMessage(
+          client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code));
       } catch (e) {
         if (e instanceof MutedError) {
           // The host has muted this participant. Tell the user explicitly
@@ -1106,7 +1134,8 @@ export function registerTools(server: Server) {
         // kind='status': posts a status-tagged message; never advances the
         // turn. The current sequential speaker also gets their deadline
         // renewed (server returns metadata.extendsTurn).
-        appendResult = await appendMessage(client, a.code, msg, await readHostKey(a.code), 'status');
+        appendResult = await appendMessage(
+          client, a.code, msg, await readHostKey(a.code), 'status', await readMemberKey(a.code));
       } catch (e) {
         if (e instanceof MutedError) {
           return ok({

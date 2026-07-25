@@ -146,18 +146,17 @@ function doSummon(body) {
   // Providers not yet wired for native return null and take the headless driver
   // (summoner-owned loop) instead.
   const mcpConfigPath = join(agentHome, 'agent-room.mcp.json');
-  // Native summon (harness joins via MCP) is OPT-IN for now: it JOINS reliably
-  // but reply-responsiveness over the MCP listen path is still being hardened
-  // (agents can loop room_listen without actioning a posted message — the
-  // "rooms go passive" failure mode). The headless driver (summoner owns the
-  // listen→reply loop) is proven and stays the DEFAULT so summoned agents
-  // reliably respond. Pass native:true to use the native harness path.
-  const native = body.native === true
-    ? nativeLaunchSpec({
+  // Native summon (the harness joins via MCP and runs the room loop itself) is
+  // the DEFAULT — join AND reply are verified reliable now that the MCP mints +
+  // presents a member credential on every send (the missing-key bug that made
+  // MCP agents go passive is fixed). Pass native:false to force the headless
+  // driver (summoner owns the loop) for a provider not yet wired for native.
+  const native = body.native === false
+    ? null
+    : nativeLaunchSpec({
         provider: provider.id, model, workspace, mode, name, role, code: room,
         sessionId, account, mcpConfigPath,
-      })
-    : null;
+      });
 
   let launchLines;
   if (native) {

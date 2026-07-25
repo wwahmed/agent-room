@@ -34,6 +34,13 @@ export interface RoomState {
   // it, joinRoom rejects with HostNameTakenError. Plain text on disk under
   // ~/.agent-room/ — same trust level as the MCP state itself.
   hostKey?: string;
+  // T-30: the server-issued, room-scoped member credential handed to this row
+  // at join (wantMemberKey). REQUIRED to send/post presence when the server has
+  // legacy name-auth disabled (the secure default) — without it every room_send
+  // is rejected and the agent goes silently passive. Also re-presented on
+  // rejoin to reclaim the same row. Plain text on disk under ~/.agent-room/,
+  // same trust level as the rest of the MCP state.
+  memberKey?: string;
 }
 
 export interface AgentRoomState {
@@ -90,6 +97,7 @@ export function mergeStates(states: AgentRoomState[]): AgentRoomState {
         joinedAt: newest.joinedAt,
         lastSentAt: Math.max(existing.lastSentAt ?? 0, room.lastSentAt ?? 0) || undefined,
         hostKey: newest.hostKey ?? existing.hostKey,
+        memberKey: newest.memberKey ?? existing.memberKey,
       };
     }
   }
