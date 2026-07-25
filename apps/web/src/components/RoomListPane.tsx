@@ -38,6 +38,30 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
   const [menu, setMenu] = useState<{ code: string; topic: string; x: number; y: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const client = useRef(createClient()).current;
+  // Resizable width (house taste), persisted; drag the right edge, double-click resets.
+  const asideRef = useRef<HTMLElement>(null);
+  const draggingRef = useRef(false);
+  const [width, setWidth] = useState<number>(() => {
+    try { const v = Number(localStorage.getItem('roomlist:width')); if (v >= 240 && v <= 640) return v; } catch { /* private mode */ }
+    return 340;
+  });
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      if (!draggingRef.current || !asideRef.current) return;
+      const left = asideRef.current.getBoundingClientRect().left;
+      setWidth(Math.min(640, Math.max(240, e.clientX - left)));
+    };
+    const up = () => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.userSelect = '';
+      setWidth(w => { try { localStorage.setItem('roomlist:width', String(Math.round(w))); } catch { /* ignore */ } return w; });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  }, []);
 
   async function pull() {
     try {
@@ -95,8 +119,8 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
   if (!rooms || visible.length === 0) return null;
 
   return (
-    <aside className="hidden h-full w-[320px] flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex 2xl:w-[400px]" data-room-list-width="responsive">
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+    <aside ref={asideRef} style={{ width }} className="relative hidden h-full flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex" data-room-list-width="resizable">
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3 modern-scrollbar">
         <div className="flex h-8 items-center px-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
           Rooms
         </div>
@@ -177,6 +201,21 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
           </button>
         </div>
       )}
+
+      {/* Right-edge resize handle (drag to resize, double-click to reset). */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize rooms list"
+        onPointerDown={(e) => {
+          draggingRef.current = true;
+          document.body.style.userSelect = 'none';
+          (e.currentTarget as HTMLElement).classList.add('dragging');
+        }}
+        onPointerUp={(e) => (e.currentTarget as HTMLElement).classList.remove('dragging')}
+        onDoubleClick={() => { setWidth(340); try { localStorage.setItem('roomlist:width', '340'); } catch { /* ignore */ } }}
+        className="pane-resize-handle absolute -right-1 top-0 z-20 h-full w-2"
+      />
     </aside>
   );
 }
