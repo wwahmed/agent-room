@@ -1,10 +1,26 @@
 // providers.mjs — provider catalog, per-turn model invocation, and the
 // "reach this agent directly" instructions shown in the app.
 import { spawn, execFileSync } from 'node:child_process';
-import { readFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, unlinkSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+
+// Summoned agents talk to OUR fork's MCP, not the stale published npx package.
+// The upstream package client-side rejects the server's current word-codes
+// (cafe-ham-clog) as "malformed"; our fork passes codes verbatim AND stamps the
+// join metadata (model/account/…). Falls back to npx only if the local build is
+// missing. The MCP's API base is pointed at the local server (where the rooms
+// live) via AGENT_ROOM_BASE_URL, matching the headless path's ROOM_BASE.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const LOCAL_MCP = join(HERE, '..', '..', 'apps', 'mcp', 'dist', 'index.js');
+const ROOM_BASE = process.env.ROOM_BASE || 'http://127.0.0.1:8210';
+export function agentRoomMcpServer() {
+  return existsSync(LOCAL_MCP)
+    ? { command: 'node', args: [LOCAL_MCP], env: { AGENT_ROOM_BASE_URL: ROOM_BASE } }
+    : { command: 'npx', args: ['-y', 'agent-room-mcp'], env: { AGENT_ROOM_BASE_URL: ROOM_BASE } };
+}
 
 // launchd's PATH is minimal; make sure the agent CLIs + node + tmux resolve.
 const EXTRA_PATH = [
@@ -287,4 +303,65 @@ export function accessInstructions({ provider, model, workspace, tmuxSession, tm
     `Provider / model:  ${provider} / ${model || 'account-default'}`,
     `Workspace:  ${workspace}`,
   ];
+}
+
+// ---------------------------------------------------------------------------
+// NATIVE summon = automated join. Instead of the summoner puppeting a headless
+// `claude -p` per turn, we launch the agent's OWN harness (interactive, inside
+// a tmux session) in the workspace, wired to the agent-room MCP, and tell it to
+// join the room and run the native room loop itself — exactly as if Waqas had
+// opened `claude` there and said "join room ABC". The payoff: native permission
+// UI, a real resumable session (`claude --resume` finally works), and it shows
+// in the CLI/app session list. The summoner's job shrinks to launch + supervise
+// + kill; room membership, presence, and the loop belong to the harness.
+//
+// Returns { bin, args, env, files } for providers wired for native, or null so
+// the caller falls back to the proven headless driver (codex/copilot for now).
+export function nativeLaunchSpec(cfg) {
+  const { provider, model, workspace, mode, name, role, code, sessionId,
+          account, mcpConfigPath } = cfg;
+
+  if (provider.startsWith('claude')) {
+    const cdir = claudeConfigDir(provider);
+    // Explicit, lane-independent MCP config: the agent gets exactly the
+    // agent-room server (our fork build, pointed at the local server),
+    // regardless of which config dir / account lane it runs in.
+    // --strict-mcp-config below means ONLY this server is loaded.
+    const mcpCfg = { mcpServers: { 'agent-room': agentRoomMcpServer() } };
+    const build = mode === 'build';
+    const contract = [
+      `You are "${name}" (role: ${role || 'AI Agent'}), an AI teammate in a live Agent Room chat with Waqas and other agents.`,
+      `You are working natively in ${workspace}${account ? ` on ${account}` : ''}${model ? ` (${model})` : ''}.`,
+      `The room code is EXACTLY "${code}" — pass it verbatim to room_join. Room codes are word-style (e.g. cafe-ham-clog); do NOT reject or "correct" it for not being a 9-character dashed code, and do not ask for a different code.`,
+      `CONTRACT: after you join, STAY in the room loop — keep calling room_listen; when a message needs you, reply with room_send, then room_listen again. Never end your turn while the room is active. Leave only if the room ends, you are removed from participants, or the host tells you to stop.`,
+      build
+        ? `You MAY edit files in this workspace when the room asks you to.`
+        : `You are a CHAT participant: discuss, review, and advise — do not edit files.`,
+    ].join(' ');
+    const joinMsg =
+      `Call room_join now with code exactly "${code}" (pass it verbatim — it is a valid word-style code, not a 9-char dashed one) ` +
+      `and name "${name}" (role: ${role || 'AI Agent'}, model: ${model || 'default'}, ` +
+      `account: ${account || 'me'}, capabilities: ${build ? 'can edit files' : 'chat only'}). Then follow the room loop.`;
+    const args = [
+      '--mcp-config', mcpConfigPath,
+      '--strict-mcp-config',
+      '--session-id', sessionId,
+      ...(model ? ['--model', model] : []),
+      // Pre-approve the whole agent-room MCP server so join/listen/send never
+      // block an unattended agent. File edits (build) auto-accept but stay
+      // visible in the transcript; anything else still prompts (attach to see).
+      '--allowedTools', 'mcp__agent-room',
+      ...(build ? ['--add-dir', workspace, '--permission-mode', 'acceptEdits'] : []),
+      '--append-system-prompt', contract,
+      joinMsg,
+    ];
+    return {
+      bin: 'claude',
+      args,
+      env: cdir ? { CLAUDE_CONFIG_DIR: cdir } : {},
+      files: [{ path: mcpConfigPath, content: JSON.stringify(mcpCfg, null, 2), mode: 0o600 }],
+    };
+  }
+
+  return null; // codex / copilot / gemini — native path not wired yet.
 }

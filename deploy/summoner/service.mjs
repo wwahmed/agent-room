@@ -18,8 +18,8 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { listGrouped, validWorkspacePaths } from './workspaces.mjs';
-import { catalog, providerById, accessInstructions, AUG_PATH } from './providers.mjs';
+import { listGrouped, isValidWorkspace } from './workspaces.mjs';
+import { catalog, providerById, accessInstructions, nativeLaunchSpec, AUG_PATH } from './providers.mjs';
 import { leave } from './roomcli.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +67,10 @@ function slug(s) {
 function health(agent) {
   if (agent.status === 'dismissed') return 'dismissed';
   if (!sessionAlive(agent.tmuxSession)) return 'stopped';
+  // Native agents own their own room loop (no summoner heartbeat file); a live
+  // tmux session means the harness is running. True in-room presence is the
+  // server's job (lease/heartbeat), shown in the room itself.
+  if (agent.native) return 'online';
   try {
     const beat = Number(readFileSync(agent.heartbeat, 'utf8').trim());
     if (Date.now() - beat < 320000) return 'online';
@@ -78,7 +82,7 @@ function publicAgent(a) {
   return {
     agentId: a.agentId, name: a.name, role: a.role, provider: a.provider,
     model: a.model, workspace: a.workspace, room: a.room, mode: a.mode, persistent: a.persistent,
-    account: a.account || '', sessionId: a.sessionId,
+    account: a.account || '', sessionId: a.sessionId, native: Boolean(a.native),
     createdAt: a.createdAt, dismissedAt: a.dismissedAt, status: a.status, health: health(a),
     tmuxSession: a.tmuxSession,
     access: accessInstructions({ ...a, tmuxTmpdir: TMUX_TMPDIR }),
@@ -109,7 +113,7 @@ function doSummon(body) {
   if (!room) throw httpErr(400, 'room code is required');
 
   const workspace = String(body.workspace || '').trim();
-  if (!validWorkspacePaths().has(workspace)) throw httpErr(400, 'invalid workspace');
+  if (!isValidWorkspace(workspace)) throw httpErr(400, `workspace not found or outside home: ${workspace || '(none)'}`);
 
   const model = String(body.model || '').trim() || provider.defaultModel;
   const role = sanitizeName(body.role) || 'AI Agent';
@@ -134,30 +138,52 @@ function doSummon(body) {
   const heartbeat = join(agentHome, 'heartbeat');
   const logfile = join(agentHome, 'driver.log');
   const sessionId = randomUUID();
+  const account = provider.account?.email || '';
 
-  // Write a launch script with the env baked in (avoids tmux quoting issues).
-  const env = {
-    PATH: AUG_PATH, ROOM_BASE,
-    SM_ROOM: room, SM_NAME: name, SM_ROLE: role, SM_PROVIDER: provider.id,
-    SM_MODEL: model, SM_WORKSPACE: workspace, SM_KEYFILE: keyfile,
-    SM_SESSION: sessionId, SM_MODE: mode, SM_HEARTBEAT: heartbeat, SM_LOG: logfile,
-    SM_PERSISTENT: persistent ? 'on' : 'off',
-    SM_COLOR: colorFor(provider.id),
-  };
+  // NATIVE summon (default) = automated join: launch the agent's OWN harness in
+  // the workspace and let it join the room itself via the agent-room MCP. Gives
+  // native permission UI, a real resumable session, and session-list presence.
+  // Providers not yet wired for native return null and take the headless driver
+  // (summoner-owned loop) instead.
+  const mcpConfigPath = join(agentHome, 'agent-room.mcp.json');
+  const native = nativeLaunchSpec({
+    provider: provider.id, model, workspace, mode, name, role, code: room,
+    sessionId, account, mcpConfigPath,
+  });
+
+  let launchLines;
+  if (native) {
+    for (const f of native.files) writeFileSync(f.path, f.content, { mode: f.mode || 0o600 });
+    const envPairs = { PATH: AUG_PATH, ...native.env };
+    launchLines = ['#!/bin/bash', 'set -e',
+      ...Object.entries(envPairs).map(([k, v]) => `export ${k}=${shq(v)}`),
+      `cd ${shq(workspace)}`,
+      `exec ${shq(native.bin)} ${native.args.map(shq).join(' ')}`, ''];
+  } else {
+    // Headless driver path — the summoner owns the listen→model→send loop.
+    const env = {
+      PATH: AUG_PATH, ROOM_BASE,
+      SM_ROOM: room, SM_NAME: name, SM_ROLE: role, SM_PROVIDER: provider.id,
+      SM_MODEL: model, SM_WORKSPACE: workspace, SM_KEYFILE: keyfile,
+      SM_SESSION: sessionId, SM_MODE: mode, SM_HEARTBEAT: heartbeat, SM_LOG: logfile,
+      SM_PERSISTENT: persistent ? 'on' : 'off',
+      SM_COLOR: colorFor(provider.id),
+    };
+    launchLines = ['#!/bin/bash', 'set -e',
+      ...Object.entries(env).map(([k, v]) => `export ${k}=${shq(v)}`),
+      `exec node ${shq(DRIVER)}`, ''];
+  }
   const launch = join(agentHome, 'launch.sh');
-  const sh = ['#!/bin/bash', 'set -e',
-    ...Object.entries(env).map(([k, v]) => `export ${k}=${shq(v)}`),
-    `exec node ${shq(DRIVER)}`, ''].join('\n');
-  writeFileSync(launch, sh, { mode: 0o700 });
+  writeFileSync(launch, launchLines.join('\n'), { mode: 0o700 });
   try { chmodSync(launch, 0o700); } catch {}
 
-  // Launch the driver in a detached tmux session.
+  // Launch in a detached tmux session.
   const res = tmux(['new-session', '-d', '-s', tmuxSession, '-c', workspace, 'bash', launch]);
   if (res.status !== 0) throw httpErr(500, `tmux launch failed: ${(res.stderr || '').trim()}`);
 
   const agent = {
     agentId, name, role, provider: provider.id, model, workspace, room, mode, persistent,
-    account: provider.account?.email || '',
+    account, native: Boolean(native),
     tmuxSession, sessionId, agentHome, keyfile, heartbeat, logfile,
     createdAt: Date.now(), status: 'active',
   };

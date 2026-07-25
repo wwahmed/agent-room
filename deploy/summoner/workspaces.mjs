@@ -67,3 +67,19 @@ export function validWorkspacePaths() {
   for (const g of listGrouped()) for (const it of g.items) set.add(it.path);
   return set;
 }
+
+// Tolerant workspace validation for a summon request. The top-level scan can't
+// see every legit target — a room's INHERITED workspace, a git worktree, or a
+// nested repo all live below the scan. So accept any real directory under the
+// user's home in addition to the picker set, while still refusing arbitrary
+// absolute paths outside home. This is what kills the spurious "invalid
+// workspace" error when summoning into a room whose workspace isn't a bare
+// top-level ~/workspaces entry.
+export function isValidWorkspace(path) {
+  const p = String(path || '');
+  if (!p) return false;
+  if (validWorkspacePaths().has(p)) return true;
+  const home = homedir();
+  if (p !== home && !p.startsWith(home + '/')) return false;
+  try { return statSync(p).isDirectory(); } catch { return false; }
+}
