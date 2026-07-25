@@ -18,7 +18,6 @@ interface Props {
   onToggleInspector: () => void;
   onSearch: () => void;
   onOpenRoom: () => void;
-  onSummon?: () => void;
   onEndRoom: () => void;
   canEndRoom: boolean;
   /** T-26/T-27: the signed-in person, for the account menu avatar. */
@@ -48,7 +47,6 @@ export function RoomHeader({
   onToggleInspector,
   onSearch,
   onOpenRoom,
-  onSummon,
   onEndRoom,
   canEndRoom,
   selfName,
@@ -258,7 +256,10 @@ export function RoomHeader({
                 sm boundary inverted legibility at exactly 640 (VA-0076). */}
             <span className="hidden text-[13px] font-semibold md:inline">Share</span>
           </button>
-          <div ref={menuRef} className="relative">
+          {/* Waqas IA: the ⋯ overflow is a MOBILE affordance only — on desktop
+             room control lives in the center Settings tab and the right cluster
+             stays just Search · Agents · Share · Profile. */}
+          <div ref={menuRef} className={`relative ${workspaceNav ? 'lg:hidden' : ''}`}>
             <button
               type="button"
               onClick={() => setMenuOpen(open => !open)}
@@ -289,16 +290,6 @@ export function RoomHeader({
                   <span className="flex w-5 justify-center" aria-hidden="true">⚙</span>
                   Room settings & rename
                 </button>
-                {onSummon && !ended && (
-                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onSummon(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink">
-                    <span className="flex w-5 justify-center" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M8 2v5M8 7l2.2-1.3M8 7 5.8 5.7" /><circle cx="8" cy="10.5" r="3.2" />
-                      </svg>
-                    </span>
-                    Summon agent
-                  </button>
-                )}
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onShare(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-ink-soft transition hover:bg-surface-softer hover:text-ink sm:hidden">
                   <span className="flex w-5 justify-center" aria-hidden="true">
                     <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

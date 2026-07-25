@@ -34,7 +34,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, type BoardTask, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, dismissSummonedAgent, type BoardTask, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -94,6 +94,9 @@ const MAIN_TABS: Array<{ key: MainTab; label: string; icon: React.ReactNode }> =
   { key: 'project', label: 'Project', icon: <><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M2 6h12" /></> },
   { key: 'people', label: 'People', icon: <><circle cx="5.5" cy="5" r="2.25" /><path d="M1.75 13c.5-2.2 2-3.5 3.75-3.5S8.75 10.8 9.25 13" /><circle cx="11.5" cy="5.5" r="1.75" /><path d="M10.9 9.6c1.6.2 2.8 1.4 3.2 3.4" /></> },
   { key: 'outputs', label: 'Outputs', icon: <><path d="M8 1.75 14 4.5v7L8 14.25 2 11.5v-7L8 1.75Z" /><path d="M2 4.5 8 7.25l6-2.75M8 7.25v7" /></> },
+  // T-71 rev (Waqas): room control lives in the CENTER cluster alongside the
+  // work surfaces, not hidden in a right-side overflow.
+  { key: 'room', label: 'Settings', icon: <><circle cx="8" cy="8" r="2" /><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8 3.4 3.4" /></> },
 ];
 
 // T-71 page anatomy (Notion-borrowed): every workspace destination is a PAGE
@@ -909,6 +912,23 @@ export function Room() {
     } catch (e) {
       const { showToast } = await import('../components/Toast.js');
       showToast(e instanceof Error ? `Kick failed: ${e.message}` : 'Kick failed', 'error');
+    }
+  }
+
+  async function handleArchiveRoom() {
+    try {
+      let agentIds: string[] = [];
+      try {
+        agentIds = (await listSummonedAgents())
+          .filter(a => a.room === code && a.status === 'active').map(a => a.agentId);
+      } catch { /* summoner may be down; archive anyway */ }
+      if (agentIds.length > 0 && window.confirm(`Also stop & archive ${agentIds.length} agent(s) attached to this room?`)) {
+        for (const id of agentIds) { try { await dismissSummonedAgent(id, true); } catch { /* best-effort */ } }
+      }
+      await archiveRoomAction(createClient(), code);
+      navigate('/');
+    } catch (e) {
+      window.alert(`Could not archive: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -1862,6 +1882,21 @@ export function Room() {
           );
         })()}
       </section>
+      {room.createdBy === self.name && (
+        <section aria-label="Archive" className="rounded-xl border border-border-faint bg-surface p-4">
+          {settingsSectionHead('Archive')}
+          <p className="mb-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+            Hide this room from Active/Ended into the Archived list. Reversible — restore it from Home’s Archived tab. Any summoned agents can be stopped at the same time.
+          </p>
+          <button
+            type="button"
+            onClick={handleArchiveRoom}
+            className="flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink"
+          >
+            Archive room
+          </button>
+        </section>
+      )}
       {!ended && room.createdBy === self.name && (
         <section aria-label="Danger zone" className="rounded-xl border border-red-400/30 bg-red-500/5 p-4">
           {settingsSectionHead('Danger', 'text-red-400')}
@@ -2110,13 +2145,22 @@ export function Room() {
           {peopleGroups.offline.length > 0 && <SummaryChip tone="quiet">{peopleGroups.offline.length} offline</SummaryChip>}
         </>}
         action={(
-          <button
-            type="button"
-            onClick={() => copyText(joinUrl, 'Invite link copied')}
-            className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90"
-          >
-            Invite
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSummonOpen(true)}
+              className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink"
+            >
+              <span aria-hidden="true">＋</span> Summon
+            </button>
+            <button
+              type="button"
+              onClick={() => copyText(joinUrl, 'Invite link copied')}
+              className="flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-bold text-white transition hover:opacity-90"
+            >
+              Invite
+            </button>
+          </div>
         )}
       >
         {peoplePanel}
@@ -2305,7 +2349,7 @@ export function Room() {
     // T-82: on phones the CHAT tab is full-bleed (pt-0) — the feed's top
     // clearance lives inside its scroll content, so hiding chrome reveals
     // feed pixels instead of a blank placeholder strip.
-    <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'room' ? 'pt-[52px]' : mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'} ${chromeHidden && mainTab === 'chat' ? 'chrome-hidden' : ''}`}>
+    <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'} ${chromeHidden && mainTab === 'chat' ? 'chrome-hidden' : ''}`}>
       <WorkspaceRail />
       <RoomListPane activeCode={code} selfName={me.name} />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface-soft">
@@ -2317,11 +2361,11 @@ export function Room() {
                band. Settings open = four segments stay four, none active. */
             <WorkspaceSwitcher
               destinations={MAIN_TABS}
-              active={mainTab === 'room' ? null : mainTab}
+              active={mainTab}
               onSelect={key => selectTab(key as MainTab)}
             />
           )}
-          mobileNavHidden={mainTab === 'room'}
+          mobileNavHidden={false}
           backOverride={mainTab === 'room' ? {
             label: `Back to ${MAIN_TABS.find(t => t.key === prevTabRef.current)?.label ?? 'Chat'}`,
             onBack: () => selectTab(prevTabRef.current),
@@ -2332,7 +2376,6 @@ export function Room() {
           onToggleInspector={() => setInspectorOpen(v => !v)}
           onSearch={() => setSearchOpen(true)}
           onOpenRoom={() => selectTab('room')}
-          onSummon={() => setSummonOpen(true)}
           onEndRoom={handleEndMeeting}
           canEndRoom={!ended && activeRoom.createdBy === self.name}
           selfName={self.name}
