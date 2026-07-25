@@ -220,7 +220,10 @@ export function RoomHeader({
                 <span className={`text-[13px] font-semibold ${agentStaleCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{agentCount}</span>
               </button>
               <div
-                className={`header-team-pill hidden min-h-11 items-center rounded-xl pr-1 sm:flex sm:pr-2 ${agentStaleCount > 0 ? 'header-team-pill-warn' : ''}`}
+                /* Waqas IA: on desktop the agents/attention cluster lives in
+                   the People tab, not the header right — hide it at lg+. It
+                   stays on tablet/mobile where People is one tap deeper. */
+                className={`header-team-pill hidden min-h-11 items-center rounded-xl pr-1 sm:flex sm:pr-2 lg:hidden ${agentStaleCount > 0 ? 'header-team-pill-warn' : ''}`}
                 aria-label={`${agentCount} agents, ${agentStatus}`}
               >
                 <AgentFacepile code={room.code} agentCount={agentCount} agentStaleCount={agentStaleCount} agents={agents} />
