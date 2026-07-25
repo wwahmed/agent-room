@@ -46,3 +46,18 @@ for build mode.
 - MCP fork reconciliation + publish (adopt upstream task-board + attachments,
   keep our questions, ship the code-format + join-metadata fixes). PUBLISH GATED
   ON YOUR REVIEW — see NIGHT-STATUS.md.
+
+## RESPONSIVENESS — the open item (test, before trusting native for chat)
+In the overnight test the agent JOINED (t+5s) and stayed in a live loop, but did
+NOT reply to a probe within ~2min before I dismissed it. Root cause looks like
+listen-window timing, not native launch:
+- room_join runs its first listen window INLINE (listenAfterJoin=true) and blocked
+  ~2m11s — i.e. the listen window is ~2min and did NOT return early when a new
+  message arrived.
+- If the server's `listen` long-poll doesn't wake promptly on new messages, EVERY
+  reply is delayed up to a full window. That would also explain manual-join lag —
+  and is squarely the "reliable join" north-star item.
+ACTION for next session: (a) confirm whether server listen wakes on new-message,
+(b) tune summoned agents to shorter listen windows / listenAfterJoin behavior,
+(c) re-run the reply probe. Until then, native summon JOINS reliably; reply
+latency is unverified.
