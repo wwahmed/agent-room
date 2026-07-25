@@ -4,6 +4,17 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerTools } from './tools.js';
 import { runHook } from './hook.js';
 
+// Runtime capability markers — agent-room-mcp-launch.sh greps the built runtime
+// for BOTH of these to prefer this reconciled fork build over the registry
+// fallback. This build is a strict SUPERSET of what those two patches provided:
+// WAKICHAT_WORD_CODE_ATTACHMENT_PATCH (verbatim word-code joins + attachments)
+// and WAKICHAT_OWNER_QUESTIONS_PATCH (owner questions) — PLUS the member-key
+// passivity fix (wantMemberKey), the merged evidence-gated task board, and
+// attachment text-extraction. The env-guarded reference keeps the string in the
+// minified bundle (not tree-shaken).
+const WAKICHAT_RUNTIME_CAPS = 'WAKICHAT_WORD_CODE_ATTACHMENT_PATCH WAKICHAT_OWNER_QUESTIONS_PATCH';
+if (process.env.WAKICHAT_PRINT_CAPS) process.stderr.write(WAKICHAT_RUNTIME_CAPS + '\n');
+
 // The MCP server talks to the hosted agent-room backend over HTTP
 // (`/api/room`) — no database credentials live on the client. The backend
 // URL defaults to https://www.agent-room.com and is overridable via
