@@ -34,10 +34,17 @@ function blip(freq: number, durationMs: number, peak = 0.05): void {
   osc.stop(now + durationMs / 1000 + 0.02);
 }
 
-/** Mic-live confirmation at the start of recording (rising two-note). */
-export function playStartCue(): void {
-  blip(660, 90);
-  setTimeout(() => blip(880, 110), 90);
+/** Warming up: faint, quick dots while the mic is being acquired — a
+ *  responsive "hang on, getting ready" tick, not a chime. */
+export function playWarmingCue(): void {
+  blip(520, 40, 0.02);
+  setTimeout(() => blip(520, 40, 0.02), 105);
+  setTimeout(() => blip(520, 40, 0.02), 210);
+}
+
+/** Recording live: a single solid, slightly longer tone — "recording now". */
+export function playReadyCue(): void {
+  blip(780, 200, 0.06);
 }
 
 /** Sent confirmation (single soft note). */

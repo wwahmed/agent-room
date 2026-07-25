@@ -7,7 +7,7 @@ import {
   type RecorderLike,
   type SegmentStoreLike,
 } from '../lib/voiceCapture.js';
-import { playStartCue, playSendCue } from '../lib/audioCue.js';
+import { playWarmingCue, playReadyCue, playSendCue } from '../lib/audioCue.js';
 import { ScreenWakeLockController } from '../lib/screenWakeLock.js';
 
 // A controller the button can drive uniformly, whether it is the built-in
@@ -260,10 +260,12 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
           onStart?.(); // snapshot the composer's base draft before words stream in
           const c = buildController();
           ctrlRef.current = c;
-          // Two cues only (Waqas): a rising "ready" tone once the recorder is
-          // actually warmed up + live (fires when start() resolves), and a
-          // single "send" tone on stop — silent in between.
-          void Promise.resolve(c.start()).then(() => playStartCue()).catch(() => {});
+          // Responsive two-phase start (Waqas): faint warming-up dots the
+          // instant you tap, then a solid "recording now" tone once the
+          // recorder is actually live (start() resolved). A single "send" tone
+          // on stop. Silent in between.
+          playWarmingCue();
+          void Promise.resolve(c.start()).then(() => playReadyCue()).catch(() => {});
         }}
         aria-label={active ? 'Stop dictation and insert text' : resumeMode ? 'Resume dictation' : 'Start voice dictation'}
         title={active ? 'Stop dictation' : resumeMode ? 'Resume dictation (paused)' : 'Start voice dictation'}
