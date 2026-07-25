@@ -2356,13 +2356,28 @@ export function Room() {
           room={activeRoom}
           ended={ended}
           workspaceNav={(
-            /* T-71: navigation lives IN the command bar — no third chrome
-               band. Settings open = four segments stay four, none active. */
-            <WorkspaceSwitcher
-              destinations={MAIN_TABS}
-              active={mainTab}
-              onSelect={key => selectTab(key as MainTab)}
-            />
+            /* T-71: navigation lives IN the command bar. Search is a control
+               INSIDE the center cluster (Waqas) — it opens the palette as a
+               vertical dropdown, so the center cluster stays centered and the
+               right cluster is global/you only. */
+            <div className="flex items-center gap-1.5">
+              <WorkspaceSwitcher
+                destinations={MAIN_TABS}
+                active={mainTab}
+                onSelect={key => selectTab(key as MainTab)}
+              />
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Search rooms, messages, and tasks"
+                title="Search (⌘K)"
+                className="header-glass-control flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:text-ink"
+              >
+                <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
+                </svg>
+              </button>
+            </div>
           )}
           mobileNavHidden={false}
           backOverride={mainTab === 'room' ? {

@@ -183,19 +183,8 @@ export function RoomHeader({
               <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
             </svg>
           </button>
-          {workspaceNav && (
-            <button
-              type="button"
-              onClick={onSearch}
-              aria-label="Search rooms, messages, and tasks"
-              className="header-glass-control hidden h-11 flex-shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-ink-soft transition hover:text-ink lg:flex"
-            >
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-                <circle cx="7" cy="7" r="4.25" /><path d="m10.2 10.2 3 3" />
-              </svg>
-              <kbd className="rounded-md border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-medium text-ink-soft">⌘K</kbd>
-            </button>
-          )}
+          {/* Desktop Search moved INTO the center cluster (Waqas); the mobile/
+             tablet icon above still covers small screens. */}
           <div className="hidden sm:block">{mentionNav}</div>
           {agentCount > 0 && (
             <>
