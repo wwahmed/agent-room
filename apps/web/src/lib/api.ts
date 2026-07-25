@@ -689,6 +689,12 @@ export interface SummonedAgent {
   agentId: string; name: string; role: string; provider: string; model: string;
   workspace: string; room: string; mode: string; status: string; health: string;
   tmuxSession: string; access: string[]; createdAt: number;
+  account?: string; sessionId?: string; dismissedAt?: number; persistent?: boolean;
+}
+
+/** All summoner records for a room, incl. dismissed (for join/leave history). */
+export async function listRoomAgentHistory(code: string): Promise<SummonedAgent[]> {
+  return (await listSummonedAgents()).filter((a) => a.room === code);
 }
 
 export async function summonProviders(refresh = false): Promise<SummonProvider[]> {

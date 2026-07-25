@@ -9,6 +9,7 @@ import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { SummonAgentSheet } from '../components/SummonAgentSheet.js';
+import { AgentDetailsSheet } from '../components/AgentDetailsSheet.js';
 import { BriefCard } from '../components/BriefCard.js';
 import { CommandPalette } from '../components/CommandPalette.js';
 import { parseBriefCommand } from '../lib/briefCommand.js';
@@ -505,6 +506,7 @@ export function Room() {
   }, [seekFailure, mainTab, serverArtifacts, outputsFilter, showAllArtifacts]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [summonOpen, setSummonOpen] = useState(false);
+  const [detailsFor, setDetailsFor] = useState<Participant | null>(null);
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
@@ -2050,11 +2052,21 @@ export function Room() {
                         but always discoverable, and only render at all when
                         the viewer is actually the host.
                       */}
-                      {(canAsk || canMuteToggle || canKick) && (
-                        // T-44: 36px touch targets (28px only at lg pointer
-                        // sizes), and the destructive Remove is separated from
-                        // the routine controls so it cannot be fat-fingered.
-                        <div className="flex items-center gap-1.5">
+                      {/* Details (ⓘ) is always available; host controls (Ask/
+                          Mute/Remove) render only for the host. */}
+                      <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setDetailsFor(p)}
+                            title={`Details for ${p.name}`}
+                            aria-label={`Details for ${p.name}`}
+                            className="flex min-h-11 min-w-11 items-center justify-center"
+                          >
+                            <span className="flex h-9 w-9 items-center justify-center rounded-md border border-border-faint bg-surface text-ink-soft transition hover:border-accent/40 hover:bg-accent/10 hover:text-accent lg:h-7 lg:w-7">
+                              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <circle cx="8" cy="8" r="6.25" /><path d="M8 7v3.4M8 5.15v.05" />
+                              </svg>
+                            </span>
+                          </button>
                           {canAsk && (
                             <button
                               onClick={() => { void handleAskAgent(p); }}
@@ -2107,8 +2119,7 @@ export function Room() {
                               </span>
                             </button>
                           )}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   );
   };
@@ -3216,6 +3227,7 @@ export function Room() {
           Inspector's desktop column is gone (T-64). */}
       <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
       {summonOpen && <SummonAgentSheet code={code} onClose={() => setSummonOpen(false)} />}
+      {detailsFor && <AgentDetailsSheet code={code} participant={detailsFor} onClose={() => setDetailsFor(null)} />}
       <CommandSearch
         open={searchOpen}
         room={activeRoom}

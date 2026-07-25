@@ -78,7 +78,8 @@ function publicAgent(a) {
   return {
     agentId: a.agentId, name: a.name, role: a.role, provider: a.provider,
     model: a.model, workspace: a.workspace, room: a.room, mode: a.mode, persistent: a.persistent,
-    createdAt: a.createdAt, status: a.status, health: health(a),
+    account: a.account || '', sessionId: a.sessionId,
+    createdAt: a.createdAt, dismissedAt: a.dismissedAt, status: a.status, health: health(a),
     tmuxSession: a.tmuxSession,
     access: accessInstructions({ ...a, tmuxTmpdir: TMUX_TMPDIR }),
   };
@@ -156,6 +157,7 @@ function doSummon(body) {
 
   const agent = {
     agentId, name, role, provider: provider.id, model, workspace, room, mode, persistent,
+    account: provider.account?.email || '',
     tmuxSession, sessionId, agentHome, keyfile, heartbeat, logfile,
     createdAt: Date.now(), status: 'active',
   };
