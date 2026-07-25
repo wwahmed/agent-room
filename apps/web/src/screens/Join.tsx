@@ -4,10 +4,9 @@ import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, Roo
 import type { Room } from '@agent-room/shared';
 import { isValidCode, canonicalizeCode, ROLE_PRESETS } from '@agent-room/shared';
 import { CodeInput } from '../components/CodeInput.js';
-import { AgentRoomLogo } from '../components/AgentRoomLogo.js';
 import { AgentJoinQuickstart } from '../components/AgentJoinQuickstart.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
-import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
+import { fetchIdentity, lastRole, rememberRole, type WhoAmI } from '../lib/identity.js';
 
 export function Join() {
   const { code: codeParam = '' } = useParams();
@@ -20,6 +19,9 @@ export function Join() {
   const [role, setRole] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [identity, setIdentity] = useState<WhoAmI | null>(null);
+  // 'choose' = show Host/Participant choice; the others are the active path.
+  const [mode, setMode] = useState<'choose' | 'host' | 'participant'>('choose');
 
   // Prefill from the Access-authenticated identity so the owner never
   // types name/role even when landing on the Join form directly.
@@ -27,6 +29,7 @@ export function Join() {
     let cancelled = false;
     fetchIdentity().then(me => {
       if (cancelled || !me) return;
+      setIdentity(me);
       setName(prev => prev || me.name);
       setRole(prev => prev || me.role || lastRole());
     });
@@ -47,6 +50,34 @@ export function Join() {
       .then(setRoom)
       .catch(e => setErr(e instanceof RoomNotFoundError ? 'Room not found' : String(e)));
   }, [raw]);
+
+  // Join as the room's host, verified by your signed-in identity (the server
+  // checks your Access email against the room's host, or a stored host key for
+  // rooms created on another device / via the API).
+  async function joinAsHost() {
+    if (!room) return;
+    setBusy(true); setErr(null);
+    try {
+      const client = createClient();
+      const hostName = room.createdBy;
+      const hostKey = localStorage.getItem(`room:${room.code}:hostKey`)
+        ?? sessionStorage.getItem(`room:${room.code}:hostKey`)
+        ?? undefined;
+      await verifyHostKey(client, room.code, hostKey);
+      const participant = {
+        name: hostName, role: role.trim() || 'Host', color: colorForName(hostName),
+        initials: initialsFor(hostName), client: 'web' as const, joinedAt: Date.now(), lastSeenAt: Date.now(),
+      };
+      const result = await joinRoom(client, room.code, participant, { priorIdentity: { name: hostName, client: 'web' } });
+      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify({ name: result.participant.name, role: role.trim() }));
+      rememberRole(role);
+      navigate(`/r/${room.code}`);
+    } catch (e) {
+      setErr('Could not verify you as host of this room. If you created it on another device or via the API, seed your host key (or use Join as participant). ' + (e instanceof Error ? '' : String(e)));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function join() {
     if (!room || !name.trim()) return;
@@ -99,14 +130,15 @@ export function Join() {
     <>
       <div className="bg-surface px-6 py-5">
         <div className="mx-auto max-w-6xl">
-          <Link to="/" aria-label="Agent Room home" className="inline-block hover:opacity-85 transition">
-            <AgentRoomLogo markClassName="h-7 w-7" wordmarkClassName="text-base" />
+          <Link to="/" aria-label="WakiChat home" className="inline-flex items-center gap-2.5 hover:opacity-85 transition">
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-7 w-7 rounded-lg" />
+            <span className="text-base font-bold tracking-tight text-ink">WakiChat</span>
           </Link>
         </div>
       </div>
       <div className="max-w-md mx-auto mt-10 p-8 bg-surface border border-border rounded-xl shadow-card">
-      <h1 className="text-lg font-semibold tracking-tight">Join a meeting</h1>
-      <p className="text-xs text-ink-soft mt-1 mb-6">Enter the room code from your invite.</p>
+      <h1 className="text-lg font-semibold tracking-tight">Join a room</h1>
+      <p className="text-xs text-ink-soft mt-1 mb-6">You're joining an existing room — not creating one.</p>
 
       <div className="mb-4">
         <CodeInput value={raw} onChange={setRaw} />
@@ -114,7 +146,9 @@ export function Join() {
 
       {err && <div className="text-xs text-red-600 mb-3">{err}</div>}
 
-      {room && (
+      {room && (() => {
+        const canHost = !!identity && identity.name === room.createdBy;
+        return (
         <>
           {/* Who you're joining — the welcome, up top. */}
           <div className="mb-5 flex items-center gap-3 rounded-xl border border-border-faint bg-surface-soft p-3.5">
@@ -125,31 +159,65 @@ export function Join() {
             </div>
           </div>
 
-          {/* PRIMARY: join as yourself. */}
-          <label className="mb-3 block">
-            <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your name</span>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name"
-              onKeyDown={e => { if (e.key === 'Enter' && name.trim() && !busy) void join(); }}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
-          </label>
-          <label className="mb-5 block">
-            <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your role <span className="font-medium text-ink-faint">optional</span></span>
-            <select
-              value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
-              onChange={e => setRole(e.target.value)}
-              className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
-            >
-              <option value="">Custom role</option>
-              {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
-            </select>
-            <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Reviewer"
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
-          </label>
+          {/* Step 1 — pick how you're joining. */}
+          {mode === 'choose' && (
+            <div className="space-y-2.5">
+              {canHost && (
+                <button onClick={() => { setErr(null); setMode('host'); }}
+                  className="w-full rounded-lg bg-accent px-4 py-3 text-left text-sm font-semibold text-white transition hover:opacity-90">
+                  Join as Host
+                  <span className="mt-0.5 block text-[11px] font-normal opacity-85">You're signed in as {identity!.name} — the owner of this room</span>
+                </button>
+              )}
+              <button onClick={() => { setErr(null); setMode('participant'); }}
+                className={`w-full rounded-lg px-4 py-3 text-left text-sm font-semibold transition ${canHost ? 'border border-border text-ink hover:border-border-strong' : 'bg-accent text-white hover:opacity-90'}`}>
+                Join as Participant
+                <span className={`mt-0.5 block text-[11px] font-normal ${canHost ? 'text-ink-soft' : 'opacity-85'}`}>Join under a display name of your choosing</span>
+              </button>
+            </div>
+          )}
 
-          <button disabled={busy || !name.trim()} onClick={join}
-            className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-            {busy ? 'Joining…' : 'Join room →'}
-          </button>
+          {/* Host path — identity-verified, no form. */}
+          {mode === 'host' && (
+            <div>
+              <p className="mb-3 text-[13px] text-ink-soft">Joining as host <span className="font-semibold text-ink">{room.createdBy}</span>, verified by your signed-in identity.</p>
+              <button disabled={busy} onClick={joinAsHost}
+                className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+                {busy ? 'Joining…' : 'Join as Host →'}
+              </button>
+              <button onClick={() => { setMode('choose'); setErr(null); }} className="mt-2 w-full py-1 text-[12px] text-ink-soft transition hover:text-ink">← Back</button>
+            </div>
+          )}
+
+          {/* Participant path — pick a display name. */}
+          {mode === 'participant' && (
+            <div>
+              <label className="mb-3 block">
+                <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your name</span>
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name"
+                  onKeyDown={e => { if (e.key === 'Enter' && name.trim() && !busy) void join(); }}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
+              </label>
+              <label className="mb-5 block">
+                <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your role <span className="font-medium text-ink-faint">optional</span></span>
+                <select
+                  value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
+                  onChange={e => setRole(e.target.value)}
+                  className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+                >
+                  <option value="">Custom role</option>
+                  {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
+                </select>
+                <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Reviewer"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
+              </label>
+              <button disabled={busy || !name.trim()} onClick={join}
+                className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+                {busy ? 'Joining…' : 'Join room →'}
+              </button>
+              <button onClick={() => { setMode('choose'); setErr(null); }} className="mt-2 w-full py-1 text-[12px] text-ink-soft transition hover:text-ink">← Back</button>
+            </div>
+          )}
 
           {/* SECONDARY: bringing an AI agent — tucked into a disclosure so the
              human join flow above stays clean, not a wall of setup. */}
@@ -166,7 +234,8 @@ export function Join() {
             </div>
           </details>
         </>
-      )}
+        );
+      })()}
       </div>
     </>
   );
