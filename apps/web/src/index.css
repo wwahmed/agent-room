@@ -196,7 +196,13 @@ body {
     .msg-note { font-size: 17px; }
     .msg-disclosure { font-size: 15px; }
     .msg-composer { font-size: 20px; }
-    .room-tab-label { font-size: 17px; }
+    /* Workspace tabs are icon-over-label stacked on phones (five tabs must
+       share ~375px without truncating). The label rides under a 16px glyph,
+       so it sits at the repo-wide 12px floor rather than the 17px label-only
+       floor. The T-71 contrast pairs are size-independent and unchanged:
+       dark already promotes the active label to full ink on the tint, and
+       both idle rules were re-tuned to the normal-text 4.5:1 floor. */
+    .room-tab-label { font-size: 12px; }
   }
   /* T-73: phone reading scale. Comfortable is the unmarked 19px default
      above; Large is 21 with author/meta/composer scaled proportionally;

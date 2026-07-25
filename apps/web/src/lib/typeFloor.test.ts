@@ -53,7 +53,10 @@ describe('T-74 mobile reading contract', () => {
     expect(css).toContain('.msg-author { font-size: 18px; font-weight: 700; }');
     expect(css).toContain('.msg-meta { font-size: 15px; }');
     expect(css).toContain('.msg-composer { font-size: 20px; }');
-    expect(css).toContain('.room-tab-label { font-size: 17px; }');
+    // Workspace tabs went icon-over-label stacked on phones (five tabs,
+    // ~375px): the label sits under a 16px glyph at the 12px floor instead
+    // of the 17px label-only floor.
+    expect(css).toContain('.room-tab-label { font-size: 12px; }');
     expect(room).toContain('className="msg-composer w-full');
     expect(room).toContain('placeholder="Message…"');
   });

@@ -2401,7 +2401,9 @@ export function Room() {
                INSIDE the center cluster (Waqas) — it opens the palette as a
                vertical dropdown, so the center cluster stays centered and the
                right cluster is global/you only. */
-            <div className="flex items-center gap-1.5">
+            /* Below lg the cluster must claim the full second-row width —
+               content-sizing it starves the five tabs and truncates labels. */
+            <div className="flex w-full min-w-0 items-center gap-1.5 lg:w-auto">
               <WorkspaceSwitcher
                 destinations={MAIN_TABS}
                 active={mainTab}
