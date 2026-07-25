@@ -15,6 +15,7 @@ const cfg = {
   workspace: process.env.SM_WORKSPACE,
   keyfile: process.env.SM_KEYFILE,
   sessionId: process.env.SM_SESSION || '',
+  persistent: process.env.SM_PERSISTENT !== 'off',
   mode: process.env.SM_MODE || 'chat',
   color: process.env.SM_COLOR || '#4F46E5',
   heartbeat: process.env.SM_HEARTBEAT || '',
@@ -54,7 +55,7 @@ async function respondTo(newMsgs) {
   const resume = turns > 0;
   const { text, code, err } = await invokeModel({
     provider: cfg.provider, model: cfg.model, workspace: cfg.workspace,
-    sessionId: cfg.sessionId, resume, mode: cfg.mode, prompt,
+    persistent: cfg.persistent, sessionId: cfg.sessionId, resume, mode: cfg.mode, prompt,
   });
   turns += 1;
   const reply = (text || '').trim();

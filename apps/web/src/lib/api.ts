@@ -707,7 +707,7 @@ export async function listSummonedAgents(): Promise<SummonedAgent[]> {
 }
 
 export async function summonAgent(body: {
-  room: string; provider: string; model: string; workspace: string; name: string; role: string; mode: string;
+  room: string; provider: string; model: string; workspace: string; name: string; role: string; mode: string; persistent: boolean;
 }): Promise<SummonedAgent> {
   const res = await fetch('/api/summon', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

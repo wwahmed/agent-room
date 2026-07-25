@@ -77,7 +77,7 @@ function health(agent) {
 function publicAgent(a) {
   return {
     agentId: a.agentId, name: a.name, role: a.role, provider: a.provider,
-    model: a.model, workspace: a.workspace, room: a.room, mode: a.mode,
+    model: a.model, workspace: a.workspace, room: a.room, mode: a.mode, persistent: a.persistent,
     createdAt: a.createdAt, status: a.status, health: health(a),
     tmuxSession: a.tmuxSession,
     access: accessInstructions({ ...a, tmuxTmpdir: TMUX_TMPDIR }),
@@ -113,6 +113,7 @@ function doSummon(body) {
   const model = String(body.model || '').trim() || provider.defaultModel;
   const role = sanitizeName(body.role) || 'AI Agent';
   const mode = body.mode === 'build' ? 'build' : 'chat';
+  const persistent = body.persistent !== false; // default ON — resumable/attachable
 
   // Reject a duplicate live agent with the same name in the same room.
   const reg0 = loadRegistry();
@@ -139,6 +140,7 @@ function doSummon(body) {
     SM_ROOM: room, SM_NAME: name, SM_ROLE: role, SM_PROVIDER: provider.id,
     SM_MODEL: model, SM_WORKSPACE: workspace, SM_KEYFILE: keyfile,
     SM_SESSION: sessionId, SM_MODE: mode, SM_HEARTBEAT: heartbeat, SM_LOG: logfile,
+    SM_PERSISTENT: persistent ? 'on' : 'off',
     SM_COLOR: colorFor(provider.id),
   };
   const launch = join(agentHome, 'launch.sh');
@@ -153,7 +155,7 @@ function doSummon(body) {
   if (res.status !== 0) throw httpErr(500, `tmux launch failed: ${(res.stderr || '').trim()}`);
 
   const agent = {
-    agentId, name, role, provider: provider.id, model, workspace, room, mode,
+    agentId, name, role, provider: provider.id, model, workspace, room, mode, persistent,
     tmuxSession, sessionId, agentHome, keyfile, heartbeat, logfile,
     createdAt: Date.now(), status: 'active',
   };

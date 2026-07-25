@@ -30,6 +30,7 @@ export function SummonAgentSheet({ code, onClose }: Props) {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [mode, setMode] = useState<'chat' | 'build'>('chat');
+  const [persistent, setPersistent] = useState(true);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -88,7 +89,7 @@ export function SummonAgentSheet({ code, onClose }: Props) {
       }
       const agent = await summonAgent({
         room: code, provider: provider.id, model: resolvedModel,
-        workspace: ws, name: name.trim(), role: role.trim(), mode,
+        workspace: ws, name: name.trim(), role: role.trim(), mode, persistent,
       });
       setJustSummoned(agent);
       setName('');
@@ -212,6 +213,18 @@ export function SummonAgentSheet({ code, onClose }: Props) {
                   <div className="font-semibold">Build</div><div className="text-[11px] text-ink-soft">Can edit files in the workspace</div>
                 </button>
               </div>
+
+              {/* Persistent session — resumable + shows in your CLI/app session list. */}
+              <button type="button" onClick={() => setPersistent(v => !v)}
+                className="mb-4 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition hover:border-border-strong">
+                <span className={`flex h-5 w-9 flex-shrink-0 items-center rounded-full p-0.5 transition ${persistent ? 'bg-accent' : 'bg-border'}`}>
+                  <span className={`h-4 w-4 rounded-full bg-white transition ${persistent ? 'translate-x-4' : ''}`} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-ink">Persistent session</span>
+                  <span className="block text-[11px] text-ink-soft">Resumable + attachable — reach this exact agent later with {provider?.id === 'copilot' ? 'copilot --resume' : provider?.id === 'codex' ? 'codex resume' : 'claude --resume'}. Off = one-shot, no saved session.</span>
+                </span>
+              </button>
 
               {error && <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-[13px] text-red-400">{error}</div>}
 

@@ -107,8 +107,9 @@ export function providerById(id) {
 // NOTE: turns are stateless (no --session-id). With --session-id, Claude Code
 // loads full session/CLAUDE.md context and reliably answers "(no reply)"; the
 // room transcript is the shared memory instead. Continuity is a future add.
-function buildArgv({ provider, model, workspace, mode, outFile }) {
+function buildArgv({ provider, model, workspace, mode, outFile, persistent, sessionId, resume }) {
   const build = mode === 'build';
+  const persist = persistent && sessionId;
   if (provider === 'claude') {
     // NOTE: --add-dir is VARIADIC (<directories...>), so it must be followed by
     // another flag — never placed right before the positional prompt, or it
@@ -117,15 +118,26 @@ function buildArgv({ provider, model, workspace, mode, outFile }) {
     const a = ['-p'];
     if (build) a.push('--add-dir', workspace, '--dangerously-skip-permissions');
     a.push('--model', model, '--output-format', 'text', '--strict-mcp-config');
+    if (persist) {
+      // --setting-sources project keeps the global ~/.claude/CLAUDE.md (the
+      // Agent-Room auto-join rules) from hijacking the summoned agent, while the
+      // session id makes it durable + resumable (`claude --resume <id>`).
+      a.push('--setting-sources', 'project', resume ? '--resume' : '--session-id', sessionId);
+    }
     return { cmd: 'claude', args: a, promptVia: 'arg' };
   }
   if (provider === 'copilot') {
     const a = ['--model', model, '-s', '--no-color', '-C', workspace];
     if (build) a.push('--allow-all-tools');
+    // Copilot's --session-id resumes an existing session or sets the UUID for a
+    // new one, so the same id each turn continues the same durable session.
+    if (persist) a.push('--session-id', sessionId);
     return { cmd: 'copilot', args: a, promptVia: 'prompt-flag' };
   }
   if (provider === 'codex') {
     // Empty model => use the account's configured default (ids vary per account).
+    // Codex has no fixed --session-id; it persists in its own session store, so
+    // attach with `codex resume` (picker). resume --last continues the newest.
     const a = ['exec', '--skip-git-repo-check', '-C', workspace,
       '--sandbox', build ? 'workspace-write' : 'read-only'];
     if (model) a.push('-m', model);
@@ -136,9 +148,9 @@ function buildArgv({ provider, model, workspace, mode, outFile }) {
 }
 
 // Run one model turn. Returns { text, code }.
-export function invokeModel({ provider, model, workspace, mode, prompt, timeoutMs = 180000 }) {
+export function invokeModel({ provider, model, workspace, mode, prompt, persistent, sessionId, resume, timeoutMs = 180000 }) {
   const outFile = provider === 'codex' ? join(tmpdir(), `codex-${randomUUID()}.txt`) : '';
-  const spec = buildArgv({ provider, model, workspace, mode, outFile });
+  const spec = buildArgv({ provider, model, workspace, mode, outFile, persistent, sessionId, resume });
   const args = [...spec.args];
   if (spec.promptVia === 'prompt-flag') args.unshift('-p', prompt);
   else if (spec.promptVia === 'arg') args.push(prompt);
@@ -187,12 +199,19 @@ function cleanOutput(provider, raw) {
 }
 
 // Instructions the app shows so Waqas can reach the agent directly.
-export function accessInstructions({ provider, model, workspace, tmuxSession, tmuxTmpdir }) {
+export function accessInstructions({ provider, model, workspace, tmuxSession, tmuxTmpdir, persistent, sessionId }) {
   const cli = provider === 'claude' ? 'claude' : provider === 'copilot' ? 'copilot' : 'codex';
   const tmuxPrefix = tmuxTmpdir ? `TMUX_TMPDIR=${tmuxTmpdir} ` : '';
+  // With a persistent session you can RESUME the exact same agent conversation
+  // (and it shows up in the CLI/app session list). Otherwise, open a fresh CLI.
+  let attach;
+  if (persistent && sessionId && provider === 'claude') attach = `Resume this exact agent:  cd ${workspace} && claude --resume ${sessionId}`;
+  else if (persistent && sessionId && provider === 'copilot') attach = `Resume this exact agent:  cd ${workspace} && copilot --resume=${sessionId}`;
+  else if (persistent && provider === 'codex') attach = `Resume this agent:  cd ${workspace} && codex resume   (pick the newest session)`;
+  else attach = `Chat directly in its workspace:  cd ${workspace} && ${cli}`;
   return [
     `Watch the live agent loop:  ${tmuxPrefix}tmux attach -t ${tmuxSession}   (detach: Ctrl-b then d)`,
-    `Chat directly in its workspace:  cd ${workspace} && ${cli}`,
+    attach,
     `Provider / model:  ${provider} / ${model || 'account-default'}`,
     `Workspace:  ${workspace}`,
   ];
