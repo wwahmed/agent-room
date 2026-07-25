@@ -8,6 +8,7 @@ import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 import { BrandedLogoAvatar, GenericAgentBadge } from './AgentAvatar.js';
 import type { AgentBrand } from '../lib/agentBrand.js';
+import { textMentionsSelf } from '../lib/mentions.js';
 
 // T-05 editorial message rows. Sender identity is the primary visual
 // anchor (host feedback: "I am having a very hard time distinguishing
@@ -309,7 +310,16 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // corner, name + time sit on ONE line (no divider, no wrap), role hidden on
   // mobile.
   const rowClass = 'group relative pl-5 pr-12 sm:pl-6 sm:pr-20';
-  const bubbleShape = 'relative z-10 inline-block max-w-full break-words rounded-xl border border-border-faint bg-surface-softer sm:max-w-[80ch] [overflow-wrap:anywhere]';
+  // T-12: whole-bubble "you were mentioned" highlight. The inline chip already
+  // marks the @token; this makes the message itself scannable in a busy room —
+  // an amber left accent + faint wash that holds in both themes. Own messages
+  // (self) already returned above, so this only lights up incoming mentions.
+  const mentionsMe = message.type === 'msg' && textMentionsSelf(body, selfName);
+  const bubbleShape = `relative z-10 inline-block max-w-full break-words rounded-xl border sm:max-w-[80ch] [overflow-wrap:anywhere] ${
+    mentionsMe
+      ? 'border-l-[3px] border-l-amber-400 border-y-amber-400/40 border-r-amber-400/40 bg-amber-400/[0.07]'
+      : 'border-border-faint bg-surface-softer'
+  }`;
   // T-41 acceptance sheet: stay on the deliberate token scale. Perceived
   // shouting is solved by flat peer rows and hierarchy, not off-scale thin
   // glyphs that become harder to read on a dark canvas.
