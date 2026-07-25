@@ -50,7 +50,7 @@ export interface RecognitionEventLike {
 export interface DictationOptions {
   createRecognizer: () => RecognizerLike;
   onChange: (snapshot: DictationSnapshot) => void;
-  onFinalize: (text: string) => void; // Stop or hard-deadline only
+  onFinalize: (text: string) => void; // Stop or hard-deadline only; text may be ''
   lang?: string;
   maxMs?: number;
   restartBackoffMs?: number;
@@ -380,7 +380,11 @@ export class DictationController {
     this.clearDeadline();
     this.hardReset('idle');
     this.emit();
-    if (text) this.o.onFinalize(text);
+    // Deliver even when empty: the one-tap Send intent (VoiceButton) must hear
+    // back from every finish, or a Send tapped over a silent session strands
+    // the composer's typed base draft unsent with no feedback. Insert-only
+    // consumers already guard on text themselves.
+    this.o.onFinalize(text);
   }
 
   private hardReset(state: DictationState) {

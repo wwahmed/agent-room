@@ -192,6 +192,18 @@ describe('DictationController', () => {
     expect(h.finals).toEqual(['committed trailing']);
   });
 
+  it('explicit Stop with an empty transcript still finalizes, delivering \'\'', () => {
+    // The recorder's one-tap Send routes through onFinalize; a silent session
+    // must still complete that round-trip or a typed base draft in the
+    // composer is stranded unsent with no feedback. Fatal errors and cancel
+    // still never deliver (tested below).
+    const h = harness();
+    h.c.start();
+    h.c.stop(); // nothing was ever recognized
+    expect(h.snap().state).toBe('idle');
+    expect(h.finals).toEqual(['']);
+  });
+
   it('does not double-commit when stop triggers a late cumulative final result', () => {
     const h = harness();
     h.c.start();
