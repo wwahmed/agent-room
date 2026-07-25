@@ -152,6 +152,37 @@ export function SummonAgentSheet({ code, onClose }: Props) {
         <div className="overflow-y-auto p-4 sm:p-6">
           {loading ? (
             <div className="py-10 text-center text-sm text-ink-soft">Loading providers &amp; workspaces…</div>
+          ) : justSummoned ? (
+            /* ---- RESULT step — replaces the form so it's one thing at a time ---- */
+            <div className="py-2">
+              <div className="flex flex-col items-center text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-success text-[22px] font-bold text-white">✓</span>
+                <div className="mt-3 text-lg font-semibold text-ink">{justSummoned.name} is live</div>
+                <div className="mt-1 text-[13px] text-ink-soft">{justSummoned.provider} / {justSummoned.model || 'account-default'} · joined this room</div>
+              </div>
+              <div className="mt-4 rounded-xl border border-border-faint bg-surface-softer p-3.5">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Reach it directly anytime</div>
+                <ul className="space-y-1.5">
+                  {justSummoned.access.map((line, i) => {
+                    const parts = line.split(':  ');
+                    const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
+                    return (
+                      <li key={i} className="flex items-start gap-2">
+                        <code className="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
+                        <button type="button" onClick={() => { try { void navigator.clipboard.writeText(cmd); } catch { /* no clipboard */ } }}
+                          className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10">Copy</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={() => { setJustSummoned(null); setName(''); }}
+                  className="flex-1 rounded-xl border border-border px-3 py-2.5 text-[13px] font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink">＋ Summon another</button>
+                <button type="button" onClick={onClose}
+                  className="flex-1 rounded-xl bg-accent px-3 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90">Done</button>
+              </div>
+            </div>
           ) : (
             <>
               {/* Provider + Model — compact row */}
@@ -267,34 +298,6 @@ export function SummonAgentSheet({ code, onClose }: Props) {
                 className="min-h-11 w-full rounded-xl bg-accent px-5 text-sm font-semibold text-white disabled:opacity-40">
                 {busy ? 'Summoning…' : 'Create & Summon'}
               </button>
-
-              {/* Confirmation + how to reach the just-summoned agent directly. */}
-              {justSummoned && (
-                <div className="mt-4 rounded-xl border border-success/40 bg-success/10 p-3.5">
-                  <div className="flex items-center gap-2 text-[14px] font-semibold text-ink">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-success text-[12px] font-bold text-white">✓</span>
-                    {justSummoned.name} is live in this room
-                  </div>
-                  <div className="mt-1 text-[12px] text-ink-soft">{justSummoned.provider} / {justSummoned.model || 'account-default'} · reach it directly anytime:</div>
-                  <ul className="mt-2 space-y-1.5">
-                    {justSummoned.access.map((line, i) => {
-                      const parts = line.split(':  ');
-                      const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
-                      return (
-                        <li key={i} className="flex items-start gap-2">
-                          <code className="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
-                          <button type="button" onClick={() => { try { void navigator.clipboard.writeText(cmd); } catch { /* no clipboard */ } }}
-                            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10">Copy</button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <button type="button" onClick={() => { setJustSummoned(null); setName(''); }}
-                    className="mt-3 w-full rounded-lg border border-border px-3 py-2 text-[13px] font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink">
-                    ＋ Summon another
-                  </button>
-                </div>
-              )}
 
               {/* Live roster for this room */}
               {agents.length > 0 && (
