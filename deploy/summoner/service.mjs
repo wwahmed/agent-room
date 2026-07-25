@@ -19,7 +19,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { listGrouped, isValidWorkspace } from './workspaces.mjs';
-import { catalog, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, AUG_PATH } from './providers.mjs';
+import { catalog, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, ensureAgentConfigReady, AUG_PATH } from './providers.mjs';
 import { leave } from './roomcli.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -184,6 +184,11 @@ function doSummon(body) {
   const launch = join(agentHome, 'launch.sh');
   writeFileSync(launch, launchLines.join('\n'), { mode: 0o700 });
   try { chmodSync(launch, 0o700); } catch {}
+
+  // Clear Claude Code's first-run gates (onboarding / bypass-accept / folder
+  // trust) in the agent's dedicated config dir so an unattended native session
+  // never stalls on a prompt no one can answer.
+  ensureAgentConfigReady(provider.id, workspace);
 
   // Launch in a detached tmux session.
   const res = tmux(['new-session', '-d', '-s', tmuxSession, '-c', workspace, 'bash', launch]);

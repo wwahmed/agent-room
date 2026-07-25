@@ -1,7 +1,7 @@
 // providers.mjs — provider catalog, per-turn model invocation, and the
 // "reach this agent directly" instructions shown in the app.
 import { spawn, execFileSync } from 'node:child_process';
-import { readFileSync, unlinkSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync, renameSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +50,49 @@ export const CLAUDE_LANES = [
 export function claudeConfigDir(providerId) {
   const lane = CLAUDE_LANES.find((l) => l.id === providerId);
   return lane ? lane.dir : '';
+}
+
+// Pre-clear Claude Code's interactive first-run gates for a summoned agent so an
+// UNATTENDED native session never stalls on a prompt no one can answer:
+//   - hasCompletedOnboarding      → skips the theme picker
+//   - bypassPermissionsModeAccepted → skips the bypass-mode acceptance
+//   - projects[ws].hasTrustDialogAccepted → skips the "trust this folder?" gate
+//     (which even --dangerously-skip-permissions does NOT bypass).
+// Scoped to lanes with a DEDICATED config dir (e.g. the corporate agent lane);
+// the personal lane is the human's own ~/.claude.json and their folders are
+// already trusted — we never mutate that. Atomic write; best-effort.
+export function ensureAgentConfigReady(providerId, workspace) {
+  if (!providerId.startsWith('claude')) return;
+  const dir = claudeConfigDir(providerId);
+  if (!dir) return; // personal lane — do not touch the human's config
+  const cfgPath = join(dir, '.claude.json');
+  try {
+    const j = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8')) : {};
+    const before = JSON.stringify(j);
+    j.hasCompletedOnboarding = true;
+    j.bypassPermissionsModeAccepted = true;
+    const proj = (j.projects = j.projects || {});
+    const e = (proj[workspace] = proj[workspace] || {});
+    e.hasTrustDialogAccepted = true;
+    // Pre-DECLINE any project-.mcp.json servers so the "new MCP server found in
+    // this project" prompt never blocks — the agent runs --strict-mcp-config
+    // and only loads the agent-room server anyway.
+    try {
+      const mj = join(workspace, '.mcp.json');
+      if (existsSync(mj)) {
+        const servers = Object.keys(JSON.parse(readFileSync(mj, 'utf8')).mcpServers || {});
+        const disabled = new Set(e.disabledMcpjsonServers || []);
+        for (const s of servers) disabled.add(s);
+        e.disabledMcpjsonServers = [...disabled];
+        e.enabledMcpjsonServers = e.enabledMcpjsonServers || [];
+      }
+    } catch { /* no/invalid .mcp.json — nothing to pre-decline */ }
+    if (JSON.stringify(j) === before) return; // nothing changed — skip the write
+    const tmp = cfgPath + '.summoner-tmp';
+    writeFileSync(tmp, JSON.stringify(j, null, 2), { mode: 0o600 });
+    JSON.parse(readFileSync(tmp, 'utf8')); // verify it parses before swapping
+    renameSync(tmp, cfgPath);
+  } catch { /* best-effort; a prompt is still better than a corrupt config */ }
 }
 
 // Account (email + loggedIn) for a given Claude config dir. '' = default.
@@ -373,16 +416,20 @@ export function nativeLaunchSpec(cfg) {
       '--mcp-config', mcpConfigPath, '--strict-mcp-config',
       '--session-id', sessionId,
       ...(model ? ['--model', model] : []),
-      // Pre-approve the whole agent-room server so join/listen/send never block
-      // an unattended agent. Build edits auto-accept but stay visible.
-      '--allowedTools', 'mcp__agent-room',
-      // Permission level → real, EFFECTIVE flags (unattended, so it can't
-      // answer prompts): build = full autonomy in the workspace (edit + shell +
-      // git, so it can actually ship); edit = auto-accept edits only; chat = no
-      // workspace access. This is what fixes "everything's gated by a prompt".
-      ...(build ? ['--add-dir', workspace, '--permission-mode', 'bypassPermissions']
-        : access === 'edit' ? ['--add-dir', workspace, '--permission-mode', 'acceptEdits']
-        : []),
+      // Permission level → EFFECTIVE, unattended-safe flags. Key subtlety:
+      // BOTH --dangerously-skip-permissions AND --permission-mode
+      // bypassPermissions pop a one-time interactive "accept bypass mode"
+      // warning that a headless -p run skips but an interactive (native) run
+      // does NOT — and it isn't persisted to config, so it would block every
+      // launch. So we DON'T use bypass. Instead: --permission-mode acceptEdits
+      // (auto-accepts file edits, no warning) + an explicit allow-list that
+      // pre-approves the shell/file tools a build agent needs — full autonomy,
+      // zero prompts. Folder-trust + project-MCP prompts are pre-cleared in the
+      // agent config by ensureAgentConfigReady.
+      '--allowedTools', build
+        ? 'mcp__agent-room,Bash,Edit,Write,MultiEdit,NotebookEdit,Read,Glob,Grep,TodoWrite,WebFetch,WebSearch'
+        : 'mcp__agent-room',
+      ...(canWrite ? ['--add-dir', workspace, '--permission-mode', 'acceptEdits'] : []),
       '--append-system-prompt', contract,
       joinMsg,
     ];
