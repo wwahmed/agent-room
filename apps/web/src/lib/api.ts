@@ -729,6 +729,19 @@ export async function summonAgent(body: {
   return j.agent;
 }
 
+// One-step "bring the agents back": re-summon every agent that was in this room
+// (newest config per name), skipping any still alive. Returns the per-agent
+// outcome so the caller can toast a summary.
+export async function resummonRoomAgents(room: string): Promise<{ name: string; status: string }[]> {
+  const res = await fetch('/api/summon/resummon', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ room }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { agents?: { name: string; status: string }[]; error?: string; message?: string };
+  if (!res.ok) throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Resummon failed (${res.status})`), res.status);
+  return j.agents ?? [];
+}
+
 export async function dismissSummonedAgent(agentId: string, archived = false): Promise<void> {
   const res = await fetch('/api/summon/dismiss', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

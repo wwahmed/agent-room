@@ -34,7 +34,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, dismissSummonedAgent, type BoardTask, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, dismissSummonedAgent, resummonRoomAgents, type BoardTask, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -879,25 +879,11 @@ export function Room() {
     };
   }, [ended, messages.length]);
 
-  // Auto-close countdown
-  useEffect(() => {
-    if (!showIdlePrompt || ended) return;
-
-    setCountdown(AUTO_CLOSE_COUNTDOWN);
-    countdownRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          handleEndMeeting();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-    };
-  }, [showIdlePrompt, ended]);
+  // Owner ruling ("keep the rooms going"): rooms NO LONGER auto-close on idle.
+  // The idle notice below is informational only — a human ends a room
+  // explicitly, and an ended/quiet room's crew comes back in one click
+  // (Reactivate + bring agents back). The former 5s auto-close countdown that
+  // silently ended rooms (and killed the agents in them) is removed.
 
   const dismissIdlePrompt = useCallback(() => {
     setShowIdlePrompt(false);
@@ -2647,14 +2633,14 @@ export function Room() {
 
               {showIdlePrompt && !ended && (
                 <div className="sticky bottom-0 mx-auto bg-surface border border-border rounded-xl shadow-lg p-4 text-center max-w-sm">
-                  <p className="text-sm font-semibold text-ink mb-1">No activity for 1 hour</p>
-                  <p className="text-xs text-ink-soft mb-3">Meeting will close in <span className="font-bold text-red-600">{countdown}s</span></p>
+                  <p className="text-sm font-semibold text-ink mb-1">Quiet for a while</p>
+                  <p className="text-xs text-ink-soft mb-3">This room stays open and your agents keep running until you end it.</p>
                   <div className="flex gap-2 justify-center">
                     <button onClick={dismissIdlePrompt} className="px-4 py-1.5 bg-accent text-white text-xs font-semibold rounded-lg">
-                      Keep open
+                      Keep it going
                     </button>
                     <button onClick={handleEndMeeting} className="px-4 py-1.5 bg-red-500/10 text-red-300 text-xs font-semibold rounded-lg border border-red-400/30">
-                      End now
+                      End meeting
                     </button>
                   </div>
                 </div>
@@ -2770,11 +2756,27 @@ export function Room() {
                         if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
                         setEnded(false);
                         await refreshRoom();
+                        // Bring the crew back in the same click: re-summon every
+                        // agent that was in this room (skips any still alive).
+                        try {
+                          const back = await resummonRoomAgents(code);
+                          const revived = back.filter(a => a.status === 'resummoned').length;
+                          const { showToast } = await import('../components/Toast.js');
+                          showToast(
+                            revived > 0 ? `Reactivated — bringing ${revived} agent${revived === 1 ? '' : 's'} back…`
+                                        : 'Reactivated. No previous agents to bring back.',
+                            'success',
+                          );
+                          setTimeout(() => { void refreshRoom(); }, 4000);
+                        } catch (e) {
+                          const { showToast } = await import('../components/Toast.js');
+                          showToast(e instanceof Error ? `Reactivated, but resummon failed: ${e.message}` : 'Reactivated; resummon failed', 'error');
+                        }
                       } catch {}
                     }}
-                    className="text-xs font-semibold text-ink-muted bg-surface border border-border px-4 py-1.5 rounded-lg hover:border-accent/40 hover:text-accent transition"
+                    className="text-xs font-semibold text-white bg-accent/90 px-4 py-1.5 rounded-lg hover:bg-accent transition"
                   >
-                    Reactivate
+                    Reactivate &amp; bring agents back
                   </button>
                   <button onClick={() => navigate('/')} className="text-xs font-semibold text-ink-faint hover:text-ink-muted">Back to home</button>
                 </div>

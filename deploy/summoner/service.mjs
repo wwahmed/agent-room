@@ -214,6 +214,39 @@ function doSummon(body) {
   return { agent: publicAgent(agent) };
 }
 
+// One-step "bring the agents back": re-summon every distinct agent that was
+// ever in a room (newest config per name wins), skipping any still alive. Used
+// by the app's Reactivate flow so an ended/gone-quiet room's crew returns in a
+// single click instead of re-summoning each agent by hand.
+function doResummon(body) {
+  const room = String(body.room || '').trim();
+  if (!room) throw httpErr(400, 'room code is required');
+  const reg = loadRegistry();
+  const byName = {};
+  for (const a of Object.values(reg.agents)) {
+    if (a.room !== room) continue;
+    if (!byName[a.name] || a.createdAt > byName[a.name].createdAt) byName[a.name] = a;
+  }
+  const results = [];
+  for (const a of Object.values(byName)) {
+    if (a.status === 'active' && sessionAlive(a.tmuxSession)) {
+      results.push({ name: a.name, status: 'already-live' });
+      continue;
+    }
+    try {
+      const r = doSummon({
+        room, provider: a.provider, model: a.model, workspace: a.workspace,
+        name: a.name, role: a.role, mode: a.mode,
+        persistent: a.persistent !== false, native: Boolean(a.native),
+      });
+      results.push({ name: a.name, status: 'resummoned', agentId: r.agent.agentId });
+    } catch (e) {
+      results.push({ name: a.name, status: 'error', error: e.message });
+    }
+  }
+  return { room, agents: results };
+}
+
 async function doDismiss(body) {
   const r = loadRegistry();
   const a = r.agents[body.agentId];
@@ -263,6 +296,10 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/summon') {
       const body = JSON.parse((await readBody(req)) || '{}');
       return json(res, 200, doSummon(body));
+    }
+    if (req.method === 'POST' && url.pathname === '/resummon') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      return json(res, 200, doResummon(body));
     }
     if (req.method === 'POST' && url.pathname === '/dismiss') {
       const body = JSON.parse((await readBody(req)) || '{}');
