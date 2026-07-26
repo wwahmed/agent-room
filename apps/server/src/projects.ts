@@ -124,6 +124,21 @@ export function getProject(id: string): ProjectConfig | null {
   return loadRegistry()[id] ?? null;
 }
 
+/** The registered project whose repo root IS this path (realpath-compared),
+ *  or null. Lets a room whose workspace is a registered repo get its durable
+ *  ledger attached automatically instead of via a manual Board-tab step. */
+export function projectForRoot(root: string): { id: string; name: string } | null {
+  if (!root) return null;
+  let want: string;
+  try { want = realpathSync(resolve(root)); } catch { return null; }
+  for (const [id, cfg] of Object.entries(loadRegistry())) {
+    try {
+      if (realpathSync(resolve(cfg.root)) === want) return { id, name: cfg.name };
+    } catch { /* registered root missing on disk — skip */ }
+  }
+  return null;
+}
+
 /**
  * Resolve a doc role to an absolute path, guaranteed inside the project
  * root. Throws on unknown project/role, traversal (`..` in config), or

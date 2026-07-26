@@ -50,7 +50,7 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from './blobstore.js';
 import { verifyAccessJwt, allowedEmails } from './access.js';
-import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
+import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, projectForRoot, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { effectiveVerifier, verifierCollidesWithOwner } from './taskrules.js';
@@ -799,8 +799,8 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         const flagged = await casRoom(client, newCode, (cur) => ({ ...cur, qa: true }));
         return { room: flagged, hostKey };
       }
-      // T-18: optional project binding at create time (the web form makes
-      // it required; MCP clients may attach later via attachProject).
+      // T-18: optional project binding at create time (MCP clients may also
+      // attach later via attachProject).
       const projectId = String(payload.projectId || '');
       if (projectId) {
         if (!getProject(projectId)) {
@@ -809,6 +809,14 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           throw err;
         }
         const withProject = await casRoom(client, newCode, (cur) => ({ ...cur, projectId }));
+        return { room: withProject, hostKey };
+      }
+      // Auto-attach (host ask): a workspace that IS a registered project's
+      // repo gets its durable ledger from birth — the Board pitch should only
+      // ever appear for unregistered folders.
+      const autoProject = typeof payload.workspace === 'string' ? projectForRoot(payload.workspace) : null;
+      if (autoProject) {
+        const withProject = await casRoom(client, newCode, (cur) => ({ ...cur, projectId: autoProject.id }));
         return { room: withProject, hostKey };
       }
       return { room, hostKey };
@@ -1301,7 +1309,15 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     }
     case 'setWorkspace': {
       if (caller.kind !== 'local') await requireHost(code, payload.hostKey as string | undefined, caller);
-      return { room: await setRoomWorkspace(client, code, String(payload.workspace || '')) };
+      const wsRoom = await setRoomWorkspace(client, code, String(payload.workspace || ''));
+      // Same auto-attach as at creation: a room that gains a registered
+      // repo as its workspace (e.g. the first summon binding it) gets the
+      // project ledger without a manual Board-tab step.
+      if (!wsRoom.projectId) {
+        const autoWs = projectForRoot(String(payload.workspace || ''));
+        if (autoWs) return { room: await casRoom(client, code, (cur) => ({ ...cur, projectId: autoWs.id })) };
+      }
+      return { room: wsRoom };
     }
     case 'setTemplate': {
       // Host-editable room TYPE — this is what lets an existing room be
