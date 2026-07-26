@@ -116,6 +116,36 @@ function publicAgent(a) {
   };
 }
 
+// Attention-state ledger shared by the EVENT path (Claude Notification hook →
+// /agent-event, instant) and the SAMPLER fallback (45s pane sweep) so one
+// incident produces exactly one owner alert no matter which path saw it first.
+const watchState = new Map(); // agentId -> 'ok' | 'blocked' | 'dead'
+
+// Event-driven attention alert (the architectural fix): a lane-wide Claude
+// Notification hook posts {room,name} here the INSTANT the harness needs a
+// human — no polling latency. Classify from the pane (permission furniture →
+// blocked-on-prompt, else generic needs-attention), dedupe via watchState,
+// forward to the room server's owner-push pipe.
+function doAgentEvent(body) {
+  const room = String(body.room || '');
+  const name = String(body.name || '');
+  if (!room || !name) throw httpErr(400, 'room and name are required');
+  const r = loadRegistry();
+  const a = Object.values(r.agents).find((x) =>
+    x.room === room && x.name === name && x.status === 'active' && sessionAlive(x.tmuxSession));
+  if (!a) return { ok: true, ignored: 'no matching active agent' };
+  if (watchState.get(a.agentId) === 'blocked') return { ok: true, deduped: true };
+  const blocked = paneBlockedOnPrompt(a.tmuxSession);
+  watchState.set(a.agentId, 'blocked'); // the sampler clears this once the pane is clean
+  const kind = blocked ? 'blocked-on-prompt' : 'needs-attention';
+  console.log(`[agent-event] ${name} (${room}) -> ${kind}`);
+  fetch(`${ROOM_BASE}/api/agent-alert`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, room, kind }),
+  }).catch(() => { /* push is best-effort */ });
+  return { ok: true, kind };
+}
+
 // ---------- core actions ----------
 function doListWorkspaces() { return { groups: listGrouped() }; }
 function doListProviders(force = false) { return { providers: catalog(force) }; }
@@ -188,7 +218,14 @@ function doSummon(body) {
   let launchLines;
   if (native) {
     for (const f of native.files) writeFileSync(f.path, f.content, { mode: f.mode || 0o600 });
-    const envPairs = { PATH: AUG_PATH, ...native.env };
+    // SM_* identity rides the harness env so lane-wide hooks (the Claude
+    // Notification hook that makes attention alerts EVENT-DRIVEN) can say
+    // which agent fired without any per-agent config. Harmless elsewhere.
+    const envPairs = {
+      PATH: AUG_PATH,
+      SM_ROOM: room, SM_NAME: name, SM_SUMMONER: `http://127.0.0.1:${PORT}`,
+      ...native.env,
+    };
     launchLines = ['#!/bin/bash', 'set -e',
       ...Object.entries(envPairs).map(([k, v]) => `export ${k}=${shq(v)}`),
       `cd ${shq(workspace)}`,
@@ -432,6 +469,10 @@ async function handle(req, res) {
       const body = JSON.parse((await readBody(req)) || '{}');
       return json(res, 200, doRespond(body));
     }
+    if (req.method === 'POST' && url.pathname === '/agent-event') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      return json(res, 200, doAgentEvent(body));
+    }
     return json(res, 404, { error: 'not found' });
   } catch (e) {
     return json(res, e.status || 500, { error: e.message || String(e) });
@@ -456,14 +497,14 @@ if (verb) {
     try { catalog(); } catch { /* best-effort */ }
   });
 
-  // Watchdog (host order: enhance monitoring/resolution): every active native
-  // agent's screen is checked periodically; a TRANSITION into blocked-on-
-  // prompt or a dead tmux fires ONE owner push via the room server's loopback
-  // /api/agent-alert — the human gets interrupted instead of discovering a
-  // frozen agent minutes later. Transition-based so a long-blocked agent
-  // never renotifies until it clears and blocks again. Best-effort by design:
-  // the roster and the in-app amber badge remain the source of truth.
-  const watchState = new Map(); // agentId -> 'ok' | 'blocked' | 'dead'
+  // Sampler FALLBACK (demoted per host architecture call — the primary path
+  // is the event-driven Notification hook → /agent-event): every active
+  // native agent's screen is checked periodically; a TRANSITION into blocked-
+  // on-prompt or a dead tmux fires ONE owner push via the room server's
+  // loopback /api/agent-alert. Covers harnesses with no event hooks (codex,
+  // copilot) and clears watchState once a pane is clean so the next incident
+  // re-arms. Best-effort by design: the roster and the in-app amber badge
+  // remain the source of truth.
   setInterval(() => {
     try {
       const r = loadRegistry();

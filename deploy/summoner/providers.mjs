@@ -93,6 +93,33 @@ export function ensureAgentConfigReady(providerId, workspace) {
     JSON.parse(readFileSync(tmp, 'utf8')); // verify it parses before swapping
     renameSync(tmp, cfgPath);
   } catch { /* best-effort; a prompt is still better than a corrupt config */ }
+  ensureAttentionHook(dir);
+}
+
+// Event-driven attention alerts (host architecture call, 2026-07-25): register
+// a lane-wide Claude Code Notification hook that pings the summoner the
+// INSTANT the harness needs a human (permission request, waiting-for-input) —
+// replacing polling latency for the Claude lane. The hook reads the per-agent
+// SM_* env the launch script exports, so one lane-wide hook serves every
+// agent; a manual session in this lane without SM_ROOM no-ops harmlessly.
+const ATTENTION_HOOK_CMD =
+  '[ -n "$SM_ROOM" ] && [ -n "$SM_SUMMONER" ] && curl -s -m 3 -X POST "$SM_SUMMONER/agent-event" ' +
+  `-H 'content-type: application/json' --data "{\\"room\\":\\"$SM_ROOM\\",\\"name\\":\\"$SM_NAME\\"}" >/dev/null 2>&1; true`;
+export function ensureAttentionHook(dir) {
+  if (!dir) return; // personal lane — never touch the human's own settings
+  try {
+    const settingsPath = join(dir, 'settings.json');
+    const s = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
+    const hooks = (s.hooks = s.hooks || {});
+    const existing = JSON.stringify(hooks.Notification || null);
+    const desired = [{ hooks: [{ type: 'command', command: ATTENTION_HOOK_CMD }] }];
+    if (existing === JSON.stringify(desired)) return;
+    hooks.Notification = desired;
+    const tmp = settingsPath + '.summoner-tmp';
+    writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
+    JSON.parse(readFileSync(tmp, 'utf8'));
+    renameSync(tmp, settingsPath);
+  } catch { /* best-effort; the 45s sampler still covers this lane */ }
 }
 
 // Account (email + loggedIn) for a given Claude config dir. '' = default.

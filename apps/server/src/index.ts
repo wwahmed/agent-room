@@ -1897,12 +1897,14 @@ const server = createServer(async (req, res) => {
       try { alert = JSON.parse((await readBody(req)) || '{}'); } catch { /* keep defaults */ }
       const agentName = String(alert.name || 'An agent');
       const roomCode = String(alert.room || '');
-      const blocked = String(alert.kind || '') === 'blocked-on-prompt';
+      const alertKind = String(alert.kind || '');
+      const copy = alertKind === 'blocked-on-prompt'
+        ? { title: `${agentName} is waiting for your permission`, body: 'It hit a permission dialog and is paused. Tap to answer it from the People pane.' }
+        : alertKind === 'needs-attention'
+          ? { title: `${agentName} needs attention`, body: 'Its harness raised a notification and it may be waiting on you. Tap to check.' }
+          : { title: `${agentName}'s process stopped`, body: 'It exited unexpectedly. Relaunch it from the People pane.' };
       notifyOwnerAsync({
-        title: blocked ? `${agentName} is waiting for your permission` : `${agentName}'s process stopped`,
-        body: blocked
-          ? 'It hit a permission dialog and is paused. Tap to answer it from the People pane.'
-          : 'It exited unexpectedly. Relaunch it from the People pane.',
+        ...copy,
         url: roomCode ? `/r/${roomCode}?panel=people` : '/',
         tag: `agent-alert-${roomCode}-${agentName}`,
       });
