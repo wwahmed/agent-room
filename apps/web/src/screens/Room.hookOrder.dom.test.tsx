@@ -103,7 +103,7 @@ describe('Room hook-order stability across bootstrap transitions', () => {
       expect(btn, `workspace tab "${label}"`).toBeTruthy();
       return btn!;
     };
-    for (const label of ['Project', 'People', 'Outputs', 'Chat']) {
+    for (const label of ['Board', 'People', 'Outputs', 'Chat']) {
       await act(async () => { tab(label).click(); });
       expect(document.querySelector('[data-gate="feed"], main, [role="tablist"]')).not.toBeNull();
     }

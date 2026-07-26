@@ -94,7 +94,11 @@ type MainTab = 'chat' | InspectorTab;
 // — a settings page is not a sibling of the work surfaces.
 const MAIN_TABS: Array<{ key: MainTab; label: string; icon: React.ReactNode }> = [
   { key: 'chat', label: 'Chat', icon: <path d="M2 3.5h12v8H8.5L5 14v-2.5H2v-8Z" /> },
-  { key: 'project', label: 'Project', icon: <><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M2 6h12" /></> },
+  // "Board", not "Project": the conventions, the room_task_* tools, /brief,
+  // and every agent's vocabulary say "the board" — the tab must answer to the
+  // name agents send humans to (host report: "check the Board tab" → no such
+  // tab). Key stays 'project' so ?panel=project deep links keep working.
+  { key: 'project', label: 'Board', icon: <><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M2 6h12" /></> },
   { key: 'people', label: 'People', icon: <><circle cx="5.5" cy="5" r="2.25" /><path d="M1.75 13c.5-2.2 2-3.5 3.75-3.5S8.75 10.8 9.25 13" /><circle cx="11.5" cy="5.5" r="1.75" /><path d="M10.9 9.6c1.6.2 2.8 1.4 3.2 3.4" /></> },
   { key: 'outputs', label: 'Outputs', icon: <><path d="M8 1.75 14 4.5v7L8 14.25 2 11.5v-7L8 1.75Z" /><path d="M2 4.5 8 7.25l6-2.75M8 7.25v7" /></> },
   // T-71 rev (Waqas): room control lives in the CENTER cluster alongside the
@@ -2325,7 +2329,7 @@ export function Room() {
       </PageScaffold>
     ) : tab === 'project' ? (
       <PageScaffold
-        title="Project"
+        title="Board"
         purpose="The evidence-gated task board: claimed, built, submitted, verified."
         summary={activeRoom.projectId && taskPulse && taskPulse.length > 0 ? (() => {
           const done = taskPulse.filter(t => t.state === 'done').length;
