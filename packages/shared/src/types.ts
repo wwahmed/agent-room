@@ -265,6 +265,10 @@ export type MessageKind = 'msg' | 'sys';
 // for prompt construction (a Sequential supplement agent needs to see prior
 // turn messages to know what was already said).
 export interface MessageMetadata {
+  // The sender dictated this message by voice. Recipients (human and agent)
+  // should read transcription artifacts charitably — odd words may be the
+  // speech engine, not the speaker. Set by the web composer at send time.
+  dictated?: boolean;
   modeAtSend?: ReplyMode;
   roleAtSend?: RoleInTurn;
   // Stable id for the current turn (epoch ms of when the turn started).

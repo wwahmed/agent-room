@@ -239,6 +239,19 @@ function SwipeReplyIndicator({ progress }: { progress: number }) {
   );
 }
 
+/** Voice-dictated message tag: primes the reader to attribute odd words to
+ *  the speech engine, not the speaker (host ask, 2026-07-25). */
+function DictatedChip() {
+  return (
+    <span
+      className="text-fixed inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-softer px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft"
+      title="Dictated by voice — transcription may contain artifacts"
+    >
+      <span aria-hidden="true">🎤</span>dictated
+    </span>
+  );
+}
+
 export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, selfName, senderBrand }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
@@ -292,7 +305,10 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
-          <div className="msg-meta mt-1 text-right leading-none" title={exactTime(message.time)}>{messageTime(message.time, now)}</div>
+          <div className="msg-meta mt-1 flex items-center justify-end gap-1.5 leading-none" title={exactTime(message.time)}>
+            {message.metadata?.dictated && <DictatedChip />}
+            <span>{messageTime(message.time, now)}</span>
+          </div>
         </div>
       </div>
     );
@@ -362,6 +378,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
               demanding its full text width, which crushed a long name to 1ch
               and break-words then stacked it vertically (host screenshot). */}
           <span className="msg-author max-w-[60%] shrink-0 truncate">{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
+          {message.metadata?.dictated && <DictatedChip />}
           {ambiguous && <span className="msg-meta shrink-0">{message.client}</span>}
           {message.role && <span className="msg-meta hidden min-w-0 flex-1 truncate sm:block">{message.role}</span>}
           {!message.role && <span className="hidden flex-1 sm:block" aria-hidden="true" />}

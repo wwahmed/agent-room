@@ -1684,6 +1684,9 @@ export function Room() {
       attachments: attachments.length ? attachments : undefined,
       // T-54: quote-reply reference; the server sanitizes/truncates name+snippet.
       replyTo: replyingTo ?? undefined,
+      // Voice-dictated sends are tagged so recipients (and agents, who see
+      // this in the payload) read transcription artifacts charitably.
+      metadata: wasDictation ? { dictated: true } : undefined,
     };
     setText('');
     setDictationDraft(false);
