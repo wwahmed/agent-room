@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { listRoomAgentHistory, relaunchAgentWithMode, type SummonedAgent } from '../lib/api.js';
+import { listRoomAgentHistory, relaunchAgentWithMode, respondToAgentPrompt, type PromptRespondVerb, type SummonedAgent } from '../lib/api.js';
 import { brandFor } from '../lib/agentBrand.js';
 
 // Permission levels a summoned agent can be relaunched at. Labels mirror the
@@ -45,6 +45,10 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
   const [pendingLevel, setPendingLevel] = useState<PermissionLevel | null>(null);
   const [relaunching, setRelaunching] = useState(false);
   const [permissionNote, setPermissionNote] = useState<string | null>(null);
+  // Blocked-on-prompt flow: the agent's harness is sitting on an interactive
+  // permission dialog; the banner shows it and relays a human tap as a verb.
+  const [responding, setResponding] = useState(false);
+  const [promptNote, setPromptNote] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -81,6 +85,23 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
       setRelaunching(false);
     }
   }
+  async function onRespond(verb: PromptRespondVerb) {
+    if (!agent || responding) return;
+    setResponding(true);
+    setPromptNote(null);
+    try {
+      const out = await respondToAgentPrompt(agent.agentId, verb);
+      setAgent(out.agent);
+      setPromptNote(out.cleared
+        ? `Answered — ${participant.name} is working again.`
+        : 'Answer sent, but the dialog is still showing — it may have advanced to a follow-up prompt. Reopen to check.');
+    } catch (e) {
+      setPromptNote(e instanceof Error ? e.message : 'Could not deliver the answer.');
+    } finally {
+      setResponding(false);
+    }
+  }
+
   const resume = agent?.access?.find((l) => /Resume this|Chat directly/i.test(l));
   const resumeCmd = resume ? resume.split(':  ').slice(1).join(':  ') : '';
 
@@ -137,6 +158,35 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
             <div className="py-8 text-center text-sm text-ink-soft">Loading…</div>
           ) : (
             <>
+              {agent?.health === 'blocked-on-prompt' && (
+                <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3" data-gate="prompt-banner" role="alert">
+                  <div className="text-[13px] font-bold text-amber-300">Waiting for your permission</div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                    {participant.name} is stopped on a permission dialog and can't continue until someone answers it.
+                    This is its harness's own safety prompt — your tap below is the answer.
+                  </p>
+                  {agent.promptPreview && (
+                    <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-black/30 p-2.5 font-mono text-[11px] leading-snug text-ink-soft">{agent.promptPreview}</pre>
+                  )}
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    <button type="button" disabled={responding} onClick={() => { void onRespond('approve'); }}
+                      className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+                      {responding ? 'Sending…' : 'Approve'}
+                    </button>
+                    <button type="button" disabled={responding} onClick={() => { void onRespond('approve-always'); }}
+                      className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold transition hover:border-accent disabled:opacity-50">
+                      Always allow
+                    </button>
+                    <button type="button" disabled={responding} onClick={() => { void onRespond('deny'); }}
+                      className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-red-300 transition hover:border-red-400/60 disabled:opacity-50">
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              )}
+              {promptNote && (
+                <p role="status" className="mb-3 rounded-lg bg-surface-softer px-3 py-2 text-[13px] text-ink-soft">{promptNote}</p>
+              )}
               <dl className="divide-y divide-border-faint">
                 {rows.map(([k, v]) => (
                   <div key={k} className="flex items-start justify-between gap-4 py-2">

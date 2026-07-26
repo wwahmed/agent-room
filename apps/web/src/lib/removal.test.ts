@@ -65,6 +65,11 @@ describe('processBadge — process truth, not presence', () => {
     expect(processBadge({ name: 'Agent', client: 'cc' }, null)).toBe(null);
   });
 
+  it('a prompt-blocked process reads as actionable amber, not dead', () => {
+    expect(processBadge({ name: 'Agent', client: 'cc' }, [rec({ health: 'blocked-on-prompt' })]))
+      .toEqual({ label: 'waiting for permission — tap to answer', tone: 'warn' });
+  });
+
   it('flags a dismissed process as a stale row and an unmanaged agent as not ours', () => {
     expect(processBadge({ name: 'Agent', client: 'cc' }, [rec({ status: 'dismissed' })]))
       .toEqual({ label: 'process dismissed — row is stale', tone: 'dead' });

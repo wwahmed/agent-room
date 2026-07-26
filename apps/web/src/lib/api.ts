@@ -704,6 +704,9 @@ export interface SummonedAgent {
   account?: string; sessionId?: string; dismissedAt?: number; persistent?: boolean;
   /** Permission level (chat|edit|build) + a human label — what the agent can do. */
   accessLevel?: string; accessLabel?: string; native?: boolean;
+  /** When health is 'blocked-on-prompt': the dialog text the harness is stuck
+   *  on, so the sheet can show WHAT is being asked before approve/deny. */
+  promptPreview?: string;
 }
 
 /** All summoner records for a room, incl. dismissed (for join/leave history). */
@@ -795,6 +798,23 @@ export async function removeAgentFromRoom(opts: {
     removedRow = true;
   } catch { /* row may already be gone or auth failed; caller reports outcome */ }
   return { dismissed, removedRow };
+}
+
+// Answer a blocked agent's interactive permission dialog from the app. Verbs
+// only (approve / approve-always / deny) — the summoner maps them to the
+// harness dialog's keys and refuses unless the agent is actually waiting on a
+// prompt, so this can never type into a working agent. A human tap, relayed.
+export type PromptRespondVerb = 'approve' | 'approve-always' | 'deny';
+export async function respondToAgentPrompt(agentId: string, verb: PromptRespondVerb): Promise<{ agent: SummonedAgent; cleared: boolean }> {
+  const res = await fetch('/api/summon/respond', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ agentId, verb }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { agent?: SummonedAgent; cleared?: boolean; error?: string; message?: string };
+  if (!res.ok || !j.agent) {
+    throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Respond failed (${res.status})`), res.status);
+  }
+  return { agent: j.agent, cleared: Boolean(j.cleared) };
 }
 
 export async function dismissSummonedAgent(agentId: string, archived = false): Promise<void> {

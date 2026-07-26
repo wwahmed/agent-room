@@ -87,6 +87,9 @@ export function processBadge(p: RemovalParticipant, records: SummonedAgent[] | n
   if (!live) return { label: 'process dismissed — row is stale', tone: 'dead' };
   if (live.health === 'online') return { label: 'process online', tone: 'ok' };
   if (live.health === 'starting') return { label: 'process starting', tone: 'warn' };
+  // Not dead — the harness is alive but stopped on an interactive permission
+  // dialog. Amber, and named for what the human should do about it.
+  if (live.health === 'blocked-on-prompt') return { label: 'waiting for permission — tap to answer', tone: 'warn' };
   return { label: `process ${live.health || 'stopped'}`, tone: 'dead' };
 }
 

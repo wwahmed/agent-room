@@ -1901,6 +1901,7 @@ const server = createServer(async (req, res) => {
         'POST /api/summon/dismiss': '/dismiss',
         'POST /api/summon/relaunch': '/relaunch',
         'POST /api/summon/resummon': '/resummon',
+        'POST /api/summon/respond': '/respond',
       };
       const target = routeMap[`${req.method} ${path}`];
       if (!target) return sendJson(res, 404, { error: 'NotFound', message: 'unknown summon route' });

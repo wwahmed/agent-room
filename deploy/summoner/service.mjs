@@ -61,11 +61,13 @@ function killSession(session) {
 // copilot's "Allow directory access?" for a /tmp worktree) while reading as
 // "online" — a live tmux session says nothing about being blocked. Sniff the
 // visible pane tail for dialog furniture so the roster can say so.
-function paneBlockedOnPrompt(session) {
+function paneTail(session, lines = 35) {
   const out = tmux(['capture-pane', '-p', '-t', session]);
-  if (out.status !== 0) return false;
-  const tail = String(out.stdout || '').split('\n').slice(-35).join('\n');
-  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files/.test(tail);
+  if (out.status !== 0) return '';
+  return String(out.stdout || '').split('\n').slice(-lines).join('\n');
+}
+function paneBlockedOnPrompt(session) {
+  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files/.test(paneTail(session));
 }
 
 // ---------- helpers ----------
@@ -92,13 +94,17 @@ function health(agent) {
 }
 
 function publicAgent(a) {
+  const h = health(a);
   return {
     agentId: a.agentId, name: a.name, role: a.role, provider: a.provider,
     model: a.model, workspace: a.workspace, room: a.room, mode: a.mode,
     accessLevel: normalizeAccess(a.mode), accessLabel: accessLabel(a.mode), persistent: a.persistent,
     account: a.account || '', sessionId: a.sessionId, native: Boolean(a.native),
-    createdAt: a.createdAt, dismissedAt: a.dismissedAt, status: a.status, health: health(a),
+    createdAt: a.createdAt, dismissedAt: a.dismissedAt, status: a.status, health: h,
     tmuxSession: a.tmuxSession,
+    // The actual dialog the harness is stuck on, so the app can show the human
+    // WHAT is being asked before they approve/deny it from the sheet.
+    ...(h === 'blocked-on-prompt' ? { promptPreview: paneTail(a.tmuxSession, 28) } : {}),
     access: accessInstructions({ ...a, tmuxTmpdir: TMUX_TMPDIR }),
   };
 }
@@ -311,6 +317,36 @@ async function doRelaunch(body) {
   return { agent: r.agent, status: 'relaunched' };
 }
 
+// Answer a native agent's interactive dialog from the app (Waqas: no more
+// silent stalls). Constrained VERBS only — never free-form keystrokes from
+// the web — and only while the pane actually shows a dialog, so keys can
+// never be typed into a working agent's input box. This is a human's tap
+// relayed to the harness's own safety prompt; nothing here auto-answers.
+const RESPOND_KEYS = {
+  approve: ['Enter'],                    // accept the highlighted/default choice
+  'approve-always': ['2', 'Enter'],      // copilot's "Yes, and add to allowed list"
+  deny: ['Escape'],
+};
+function doRespond(body) {
+  const r = loadRegistry();
+  const a = r.agents[String(body.agentId || '')];
+  if (!a) throw httpErr(404, 'unknown agentId');
+  const keys = RESPOND_KEYS[body.verb];
+  if (!keys) throw httpErr(400, `verb must be approve, approve-always, or deny (got: ${body.verb ?? '(none)'})`);
+  if (a.status !== 'active' || !sessionAlive(a.tmuxSession)) throw httpErr(409, 'agent is not running');
+  if (!paneBlockedOnPrompt(a.tmuxSession)) throw httpErr(409, 'agent is not waiting on a prompt');
+  for (const k of keys) tmux(['send-keys', '-t', a.tmuxSession, k]);
+  // Give the dialog a beat to dismiss, then report the observed outcome so the
+  // sheet can flip its banner without a second round-trip.
+  const deadline = Date.now() + 2500;
+  let cleared = false;
+  while (Date.now() < deadline) {
+    if (!paneBlockedOnPrompt(a.tmuxSession)) { cleared = true; break; }
+    spawnSync('sleep', ['0.3']);
+  }
+  return { agent: publicAgent(a), cleared };
+}
+
 async function doDismiss(body) {
   const r = loadRegistry();
   const a = r.agents[body.agentId];
@@ -372,6 +408,10 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/dismiss') {
       const body = JSON.parse((await readBody(req)) || '{}');
       return json(res, 200, await doDismiss(body));
+    }
+    if (req.method === 'POST' && url.pathname === '/respond') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      return json(res, 200, doRespond(body));
     }
     return json(res, 404, { error: 'not found' });
   } catch (e) {
