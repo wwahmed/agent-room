@@ -9,7 +9,7 @@
 // ordinary unread (never silently dropped).
 
 import { createClient, listMessages } from './api.js';
-import { getReadCount, isSelfAuthored, isStatusPing, unreadCount } from './unread.js';
+import { effectiveReadCount, isSelfAuthored, isStatusPing, unreadCount } from './unread.js';
 import { textMentionsSelf } from './mentions.js';
 
 export interface UnreadWindowStats {
@@ -48,7 +48,10 @@ export function unreadWindowStats(
 ): Promise<UnreadWindowStats | null> {
   const raw = unreadCount(code, messageCount, selfName);
   if (raw <= 0 || typeof messageCount !== 'number') return Promise.resolve({ unread: raw, mentions: 0 });
-  const marker = getReadCount(code) ?? messageCount;
+  // Effective position (earned marker or device-local seed): the window base
+  // must match what the badge counted against, or spans go negative/undefined
+  // for rooms this device has only ever listed.
+  const marker = effectiveReadCount(code) ?? messageCount;
   const span = Math.max(0, messageCount - marker);
   if (span <= 0) return Promise.resolve({ unread: raw, mentions: 0 });
   const key = `${code}:${marker}:${messageCount}:${selfName.toLowerCase()}`;

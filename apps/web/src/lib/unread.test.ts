@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   firstUnreadMessageIndex,
+  getReadCount,
   isSelfAuthored,
   isStatusPing,
   markRoomRead,
@@ -29,6 +30,33 @@ describe('unread counts (T-62)', () => {
     expect(unreadCount('AAA-BBB-CCC', 59)).toBe(0);
     // ...and the seed sticks, so later messages DO count.
     expect(unreadCount('AAA-BBB-CCC', 62)).toBe(3);
+  });
+
+  it('a seed is DEVICE-LOCAL: no earned marker, no sync announcement (cross-room badge-clear bug)', () => {
+    // When seeding wrote a real marker, T-126's sync pushed "fully read" for
+    // every room a fresh browser profile merely LISTED — clearing badges on
+    // every other device for rooms never actually read.
+    const events: unknown[] = [];
+    const g = globalThis as unknown as { window?: { dispatchEvent: (e: unknown) => void } };
+    const priorWindow = g.window;
+    g.window = { dispatchEvent: (e: unknown) => { events.push(e); } };
+    try {
+      expect(unreadCount('SEED-ONLY-ROOM', 40)).toBe(0); // seeds
+      expect(getReadCount('SEED-ONLY-ROOM')).toBe(null); // nothing earned → nothing to sync
+      expect(events).toHaveLength(0);                    // and nothing announced
+      expect(unreadCount('SEED-ONLY-ROOM', 45)).toBe(5); // seed still counts new traffic
+    } finally {
+      if (priorWindow === undefined) delete g.window; else g.window = priorWindow;
+    }
+  });
+
+  it('an earned marker at/above the seed retires it; below it, the seed still masks', () => {
+    expect(unreadCount('SEEDED', 20)).toBe(0); // seed at 20
+    markRoomRead('SEEDED', 10);                // read partway on this device
+    expect(unreadCount('SEEDED', 20)).toBe(0); // seed (20) still masks, as before
+    markRoomRead('SEEDED', 25);                // read past the seed
+    expect(localStorage.getItem('wakichat:read-seed:SEEDED')).toBe(null);
+    expect(unreadCount('SEEDED', 27)).toBe(2); // earned marker governs from here
   });
 
   it('counts messages that arrived after the reader last caught up', () => {

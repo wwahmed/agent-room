@@ -13,12 +13,32 @@
 // later without changing the call sites.
 
 const KEY = (code: string) => `wakichat:read:${code}`;
+// A device-local SEED for rooms this browser has never opened: first sight of
+// a room card treats it as read (don't cry wolf), but a seed is display state
+// only — it must never masquerade as an earned marker, because earned markers
+// sync to the account (T-126). When seeds went through markRoomRead, one fresh
+// browser profile (or a PWA storage eviction) rendering Home once pushed
+// "fully read" for EVERY listed room to the server, and every other device
+// then merged it — Waqas's "opening the app cleared badges in rooms I never
+// read". Seeds stay on this device; only actual reading earns a synced marker.
+const SEED_KEY = (code: string) => `wakichat:read-seed:${code}`;
 const SELF_KEY = (code: string, selfName: string) =>
   `wakichat:self-seen:${code}:${encodeURIComponent(selfName.trim().toLocaleLowerCase())}`;
 
-/** How many messages this device has read. null = never opened. */
+/** How many messages this device has read. null = never opened. Earned
+ *  markers only — this is what the account sync reads and pushes. */
 export function getReadCount(code: string): number | null {
   return readMarker(code);
+}
+
+/** This device's effective reading POSITION for display math: the earned
+ *  marker or, for rooms never opened here, the local seed — whichever is
+ *  higher. Never used for sync (seeds must not leave this device). */
+export function effectiveReadCount(code: string): number | null {
+  const marker = readMarker(code);
+  const seed = seedMarker(code);
+  if (marker === null && seed === null) return null;
+  return Math.max(marker ?? 0, seed ?? 0);
 }
 
 function readMarker(code: string): number | null {
@@ -29,6 +49,17 @@ function readMarker(code: string): number | null {
     return Number.isFinite(n) && n >= 0 ? n : null;
   } catch {
     return null; // private mode / storage disabled → degrade to "nothing unread"
+  }
+}
+
+function seedMarker(code: string): number | null {
+  try {
+    const raw = localStorage.getItem(SEED_KEY(code));
+    if (raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  } catch {
+    return null;
   }
 }
 
@@ -51,6 +82,10 @@ export function markRoomRead(code: string, total: number, selfName = ''): void {
     // Once the absolute read marker catches up, locally-authored messages are
     // represented by that marker and no longer need a separate subtraction.
     if (selfName) localStorage.removeItem(SELF_KEY(code, selfName));
+    // An earned marker at/above the seed supersedes it — drop the seed so the
+    // synced position is the single source from here on.
+    const seed = seedMarker(code);
+    if (seed !== null && (readMarker(code) ?? 0) >= seed) localStorage.removeItem(SEED_KEY(code));
   } catch {
     /* storage unavailable — unread simply won't persist */
   }
@@ -151,9 +186,14 @@ export function firstUnreadMessageIndex<T extends { name?: string; client?: stri
 export function unreadCount(code: string, messageCount: number | undefined, selfName = ''): number {
   if (typeof messageCount !== 'number' || !Number.isFinite(messageCount)) return 0;
   const marker = readMarker(code);
-  if (marker === null) {
-    markRoomRead(code, messageCount, selfName); // seed, don't cry wolf
+  const seed = seedMarker(code);
+  if (marker === null && seed === null) {
+    // Seed, don't cry wolf — but DEVICE-LOCALLY (see SEED_KEY): no marker
+    // write, no sync event, nothing pushed to the account. Rooms this device
+    // never opened must not read as "fully read" on every other device.
+    try { localStorage.setItem(SEED_KEY(code), String(Math.floor(messageCount))); } catch { /* storage unavailable */ }
     return 0;
   }
-  return Math.max(0, messageCount - marker - selfSeenCount(code, selfName));
+  const effective = Math.max(marker ?? 0, seed ?? 0);
+  return Math.max(0, messageCount - effective - selfSeenCount(code, selfName));
 }
