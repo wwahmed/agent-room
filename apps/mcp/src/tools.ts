@@ -36,7 +36,7 @@ import {
 } from './roomApi.js';
 import { ROOM_ATTACHMENT_DOWNLOAD_TOOL, downloadRoomAttachment } from './attachmentDownloadTool.js';
 import { readRoomAttachmentText } from './attachmentRead.js';
-import { AVATAR_PALETTE, roleBriefFor, normalizeEscapedWhitespace } from '@agent-room/shared';
+import { AVATAR_PALETTE, ROOM_CONVENTIONS, roleBriefFor, normalizeEscapedWhitespace, templateInfo } from '@agent-room/shared';
 import type {
   Message,
   Participant,
@@ -1067,6 +1067,10 @@ export function registerTools(server: Server) {
           ...notice,
           recentMessages,
           roleBrief: roleBriefFor(a.role ?? ''),
+          // Room type + working conventions: every joiner learns how work is
+          // published here (markers/board/questions), not just how to listen.
+          roomTemplate: templateInfo(updated.templateId),
+          conventions: ROOM_CONVENTIONS,
           initialListenMs: listenMs,
           autoWatchStarted: !first.terminated && shouldAutoWatch,
           clientKind: harness.kind,
@@ -1095,6 +1099,8 @@ export function registerTools(server: Server) {
         ...notice,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
+        roomTemplate: templateInfo(updated.templateId),
+        conventions: ROOM_CONVENTIONS,
         autoWatchStarted: shouldAutoWatch,
         clientKind: harness.kind,
         hint: muted
@@ -1341,10 +1347,14 @@ export function registerTools(server: Server) {
       // poll iteration) — listen-returns happen on the order of every
       // few minutes, so this is negligible.
       let snapshot: ReplyModeSnapshot | undefined;
+      let roomTemplate: ReturnType<typeof templateInfo> = null;
       if (!result.terminated) {
         try {
           const room = await getRoom(client, a.code);
           snapshot = await readReplyModeSnapshot(client, room, selfName);
+          // Surface the room type on every listen return so a mid-session
+          // retag ('setTemplate') reaches agents without a rejoin.
+          roomTemplate = templateInfo(room.templateId);
         } catch { /* snapshot is best-effort */ }
       }
       return ok({
@@ -1352,6 +1362,7 @@ export function registerTools(server: Server) {
         cursor: result.cursor,
         ...(result.terminated ? { terminated: result.terminated } : {}),
         ...(snapshot ?? {}),
+        ...(roomTemplate ? { roomTemplate } : {}),
         hint: result.hint,
       });
     }

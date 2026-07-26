@@ -250,6 +250,9 @@ export interface CreateRoomInput {
   projectId?: string;
   /** Local workspace path this room is based in; summoned agents inherit it. */
   workspace?: string;
+  /** Room-template id (shared registry) — persisted on the room record so
+   *  every joiner, human or agent, can read the room's type. */
+  templateId?: string;
 }
 
 export async function createRoom(
@@ -262,8 +265,17 @@ export async function createRoom(
     createdBy: input.createdBy,
     projectId: input.projectId,
     workspace: input.workspace,
+    templateId: input.templateId,
   });
   return { ...out.room, hostKey: out.hostKey };
+}
+
+/** Set (or clear with '') the room's type — host-only. Converting an existing
+ *  room is just retagging it; the server announces the change in-room. */
+export async function setRoomTemplateAction(_client: ApiClient, code: string, templateId: string, auth: HostAuth = {}): Promise<Room> {
+  return (await call<{ room: Room }>({
+    action: 'setTemplate', code, templateId, hostKey: auth.hostKey ?? storedHostKey(code),
+  })).room;
 }
 
 /** Bind (or clear) the room's workspace — the source of truth agents inherit. */

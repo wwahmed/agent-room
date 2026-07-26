@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AVATAR_PALETTE, type Room } from '@agent-room/shared';
-import { createClient, createRoom, getRoom, RoomNotFoundError, casRoom, ConcurrencyError, joinRoom } from '../src/index.js';
+import { createClient, createRoom, getRoom, RoomNotFoundError, casRoom, ConcurrencyError, joinRoom, setRoomTemplate } from '../src/index.js';
 
 const ENV = { url: 'https://example.upstash.io', token: 't' };
 
@@ -34,6 +34,42 @@ describe('createRoom', () => {
     expect(stored.topic).toBe('Q3');
     expect(cmd).toContain('EX');
     expect(cmd).toContain(86400);
+  });
+});
+
+describe('room templates', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('createRoom persists the template id on the room record', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResp({ result: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createClient(ENV);
+    const room = await createRoom(client, {
+      code: 'ABC-DEF-GHJ', topic: 'Prod down', createdBy: 'Alex', templateId: 'incident',
+    });
+    expect(room.templateId).toBe('incident');
+    const [, init] = fetchMock.mock.calls[0]!;
+    const stored = JSON.parse(JSON.parse((init as any).body)[2]);
+    expect(stored.templateId).toBe('incident');
+  });
+
+  it('setRoomTemplate retags an existing room (conversion) and "" clears it', async () => {
+    const existing: Room = {
+      code: 'ABC-DEF-GHJ', topic: 'Q3', createdAt: 1, createdBy: 'Alex',
+      status: 'active', version: 2, participants: [],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(existing) })) // CAS read
+      .mockResolvedValueOnce(mockResp({ result: 'OK' }))                    // CAS write
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify({ ...existing, templateId: 'bug-fix', version: 3 }) }))
+      .mockResolvedValueOnce(mockResp({ result: 'OK' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = createClient(ENV);
+    const tagged = await setRoomTemplate(client, 'ABC-DEF-GHJ', 'bug-fix');
+    expect(tagged.templateId).toBe('bug-fix');
+    expect(tagged.version).toBe(3);
+    const cleared = await setRoomTemplate(client, 'ABC-DEF-GHJ', '');
+    expect(cleared.templateId).toBeUndefined();
   });
 });
 

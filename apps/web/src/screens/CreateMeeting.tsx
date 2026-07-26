@@ -67,6 +67,10 @@ export function CreateMeeting() {
         topic: normalizeRoomTopic(topic),
         createdBy: name.trim(),
         workspace: workspace || undefined,
+        // Persist the room's type server-side: joiners (and agents, via their
+        // join response) read it from the room record — no longer a
+        // this-browser-only sessionStorage fact.
+        templateId: template && template.id !== 'blank' ? template.id : undefined,
       });
       const code = created.code;
       sessionStorage.setItem(`room:${code}:self`, JSON.stringify({ name: name.trim(), role: role.trim() }));

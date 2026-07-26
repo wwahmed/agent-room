@@ -115,7 +115,8 @@ export type SystemEventType =
   | 'host_invoked'
   | 'moderator_dispatched'
   | 'question_created'
-  | 'reaction';
+  | 'reaction'
+  | 'template_changed';
 
 // Default per-role timeout values (in ms). Used when a room hasn't been
 // configured with custom overrides. Tuned higher than the chat default
@@ -221,6 +222,11 @@ export interface Room {
   // T-18: id of the server-registered project this room is attached to.
   // Always a registry slug, never a filesystem path.
   projectId?: string;
+  // Room-template id (shared/templates.ts registry). Host-editable AFTER
+  // creation ('setTemplate'), so existing rooms can be converted; undefined
+  // means untyped/blank. This is what turns templates from a create-form
+  // veneer into a shared fact every joiner (human or agent) can read.
+  templateId?: string;
 }
 
 // Structured prompts stored as private owner-decision documents. A safe link
@@ -279,6 +285,9 @@ export interface MessageMetadata {
   // Sequential mode: room_status heartbeat that renewed the speaker's deadline
   // instead of ending the turn (UI/report show "still working" pings).
   extendsTurn?: boolean;
+  // template_changed events: the template id the room was retagged to
+  // (absent when the host cleared the type).
+  templateId?: string;
   // Structured owner-question artifact linked from an inline chat card. The
   // card itself contains no private prompt/answer content; authorized viewers
   // resolve this id through the owner Questions API.

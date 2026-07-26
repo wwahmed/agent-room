@@ -34,9 +34,9 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
-import { templateById } from '../lib/templates.js';
+import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import {
@@ -992,6 +992,23 @@ export function Room() {
       }
     })();
   }, [room, self, ended, summonerAgents, health, code]);
+
+  // Host-only. Set/clear the room's TYPE — this is how an existing room gets
+  // converted to a template after the fact. The server persists the id on the
+  // room record and posts a system message so agents see the switch.
+  async function handleSetTemplate(templateId: string) {
+    if (!room || !self || room.createdBy !== self.name) return;
+    try {
+      await setRoomTemplateAction(createClient(), code, templateId);
+      const { showToast } = await import('../components/Toast.js');
+      const t = templateById(templateId);
+      showToast(t ? `Room type set to ${t.label}.` : 'Room type cleared.');
+      await refreshRoom();
+    } catch (e) {
+      const { showToast } = await import('../components/Toast.js');
+      showToast(e instanceof Error ? `Could not set room type: ${e.message}` : 'Could not set room type', 'error');
+    }
+  }
 
   async function handleArchiveRoom() {
     try {
@@ -1976,6 +1993,26 @@ export function Room() {
           );
         })()}
       </section>
+      {room.createdBy === self.name && !ended && (
+        <section aria-label="Room type" className="rounded-xl border border-border-faint bg-surface p-4">
+          {settingsSectionHead('Room type')}
+          <p className="mb-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+            The template this room follows. Changing it retags the room for everyone — a system message announces it,
+            and agents pick up the new conventions on their next listen or join.
+          </p>
+          <select
+            value={room.templateId ?? ''}
+            onChange={(e) => { void handleSetTemplate(e.target.value); }}
+            aria-label="Room type"
+            className="w-full rounded-lg border border-border bg-surface-softer px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+          >
+            <option value="">◇ Untyped (blank)</option>
+            {ROOM_TEMPLATES.filter((t) => t.id !== 'blank').map((t) => (
+              <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>
+            ))}
+          </select>
+        </section>
+      )}
       {room.createdBy === self.name && (
         <section aria-label="Archive" className="rounded-xl border border-border-faint bg-surface p-4">
           {settingsSectionHead('Archive')}

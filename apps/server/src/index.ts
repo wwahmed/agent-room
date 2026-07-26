@@ -37,7 +37,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TTL_SECONDS, roomTopicIssue, buildOwnerBrief, briefToSpeech, composeBrief } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TEMPLATES_SHARED, ROOM_TTL_SECONDS, isKnownTemplateId, roomTopicIssue, buildOwnerBrief, briefToSpeech, composeBrief, templateInfo } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 import { parseMultipart } from './multipart.js';
 import {
@@ -118,6 +118,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   reactivateRoom,
   archiveRoom,
   unarchiveRoom,
+  setRoomTemplate,
   setRoomWorkspace,
   removeParticipant,
   RoomNotFoundError,
@@ -773,12 +774,22 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         }
       }
       if (!newCode) throw new Error('could not allocate a room code');
+      // Template id must come from the shared registry — reject typos loudly
+      // rather than storing a template no layer can resolve (ba5b1fe lesson:
+      // silent normalization makes API misuse invisible).
+      const requestedTemplate = payload.templateId;
+      if (requestedTemplate !== undefined && requestedTemplate !== '' && !isKnownTemplateId(requestedTemplate)) {
+        const err = new Error(`Unknown templateId "${String(requestedTemplate)}". Known ids: ${ROOM_TEMPLATES_SHARED.map((t) => t.id).join(', ')}.`);
+        err.name = 'BadRequestError';
+        throw err;
+      }
       const created = await createRoom(client, {
         code: newCode,
         topic: normalizeRoomTopic(requestedTopic),
         createdBy: String(payload.createdBy || ''),
         hostAuthId: caller.kind === 'user' ? caller.email : undefined,
         workspace: typeof payload.workspace === 'string' && payload.workspace ? payload.workspace : undefined,
+        templateId: isKnownTemplateId(requestedTemplate) ? requestedTemplate : undefined,
       });
       const { hostKey, ...room } = created;
       // T-114: harness/probe rooms opt in as QA at creation (explicit flag or
@@ -1291,6 +1302,39 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     case 'setWorkspace': {
       if (caller.kind !== 'local') await requireHost(code, payload.hostKey as string | undefined, caller);
       return { room: await setRoomWorkspace(client, code, String(payload.workspace || '')) };
+    }
+    case 'setTemplate': {
+      // Host-editable room TYPE — this is what lets an existing room be
+      // CONVERTED (retagged) rather than templates being creation-only.
+      if (caller.kind !== 'local') await requireHost(code, payload.hostKey as string | undefined, caller);
+      const templateId = String(payload.templateId || '');
+      if (templateId && !isKnownTemplateId(templateId)) {
+        const err = new Error(`Unknown templateId "${templateId}". Known ids: ${ROOM_TEMPLATES_SHARED.map((t) => t.id).join(', ')}.`);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      const room = await setRoomTemplate(client, code, templateId);
+      // Announce the conversion in-room so agents observe it on their next
+      // listen and joiners can see when the type changed.
+      const info = templateInfo(templateId);
+      const now = Date.now();
+      try {
+        await appendSystemMessage(client, code, {
+          id: now,
+          type: 'sys',
+          name: 'system',
+          initials: '⚙️',
+          color: '#6B7280',
+          role: '',
+          client: 'cc',
+          time: now,
+          text: info
+            ? `Room type set to ${info.label} by the host. Agents: ${info.brief}`
+            : 'Room type cleared by the host (untyped room).',
+          metadata: { eventType: 'template_changed', ...(templateId ? { templateId } : {}) },
+        } as Message);
+      } catch { /* announcement is best-effort; the retag itself succeeded */ }
+      return { room };
     }
     case 'createReport': {
       const room = await getRoom(client, code);

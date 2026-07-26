@@ -48,6 +48,8 @@ export interface CreateRoomInput {
   ownerName?: string;
   /** Local workspace path this room is based in; summoned agents inherit it. */
   workspace?: string;
+  /** Room-template id (shared registry). Host-editable later via setRoomTemplate. */
+  templateId?: string;
 }
 
 // createRoom now returns the Room PLUS a one-time `hostKey`. The host stores
@@ -70,6 +72,7 @@ export async function createRoom(client: UpstashClient, input: CreateRoomInput):
     ownerEmail: input.ownerEmail,
     ownerName: input.ownerName,
     workspace: input.workspace,
+    templateId: input.templateId,
     status: 'active',
     version: 1,
     participants: [],
@@ -912,6 +915,20 @@ export async function setRoomWorkspace(
   return casRoom(client, code, (current) => ({
     ...current,
     workspace: workspace || undefined,
+  }));
+}
+
+// Set (or clear) the room's template id — host-editable so existing rooms can
+// be CONVERTED to a type, not just born with one. Joiners read it from the
+// room record; agents get the template brief in their join response.
+export async function setRoomTemplate(
+  client: UpstashClient,
+  code: string,
+  templateId: string,
+): Promise<Room> {
+  return casRoom(client, code, (current) => ({
+    ...current,
+    templateId: templateId || undefined,
   }));
 }
 

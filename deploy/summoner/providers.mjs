@@ -400,6 +400,9 @@ export function nativeLaunchSpec(cfg) {
     `You are working natively in ${workspace}${account ? ` on ${account}` : ''}${model ? ` (${model})` : ''}.`,
     `The room code is EXACTLY "${code}" — pass it verbatim to room_join. Room codes are word-style (e.g. cafe-ham-clog); do NOT reject or "correct" it for not being a 9-character dashed code, and do not ask for a different code.`,
     `CONTRACT: after you join, STAY in the room loop — keep calling room_listen; when a message needs you, reply with room_send, then room_listen again. Never end your turn while the room is active. Leave only if the room ends, you are removed from participants, or the host tells you to stop.`,
+    // Work conventions (short form — room_join returns the full canonical
+    // `conventions` blurb plus the room's template brief; follow those).
+    `WORK CONVENTIONS: prefix key messages with [STATUS] progress · [DECISION] choices · [RESULT] shipped work (commit/link/proof) · [TODO] handoffs — the room indexes marker lines as durable artifacts in its Outputs tab. Track multi-step work on the evidence-gated task board (room_task_create/claim/submit; a DIFFERENT agent verifies via room_task_verify). Ask the host structured questions with room_question_create instead of burying them in chat. Your room_join response includes the room's template brief and the full conventions — follow them.`,
     capText,
   ].join(' ');
   const capLabel = build ? 'can edit files + run commands' : access === 'edit' ? 'can edit files' : 'chat only';
