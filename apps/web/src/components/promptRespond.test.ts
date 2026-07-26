@@ -12,7 +12,10 @@ const server = readFileSync(new URL('../../../server/src/index.ts', import.meta.
 describe('permission-prompt respond flow', () => {
   it('the summoner accepts only the three verbs and refuses when no dialog is showing', () => {
     expect(service).toContain("approve: ['Enter']");
-    expect(service).toContain("'approve-always': ['2', 'Enter']");
+    // ddda552: verb→keys is furniture-aware — "always allow" is a different
+    // option number on codex vs copilot, so the map keys on the visible dialog.
+    expect(service).toContain('function respondKeysFor(tail)');
+    expect(service).toContain("'approve-always': codexStyle ? ['3', 'Enter'] : ['2', 'Enter']");
     expect(service).toContain("deny: ['Escape']");
     expect(service).toContain("if (!paneBlockedOnPrompt(a.tmuxSession)) throw httpErr(409, 'agent is not waiting on a prompt');");
   });

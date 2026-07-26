@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { createClient, createRoom, summonWorkspaces, type SummonWorkspaceGroup } from '../lib/api.js';
-import { normalizeRoomTopic, ROLE_PRESETS, roomTopicIssue } from '@agent-room/shared';
-import { ROOM_TEMPLATES, roleLabelFor, templateById } from '../lib/templates.js';
+import { normalizeRoomTopic, roomTopicIssue } from '@agent-room/shared';
+import { ROOM_TEMPLATES, roleLabelFor, suggestTemplateForTopic, templateById } from '../lib/templates.js';
+import { RolePicker } from '../components/RolePicker.js';
 import { fetchIdentity, lastRole } from '../lib/identity.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 
@@ -111,8 +112,59 @@ export function CreateMeeting() {
 
         {error && <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">{error}</div>}
 
+        {/* The room TYPE leads (teaching moment): cards say when to pick each,
+            and the choice seeds the name placeholder + agent briefs. Blank is
+            demoted to a skip link — structure is the default posture. */}
+        <div className="mb-5">
+          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">What kind of room?</span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {ROOM_TEMPLATES.filter(t => t.id !== 'blank').map(t => {
+              const active = t.id === templateId;
+              return (
+                <button
+                  type="button"
+                  key={t.id}
+                  onClick={() => pickTemplate(t.id)}
+                  aria-pressed={active}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                    active
+                      ? 'border-accent bg-accent-tint'
+                      : 'border-border bg-surface hover:border-accent/40'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                    <span aria-hidden="true">{t.emoji}</span>
+                    <span>{t.label}</span>
+                  </span>
+                  <span className="mt-0.5 block text-[12px] leading-snug text-ink-soft">{t.whenToUse}</span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => pickTemplate('blank')}
+            aria-pressed={templateId === 'blank'}
+            className={`mt-2 text-[12px] font-semibold transition ${templateId === 'blank' ? 'text-accent' : 'text-ink-faint hover:text-ink'}`}
+          >
+            {templateId === 'blank' ? '✓ Starting blank — just a topic' : 'Skip — just a topic, no structure'}
+          </button>
+          {template && template.id !== 'blank' && (
+            <div className="mt-2 rounded-xl border border-border-faint bg-surface p-3" data-gate="template-preview">
+              <p className="text-[12px] leading-relaxed text-ink-soft">{template.description}</p>
+              {template.suggestedRoleIds.length > 0 && (
+                <p className="mt-1 text-[12px] text-ink-faint">
+                  Suggested crew: {template.suggestedRoleIds.map(roleLabelFor).join(' · ')}
+                </p>
+              )}
+              <p className="mt-1 text-[12px] text-ink-faint">
+                Its opening message teaches the room the [DECISION] / [TODO] / [STATUS] / [RESULT] markers, and agents get this room type in their briefing.
+              </p>
+            </div>
+          )}
+        </div>
 
-        <label className="mb-4 block">
+        <label className="mb-1 block">
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Room name</span>
           <input value={topic} onChange={e => { setTopic(e.target.value); setError(null); }} required
             aria-invalid={Boolean(topic && roomTopicIssue(topic))}
@@ -124,6 +176,18 @@ export function CreateMeeting() {
             </span>
           )}
         </label>
+        {templateId === 'blank' && suggestTemplateForTopic(topic) && (
+          <button
+            type="button"
+            data-gate="template-suggestion"
+            onClick={() => pickTemplate(suggestTemplateForTopic(topic)!.id)}
+            className="mb-3 mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-accent/40 bg-accent-tint px-3 text-[12px] font-semibold text-accent transition hover:border-accent"
+          >
+            <span aria-hidden="true">{suggestTemplateForTopic(topic)!.emoji}</span>
+            Looks like a {suggestTemplateForTopic(topic)!.label} room — use that type?
+          </button>
+        )}
+        <div className="mb-4" />
 
         {wsGroups.length > 0 && (
           <label className="mb-4 block">
@@ -140,34 +204,6 @@ export function CreateMeeting() {
             </span>
           </label>
         )}
-
-        <div className="mb-5">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Template <span className="font-medium text-ink-faint">optional</span></span>
-          <div className="flex flex-wrap gap-1.5">
-            {ROOM_TEMPLATES.map(t => {
-              const active = t.id === templateId;
-              return (
-                <button
-                  type="button"
-                  key={t.id}
-                  onClick={() => pickTemplate(t.id)}
-                  title={`${t.description}${t.suggestedRoleIds.length ? ` · roles: ${t.suggestedRoleIds.map(roleLabelFor).join(', ')}` : ''}`}
-                  className={`flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition ${
-                    active
-                      ? 'border-accent bg-accent-tint text-accent'
-                      : 'border-border bg-surface text-ink-muted hover:border-accent/40 hover:text-ink'
-                  }`}
-                >
-                  <span aria-hidden="true">{t.emoji}</span>
-                  <span>{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {template && template.id !== 'blank' && (
-            <p className="mt-1.5 text-[12px] leading-relaxed text-ink-faint">{template.description}</p>
-          )}
-        </div>
 
         {identityKnown && !editIdentity ? (
           <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-border-faint bg-surface p-3">
@@ -192,18 +228,7 @@ export function CreateMeeting() {
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Your name</span>
               <input value={name} onChange={e => setName(e.target.value)} required className={fieldClass} />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Your role <span className="font-medium text-ink-faint">optional</span></span>
-              <select
-                value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
-                onChange={e => setRole(e.target.value)}
-                className={`${fieldClass} mb-2`}
-              >
-                <option value="">Custom role…</option>
-                {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
-              </select>
-              <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Frontend" className={fieldClass} />
-            </label>
+            <RolePicker value={role} onChange={setRole} fieldClass={fieldClass} />
           </div>
         )}
 

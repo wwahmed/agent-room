@@ -174,6 +174,25 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
   },
 ];
 
+// Suggest a room type from what the host is typing as the topic — the tag
+// chip this feeds is suggestion-only (host taps to accept), never auto-applied.
+const TOPIC_HINTS: Array<[RegExp, string]> = [
+  [/\b(bug|broken|crash|regression|not working|fix)\b/i, 'bug-fix'],
+  [/\b(incident|outage|down|sev ?\d|p0|on fire)\b/i, 'incident'],
+  [/\b(review|pull request|diff|patch)\b|\bpr\b/i, 'code-review'],
+  [/\b(support|customer|helpdesk|ticket|triage)\b/i, 'support-desk'],
+  [/\b(hq|ops|admin|master|home base)\b/i, 'live-ops'],
+  [/\b(build|feature|implement|greenfield)\b/i, 'feature-build'],
+  [/\b(strategy|brainstorm|direction|options)\b/i, 'strategy'],
+  [/\b(deliverable|deadline|client|delivery)\b/i, 'delivery'],
+];
+export function suggestTemplateForTopic(topic: string): RoomTemplate | undefined {
+  const t = String(topic || '').trim();
+  if (t.length < 3) return undefined;
+  for (const [re, id] of TOPIC_HINTS) if (re.test(t)) return templateById(id);
+  return undefined;
+}
+
 export function templateById(id: string | null | undefined): RoomTemplate | undefined {
   if (!id) return undefined;
   return ROOM_TEMPLATES.find(t => t.id === id);
