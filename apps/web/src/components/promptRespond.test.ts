@@ -15,7 +15,9 @@ describe('permission-prompt respond flow', () => {
     // ddda552: verb→keys is furniture-aware — "always allow" is a different
     // option number on codex vs copilot, so the map keys on the visible dialog.
     expect(service).toContain('function respondKeysFor(tail)');
-    expect(service).toContain("'approve-always': codexStyle ? ['3', 'Enter'] : ['2', 'Enter']");
+    // Furniture-aware verb map: option 3 on codex, plain Enter on Claude
+    // Code's binary proceed dialog (option 2 there means NO), 2 on copilot.
+    expect(service).toContain("'approve-always': codexStyle ? ['3', 'Enter'] : claudeStyle ? ['Enter'] : ['2', 'Enter']");
     expect(service).toContain("deny: ['Escape']");
     expect(service).toContain("if (!paneBlockedOnPrompt(a.tmuxSession)) throw httpErr(409, 'agent is not waiting on a prompt');");
   });

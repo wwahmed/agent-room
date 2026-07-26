@@ -3063,22 +3063,14 @@ export function Room() {
                     })}
                   </div>
                 )}
-                {/* T-128: a labeled, gently pulsing indicator while recording so
-                    it is unmistakably a live-transcription surface, distinct from
-                    a box you are typing into. Sits above the field; the field is
-                    already multi-line tall from the moment recording starts. */}
-                {dictating && (
-                  <div data-gate="transcribing" className="mx-1 mb-1 flex items-center gap-2 rounded-lg bg-accent/10 px-2.5 py-1 text-[12px] font-semibold text-accent">
-                    <span className="relative flex h-2 w-2" aria-hidden="true">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-                    </span>
-                    <span>Transcribing your voice…</span>
-                  </div>
-                )}
+                {/* Host order (UX sweep): NO instructional captions over the
+                    voice surface. The T-128 transcribing banner is gone — the
+                    recording bar's composite catch-up meter carries that state
+                    visually — and the draft bar below keeps only its FUNCTIONS
+                    (Undo / Clear), not the narration. */}
                 {dictationDraft && text.trim() && (
-                  <div className="mx-1 mt-1 flex items-center gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1.5 text-[12px]">
-                    <span className="min-w-0 flex-1 font-semibold text-accent-deep">Voice draft: editable. Type to revise, then Send.</span>
+                  <div className="mx-1 mt-1 flex items-center justify-end gap-2 rounded-lg border border-accent-tint-border bg-accent-tint px-2.5 py-1 text-[12px]">
+                    <span className="mr-auto text-accent-deep" aria-hidden="true">🎤</span>
                     <button
                       type="button"
                       onClick={() => { voiceRef.current?.pause(); setText(dictationUndoRef.current); setDictationDraft(false); setDictationPaused(false); requestAnimationFrame(() => textareaRef.current?.focus()); }}

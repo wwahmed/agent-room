@@ -18,10 +18,13 @@ describe('voice-draft field is a distinct transcription surface (T-128)', () => 
     expect(source).toContain('}, [text, composerExpanded, dictating]);');
   });
 
-  it('shows a labeled, animated Transcribing indicator only while recording', () => {
-    expect(source).toContain('data-gate="transcribing"');
-    expect(source).toContain('Transcribing your voice');
-    expect(source).toContain('animate-ping');
+  it('carries NO instructional captions — the composite meter and field accent are the language (host UX order)', () => {
+    // The T-128 "Transcribing your voice" banner and the "Voice draft:
+    // editable" narration are gone; the recording bar's catch-up meter and
+    // the field's recording accent say the same things visually.
+    expect(source).not.toContain('data-gate="transcribing"');
+    expect(source).not.toContain('Transcribing your voice');
+    expect(source).not.toContain('Voice draft: editable');
   });
 
   it('gives the whole field an always-on recording accent, distinct from typing focus', () => {

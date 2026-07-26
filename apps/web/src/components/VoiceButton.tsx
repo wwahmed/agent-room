@@ -190,6 +190,12 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   const [caughtUpShown, setCaughtUpShown] = useState(false);
   const caughtUpSinceRef = useRef<number | null>(null);
   const caughtUpTickedRef = useRef(false);
+  // Composite meter fill (0..1): how far transcription has caught up with
+  // speech, eased for display. Endpoints are exact — 1 only via the honest
+  // caughtUp signal — while the middle is animation over pending-upload /
+  // interim pressure, so the sweep reads as continuous progress.
+  const [catchup, setCatchup] = useState(0);
+  const catchupRef = useRef(0);
 
   const recording = snap.state === 'recording';
   const active = snap.state !== 'idle';
@@ -220,12 +226,25 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
       setCaughtUpShown(false);
       caughtUpSinceRef.current = null;
       caughtUpTickedRef.current = false;
+      catchupRef.current = 0;
+      setCatchup(0);
       return;
     }
     const id = window.setInterval(() => {
       const c = ctrlRef.current;
       const s = c ? c.snapshot() : null;
       if (s) setSnap(s);
+      // Meter target: full only on the honest caught-up signal; while words
+      // are in flight, hover partway — deeper the more segments are queued —
+      // so the fill visibly chases the speech.
+      const target = s?.caughtUp
+        ? 1
+        : s?.state !== 'recording'
+          ? catchupRef.current
+          : Math.max(0.12, 0.72 - 0.22 * ((s.pendingUploads ?? 0) + (s.interim ? 1 : 0)));
+      catchupRef.current += (target - catchupRef.current) * 0.18;
+      if (Math.abs(target - catchupRef.current) < 0.01) catchupRef.current = target;
+      setCatchup(catchupRef.current);
       if (s?.caughtUp) {
         const now = Date.now();
         if (caughtUpSinceRef.current === null) caughtUpSinceRef.current = now;
@@ -407,35 +426,35 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
               >
                 {noSignalMessage(snap)}
               </span>
-            ) : caughtUpShown && recording ? (
-              // Caught up: everything said so far is in the transcript. Shares
-              // the waveform's flexible slot (the eye is already here, next to
-              // Discard/Send), and the T-108/T-131 problem states above keep
-              // precedence — green never shows over buffered/dropped audio.
-              <span
-                role="status"
-                aria-live="polite"
-                data-gate="caught-up"
-                className="flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 overflow-hidden text-[12px] font-semibold text-emerald-300"
-                title="Transcription has caught up with your speech — safe to send"
-              >
-                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m3 8.5 3.1 3.1L13 4.7" />
-                </svg>
-                <span className="truncate">Caught up — safe to send</span>
-              </span>
             ) : (
-            /* T-85 hotfix: min-w-0 lets the waveform shrink below its bars'
-                min-content width - without it the flex row can never fit a
-                narrow viewport and the Use-draft control gets pushed out. */
-            <span className="flex h-8 min-w-0 flex-1 items-center justify-center gap-[3px] overflow-hidden" aria-hidden="true">
+            /* Composite recording + catch-up meter (host brief: ONE visual, no
+               narration). The strip is both the live-activity waveform AND the
+               transcription progress track: bars fill emerald from the left as
+               transcription catches up with speech, stay hot red where words
+               are still in flight, and the whole strip settles into a calm
+               green breathing motion when everything said is transcribed —
+               that settle (plus the Send button lighting up) IS "safe to
+               send". Endpoints are exact (full ⇔ the honest caughtUp signal);
+               the middle of the sweep is eased animation over pending-upload /
+               interim pressure. T-85's min-w-0 flex rule preserved. */
+            <span
+              role="status"
+              data-gate="catchup-meter"
+              aria-label={caughtUpShown ? 'Transcript caught up — safe to send' : 'Transcribing…'}
+              title={caughtUpShown ? 'Everything you said is in the transcript — safe to send' : 'Filling as transcription catches up with your speech'}
+              className="flex h-8 min-w-0 flex-1 items-center justify-center gap-[3px] overflow-hidden"
+            >
               {Array.from({ length: BARS }, (_, i) => {
-                const amp = 11;
-                const h = 3 + Math.abs(Math.sin(tick * 0.6 + i * 0.7)) * amp;
+                const done = (i + 1) / BARS <= catchup + 0.001;
+                // Settled: low, slow, green breathing. Transcribed: calmer
+                // green motion. In flight: the original hot red waveform.
+                const amp = caughtUpShown ? 3.5 : done ? 6 : 11;
+                const speed = caughtUpShown ? 0.22 : 0.6;
+                const h = 3 + Math.abs(Math.sin(tick * speed + i * 0.7)) * amp;
                 return (
                   <span
                     key={i}
-                    className="w-[3px] flex-shrink-0 rounded-full bg-red-400/80"
+                    className={`w-[3px] flex-shrink-0 rounded-full transition-colors duration-300 ${done ? 'bg-emerald-400/90' : 'bg-red-400/80'}`}
                     style={{ height: `${Math.min(30, h)}px` }}
                   />
                 );
@@ -464,7 +483,12 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
               }}
               aria-label={onSendTranscript ? 'Send message' : 'Use voice draft'}
               title={onSendTranscript ? 'Send' : 'Use draft (does not send the message)'}
-              className="flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full bg-accent px-3 text-white transition hover:opacity-90"
+              // The action itself signals readiness: when the transcript has
+              // caught up, Send lights up green — the second half of the
+              // composite meter's "safe to send", still with zero words.
+              className={`flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-white transition hover:opacity-90 ${
+                caughtUpShown ? 'bg-emerald-600 ring-2 ring-emerald-400/50' : 'bg-accent'
+              }`}
             >
               {onSendTranscript ? (
                 <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
