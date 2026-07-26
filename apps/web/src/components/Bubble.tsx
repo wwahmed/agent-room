@@ -208,7 +208,10 @@ function AttachmentActions({ attachment }: { attachment: MessageAttachment }) {
       <a
         href={attachment.url}
         download={attachment.name}
-        className="inline-flex min-h-11 items-center rounded-md bg-ink px-3 font-semibold text-white hover:bg-ink-soft"
+        // text-surface-sunken, not text-white: bg-ink flips light in dark
+        // mode, so the label must flip WITH it (same family as the code-block
+        // white-on-white fix, and how Home's Join button already does it).
+        className="inline-flex min-h-11 items-center rounded-md bg-ink px-3 font-semibold text-surface-sunken hover:bg-ink-soft"
       >
         Download
       </a>
@@ -256,7 +259,11 @@ export function MessageText({ text, selfName }: { text: string; selfName?: strin
       {blocks.map((block, index) => {
         if (block.type === 'code') {
           return (
-            <pre key={index} className="w-full max-w-none overflow-x-auto rounded-lg bg-ink px-3 py-2 text-[12px] leading-relaxed text-white/90">
+            /* Host screenshot (dark mode): bg-ink is the TEXT color token — it
+               flips near-white in dark theme, which painted white text on a
+               white pill. Code blocks are terminal chips: always-dark, both
+               themes, high contrast by construction. */
+            <pre key={index} className="w-full max-w-none overflow-x-auto rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-[12px] leading-relaxed text-zinc-100">
               <code>{block.lines.join('\n')}</code>
             </pre>
           );
