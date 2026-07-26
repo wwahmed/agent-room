@@ -169,8 +169,10 @@ export function Home() {
       {/* T-40: bottom padding clears the mobile sticky action bar. */}
       <main className="mx-auto max-w-3xl px-4 py-6 pb-28 sm:px-6 sm:py-10">
         {identity ? (
-          <p className="text-sm text-ink-soft">
-            Welcome back, <span className="font-semibold text-ink">{identity.name}</span>.
+          /* Demoted to an eyebrow (host screenshot: the greeting spent a whole
+             visual row saying little while the controls below were cramped). */
+          <p className="text-xs font-medium text-ink-faint">
+            Welcome back, <span className="font-semibold text-ink-soft">{identity.name}</span>
           </p>
         ) : checked ? (
           <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-card">
@@ -239,8 +241,13 @@ export function Home() {
         {/* T-40: Active/Ended segmented control with counts. Ended is lazy —
             its cards only render when the segment is selected. */}
         {identity && !roomsLoading && rooms.length > 0 && (
-          <div className="mt-5 flex items-center gap-2">
-            <div role="tablist" aria-label="Room lists" className="flex flex-1 rounded-xl bg-surface-softer p-1">
+          /* Host screenshot fix: on phones the tabs + sort crushed into one
+             unreadable string ("Active 5Ended 1Archived 15"). The row WRAPS —
+             segments take the full width first, the sort drops to its own
+             right-aligned line — and each count is a distinct pill inside its
+             tab instead of a bare number bleeding into the next label. */
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div role="tablist" aria-label="Room lists" className="flex w-full min-w-0 rounded-xl bg-surface-softer p-1 sm:w-auto sm:flex-1">
               {roomTabs.map(([key, label, count]) => (
                 <button
                   key={key}
@@ -248,22 +255,25 @@ export function Home() {
                   aria-selected={view === key}
                   onClick={() => { setView(key); setShowTestRooms(false); }}
                   // Type-floor gate finding: role=tab reads 16px on phones.
-                  className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[16px] font-semibold transition sm:text-sm ${
+                  className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[16px] font-semibold transition sm:text-sm ${
                     view === key ? 'bg-surface text-ink shadow-card' : 'text-ink-soft hover:text-ink'
                   }`}
                 >
-                  {label}
-                  <span className="tabular-nums text-ink-faint">{count}</span>
+                  <span className="truncate">{label}</span>
+                  <span className={`text-fixed rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
+                    view === key ? 'bg-accent-tint text-accent' : 'bg-surface text-ink-faint'
+                  }`}>{count}</span>
                 </button>
               ))}
             </div>
             {/* T-26/T-27: order control beside the segments — a native select
-                keeps it one 44px target on phones. */}
+                keeps it one 44px target on phones; ml-auto right-aligns it when
+                the row wraps. */}
             <select
               value={roomSort}
               onChange={e => changeRoomSort(e.target.value)}
               aria-label="Sort rooms"
-              className="min-h-11 flex-shrink-0 rounded-xl border border-border-faint bg-surface-softer px-2.5 text-[16px] font-semibold text-ink-soft outline-none transition focus:border-accent sm:text-sm"
+              className="ml-auto min-h-11 flex-shrink-0 rounded-xl border border-border-faint bg-surface-softer px-2.5 text-[16px] font-semibold text-ink-soft outline-none transition focus:border-accent sm:text-sm"
             >
               {ROOM_SORTS.map(option => (
                 <option key={option.value} value={option.value}>{option.label}</option>
