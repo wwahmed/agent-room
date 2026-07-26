@@ -39,6 +39,30 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [justSummoned, setJustSummoned] = useState<SummonedAgent | null>(null);
+  // Honest confirmation (Waqas: "it just switches screens"): after summoning
+  // we POLL until the agent is truly present — its process online AND its name
+  // in the room's participants — showing each stage as it completes instead of
+  // declaring victory at the API call.
+  const [inRoom, setInRoom] = useState(false);
+
+  useEffect(() => {
+    if (!justSummoned || inRoom) return;
+    const id = window.setInterval(() => {
+      void (async () => {
+        try {
+          const [list, room] = await Promise.all([
+            listSummonedAgents(),
+            getRoom(client, code).catch(() => null),
+          ]);
+          const cur = list.find((a) => a.agentId === justSummoned.agentId);
+          if (cur) setJustSummoned(cur);
+          if (room?.participants.some((p) => p.name === justSummoned.name)) setInRoom(true);
+        } catch { /* transient — keep polling */ }
+      })();
+    }, 2000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justSummoned?.agentId, inRoom]);
 
   const provider = useMemo(() => providers.find((p) => p.id === providerId) || null, [providers, providerId]);
 
@@ -110,6 +134,7 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
         room: code, provider: provider.id, model: resolvedModel,
         workspace: ws, name: name.trim(), role: role.trim(), mode, persistent,
       });
+      setInRoom(false);
       setJustSummoned(agent);
       setName('');
       await refreshAgents();
@@ -168,13 +193,46 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
           {loading ? (
             <div className="py-10 text-center text-sm text-ink-soft">Loading providers &amp; workspaces…</div>
           ) : justSummoned ? (
-            /* ---- RESULT step — replaces the form so it's one thing at a time ---- */
+            /* ---- RESULT step — live progress, not a premature victory screen.
+               Three staged checkpoints observed by polling: process spawned →
+               process online → actually in the room's People list. ---- */
             <div className="py-2">
               <div className="flex flex-col items-center text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-success text-[22px] font-bold text-white">✓</span>
-                <div className="mt-3 text-lg font-semibold text-ink">{justSummoned.name} is live</div>
-                <div className="mt-1 text-[13px] text-ink-soft">{justSummoned.provider} / {justSummoned.model || 'account-default'} · joined this room</div>
+                {inRoom ? (
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-success text-[22px] font-bold text-white">✓</span>
+                ) : (
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-accent/40">
+                    <span className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden="true" />
+                  </span>
+                )}
+                <div className="mt-3 text-lg font-semibold text-ink">
+                  {inRoom ? `${justSummoned.name} is in the room` : `Summoning ${justSummoned.name}…`}
+                </div>
+                <div className="mt-1 text-[13px] text-ink-soft">{justSummoned.provider} / {justSummoned.model || 'account-default'}</div>
               </div>
+              <ol className="mx-auto mt-4 w-full max-w-xs space-y-1.5" data-gate="summon-progress" aria-live="polite">
+                {([
+                  ['Process started', true],
+                  ['Agent running', justSummoned.health === 'online' || inRoom],
+                  ['Joined the room', inRoom],
+                ] as const).map(([label, done]) => (
+                  <li key={label} className="flex items-center gap-2.5 text-[13px]">
+                    {done
+                      ? <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-success text-[11px] font-bold text-white">✓</span>
+                      : <span className="h-5 w-5 flex-shrink-0 animate-pulse rounded-full border-2 border-border" aria-hidden="true" />}
+                    <span className={done ? 'text-ink' : 'text-ink-soft'}>{label}</span>
+                  </li>
+                ))}
+              </ol>
+              {justSummoned.health === 'blocked-on-prompt' && (
+                <div role="alert" className="mx-auto mt-3 w-full max-w-sm rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-[13px] text-ink-soft">
+                  <span className="font-bold text-amber-300">Waiting for your permission</span> — the agent hit a
+                  permission dialog while starting. Open People → tap {justSummoned.name} to answer it.
+                </div>
+              )}
+              {!inRoom && justSummoned.health !== 'blocked-on-prompt' && (
+                <p className="mt-3 text-center text-[12px] text-ink-faint">Usually takes 10–20 seconds — you can close this; it keeps going.</p>
+              )}
               <div className="mt-4 rounded-xl border border-border-faint bg-surface-softer p-3.5">
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Reach it directly anytime</div>
                 <ul className="space-y-1.5">
@@ -200,7 +258,15 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
             </div>
           ) : (
             <>
-              {/* Provider + Model — compact row */}
+              {/* Guided top-to-bottom flow (Waqas: the old single wall of
+                  fields taught nothing). Three numbered steps — WHO the agent
+                  is, WHERE it works, WHAT it may do — then summon. Same
+                  fields, sequential grammar. */}
+              <div className="mb-2 flex items-center gap-2" aria-hidden="true">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[12px] font-bold text-white">1</span>
+                <span className="text-[13px] font-bold uppercase tracking-wide text-ink">Who</span>
+                <span className="text-[12px] text-ink-faint">— pick the AI and name it</span>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-[13px] font-semibold text-ink">Provider</label>
@@ -237,10 +303,26 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
               ) : provider?.note ? (
                 <div className="mt-1.5 text-[11px] text-ink-soft">{provider.note}</div>
               ) : null}
-              <div className="mb-4" />
+              {/* Name + Role — part of WHO: identity before logistics. */}
+              <div className="mb-4 mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[13px] font-semibold text-ink">Display name</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CopilotDev"
+                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[13px] font-semibold text-ink">Role <span className="font-medium text-ink-faint">optional</span></label>
+                  <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Builder"
+                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink" />
+                </div>
+              </div>
 
               {/* Workspace — belongs to the room; the agent inherits it. */}
-              <label className="mb-1 block text-[13px] font-semibold text-ink">Workspace</label>
+              <div className="mb-2 flex items-center gap-2" aria-hidden="true">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[12px] font-bold text-white">2</span>
+                <span className="text-[13px] font-bold uppercase tracking-wide text-ink">Where</span>
+                <span className="text-[12px] text-ink-faint">— the folder it works in</span>
+              </div>
               {roomWorkspace && !overrideWs ? (
                 <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border-faint bg-surface-softer px-3 py-2.5">
                   <div className="min-w-0 text-sm text-ink">
@@ -268,22 +350,12 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
                 </>
               )}
 
-              {/* Name + Role */}
-              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-[13px] font-semibold text-ink">Display name</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CopilotDev"
-                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[13px] font-semibold text-ink">Role</label>
-                  <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Builder"
-                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink" />
-                </div>
-              </div>
-
               {/* Mode */}
-              <label className="mb-1 block text-[13px] font-semibold text-ink">Permissions</label>
+              <div className="mb-2 flex items-center gap-2" aria-hidden="true">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[12px] font-bold text-white">3</span>
+                <span className="text-[13px] font-bold uppercase tracking-wide text-ink">What it may do</span>
+                <span className="text-[12px] text-ink-faint">— you can change this later from People</span>
+              </div>
               <div className="mb-1 grid grid-cols-3 gap-2">
                 {([
                   ['chat', 'Chat', 'Room only'],
