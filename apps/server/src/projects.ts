@@ -622,10 +622,26 @@ export function syncTaskLedger(
   force = false,
 ): SyncResult {
   const { abs, rel, cfg } = resolveDocPath(projectId, 'tasks');
+  return syncLedgerAt({ abs, rel, rootReal: realpathSync(cfg.root), title: cfg.name }, roomCode, board, force);
+}
+
+/** A concrete ledger file the crash-safe writer/reader operates on. The
+ *  project path (registry repo docs) and the room-data path (app-owned
+ *  per-room directory) both resolve to one of these — the hardened write
+ *  machinery below is identical for either. */
+interface LedgerTarget { abs: string; rel: string; rootReal: string; title: string }
+
+function syncLedgerAt(
+  target: LedgerTarget,
+  roomCode: string,
+  board: LedgerBoardShape,
+  force = false,
+): SyncResult {
+  const { abs, rel, rootReal, title } = target;
   const now = Date.now();
   const section = renderManagedSection(board, roomCode, now);
 
-  const rootRealForIo = realpathSync(cfg.root);
+  const rootRealForIo = rootReal;
   // Canonical ledger identity keys the server-owned lock + journal. The
   // repo parent is swappable; the state dir is ours.
   const canonical = join(realpathSync(dirname(abs)), abs.split(sep).pop()!);
@@ -647,7 +663,7 @@ export function syncTaskLedger(
     // always read/write a consistent ledger, never a torn one.
     recoverLedger(abs, rootRealForIo, key);
 
-    let before = `# Task ledger — ${cfg.name}\n\nDurable record of WakiChat room task boards for this project. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
+    let before = `# Task ledger — ${title}\n\nDurable record of WakiChat room task boards. The\nfenced section below is machine-managed; write anything you like\noutside it.\n\n`;
     let after = '\n';
     ledgerFd = openNoFollow(abs, fsConstants.O_CREAT | fsConstants.O_RDWR, 0o644, rootRealForIo);
     const current = readFdText(ledgerFd);
@@ -687,7 +703,7 @@ export function syncTaskLedger(
         if (!force) {
           return { rel, bytes: 0, changed: false, hash: sectionHash(current), conflict: 'ledger has an incomplete managed section (torn write); review the file and run projectSync with force to rebuild it' };
         }
-        before = `# Task ledger — ${cfg.name}\n\n`;
+        before = `# Task ledger — ${title}\n\n`;
         after = '\n';
       } else {
         // Genuinely no managed section (user file, both markers absent):
@@ -739,11 +755,14 @@ export function syncTaskLedger(
 /** Read the embedded machine state back out of the ledger (board resume). */
 export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt: number; board: LedgerBoardShape } | null {
   const { abs, cfg } = resolveDocPath(projectId, 'tasks');
+  return loadLedgerAt(abs, realpathSync(cfg.root));
+}
+
+function loadLedgerAt(abs: string, rootReal: string): { roomCode: string; syncedAt: number; board: LedgerBoardShape } | null {
   if (!existsSync(abs)) return null;
   // Recovery runs before this READ too (Codex guardrail): a torn ledger left
   // by a crashed write is reconciled from the journal under the lock before
   // we parse it, so a resume never sees a partially-written board.
-  const rootReal = realpathSync(cfg.root);
   const canonical = join(realpathSync(dirname(abs)), abs.split(sep).pop()!);
   if (canonical !== rootReal && !canonical.startsWith(rootReal + sep)) return null;
   // T-32 F3: recover AND read the ledger while HOLDING the lock, via the same
@@ -771,6 +790,43 @@ export function loadLedgerBoard(projectId: string): { roomCode: string; syncedAt
   } catch {
     return null;
   }
+}
+
+// ---------- room-data root (v2: app-owned per-room durable storage) ----------
+//
+// Host architecture call (2026-07-25): every room's durable data lives under
+// ONE app-owned root, a directory per room, created automatically — no
+// registry entry required. The project registry above remains as an OPTIONAL
+// overlay for rooms that also want their ledger inside the product repo
+// (git-visible to the team); this root is the always-on baseline beneath it.
+
+export const ROOMS_DATA_ROOT = process.env.ROOMS_DATA_ROOT || join(homedir(), '.agent-room', 'rooms');
+// Word-style and legacy dashed codes only — anything else must not become a
+// filesystem path component.
+const ROOM_DIR_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
+
+export function roomDataDir(code: string): string {
+  const slug = String(code || '').toLowerCase();
+  if (!ROOM_DIR_RE.test(slug)) throw projErr('BadRequestError', `Invalid room code for a data directory: ${JSON.stringify(code)}`);
+  return join(ROOMS_DATA_ROOT, slug);
+}
+
+/** Write the room's board to its own data directory (created on demand).
+ *  Same crash-safe managed-section machinery as the project ledger. */
+export function syncRoomLedger(roomCode: string, board: LedgerBoardShape, force = false): SyncResult {
+  const dir = roomDataDir(roomCode);
+  mkdirSync(dir, { recursive: true });
+  return syncLedgerAt(
+    { abs: join(dir, 'TASKS.md'), rel: `${roomCode.toLowerCase()}/TASKS.md`, rootReal: realpathSync(dir), title: `room ${roomCode.toLowerCase()}` },
+    roomCode, board, force,
+  );
+}
+
+/** Read the room-data ledger back (board resume after Redis expiry). */
+export function loadRoomLedger(roomCode: string): { roomCode: string; syncedAt: number; board: LedgerBoardShape } | null {
+  const dir = roomDataDir(roomCode);
+  if (!existsSync(dir)) return null;
+  return loadLedgerAt(join(dir, 'TASKS.md'), realpathSync(dir));
 }
 
 // ---------- safe project onboarding (Codex T-18 gate 4) ----------

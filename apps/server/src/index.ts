@@ -50,7 +50,7 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from './blobstore.js';
 import { verifyAccessJwt, allowedEmails } from './access.js';
-import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, projectForRoot, readDoc, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
+import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, loadRoomLedger, projectForRoot, readDoc, syncRoomLedger, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
 import { applyAliasMigration, applyBindingOverride, AliasMigrationError } from './taskmigrate.js';
 import { effectiveVerifier, verifierCollidesWithOwner } from './taskrules.js';
@@ -811,6 +811,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         const withProject = await casRoom(client, newCode, (cur) => ({ ...cur, projectId }));
         return { room: withProject, hostKey };
       }
+      // v2 room-data root: every room's own durable directory exists from
+      // birth (empty ledger now, board state as it accrues). Best-effort —
+      // creation must never fail over a data-dir hiccup.
+      try { syncRoomLedger(newCode, { tasks: [] }); } catch { /* baseline dir is best-effort */ }
       // Auto-attach (host ask): a workspace that IS a registered project's
       // repo gets its durable ledger from birth — the Board pitch should only
       // ever appear for unregistered folders.
@@ -1769,7 +1773,19 @@ function taskBoardKey(code: string): string {
 
 async function getTaskBoard(code: string): Promise<TaskBoard> {
   const raw = await redis.get(taskBoardKey(code));
-  if (!raw) return { tasks: [] };
+  if (!raw) {
+    // Redis copy expired (24h TTL) or was lost: resume from the room's own
+    // durable ledger (v2 room-data root) so the board outlives the hot copy.
+    try {
+      const resumed = loadRoomLedger(code);
+      if (resumed && resumed.board.tasks.length > 0) {
+        const board = resumed.board as unknown as TaskBoard;
+        await saveTaskBoard(code, board);
+        return board;
+      }
+    } catch { /* resume is best-effort; an empty board is the safe default */ }
+    return { tasks: [] };
+  }
   try {
     const parsed = JSON.parse(raw) as TaskBoard;
     return Array.isArray(parsed.tasks) ? parsed : { tasks: [] };
@@ -1807,6 +1823,14 @@ async function syncProjectForRoom(code: string, force = false): Promise<SyncResu
  * projectSync reconverges.
  */
 async function commitBoard(code: string, board: TaskBoard): Promise<void> {
+  // v2 baseline: EVERY room's board persists to its own data directory —
+  // durable-first, same conflict discipline as the project ledger.
+  const roomRes = syncRoomLedger(code, board as unknown as Parameters<typeof syncRoomLedger>[1], false);
+  if (roomRes.conflict) {
+    const err = new Error(`Room ledger conflict: ${roomRes.conflict}`);
+    err.name = 'LedgerConflictError';
+    throw err;
+  }
   const room = await getRoom(client, code);
   if (room.projectId) {
     const res = syncTaskLedger(room.projectId, code, board, false);
