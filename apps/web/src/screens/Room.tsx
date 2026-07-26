@@ -40,8 +40,8 @@ import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import {
+  effectiveReadCount,
   firstUnreadMessageIndex,
-  getReadCount,
   isReactionEvent,
   isSelfAuthored,
   isStatusPing,
@@ -656,7 +656,11 @@ export function Room() {
   // window, fall back to messageTotal (a genuine first visit reads as caught-up).
   const markerGaveUpRef = useRef(false);
   if (arrivalReadRef.current === null && messageTotal > 0) {
-    const known = getReadCount(code);
+    // Effective position (earned marker OR device-local seed): a room this
+    // device only ever listed on Home still has a seed-anchored divider for
+    // the messages its badge counted — 90912b2 keeps seeds out of sync, not
+    // out of the landing math.
+    const known = effectiveReadCount(code);
     if (known !== null) arrivalReadRef.current = known;
     else if (markerGaveUpRef.current) arrivalReadRef.current = messageTotal;
   }
@@ -1218,7 +1222,7 @@ export function Room() {
     }
     let tries = 0;
     const poll = window.setInterval(() => {
-      if (getReadCount(code) !== null) {
+      if (effectiveReadCount(code) !== null) {
         window.clearInterval(poll);
         setMarkerNonce((n) => n + 1);
       } else if (++tries >= 20) {
