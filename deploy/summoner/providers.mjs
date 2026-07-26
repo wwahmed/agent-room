@@ -383,6 +383,19 @@ export function accessInstructions({ provider, model, workspace, tmuxSession, tm
 // null so the caller falls back to the headless driver. `seedKeys` (copilot) is
 // a prompt to type into the interactive REPL via tmux send-keys once it boots,
 // for harnesses that take no positional/system prompt.
+// Every agent-room MCP tool (apps/mcp/src/tools.ts). Codex approves MCP tools
+// per-tool per-first-use; an unattended session must have them all
+// pre-approved or it stalls on a dialog the first time it reaches for one.
+const CODEX_ROOM_TOOLS = [
+  'room_join', 'room_listen', 'room_send', 'room_status', 'room_list_messages',
+  'room_create', 'room_end', 'room_leave', 'room_watch', 'room_unwatch',
+  'room_export', 'room_minutes', 'room_reactivate', 'room_set_mode',
+  'room_skip_current', 'room_direct_invoke',
+  'room_question_create', 'room_question_list',
+  'room_task_list', 'room_task_create', 'room_task_claim', 'room_task_submit', 'room_task_verify',
+  'room_attachment_download', 'room_attachment_read',
+];
+
 export function nativeLaunchSpec(cfg) {
   const { provider, model, workspace, mode, name, role, code, sessionId,
           account, mcpConfigPath } = cfg;
@@ -454,6 +467,15 @@ export function nativeLaunchSpec(cfg) {
       '-c', `mcp_servers.agent-room.args=${toml(mcp.args)}`,
       ...Object.entries(mcp.env || {}).flatMap(([k, val]) =>
         ['-c', `mcp_servers.agent-room.env.${k}=${toml(val)}`]),
+      // `-a never` covers COMMAND approvals only: codex still pops a per-tool
+      // "Allow the agent-room MCP server to run tool X?" dialog on each tool's
+      // first use — observed live as CodexMaster stuck on room_join, silent,
+      // while the roster said online. Pre-approve every agent-room tool with
+      // the exact per-tool key codex itself persists when a human picks
+      // "Always allow" (verified against ~/.codex/config.toml). Our own MCP,
+      // our own tools — nothing third-party is being blanket-trusted.
+      ...CODEX_ROOM_TOOLS.flatMap((t) =>
+        ['-c', `mcp_servers.agent-room.tools.${t}.approval_mode="approve"`]),
       '-s', canWrite ? 'workspace-write' : 'read-only',
       '-a', 'never', // no approval prompts (unattended); attach to watch
       '--dangerously-bypass-hook-trust', // else codex blocks on a hooks-trust prompt, never joining

@@ -67,7 +67,11 @@ function paneTail(session, lines = 35) {
   return String(out.stdout || '').split('\n').slice(-lines).join('\n');
 }
 function paneBlockedOnPrompt(session) {
-  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files/.test(paneTail(session));
+  // Copilot furniture (allow/trust dialogs) + codex furniture (per-tool MCP
+  // approval: "Allow the agent-room MCP server to run tool X?" with
+  // "enter to submit | esc to cancel" — missed by the first pass, observed
+  // live as CodexMaster silently stuck on room_join while reading online).
+  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files|enter to submit \| esc to cancel|Allow the .{1,40} MCP server/.test(paneTail(session));
 }
 
 // ---------- helpers ----------
@@ -322,19 +326,27 @@ async function doRelaunch(body) {
 // the web — and only while the pane actually shows a dialog, so keys can
 // never be typed into a working agent's input box. This is a human's tap
 // relayed to the harness's own safety prompt; nothing here auto-answers.
-const RESPOND_KEYS = {
-  approve: ['Enter'],                    // accept the highlighted/default choice
-  'approve-always': ['2', 'Enter'],      // copilot's "Yes, and add to allowed list"
-  deny: ['Escape'],
-};
+// Verb → keys depends on WHICH harness's dialog is showing: "always allow" is
+// option 2 on copilot ("Yes, and add to allowed list") but option 3 on codex
+// ("Always allow"; its option 2 is session-only). Key the mapping on the
+// dialog furniture actually visible so one verb means the same thing
+// everywhere — never a fixed key blindly typed into the wrong menu.
+function respondKeysFor(tail) {
+  const codexStyle = /enter to submit \| esc to cancel|Allow the .{1,40} MCP server/.test(tail);
+  return {
+    approve: ['Enter'],                              // accept the highlighted/default choice
+    'approve-always': codexStyle ? ['3', 'Enter'] : ['2', 'Enter'],
+    deny: ['Escape'],
+  };
+}
 function doRespond(body) {
   const r = loadRegistry();
   const a = r.agents[String(body.agentId || '')];
   if (!a) throw httpErr(404, 'unknown agentId');
-  const keys = RESPOND_KEYS[body.verb];
-  if (!keys) throw httpErr(400, `verb must be approve, approve-always, or deny (got: ${body.verb ?? '(none)'})`);
   if (a.status !== 'active' || !sessionAlive(a.tmuxSession)) throw httpErr(409, 'agent is not running');
   if (!paneBlockedOnPrompt(a.tmuxSession)) throw httpErr(409, 'agent is not waiting on a prompt');
+  const keys = respondKeysFor(paneTail(a.tmuxSession))[body.verb];
+  if (!keys) throw httpErr(400, `verb must be approve, approve-always, or deny (got: ${body.verb ?? '(none)'})`);
   for (const k of keys) tmux(['send-keys', '-t', a.tmuxSession, k]);
   // Give the dialog a beat to dismiss, then report the observed outcome so the
   // sheet can flip its banner without a second round-trip.
