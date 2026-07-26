@@ -233,22 +233,37 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
               {!inRoom && justSummoned.health !== 'blocked-on-prompt' && (
                 <p className="mt-3 text-center text-[12px] text-ink-faint">Usually takes 10–20 seconds — you can close this; it keeps going.</p>
               )}
-              <div className="mt-4 rounded-xl border border-border-faint bg-surface-softer p-3.5">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Reach it directly anytime</div>
-                <ul className="space-y-1.5">
-                  {justSummoned.access.map((line, i) => {
-                    const parts = line.split(':  ');
-                    const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
-                    return (
-                      <li key={i} className="flex items-start gap-2">
-                        <code className="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
-                        <button type="button" onClick={() => { try { void navigator.clipboard.writeText(cmd); } catch { /* no clipboard */ } }}
-                          className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10">Copy</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+              {/* Progressive disclosure (Waqas: the command dump buried the
+                  status). The status IS this page; terminal access is an
+                  advanced need that expands on demand, with one copy-all. */}
+              <details className="group mt-4 overflow-hidden rounded-xl border border-border-faint bg-surface-softer/60" data-gate="summon-access-disclosure">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-3 text-[13px] font-semibold text-ink-soft transition hover:text-ink">
+                  <span>Need to reach it from a terminal?</span>
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-180" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+                </summary>
+                <div className="border-t border-border-faint px-3.5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => { try { void navigator.clipboard.writeText(justSummoned.access.join('\n')); } catch { /* no clipboard */ } }}
+                    className="mb-2 rounded-lg border border-border px-3 py-1.5 text-[12px] font-semibold text-accent transition hover:border-accent"
+                  >
+                    Copy all instructions
+                  </button>
+                  <ul className="space-y-1.5">
+                    {justSummoned.access.map((line, i) => {
+                      const parts = line.split(':  ');
+                      const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
+                      return (
+                        <li key={i} className="flex items-start gap-2">
+                          <code className="min-w-0 flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
+                          <button type="button" onClick={() => { try { void navigator.clipboard.writeText(cmd); } catch { /* no clipboard */ } }}
+                            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10">Copy</button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </details>
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={() => { setJustSummoned(null); setName(''); }}
                   className="flex-1 rounded-xl border border-border px-3 py-2.5 text-[13px] font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink">＋ Summon another</button>
