@@ -28,7 +28,15 @@ interface DetailParticipant {
 // Full detail view for a room participant — pulls the summoner record (account,
 // model, provider, session, join/leave dates) when it's an agent we summoned,
 // and falls back to the participant row for join-code agents.
-export function AgentDetailsSheet({ code, participant, onClose }: { code: string; participant: DetailParticipant; onClose: () => void }) {
+export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
+  code: string;
+  participant: DetailParticipant;
+  onClose: () => void;
+  /** Host-only: the unified "Remove from room" verb (same flow as the
+   *  People-row ×) — stops the summoned process if we manage one, then frees
+   *  the participant row. Absent for non-hosts and for the host's own row. */
+  onRemove?: () => void;
+}) {
   const [agent, setAgent] = useState<SummonedAgent | null>(null);
   const [loading, setLoading] = useState(true);
   // Permission-change flow: closed → picking a level → confirming the
@@ -194,6 +202,25 @@ export function AgentDetailsSheet({ code, participant, onClose }: { code: string
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {onRemove && (
+                <div className="mt-4 border-t border-border-faint pt-4" data-gate="remove-from-room">
+                  <button
+                    type="button"
+                    onClick={onRemove}
+                    className="min-h-11 w-full rounded-lg border border-red-400/40 bg-red-500/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
+                  >
+                    Remove from room{agent?.status === 'active' ? ' (stops its agent process)' : ''}
+                  </button>
+                  <p className="mt-1.5 text-[12px] text-ink-faint">
+                    {agent?.status === 'active'
+                      ? 'Dismisses the summoned process on this Mac and frees its seat in this room. You can summon it again later.'
+                      : agent
+                        ? 'Its process is already dismissed — this just clears the leftover row in People.'
+                        : 'Joined by code: its process runs elsewhere and is not stopped — it only loses its seat in this room.'}
+                  </p>
                 </div>
               )}
 

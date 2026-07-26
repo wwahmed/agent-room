@@ -759,6 +759,32 @@ export async function relaunchAgentWithMode(agentId: string, mode: 'chat' | 'edi
   return j.agent;
 }
 
+// The unified "Remove from room" verb: stop the summoner process when we
+// manage one, then free the participant row. Either half alone is what used to
+// confuse the host (× left the process running; Dismiss left a ghost row).
+// Row removal is a silent server-side no-op when the row is already gone (the
+// summoner's own leave() may have raced us), so double-removal is safe.
+export interface RemoveAgentOutcome { dismissed: boolean; removedRow: boolean }
+export async function removeAgentFromRoom(opts: {
+  code: string;
+  requesterName: string;
+  targetName: string;
+  targetClient: ClientKind;
+  agentId?: string | null;
+}): Promise<RemoveAgentOutcome> {
+  let dismissed = false;
+  if (opts.agentId) {
+    // Summoner down ≠ abort: still free the row so the People pane is honest.
+    try { await dismissSummonedAgent(opts.agentId); dismissed = true; } catch { /* best-effort */ }
+  }
+  let removedRow = false;
+  try {
+    await removeParticipant(createClient(), opts.code, opts.requesterName, opts.targetName, opts.targetClient);
+    removedRow = true;
+  } catch { /* row may already be gone or auth failed; caller reports outcome */ }
+  return { dismissed, removedRow };
+}
+
 export async function dismissSummonedAgent(agentId: string, archived = false): Promise<void> {
   const res = await fetch('/api/summon/dismiss', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

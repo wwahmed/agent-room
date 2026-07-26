@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   summonProviders, summonWorkspaces, listSummonedAgents, summonAgent, dismissSummonedAgent,
-  getRoom, setRoomWorkspaceAction, createClient,
+  removeAgentFromRoom, getRoom, setRoomWorkspaceAction, createClient,
   type SummonProvider, type SummonWorkspaceGroup, type SummonedAgent,
 } from '../lib/api.js';
 
 interface Props {
   code: string;
   onClose: () => void;
+  /** Host identity for the unified removal verb — dismissing an agent here
+   *  also frees its participant row, which needs the host's authority. */
+  selfName?: string;
 }
 
 const CUSTOM = '__custom__';
 
-export function SummonAgentSheet({ code, onClose }: Props) {
+export function SummonAgentSheet({ code, onClose, selfName }: Props) {
   const [providers, setProviders] = useState<SummonProvider[]>([]);
   const [groups, setGroups] = useState<SummonWorkspaceGroup[]>([]);
   const [agents, setAgents] = useState<SummonedAgent[]>([]);
@@ -118,7 +121,19 @@ export function SummonAgentSheet({ code, onClose }: Props) {
   }
 
   async function onDismiss(agentId: string) {
-    try { await dismissSummonedAgent(agentId); await refreshAgents(); }
+    try {
+      // The unified removal verb: dismissing here must ALSO free the agent's
+      // participant row, or the People pane keeps a ghost (the summoner's own
+      // self-leave is best-effort and can miss). Falls back to a bare dismiss
+      // when the caller identity is unknown.
+      const rec = agents.find((a) => a.agentId === agentId);
+      if (rec && selfName) {
+        await removeAgentFromRoom({ code, requesterName: selfName, targetName: rec.name, targetClient: 'cc', agentId });
+      } else {
+        await dismissSummonedAgent(agentId);
+      }
+      await refreshAgents();
+    }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }
 

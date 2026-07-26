@@ -34,7 +34,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, dismissSummonedAgent, resummonRoomAgents, type BoardTask, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
@@ -51,6 +51,7 @@ import {
 } from '../lib/unread.js';
 import { withinAnchoredMutation } from '../lib/readingAnchor.js';
 import { scrollReadCount } from '../lib/scrollRead.js';
+import { processBadge, removalPlan, staleAgentRows } from '../lib/removal.js';
 import { startReadingHeartbeat } from '../lib/readSync.js';
 import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
@@ -537,6 +538,24 @@ export function Room() {
     const id = window.setInterval(() => { void pull(); }, 15000);
     return () => { cancelled = true; window.clearInterval(id); };
   }, [code]);
+  // Summoner registry view for this room: PROCESS-level truth (online /
+  // stopped / dismissed), distinct from the server's listen-loop verdict
+  // above. Advisory: the endpoint is owner-gated, so a non-owner session just
+  // gets nothing and the UI omits process badges. null = not loaded yet.
+  const [summonerAgents, setSummonerAgents] = useState<SummonedAgent[] | null>(null);
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const rows = await listRoomAgentHistory(code);
+        if (!cancelled) setSummonerAgents(rows);
+      } catch { /* advisory; never break the room over it */ }
+    };
+    void pull();
+    const id = window.setInterval(() => { void pull(); }, 30000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [code]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   // T-53/T-54: the message being quote-replied to (composer chip + send payload).
   const [replyingTo, setReplyingTo] = useState<MessageReplyRef | null>(null);
@@ -908,22 +927,67 @@ export function Room() {
     }
   }
 
-  // Host-only. Removes (name, client) from the room. The kicked client will
-  // notice it's gone on its next room poll / room_listen and can be told to
-  // leave by their UI. Reconnection is not blocked — they'd need to be re-joined.
-  async function handleKick(p: { name: string; client: 'web' | 'cc' }) {
+  // Host-only. THE unified removal verb: the People-row × and the details
+  // sheet both route here. One confirm that states exactly what will happen
+  // (removalPlan), then both halves of the action — dismiss the summoner
+  // process when we manage one, and free the participant row. Historically ×
+  // only removed the row (process kept running) while Dismiss only killed the
+  // process (ghost row lingered); doing both is what makes removal mean one
+  // thing. Reconnection is not blocked — they'd need to be re-joined.
+  async function handleRemove(p: { name: string; client: 'web' | 'cc' }) {
     if (!room || !self || room.createdBy !== self.name) return;
-    if (p.name === self.name && p.client === 'web') return; // host can't kick themselves
-    if (!confirm(`Remove ${p.name} (${p.client}) from the room?`)) return;
-    try {
-      const client = createClient();
-      await removeParticipant(client, code, self.name, p.name, p.client);
-      await refreshRoom();
-    } catch (e) {
-      const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Kick failed: ${e.message}` : 'Kick failed', 'error');
+    if (p.name === self.name && p.client === 'web') return; // host can't remove themselves
+    const plan = removalPlan(p, summonerAgents ?? []);
+    if (!confirm(plan.confirm)) return;
+    const outcome = await removeAgentFromRoom({
+      code, requesterName: self.name, targetName: p.name, targetClient: p.client, agentId: plan.agentId,
+    });
+    const { showToast } = await import('../components/Toast.js');
+    if (!outcome.removedRow && !outcome.dismissed) {
+      showToast(`Could not remove ${p.name} — try again.`, 'error');
+    } else if (plan.agentId && !outcome.dismissed) {
+      showToast(`${p.name} removed from the room, but its process could not be stopped — check the summoner.`, 'error');
+    } else {
+      showToast(plan.agentId ? `${p.name} removed — agent process stopped.` : `${p.name} removed from the room.`);
     }
+    try { setSummonerAgents(await listRoomAgentHistory(code)); } catch { /* advisory */ }
+    await refreshRoom();
   }
+
+  // Ghost sweep (host only, one shot per open): a row whose summoner record
+  // says the process is gone AND whom the server sees as disconnected is a
+  // leftover from a dismiss whose self-leave failed (missing keyfile, server
+  // blip). Clear those quietly so People reflects reality. Conservative by
+  // construction: join-code agents and anything still listening are untouched
+  // (a manually-resumed session keeps its seat).
+  const sweptGhostsRef = useRef(false);
+  useEffect(() => {
+    if (sweptGhostsRef.current || ended) return;
+    if (!room || !self || room.createdBy !== self.name) return;
+    if (summonerAgents === null || health.length === 0) return;
+    sweptGhostsRef.current = true;
+    const byKey = indexHealth(health);
+    const ghosts = staleAgentRows(
+      room.participants,
+      summonerAgents,
+      (p) => byKey.get(healthKey(p.name, p.client as 'cc'))?.state ?? null,
+    );
+    if (ghosts.length === 0) return;
+    void (async () => {
+      let cleared = 0;
+      for (const g of ghosts) {
+        const out = await removeAgentFromRoom({
+          code, requesterName: self.name, targetName: g.name, targetClient: g.client as 'cc', agentId: null,
+        });
+        if (out.removedRow) cleared++;
+      }
+      if (cleared > 0) {
+        const { showToast } = await import('../components/Toast.js');
+        showToast(`Cleared ${cleared} stale agent row${cleared === 1 ? '' : 's'} — process already dismissed.`);
+        await refreshRoom();
+      }
+    })();
+  }, [room, self, ended, summonerAgents, health, code]);
 
   async function handleArchiveRoom() {
     try {
@@ -2030,6 +2094,21 @@ export function Room() {
                             )}
                           </div>
                         )}
+                        {/* Process-level truth from the summoner registry —
+                            deliberately separate from the presence verdict
+                            above: presence says whether the loop is armed,
+                            this says whether the PROCESS even exists. A
+                            dismissed-process row is the "ghost" the host can
+                            (and the open-sweep will) clean up. */}
+                        {(() => {
+                          const proc = processBadge(p, summonerAgents);
+                          if (!proc) return null;
+                          const tone = proc.tone === 'ok' ? 'text-emerald-300'
+                            : proc.tone === 'warn' ? 'text-amber-300'
+                            : proc.tone === 'dead' ? 'text-red-300'
+                            : 'text-ink-faint';
+                          return <div className={`msg-meta mt-0.5 font-medium ${tone}`}>⚙ {proc.label}</div>;
+                        })()}
                         {h && canRecover(h, ended) && (
                           <button
                             type="button"
@@ -2109,7 +2188,7 @@ export function Room() {
                           )}
                           {canKick && (
                             <button
-                              onClick={() => handleKick({ name: p.name, client: p.client })}
+                              onClick={() => { void handleRemove({ name: p.name, client: p.client }); }}
                               title={`Remove ${p.name} (asks to confirm)`}
                               aria-label={`Remove ${p.name} from the room`}
                               className="ml-1 flex min-h-11 min-w-11 items-center justify-center"
@@ -3260,8 +3339,18 @@ export function Room() {
           On desktop the same panels are peers of the chat inside <main>, so the
           Inspector's desktop column is gone (T-64). */}
       <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
-      {summonOpen && <SummonAgentSheet code={code} onClose={() => setSummonOpen(false)} />}
-      {detailsFor && <AgentDetailsSheet code={code} participant={detailsFor} onClose={() => setDetailsFor(null)} />}
+      {summonOpen && <SummonAgentSheet code={code} selfName={self.name} onClose={() => setSummonOpen(false)} />}
+      {detailsFor && (
+        <AgentDetailsSheet
+          code={code}
+          participant={detailsFor}
+          onClose={() => setDetailsFor(null)}
+          // Same unified verb as the People-row × — one confirm, both halves.
+          onRemove={isHost && !ended && !(detailsFor.name === self.name && detailsFor.client === 'web')
+            ? () => { const p = detailsFor; setDetailsFor(null); void handleRemove({ name: p.name, client: p.client as 'web' | 'cc' }); }
+            : undefined}
+        />
+      )}
       <CommandSearch
         open={searchOpen}
         room={activeRoom}
