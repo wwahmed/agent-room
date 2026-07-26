@@ -12,16 +12,23 @@ export function boardCountsView(tasks: BoardTask[] | null): { known: boolean; pe
 
 export type ProjectView = 'loading' | 'error' | 'unattached' | 'genuine-empty' | 'filtered-empty' | 'populated';
 
-/** The five distinct board states, mutually exclusive by construction. */
+/** The distinct board states, mutually exclusive by construction.
+ *
+ *  Un-gated board (host order): tasks exist wherever agents filed them — a
+ *  bound project only adds the durable repo ledger. So attachment gates the
+ *  PITCH, not the queue: 'unattached' is reserved for a room that is known
+ *  to have no tasks AND no project (pitch attaching); the moment tasks
+ *  exist, the board renders regardless. Unknown stays unknown — a null
+ *  board is loading/error, never a premature pitch over a queue that may
+ *  have tickets. */
 export function projectViewState(
   attached: boolean,
   tasks: BoardTask[] | null,
   error: boolean,
   matching: number,
 ): ProjectView {
-  if (!attached) return 'unattached';
   if (tasks === null) return error ? 'error' : 'loading';
-  if (tasks.length === 0) return 'genuine-empty';
+  if (tasks.length === 0) return attached ? 'genuine-empty' : 'unattached';
   return matching === 0 ? 'filtered-empty' : 'populated';
 }
 

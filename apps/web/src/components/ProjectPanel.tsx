@@ -106,9 +106,9 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
 
   useEffect(() => {
     // T-71: when the parent supplies the board (shared source with the
-    // contextual rail), this panel must not run a second poll.
+    // contextual rail), this panel must not run a second poll. No projectId
+    // gate — the board is un-gated (host order); tasks can exist in any room.
     if (board !== undefined) return;
-    if (!room.projectId) return;
     let cancelled = false;
     const pull = () => {
       getTaskBoard(createClient(), room.code)
@@ -118,7 +118,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
     pull();
     const id = window.setInterval(pull, 30_000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [room.code, room.projectId, board !== undefined]);
+  }, [room.code, board !== undefined]);
 
   useEffect(() => {
     // null propagates: a failed shared fetch must render the ERROR state,
@@ -236,43 +236,52 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
     }
   }
 
-  if (!room.projectId) {
-    return (
-      <div className="rounded-xl border border-dashed border-border bg-transparent p-4">
-        <p className="text-[16px] font-semibold text-ink">No project attached</p>
-        <p className="mb-3 mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
-          Attaching a project gives this room's task board a durable ledger in
-          the project repository.
-        </p>
-        {isHost ? (
-          <>
-            <select
-              value={pickId}
-              onChange={e => setPickId(e.target.value)}
-              className="mb-2 h-11 w-full rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none focus:border-accent"
-            >
-              <option value="">Choose a project…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
-              {candidates.length > 0 && (
-                <optgroup label="Create from a discovered repo">
-                  {candidates.map(c => <option key={c.key} value={`new:${c.key}`}>{c.dirName} — new project</option>)}
-                </optgroup>
-              )}
-            </select>
-            <button
-              onClick={() => { void doAttach(); }}
-              disabled={!pickId || busy}
-              className="min-h-11 w-full rounded-lg bg-accent px-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {busy ? 'Attaching…' : 'Attach project'}
-            </button>
-            {error && <div className="mt-2 text-sm text-red-400 lg:text-xs">{error}</div>}
-          </>
-        ) : (
-          <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[15px] text-ink-soft sm:text-[14px]">
-            Attaching is a host control. Ask the host to pick a project.
-          </div>
+  // The attach picker, used in two places: as the whole panel when the room
+  // has neither tasks nor a project ('unattached'), and as the quiet
+  // secondary section under a live board that has no project yet.
+  const attachControls = isHost ? (
+    <>
+      <select
+        value={pickId}
+        onChange={e => setPickId(e.target.value)}
+        className="mb-2 h-11 w-full rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-ink outline-none focus:border-accent"
+      >
+        <option value="">Choose a project…</option>
+        {projects.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+        {candidates.length > 0 && (
+          <optgroup label="Create from a discovered repo">
+            {candidates.map(c => <option key={c.key} value={`new:${c.key}`}>{c.dirName} — new project</option>)}
+          </optgroup>
         )}
+      </select>
+      <button
+        onClick={() => { void doAttach(); }}
+        disabled={!pickId || busy}
+        className="min-h-11 w-full rounded-lg bg-accent px-3 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        {busy ? 'Attaching…' : 'Attach project'}
+      </button>
+      {error && <div className="mt-2 text-sm text-red-400 lg:text-xs">{error}</div>}
+    </>
+  ) : (
+    <div className="rounded-lg border border-border-faint bg-surface-softer p-3 text-[15px] text-ink-soft sm:text-[14px]">
+      Attaching is a host control. Ask the host to pick a project.
+    </div>
+  );
+
+  // Un-gated board (host order): the queue renders wherever tasks exist —
+  // the attach pitch takes over ONLY when the room is known to have neither
+  // tasks nor a project.
+  if (viewState === 'unattached') {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-transparent p-4" data-gate="board-unattached-pitch">
+        <p className="text-[16px] font-semibold text-ink">No tasks yet</p>
+        <p className="mb-3 mt-1 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+          Work agents file in this room will appear here as a live board.
+          Attaching a project also gives the board a durable ledger in the
+          project repository.
+        </p>
+        {attachControls}
       </div>
     );
   }
@@ -408,7 +417,17 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
         )}
       </div>
 
-      {/* Quiet, secondary: project identity + read-only docs. */}
+      {/* Quiet, secondary: project identity + read-only docs — or, on a live
+          board with no project bound yet, the attach controls. */}
+      {!room.projectId ? (
+        <div className="mt-6 border-t border-border-faint pt-4" data-gate="board-attach-secondary">
+          <h3 className="mb-1 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">No project attached</h3>
+          <p className="mb-3 text-[14px] text-ink-faint">
+            The board works without one; attaching a project adds a durable task ledger in the repository.
+          </p>
+          {attachControls}
+        </div>
+      ) : (
       <div className="mt-6 border-t border-border-faint pt-4">
         <h3 className="mb-1 text-[14px] font-semibold uppercase tracking-wide text-ink-faint">About this project</h3>
         <div className="text-[15px] font-semibold text-ink sm:text-[14px]">{project?.name ?? room.projectId}</div>
@@ -435,6 +454,7 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

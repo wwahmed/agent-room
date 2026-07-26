@@ -2331,7 +2331,7 @@ export function Room() {
       <PageScaffold
         title="Board"
         purpose="The evidence-gated task board: claimed, built, submitted, verified."
-        summary={activeRoom.projectId && taskPulse && taskPulse.length > 0 ? (() => {
+        summary={taskPulse && taskPulse.length > 0 ? (() => {
           const done = taskPulse.filter(t => t.state === 'done').length;
           const review = taskPulse.filter(t => t.state === 'awaiting_review').length;
           const pending = taskPulse.length - done - review;

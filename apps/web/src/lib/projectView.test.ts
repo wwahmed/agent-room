@@ -13,9 +13,9 @@ describe('boardCountsView (no zeros from null)', () => {
   });
 });
 
-describe('projectViewState (five mutually exclusive states)', () => {
+describe('projectViewState (mutually exclusive states)', () => {
   it('distinguishes every state', () => {
-    expect(projectViewState(false, null, false, 0)).toBe('unattached');
+    expect(projectViewState(false, [], false, 0)).toBe('unattached');
     expect(projectViewState(true, null, false, 0)).toBe('loading');
     expect(projectViewState(true, null, true, 0)).toBe('error');
     expect(projectViewState(true, [], false, 0)).toBe('genuine-empty');
@@ -24,6 +24,17 @@ describe('projectViewState (five mutually exclusive states)', () => {
   });
   it('error never masquerades as empty', () => {
     expect(projectViewState(true, null, true, 0)).not.toBe('genuine-empty');
+  });
+  it('the board is UN-GATED: tasks render regardless of project attachment (host order)', () => {
+    // A project-less room with tasks shows the queue, not the attach pitch —
+    // the Customer Service desk must see its tickets, project or no project.
+    expect(projectViewState(false, [task('todo')], false, 1)).toBe('populated');
+    expect(projectViewState(false, [task('todo')], false, 0)).toBe('filtered-empty');
+    // Unknown stays unknown: no premature pitch over a queue that may have tickets.
+    expect(projectViewState(false, null, false, 0)).toBe('loading');
+    expect(projectViewState(false, null, true, 0)).toBe('error');
+    // The pitch is reserved for known-empty AND project-less.
+    expect(projectViewState(false, [], false, 0)).toBe('unattached');
   });
 });
 
