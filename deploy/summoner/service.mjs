@@ -70,8 +70,11 @@ function paneBlockedOnPrompt(session) {
   // Copilot furniture (allow/trust dialogs) + codex furniture (per-tool MCP
   // approval: "Allow the agent-room MCP server to run tool X?" with
   // "enter to submit | esc to cancel" — missed by the first pass, observed
-  // live as CodexMaster silently stuck on room_join while reading online).
-  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files|enter to submit \| esc to cancel|Allow the .{1,40} MCP server/.test(paneTail(session));
+  // live as CodexMaster silently stuck on room_join while reading online)
+  // + Claude Code furniture ("Do you want to proceed?" with "Esc to cancel"
+  // — the shell static-analysis approval; observed live as ClaudeDev
+  // silently stuck mid-task while reading online, fourth stall class).
+  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files|enter to submit \| esc to cancel|Allow the .{1,40} MCP server|Do you want to proceed\?|Esc to cancel · Tab to amend/.test(paneTail(session));
 }
 
 // ---------- helpers ----------
@@ -333,9 +336,13 @@ async function doRelaunch(body) {
 // everywhere — never a fixed key blindly typed into the wrong menu.
 function respondKeysFor(tail) {
   const codexStyle = /enter to submit \| esc to cancel|Allow the .{1,40} MCP server/.test(tail);
+  // Claude Code's proceed dialog is binary (1. Yes / 2. No) — option 2 is NO,
+  // so "approve-always" must NOT type '2' there; it degrades to a plain
+  // approve (there is no "always" option to pick).
+  const claudeStyle = /Do you want to proceed\?|Esc to cancel · Tab to amend/.test(tail);
   return {
     approve: ['Enter'],                              // accept the highlighted/default choice
-    'approve-always': codexStyle ? ['3', 'Enter'] : ['2', 'Enter'],
+    'approve-always': codexStyle ? ['3', 'Enter'] : claudeStyle ? ['Enter'] : ['2', 'Enter'],
     deny: ['Escape'],
   };
 }
