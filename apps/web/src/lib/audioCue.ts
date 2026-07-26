@@ -34,20 +34,28 @@ function blip(freq: number, durationMs: number, peak = 0.05): void {
   osc.stop(now + durationMs / 1000 + 0.02);
 }
 
+// Levels (host-tuned, 2026-07-25): the first pass was so subtle it vanished in
+// a normal room. Waqas asked for "slightly more noticeable" — so the ready and
+// send cues are now two-note figures at roughly double the old peak, which
+// reads clearly without becoming an alert. Melodic direction encodes meaning:
+// rising = recording is live, falling = message went out.
+
 /** Warming up: faint, quick dots while the mic is being acquired — a
  *  responsive "hang on, getting ready" tick, not a chime. */
 export function playWarmingCue(): void {
-  blip(520, 40, 0.02);
-  setTimeout(() => blip(520, 40, 0.02), 105);
-  setTimeout(() => blip(520, 40, 0.02), 210);
+  blip(520, 40, 0.035);
+  setTimeout(() => blip(520, 40, 0.035), 105);
+  setTimeout(() => blip(520, 40, 0.035), 210);
 }
 
-/** Recording live: a single solid, slightly longer tone — "recording now". */
+/** Recording live: a rising two-note chime — "recording now". */
 export function playReadyCue(): void {
-  blip(780, 200, 0.06);
+  blip(660, 140, 0.11);
+  setTimeout(() => blip(880, 220, 0.11), 120);
 }
 
-/** Sent confirmation (single soft note). */
+/** Sent confirmation: a falling two-note figure — "message went out". */
 export function playSendCue(): void {
-  blip(720, 120, 0.045);
+  blip(880, 100, 0.09);
+  setTimeout(() => blip(660, 160, 0.09), 95);
 }
