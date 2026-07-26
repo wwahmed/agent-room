@@ -14,7 +14,9 @@ function audioContext(): AudioContext | null {
   return ctx;
 }
 
-// A short, soft sine blip. gain stays low so it is a cue, not an alert.
+// A short, soft blip. gain stays low so it is a cue, not an alert. Triangle
+// rather than sine: the odd harmonics survive a phone speaker's low-end
+// roll-off, so the cue stays audible at the same peak instead of vanishing.
 function blip(freq: number, durationMs: number, peak = 0.05): void {
   const ac = audioContext();
   if (!ac) return;
@@ -24,7 +26,7 @@ function blip(freq: number, durationMs: number, peak = 0.05): void {
   const now = ac.currentTime;
   const osc = ac.createOscillator();
   const gain = ac.createGain();
-  osc.type = 'sine';
+  osc.type = 'triangle';
   osc.frequency.setValueAtTime(freq, now);
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(peak, now + 0.012);
