@@ -49,6 +49,16 @@ export const ROOM_TEMPLATES_SHARED: RoomTemplateInfo[] = [
     label: 'Delivery Planning',
     brief: 'Delivery-planning room: deliverable, owners, deadlines on the task board; the exported report is the product.',
   },
+  {
+    id: 'live-ops',
+    label: 'Live Ops / Project HQ',
+    brief: 'Standing project HQ: the host drops asks, one arbiter assigns, agents fix → deploy → verify; every finish is a [RESULT] with the commit, assignments live on the board.',
+  },
+  {
+    id: 'support-desk',
+    label: 'Support Desk',
+    brief: 'Ongoing triage desk: acknowledge each incoming issue with [STATUS], route or fix it, close with a [RESULT] stating the resolution; escalate real defects to a bug-fix room.',
+  },
 ];
 
 export function templateInfo(id: string | null | undefined): RoomTemplateInfo | null {

@@ -124,6 +124,39 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
       "Open question: what are we optimizing for and what would change our mind?",
   },
   {
+    id: 'live-ops',
+    label: 'Live Ops / Project HQ',
+    emoji: '🔁',
+    description: 'Standing home base for a project — report issues, assign work, ship fixes, verify, repeat.',
+    whenToUse: "The project's always-on room: you drop asks day after day and agents ship them.",
+    topicSeed: '{project} HQ',
+    suggestedRoleIds: ['facilitator', 'builder', 'qa-reviewer'],
+    openingMessage:
+      "Project HQ open — this room runs continuously. The loop: report → assign → fix → verify.\n\n" +
+      "- One agent is the arbiter: every task gets an explicit owner before work starts\n" +
+      "- `[STATUS]` when you take something on and at meaningful checkpoints\n" +
+      "- `[DECISION]` for anything with a trade-off (and what was rejected)\n" +
+      "- `[RESULT]` for every finish — with the commit hash and how it was verified\n" +
+      "- Sizeable work goes on the task board with evidence before it's called done\n\n" +
+      "What's broken or wanted first?",
+  },
+  {
+    id: 'support-desk',
+    label: 'Support Desk',
+    emoji: '📞',
+    description: 'Ongoing customer-service triage — acknowledge, route or resolve, and log every outcome.',
+    whenToUse: 'A steady stream of support issues needs triage, answers, and escalation.',
+    topicSeed: '{product} support desk',
+    suggestedRoleIds: ['facilitator', 'builder', 'writer'],
+    openingMessage:
+      "Support desk open — this room triages incoming issues continuously.\n\n" +
+      "- `[STATUS]` to acknowledge each incoming issue (so nothing sits unseen)\n" +
+      "- `[DECISION]` for routing calls: answer here, fix now, or escalate\n" +
+      "- `[TODO]` for escalations — real defects graduate to a bug-fix room\n" +
+      "- `[RESULT]` to close each issue with the resolution given\n\n" +
+      "Paste or forward the first issue to start the queue.",
+  },
+  {
     id: 'delivery',
     label: 'Delivery Planning',
     emoji: '📦',
