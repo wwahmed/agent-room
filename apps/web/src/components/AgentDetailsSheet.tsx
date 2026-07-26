@@ -8,6 +8,8 @@ import { canRecover, presenceView, recoveryPrompt, type ParticipantHealth } from
 const PRESENCE_CHIP_TONE: Record<string, string> = {
   listening: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300',
   online: 'border-border bg-surface-softer text-ink-soft',
+  // T-04: calm accent for a declared work window — busy, not degrading.
+  working: 'border-sky-400/40 bg-sky-500/10 text-sky-300',
   stale: 'border-amber-400/40 bg-amber-500/10 text-amber-300',
   disconnected: 'border-red-400/40 bg-red-500/10 text-red-300',
 };

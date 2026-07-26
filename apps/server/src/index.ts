@@ -67,7 +67,7 @@ import {
 } from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
 import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
-import { roomHealth } from './health.js';
+import { clampWorkingUntil, roomHealth } from './health.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
@@ -124,6 +124,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   RoomNotFoundError,
   setListenUntil,
   setMuted,
+  setWorkingUntil,
   setReplyMode,
   sha256Hex,
   sweepTimeouts,
@@ -1088,6 +1089,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           metadata: { ...(stamped as { metadata?: Record<string, unknown> }).metadata, kind: 'status' },
         } as Message;
         await getRoom(client, code);
+        // T-04: a status ping is a declared "I'm heads-down" — arm the work
+        // window so the sender reads as `working` instead of decaying to
+        // stale mid-task. Fire-and-forget: never fail a ping on this.
+        void setWorkingUntil(client, code, String(message.name), clampWorkingUntil(Date.now())).catch(() => {});
         await appendSystemMessage(client, code, statusMessage);
         return { result: { appended: true, metadata: statusMessage.metadata ?? {} } };
       }
@@ -1513,6 +1518,10 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       task.state = 'in_progress';
       task.claimedAt = nowMs();
       await commitBoard(code, board);
+      // T-04: claiming work IS declaring work — arm the claimant's working
+      // window so the board and the presence chip agree about what they're
+      // doing. Fire-and-forget: a claim must never fail on a presence stamp.
+      void setWorkingUntil(client, code, task.owner, clampWorkingUntil(Date.now())).catch(() => {});
       return { board, task };
     }
     case 'taskSubmit': {

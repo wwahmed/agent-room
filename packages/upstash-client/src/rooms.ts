@@ -962,3 +962,20 @@ export async function setListenUntil(
     ),
   }));
 }
+
+// T-04: stamp a declared work window (see Participant.workingUntil). Written
+// on room_status pings and task claims so a heads-down agent reads as
+// `working` instead of decaying to stale while it runs a long job.
+export async function setWorkingUntil(
+  client: UpstashClient,
+  code: string,
+  name: string,
+  until: number
+): Promise<void> {
+  await casRoom(client, code, (current) => ({
+    ...current,
+    participants: current.participants.map(p =>
+      p.name === name ? { ...p, workingUntil: until, lastSeenAt: Date.now() } : p
+    ),
+  }));
+}

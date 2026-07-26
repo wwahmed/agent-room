@@ -8,7 +8,7 @@ interface Props {
     name: string;
     color: string;
     initials: string;
-    state: 'listening' | 'online' | 'stale' | 'disconnected';
+    state: 'listening' | 'online' | 'working' | 'stale' | 'disconnected';
   }>;
   /** Compact sizing for the 280px in-room desktop list. */
   compact?: boolean;

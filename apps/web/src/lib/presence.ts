@@ -13,7 +13,7 @@
 
 import type { ClientKind } from '@agent-room/shared';
 
-export type PresenceState = 'listening' | 'online' | 'stale' | 'disconnected';
+export type PresenceState = 'listening' | 'online' | 'working' | 'stale' | 'disconnected';
 
 export interface ParticipantHealth {
   name: string;
@@ -35,6 +35,7 @@ export interface PresenceView {
 const LABEL: Record<PresenceState, string> = {
   listening: 'Listening now',
   online: 'Online',
+  working: 'Working',
   stale: 'Stale',
   disconnected: 'Disconnected',
 };
@@ -43,6 +44,7 @@ export function presenceView(h: ParticipantHealth): PresenceView {
   const agent = h.client === 'cc';
   const detail =
     h.state === 'online' && agent ? 'not in a listen window'
+      : h.state === 'working' && agent ? 'heads-down in a declared work window'
       : h.state === 'stale' && agent ? 'no heartbeat — loop may be dead'
       : h.state === 'disconnected' && agent ? 'host can remove'
       : '';

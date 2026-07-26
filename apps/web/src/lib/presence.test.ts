@@ -19,6 +19,15 @@ describe('listen-loop health (T-68: server is the source of truth)', () => {
     expect(presenceView(h({ state: 'online' })).label).toBe('Online');
     expect(presenceView(h({ state: 'stale' })).label).toBe('Stale');
     expect(presenceView(h({ state: 'disconnected' })).label).toBe('Disconnected');
+    expect(presenceView(h({ state: 'working' })).label).toBe('Working');
+  });
+
+  // T-04: declared-busy is a calm state — it must never be treated as
+  // recoverable (that's the scare path) and its detail says what it means.
+  it('working reads as heads-down, not as something to recover', () => {
+    const v = presenceView(h({ state: 'working', lastSeenAgoMs: 120_000 }));
+    expect(v.detail).toBe('heads-down in a declared work window');
+    expect(canRecover(h({ state: 'working' }), false)).toBe(false);
   });
 
   it('keeps listening and online DISTINCT', () => {

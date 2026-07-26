@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { presenceState, participantHealth, roomHealth } from './health.js';
+import {
+  presenceState, participantHealth, roomHealth,
+  clampWorkingUntil, WORKING_WINDOW_MS, WORKING_WINDOW_CAP_MS,
+} from './health.js';
 import type { Participant } from '@agent-room/shared';
 
 const NOW = 1_000_000_000;
@@ -58,6 +61,37 @@ describe('T-66 presence health — stop presence from lying', () => {
       NOW,
     ).map((h) => `${h.name}:${h.state}`);
     expect(states).toEqual(['live:listening', 'dead:disconnected']);
+  });
+
+  // T-04: a declared work window means "heads-down", not "dying". The ladder
+  // is listening → working → online → stale → disconnected, and expiry falls
+  // straight back to the silence clock — the alarm is deferred, never lost.
+  describe('T-04 working state — a busy agent is not a dying agent', () => {
+    it('an unexpired work window reads working, even after 60s+ of silence', () => {
+      expect(presenceState(p({ lastSeenAt: NOW - 120_000, workingUntil: NOW + 60_000 }), NOW)).toBe('working');
+    });
+
+    it('working outranks online: a fresh ping inside a window is still working', () => {
+      expect(presenceState(p({ lastSeenAt: NOW, workingUntil: NOW + 60_000 }), NOW)).toBe('working');
+    });
+
+    it('an armed listen loop outranks the work window', () => {
+      expect(presenceState(p({ listenUntil: NOW + 1_000, workingUntil: NOW + 60_000 }), NOW)).toBe('listening');
+    });
+
+    it('an expired window degrades exactly like silence — stale, then disconnected', () => {
+      expect(presenceState(p({ lastSeenAt: NOW - 120_000, workingUntil: NOW - 1 }), NOW)).toBe('stale');
+      expect(presenceState(p({ lastSeenAt: NOW - 600_000, workingUntil: NOW - 1 }), NOW)).toBe('disconnected');
+    });
+
+    it('clampWorkingUntil: default window, cap, and garbage fall-back', () => {
+      expect(clampWorkingUntil(NOW)).toBe(NOW + WORKING_WINDOW_MS);
+      expect(clampWorkingUntil(NOW, NOW + 5_000)).toBe(NOW + 5_000);
+      // a crashed agent that pinged once must not look busy forever
+      expect(clampWorkingUntil(NOW, NOW + 10 * WORKING_WINDOW_CAP_MS)).toBe(NOW + WORKING_WINDOW_CAP_MS);
+      expect(clampWorkingUntil(NOW, NaN)).toBe(NOW + WORKING_WINDOW_MS);
+      expect(clampWorkingUntil(NOW, NOW - 1)).toBe(NOW + WORKING_WINDOW_MS);
+    });
   });
 
   // T-143: a server restart can leave a rejoined row with a null lastSeenAt.

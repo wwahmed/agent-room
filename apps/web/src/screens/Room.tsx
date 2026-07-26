@@ -151,6 +151,9 @@ function SummaryChip({ tone, children }: { tone: keyof typeof CHIP_TONES; childr
 const STATE_TONE_PRESENCE = {
   listening: { text: 'text-success', glyph: 'dot' },
   online: { text: 'text-success', glyph: 'ring' },
+  // T-04: declared-busy reads calm accent, never the warning vocabulary — a
+  // heads-down agent is working, not degrading.
+  working: { text: 'text-accent', glyph: 'ring' },
   stale: { text: 'text-warning', glyph: 'triangle' },
   disconnected: { text: 'text-danger', glyph: 'triangle' },
 } as const;
@@ -2458,7 +2461,7 @@ export function Room() {
                       or icon comprehension (red-team finding). */}
                   <span className={`flex flex-shrink-0 items-center gap-1 text-[14px] font-medium ${STATE_TONE_PRESENCE[a.state].text}`}>
                     {presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}
-                    {a.state === 'listening' || a.state === 'online' ? 'Active' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
+                    {a.state === 'listening' || a.state === 'online' ? 'Active' : a.state === 'working' ? 'Working' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
                   </span>
                 </button>
               ))}

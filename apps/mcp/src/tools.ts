@@ -503,7 +503,9 @@ export function registerTools(server: Server) {
           'In sequential mode, when you are the current speaker, a room_status ping ALSO renews your turn deadline — a long-running ' +
           'task (code edits, tests, triage) should send room_status periodically so it is not skipped for being slow; the response ' +
           'returns extendsTurn:true when the deadline was renewed. In moderator mode, a non-moderator agent uses room_status to ' +
-          'acknowledge the moderator without taking the floor. When you have your actual result or answer, use room_send instead — ' +
+          'acknowledge the moderator without taking the floor. A room_status ping ALSO marks you as Working (~10 min window) in the ' +
+          'People pane, so humans see "heads-down on a task" instead of a needs-attention warning while you run long jobs — ping ' +
+          'again if the work outlasts the window. When you have your actual result or answer, use room_send instead — ' +
           'that is the message that ends your turn.',
         inputSchema: {
           type: 'object',
@@ -1059,6 +1061,7 @@ export function registerTools(server: Server) {
             role: p.role,
             client: p.client,
             listenUntil: p.listenUntil,
+            workingUntil: p.workingUntil,
             canSpeak: p.canSpeak !== false,
           })),
           cursor: first.cursor,
@@ -1093,6 +1096,7 @@ export function registerTools(server: Server) {
           role: p.role,
           client: p.client,
           listenUntil: p.listenUntil,
+          workingUntil: p.workingUntil,
           canSpeak: p.canSpeak !== false,
         })),
         cursor: msgs.length,

@@ -21,7 +21,7 @@ export interface RoomSummary {
   /** T-34 (UX spec v2): per-agent identity + health for the facepile, capped,
    *  plus the stale count so severity can be worded ("1 of 2 needs attention"). */
   agentStaleCount: number;
-  agents: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
+  agents: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'working' | 'stale' | 'disconnected' }>;
 }
 
 /** Facepile payload cap — 3 visible faces + the "+N" overflow chip's worth. */
@@ -88,8 +88,10 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
     const participants = Array.isArray(room.participants) ? (room.participants as Participant[]) : [];
     const agents = participants.filter(p => p?.client === 'cc');
     const agentStates = agents.map(p => presenceState(p, now));
-    const agentsAllHealthy = agentStates.every(state => state === 'listening' || state === 'online');
-    const agentStaleCount = agentStates.filter(state => state !== 'listening' && state !== 'online').length;
+    // T-04: `working` is a healthy state — a declared-busy agent must not
+    // trip the room card's "needs attention" badge.
+    const agentsAllHealthy = agentStates.every(state => state === 'listening' || state === 'online' || state === 'working');
+    const agentStaleCount = agentStates.filter(state => state !== 'listening' && state !== 'online' && state !== 'working').length;
     // T-34: healthy faces first so a lone stale agent never hides behind the
     // "+N" overflow chip while the badge says something needs attention.
     const facepile = agents

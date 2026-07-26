@@ -231,6 +231,17 @@ describe('AgentDetailsSheet — terminal access + recovery (T-02)', () => {
     expect(chip.textContent).toContain('Listening now');
   });
 
+  // T-04: declared-busy is calm — the header chips "Working" and the scary
+  // recovery banner stays away, even though nobody is listening right now.
+  it('a working agent chips "Working" in the header with NO recovery banner', async () => {
+    mockAgentsResponse([summoned()]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant}
+      health={health({ state: 'working', lastSeenAgoMs: 120_000 })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    expect(document.querySelector('[data-gate="presence-chip"]')!.textContent).toContain('Working');
+    expect(document.querySelector('[data-gate="recovery-banner"]')).toBeNull();
+  });
+
   it('a dismissed process keeps its access block but warns the tmux line is dead', async () => {
     mockAgentsResponse([summoned({ status: 'dismissed', dismissedAt: 2, access: ACCESS })]);
     render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onClose={() => {}} />);

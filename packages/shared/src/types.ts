@@ -25,6 +25,12 @@ export interface Participant {
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally
+  // T-04: declared work window. Stamped by a room_status ping or a task claim
+  // — the two acts that already mean "I'm heads-down". While unexpired, the
+  // participant reads as `working` instead of decaying toward stale, so a
+  // busy agent is not shown as a dying one. Capped server-side; an expired
+  // window degrades exactly like silence does today.
+  workingUntil?: number;
   // Host approval gate. Undefined for participants joined before this field
   // existed (treated as legacy-approved). New joiners default to false until
   // the host (createdBy) approves them via approveParticipant.

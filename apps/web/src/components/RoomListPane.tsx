@@ -28,7 +28,7 @@ interface RoomSummary {
   agentsAllHealthy?: boolean;
   // T-34: per-agent faces + stale count for the compact facepile.
   agentStaleCount?: number;
-  agents?: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'stale' | 'disconnected' }>;
+  agents?: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'working' | 'stale' | 'disconnected' }>;
 }
 
 export function RoomListPane({ activeCode, selfName }: { activeCode: string; selfName: string }) {

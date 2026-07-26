@@ -164,6 +164,21 @@ describe('room list agent facepile (T-34)', () => {
     expect(room.agents.slice(0, 4).every(a => a.state === 'listening')).toBe(true);
   });
 
+  // T-04: an agent inside a declared work window is healthy — the room card
+  // badge must not count a heads-down agent as needing attention.
+  it('counts a working agent as healthy, never stale', async () => {
+    const store = facepileStore([
+      { ...agent('Busy', { staleMs: 2 * 60_000 }), workingUntil: Date.now() + 60_000 },
+      agent('Live', { listening: true }),
+    ]);
+    const page = await listIndexedRoomPage(store, 0, 10);
+    const room = page.rooms[0]!;
+    expect(room.agentCount).toBe(2);
+    expect(room.agentStaleCount).toBe(0);
+    expect(room.agentsAllHealthy).toBe(true);
+    expect(room.agents.find(a => a.name === 'Busy')!.state).toBe('working');
+  });
+
   it('reports zero agents for a humans-only room', async () => {
     const store = facepileStore([{ name: 'Waqas', client: 'web', lastSeenAt: Date.now() }]);
     const page = await listIndexedRoomPage(store, 0, 10);

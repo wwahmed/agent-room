@@ -15,7 +15,22 @@ import type { Participant } from '@agent-room/shared';
 export const PRESENCE_STALE_MS = 60_000;
 export const PRESENCE_DISCONNECTED_MS = 300_000;
 
-export type PresenceState = 'listening' | 'online' | 'stale' | 'disconnected';
+// T-04: declared work window. A room_status ping or task claim buys this much
+// "working" time by default; a caller may declare longer but never past the
+// cap — a crashed agent that pinged once must not look busy forever.
+export const WORKING_WINDOW_MS = 600_000;
+export const WORKING_WINDOW_CAP_MS = 1_800_000;
+
+/** Clamp a declared work window to [now, now + cap]. Non-finite / past
+ *  requests fall back to the default window. */
+export function clampWorkingUntil(now: number, requestedUntil?: number): number {
+  const req = Number(requestedUntil);
+  const fallback = now + WORKING_WINDOW_MS;
+  if (!Number.isFinite(req) || req <= now) return fallback;
+  return Math.min(req, now + WORKING_WINDOW_CAP_MS);
+}
+
+export type PresenceState = 'listening' | 'online' | 'working' | 'stale' | 'disconnected';
 
 export interface ParticipantHealth {
   name: string;
@@ -48,6 +63,10 @@ export function effectiveLastSeen(p: Participant): number {
 
 export function presenceState(p: Participant, now: number): PresenceState {
   if (Number(p.listenUntil || 0) > now) return 'listening';
+  // T-04: an unexpired declared work window outranks the silence clock — a
+  // heads-down agent is working, not decaying. Expiry falls straight through
+  // to the age ladder below, so the alarm is deferred, never disabled.
+  if (Number(p.workingUntil || 0) > now) return 'working';
   const seen = effectiveLastSeen(p);
   // No timestamp at all: the loop is not armed and we have no proof of life, so
   // it is disconnected — but the AGE is unknown (see participantHealth), never

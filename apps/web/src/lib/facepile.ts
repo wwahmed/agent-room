@@ -3,7 +3,7 @@
 // agentStaleCount; this module turns that into what the cluster renders and
 // says. Kept out of the component so the wording and windowing are unit-tested.
 
-export type AgentPresence = 'listening' | 'online' | 'stale' | 'disconnected';
+export type AgentPresence = 'listening' | 'online' | 'working' | 'stale' | 'disconnected';
 
 export interface AgentFace {
   name: string;
