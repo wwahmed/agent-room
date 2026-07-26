@@ -455,4 +455,35 @@ if (verb) {
     // Warm the provider catalog so the first Summon dialog opens instantly.
     try { catalog(); } catch { /* best-effort */ }
   });
+
+  // Watchdog (host order: enhance monitoring/resolution): every active native
+  // agent's screen is checked periodically; a TRANSITION into blocked-on-
+  // prompt or a dead tmux fires ONE owner push via the room server's loopback
+  // /api/agent-alert — the human gets interrupted instead of discovering a
+  // frozen agent minutes later. Transition-based so a long-blocked agent
+  // never renotifies until it clears and blocks again. Best-effort by design:
+  // the roster and the in-app amber badge remain the source of truth.
+  const watchState = new Map(); // agentId -> 'ok' | 'blocked' | 'dead'
+  setInterval(() => {
+    try {
+      const r = loadRegistry();
+      for (const a of Object.values(r.agents)) {
+        if (a.status !== 'active' || !a.native) continue;
+        const state = !sessionAlive(a.tmuxSession) ? 'dead'
+          : paneBlockedOnPrompt(a.tmuxSession) ? 'blocked' : 'ok';
+        const prev = watchState.get(a.agentId) ?? 'ok';
+        watchState.set(a.agentId, state);
+        if (state !== prev && state !== 'ok') {
+          const kind = state === 'blocked' ? 'blocked-on-prompt' : 'process-exited';
+          console.log(`[watchdog] ${a.name} (${a.room}) -> ${kind}`);
+          fetch(`${ROOM_BASE}/api/agent-alert`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name: a.name, room: a.room, kind }),
+          }).catch(() => { /* push is best-effort */ });
+        }
+      }
+      // Registry rows that left 'active' shouldn't pin memory forever.
+      for (const id of watchState.keys()) if (!r.agents[id] || r.agents[id].status !== 'active') watchState.delete(id);
+    } catch { /* watchdog must never take the service down */ }
+  }, 45000);
 }

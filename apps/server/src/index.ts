@@ -1885,6 +1885,30 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Agent monitoring alert from the loopback summoner watchdog: a summoned
+    // agent TRANSITIONED into a state that needs the human — blocked on a
+    // harness permission dialog, or its process died. Loopback-only (the
+    // watchdog is a local daemon); composes an owner push that deep-links to
+    // the People pane where the Approve/Deny buttons live.
+    if (path === '/api/agent-alert' && req.method === 'POST') {
+      const alertCaller = await resolveCaller(req);
+      if (alertCaller.kind !== 'local') return sendJson(res, 403, { error: 'Forbidden', message: 'loopback only' });
+      let alert: { name?: string; room?: string; kind?: string } = {};
+      try { alert = JSON.parse((await readBody(req)) || '{}'); } catch { /* keep defaults */ }
+      const agentName = String(alert.name || 'An agent');
+      const roomCode = String(alert.room || '');
+      const blocked = String(alert.kind || '') === 'blocked-on-prompt';
+      notifyOwnerAsync({
+        title: blocked ? `${agentName} is waiting for your permission` : `${agentName}'s process stopped`,
+        body: blocked
+          ? 'It hit a permission dialog and is paused. Tap to answer it from the People pane.'
+          : 'It exited unexpectedly. Relaunch it from the People pane.',
+        url: roomCode ? `/r/${roomCode}?panel=people` : '/',
+        tag: `agent-alert-${roomCode}-${agentName}`,
+      });
+      return sendJson(res, 200, { ok: true });
+    }
+
     // Summon Agent — forward owner-authenticated requests to the loopback
     // agent-summoner service (deploy/summoner), which spawns/kills/tracks the
     // CLI agents. Kept out of this process so summoning can't destabilize the
