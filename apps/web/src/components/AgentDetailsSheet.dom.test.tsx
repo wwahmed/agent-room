@@ -143,15 +143,31 @@ async function waitLoaded() {
 }
 
 describe('AgentDetailsSheet — terminal access + recovery (T-02)', () => {
-  it('shows the FULL summon-screen access block with per-line copy and copy-all', async () => {
+  it('separates prose labels from copyable commands — the clipboard gets ONLY runnable code', async () => {
+    const writeText = vi.fn(async () => {});
     mockAgentsResponse([summoned({ access: ACCESS })]);
+    vi.stubGlobal('navigator', { ...window.navigator, clipboard: { writeText } });
     render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onClose={() => {}} />);
     await waitLoaded();
     const section = document.querySelector('[data-gate="terminal-access"]')!;
     expect(section).not.toBeNull();
-    for (const line of ACCESS) expect(section.textContent).toContain(line);
-    expect(section.querySelectorAll('li code').length).toBe(4); // every line, not just the resume regex hit
-    expect([...section.querySelectorAll('button')].some(b => b.textContent === 'Copy all')).toBe(true);
+    // Labels render as text; the code chips hold bare commands — no label, no
+    // "(detach…)" hint, and no provider/workspace prose rows at all.
+    expect(section.textContent).toContain('Watch the live agent loop');
+    expect(section.textContent).toContain('detach: Ctrl-b then d');
+    const codes = [...section.querySelectorAll('li code')].map((c) => c.textContent);
+    expect(codes).toEqual([
+      'TMUX_TMPDIR=/x tmux attach -t sm-x',
+      'cd /tmp/ws && claude --resume abc-123',
+    ]);
+    expect(section.textContent).not.toContain('Provider / model'); // fact, lives in identity
+    // Per-line copy pastes exactly the runnable command…
+    const rows = section.querySelectorAll('li');
+    fireEvent.click([...rows[0]!.querySelectorAll('button')].find(b => b.textContent === 'Copy')!);
+    expect(writeText).toHaveBeenCalledWith('TMUX_TMPDIR=/x tmux attach -t sm-x');
+    // …and copy-all joins just the commands.
+    fireEvent.click([...section.querySelectorAll('button')].find(b => b.textContent === 'Copy all')!);
+    expect(writeText).toHaveBeenLastCalledWith('TMUX_TMPDIR=/x tmux attach -t sm-x\ncd /tmp/ws && claude --resume abc-123');
   });
 
   it('offers the recovery prompt when the presence verdict says stale/disconnected', async () => {

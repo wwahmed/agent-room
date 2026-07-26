@@ -21,6 +21,24 @@ const PERMISSION_LEVELS = [
 ] as const;
 type PermissionLevel = (typeof PERMISSION_LEVELS)[number]['value'];
 
+// One runnable terminal command from the summoner's access lines, with its
+// prose peeled off. Format upstream is "Label:  command   (hint)".
+interface AccessCommand { label: string; cmd: string; hint?: string }
+
+function parseAccessLine(line: string): AccessCommand | null {
+  const idx = line.indexOf(':  ');
+  if (idx === -1) return { label: '', cmd: line.trim() };
+  const label = line.slice(0, idx).trim();
+  // Provider/model + workspace are facts, not commands — they already live in
+  // the identity column, and putting prose in a copy row makes copy useless.
+  if (/^(Provider\s*\/\s*model|Workspace)$/i.test(label)) return null;
+  let cmd = line.slice(idx + 3).trim();
+  let hint: string | undefined;
+  const m = cmd.match(/^(.*?)\s{2,}\((.*)\)$/);
+  if (m?.[1]) { cmd = m[1]; hint = m[2]; }
+  return { label, cmd, hint };
+}
+
 interface DetailParticipant {
   name: string;
   role?: string;
@@ -118,11 +136,12 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
     }
   }
 
-  // Full terminal-access block from the summoner record — the same lines the
-  // Summon screen shows (tmux attach, resume command, provider/model,
-  // workspace). This used to be regex-reduced to just the resume line here,
-  // which left the host with no way to locate an offline agent from People.
-  const accessLines = agent?.access ?? [];
+  // Full terminal-access block from the summoner record, parsed so prose and
+  // code never share a chip: the label ("Watch the live agent loop") renders
+  // as text, the code block holds ONLY the runnable command, and trailing
+  // hints like "(detach: Ctrl-b then d)" stay out of the clipboard. Fact lines
+  // (provider/model, workspace) are dropped — the identity column owns those.
+  const commands = (agent?.access ?? []).map(parseAccessLine).filter((c): c is AccessCommand => c !== null);
   // The one action that works when a CLI agent stops listening (usage limits,
   // crashed harness, closed terminal): paste the recovery prompt into its
   // terminal. Same contract as the People-row button.
@@ -162,16 +181,16 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
       {/* Desktop is a control center, not a phone sheet: the panel widens to
           ~4xl on lg+ and the body splits into identity | controls columns.
           Small screens keep the familiar stacked bottom-sheet. */}
-      <section className="relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl lg:max-w-4xl">
-        <header className="flex items-center justify-between gap-3 border-b border-border-faint px-4 py-3 sm:px-6">
+      <section className="relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl lg:max-w-5xl">
+        <header className="flex items-center justify-between gap-3 border-b border-border-faint px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
           <div className="min-w-0">
             <div className="text-[13px] font-semibold uppercase tracking-wide text-accent">Agent details</div>
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-              <h2 id="agent-detail-title" className="truncate text-lg font-semibold text-ink">{participant.name}</h2>
+              <h2 id="agent-detail-title" className="truncate text-lg font-semibold text-ink lg:text-2xl">{participant.name}</h2>
               {presence && (
                 <span
                   data-gate="presence-chip"
-                  className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold ${PRESENCE_CHIP_TONE[presence.state]}`}
+                  className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold ${PRESENCE_CHIP_TONE[presence.state]} lg:text-[13px]`}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
                   {presence.label}
@@ -184,7 +203,7 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
           </button>
         </header>
 
-        <div className="overflow-y-auto p-4 sm:p-6">
+        <div className="overflow-y-auto p-4 sm:p-6 lg:p-8">
           {loading ? (
             <div className="py-8 text-center text-sm text-ink-soft">Loading…</div>
           ) : (
@@ -223,12 +242,13 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   <div className="text-[13px] font-bold text-red-300">
                     {health?.state === 'disconnected' ? 'Disconnected' : 'Not listening'} — needs a nudge to come back
                   </div>
-                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft lg:text-[14px]">
                     {participant.name} isn't in its room-listen loop. This happens when the model hits its
                     usage limits, the harness exits, or its terminal closes. The app can't restart a CLI
                     process, but you can: copy the recovery prompt and paste it into the agent's terminal
-                    {accessLines.length > 0 ? ' — the commands below reach that terminal' : ''}.
+                    {commands.length > 0 ? ' — the commands below reach that terminal' : ''}.
                   </p>
+                  <code className="mt-2 block break-words rounded-lg bg-black/30 p-2.5 font-mono text-[12px] leading-relaxed text-ink-soft lg:text-[13px]">{recoveryText}</code>
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -241,14 +261,14 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   </div>
                 </div>
               )}
-              <div className="lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start lg:gap-x-10" data-gate="details-columns">
+              <div className="lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start lg:gap-x-12" data-gate="details-columns">
               <section aria-label="Identity" data-gate="identity-col">
                 <h3 className="mb-1 hidden text-[12px] font-semibold uppercase tracking-wide text-accent lg:block">Identity</h3>
                 <dl className="divide-y divide-border-faint">
                   {rows.map(([k, v]) => (
-                    <div key={k} className="flex items-start justify-between gap-4 py-2">
-                      <dt className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">{k}</dt>
-                      <dd className="min-w-0 break-words text-right text-[13px] text-ink">{v}</dd>
+                    <div key={k} className="flex items-start justify-between gap-4 py-2 lg:py-2.5">
+                      <dt className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint lg:text-[13px]">{k}</dt>
+                      <dd className="min-w-0 break-words text-right text-[13px] text-ink lg:text-[15px]">{v}</dd>
                     </div>
                   ))}
                 </dl>
@@ -271,7 +291,7 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                       </button>
                     )}
                   </div>
-                  <p className="mt-1 text-[13px] text-ink">{permissionLabel}</p>
+                  <p className="mt-1 text-[13px] text-ink lg:text-[15px]">{permissionLabel}</p>
 
               {permissionNote && (
                 <p role="status" className="mt-3 rounded-lg bg-surface-softer px-3 py-2 text-[13px] text-ink-soft">{permissionNote}</p>
@@ -339,49 +359,51 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   summon sheet is gone. Join-code agents get an honest
                   explanation instead of a false-empty. */}
               <div className="mt-4" data-gate="terminal-access">
-                <div className="mb-1.5 flex items-center justify-between gap-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Reach it from a terminal</div>
-                  {accessLines.length > 1 && (
+                  {commands.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => copy(accessLines.join('\n'), 'all')}
-                      className="rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10"
+                      onClick={() => copy(commands.map((c) => c.cmd).join('\n'), 'all')}
+                      className="rounded-md px-2 py-1 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
                     >
                       {copiedWhat === 'all' ? 'Copied' : 'Copy all'}
                     </button>
                   )}
                 </div>
-                {accessLines.length > 0 ? (
+                {commands.length > 0 ? (
                   <>
                     {agent && agent.status !== 'active' && (
-                      <p className="mb-1.5 text-[12px] leading-relaxed text-ink-faint">
+                      <p className="mb-2 text-[12px] leading-relaxed text-ink-faint lg:text-[13px]">
                         Its process was dismissed — the live-loop (tmux) line won't attach anymore, but the
                         resume command still reopens this exact session.
                       </p>
                     )}
-                    <ul className="space-y-1.5">
-                      {accessLines.map((line, i) => {
-                        const parts = line.split(':  ');
-                        const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
-                        return (
-                          <li key={i} className="flex items-start gap-2">
-                            <code className="min-w-0 flex-1 break-all rounded bg-surface-softer px-2 py-1.5 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
+                    <ul className="space-y-2.5">
+                      {commands.map((c, i) => (
+                        <li key={i} className="rounded-xl bg-surface-softer p-3">
+                          <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                            <span className="min-w-0 text-[13px] font-medium text-ink-soft lg:text-[14px]">
+                              {c.label || 'Command'}
+                              {c.hint && <span className="font-normal text-ink-faint"> — {c.hint}</span>}
+                            </span>
                             <button
                               type="button"
-                              onClick={() => copy(cmd, `line-${i}`)}
-                              className="shrink-0 rounded-md px-2 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/10"
+                              onClick={() => copy(c.cmd, `line-${i}`)}
+                              className="shrink-0 rounded-md px-2 py-1 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
                             >
                               {copiedWhat === `line-${i}` ? 'Copied' : 'Copy'}
                             </button>
-                          </li>
-                        );
-                      })}
+                          </div>
+                          <code className="block break-all rounded-lg bg-black/30 p-2.5 font-mono text-[12px] leading-relaxed text-ink lg:text-[13px]">{c.cmd}</code>
+                        </li>
+                      ))}
                     </ul>
                   </>
                 ) : (
-                  <p className="text-[13px] leading-relaxed text-ink-soft">
+                  <p className="text-[13px] leading-relaxed text-ink-soft lg:text-[14px]">
                     Joined via invite code — its process runs wherever it was started
-                    {participant.workspace ? <> (workspace <code className="rounded bg-surface-softer px-1.5 py-0.5 font-mono text-[11px]">{participant.workspace}</code>)</> : null},
+                    {participant.workspace ? <> (workspace <code className="rounded bg-surface-softer px-1.5 py-0.5 font-mono text-[12px]">{participant.workspace}</code>)</> : null},
                     so there are no app-managed terminal commands for it. To interact with it directly, use
                     the terminal it was launched from{offline ? ' — and paste the recovery prompt above to bring it back into the room' : ''}.
                   </p>
@@ -397,7 +419,7 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   >
                     Remove from room{agent?.status === 'active' ? ' (stops its agent process)' : ''}
                   </button>
-                  <p className="mt-1.5 text-[12px] text-ink-faint">
+                  <p className="mt-1.5 text-[12px] text-ink-faint lg:text-[13px]">
                     {agent?.status === 'active'
                       ? 'Dismisses the summoned process on this Mac and frees its seat in this room. You can summon it again later.'
                       : agent
