@@ -135,15 +135,19 @@ function doAgentEvent(body) {
     x.room === room && x.name === name && x.status === 'active' && sessionAlive(x.tmuxSession));
   if (!a) return { ok: true, ignored: 'no matching active agent' };
   if (watchState.get(a.agentId) === 'blocked') return { ok: true, deduped: true };
-  const blocked = paneBlockedOnPrompt(a.tmuxSession);
+  // Claude's Notification hook also fires for plain idle/waiting-for-input
+  // events (review watch-item on d540c93): only a pane actually showing
+  // dialog furniture earns a push — otherwise an idle agent would re-alert
+  // every time the sampler resets the ledger. Generic notifications stay
+  // silent; the roster/badge remains their surface.
+  if (!paneBlockedOnPrompt(a.tmuxSession)) return { ok: true, ignored: 'no dialog showing' };
   watchState.set(a.agentId, 'blocked'); // the sampler clears this once the pane is clean
-  const kind = blocked ? 'blocked-on-prompt' : 'needs-attention';
-  console.log(`[agent-event] ${name} (${room}) -> ${kind}`);
+  console.log(`[agent-event] ${name} (${room}) -> blocked-on-prompt`);
   fetch(`${ROOM_BASE}/api/agent-alert`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, room, kind }),
+    body: JSON.stringify({ name, room, kind: 'blocked-on-prompt' }),
   }).catch(() => { /* push is best-effort */ });
-  return { ok: true, kind };
+  return { ok: true, kind: 'blocked-on-prompt' };
 }
 
 // ---------- core actions ----------
