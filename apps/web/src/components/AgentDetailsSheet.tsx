@@ -1,7 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { listRoomAgentHistory, relaunchAgentWithMode, respondToAgentPrompt, type PromptRespondVerb, type SummonedAgent } from '../lib/api.js';
 import { brandFor } from '../lib/agentBrand.js';
-import { canRecover, recoveryPrompt, type ParticipantHealth } from '../lib/presence.js';
+import { canRecover, presenceView, recoveryPrompt, type ParticipantHealth } from '../lib/presence.js';
+
+// Header presence chip tones — the server's listen-loop verdict, promoted from
+// a buried mid-list row to the first thing the sheet says about an agent.
+const PRESENCE_CHIP_TONE: Record<string, string> = {
+  listening: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300',
+  online: 'border-border bg-surface-softer text-ink-soft',
+  stale: 'border-amber-400/40 bg-amber-500/10 text-amber-300',
+  disconnected: 'border-red-400/40 bg-red-500/10 text-red-300',
+};
 
 // Permission levels a summoned agent can be relaunched at. Labels mirror the
 // SummonAgentSheet copy so both surfaces describe the same contract.
@@ -124,32 +133,21 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
     try { void navigator.clipboard.writeText(text); setCopiedWhat(what); } catch { /* no clipboard */ }
   };
 
+  // Permissions moved out of the fact list into the controls column — it's an
+  // action surface (Change → picker → relaunch), not a static fact.
+  const permissionLabel = agent
+    ? (agent.accessLabel
+        || (currentLevel === 'build' ? 'Build — edits files and runs commands autonomously'
+          : currentLevel === 'edit' ? 'Edit — can create/modify files in the workspace'
+          : 'Chat — responds in the room only (no file access)'))
+    : (participant.capabilities || '—');
+  const presence = health ? presenceView(health) : null;
+
   const rows: Array<[string, ReactNode]> = [
     ['Provider', agent ? agent.provider : (brand?.label ?? participant.harness ?? 'Agent')],
     ['Model', agent ? (agent.model || 'account-default') : (participant.model || '—')],
     ['Account', agent?.account || participant.account || '—'],
     ['Workspace', agent?.workspace || participant.workspace || '—'],
-    ['Permissions', (
-      <span className="inline-flex flex-wrap items-center justify-end gap-2">
-        <span>
-          {agent
-            ? (agent.accessLabel
-                || (currentLevel === 'build' ? 'Build — edits files and runs commands autonomously'
-                  : currentLevel === 'edit' ? 'Edit — can create/modify files in the workspace'
-                  : 'Chat — responds in the room only (no file access)'))
-            : (participant.capabilities || '—')}
-        </span>
-        {canChangePermissions && (
-          <button
-            type="button"
-            onClick={() => { setPicking(p => !p); setPendingLevel(null); setPermissionNote(null); }}
-            className="rounded-md px-2 py-1 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
-          >
-            {picking ? 'Cancel' : 'Change'}
-          </button>
-        )}
-      </span>
-    )],
     ['Persistent', agent ? (agent.persistent ? 'Yes — resumable' : 'No — one-shot') : '—'],
     ['Role', participant.role || agent?.role || '—'],
     ['Joined', fmt(agent?.createdAt ?? participant.joinedAt)],
@@ -161,11 +159,25 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="agent-detail-title">
       <button type="button" className="absolute inset-0 bg-black/55" onClick={onClose} aria-label="Close details" />
-      <section className="relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl">
+      {/* Desktop is a control center, not a phone sheet: the panel widens to
+          ~4xl on lg+ and the body splits into identity | controls columns.
+          Small screens keep the familiar stacked bottom-sheet. */}
+      <section className="relative z-10 flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-surface shadow-2xl sm:rounded-2xl lg:max-w-4xl">
         <header className="flex items-center justify-between gap-3 border-b border-border-faint px-4 py-3 sm:px-6">
           <div className="min-w-0">
             <div className="text-[13px] font-semibold uppercase tracking-wide text-accent">Agent details</div>
-            <h2 id="agent-detail-title" className="mt-0.5 truncate text-lg font-semibold text-ink">{participant.name}</h2>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h2 id="agent-detail-title" className="truncate text-lg font-semibold text-ink">{participant.name}</h2>
+              {presence && (
+                <span
+                  data-gate="presence-chip"
+                  className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold ${PRESENCE_CHIP_TONE[presence.state]}`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+                  {presence.label}
+                </span>
+              )}
+            </div>
           </div>
           <button type="button" onClick={onClose} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-surface-softer" aria-label="Close">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="m4 4 8 8M12 4l-8 8" /></svg>
@@ -229,21 +241,44 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   </div>
                 </div>
               )}
-              <dl className="divide-y divide-border-faint">
-                {rows.map(([k, v]) => (
-                  <div key={k} className="flex items-start justify-between gap-4 py-2">
-                    <dt className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">{k}</dt>
-                    <dd className="min-w-0 break-words text-right text-[13px] text-ink">{v}</dd>
+              <div className="lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start lg:gap-x-10" data-gate="details-columns">
+              <section aria-label="Identity" data-gate="identity-col">
+                <h3 className="mb-1 hidden text-[12px] font-semibold uppercase tracking-wide text-accent lg:block">Identity</h3>
+                <dl className="divide-y divide-border-faint">
+                  {rows.map(([k, v]) => (
+                    <div key={k} className="flex items-start justify-between gap-4 py-2">
+                      <dt className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">{k}</dt>
+                      <dd className="min-w-0 break-words text-right text-[13px] text-ink">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+
+              {/* The action surfaces — permissions, terminal access, removal —
+                  live together in their own column on desktop instead of being
+                  interleaved with facts down one narrow scroll. */}
+              <section aria-label="Controls" data-gate="controls-col" className="mt-5 lg:mt-0">
+                <div className="rounded-xl border border-border-faint bg-surface-softer/40 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Permissions</div>
+                    {canChangePermissions && (
+                      <button
+                        type="button"
+                        onClick={() => { setPicking(p => !p); setPendingLevel(null); setPermissionNote(null); }}
+                        className="rounded-md px-2 py-1 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
+                      >
+                        {picking ? 'Cancel' : 'Change'}
+                      </button>
+                    )}
                   </div>
-                ))}
-              </dl>
+                  <p className="mt-1 text-[13px] text-ink">{permissionLabel}</p>
 
               {permissionNote && (
                 <p role="status" className="mt-3 rounded-lg bg-surface-softer px-3 py-2 text-[13px] text-ink-soft">{permissionNote}</p>
               )}
 
               {picking && canChangePermissions && (
-                <div className="mt-3 rounded-xl border border-border p-3" data-gate="permission-picker">
+                <div className="mt-3 border-t border-border-faint pt-3" data-gate="permission-picker">
                   <div className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Change permissions</div>
                   <div role="radiogroup" aria-label="Permission level" className="flex flex-col gap-1.5">
                     {PERMISSION_LEVELS.map(lvl => {
@@ -296,25 +331,7 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   )}
                 </div>
               )}
-
-              {onRemove && (
-                <div className="mt-4 border-t border-border-faint pt-4" data-gate="remove-from-room">
-                  <button
-                    type="button"
-                    onClick={onRemove}
-                    className="min-h-11 w-full rounded-lg border border-red-400/40 bg-red-500/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
-                  >
-                    Remove from room{agent?.status === 'active' ? ' (stops its agent process)' : ''}
-                  </button>
-                  <p className="mt-1.5 text-[12px] text-ink-faint">
-                    {agent?.status === 'active'
-                      ? 'Dismisses the summoned process on this Mac and frees its seat in this room. You can summon it again later.'
-                      : agent
-                        ? 'Its process is already dismissed — this just clears the leftover row in People.'
-                        : 'Joined by code: its process runs elsewhere and is not stopped — it only loses its seat in this room.'}
-                  </p>
                 </div>
-              )}
 
               {/* The SAME terminal-access block the Summon screen shows — tmux
                   attach, resume command, provider/model, workspace — so an
@@ -369,6 +386,27 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                     the terminal it was launched from{offline ? ' — and paste the recovery prompt above to bring it back into the room' : ''}.
                   </p>
                 )}
+              </div>
+
+              {onRemove && (
+                <div className="mt-4 border-t border-border-faint pt-4" data-gate="remove-from-room">
+                  <button
+                    type="button"
+                    onClick={onRemove}
+                    className="min-h-11 w-full rounded-lg border border-red-400/40 bg-red-500/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
+                  >
+                    Remove from room{agent?.status === 'active' ? ' (stops its agent process)' : ''}
+                  </button>
+                  <p className="mt-1.5 text-[12px] text-ink-faint">
+                    {agent?.status === 'active'
+                      ? 'Dismisses the summoned process on this Mac and frees its seat in this room. You can summon it again later.'
+                      : agent
+                        ? 'Its process is already dismissed — this just clears the leftover row in People.'
+                        : 'Joined by code: its process runs elsewhere and is not stopped — it only loses its seat in this room.'}
+                  </p>
+                </div>
+              )}
+              </section>
               </div>
             </>
           )}

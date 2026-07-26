@@ -192,6 +192,29 @@ describe('AgentDetailsSheet — terminal access + recovery (T-02)', () => {
     expect(document.querySelector('[data-gate="recovery-banner"]')).not.toBeNull();
   });
 
+  // T-03: desktop control-center anatomy — facts and actions are separate
+  // columns, and the presence verdict is a header chip, not a buried row.
+  it('splits identity facts from the controls column and chips presence in the header', async () => {
+    mockAgentsResponse([summoned({ access: ACCESS })]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onRemove={() => {}}
+      health={health({ state: 'listening', listenRemainingMs: 60_000 })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    const identity = document.querySelector('[data-gate="identity-col"]')!;
+    const controls = document.querySelector('[data-gate="controls-col"]')!;
+    expect(identity).not.toBeNull();
+    expect(controls).not.toBeNull();
+    expect(identity.textContent).toContain('Provider');
+    expect(identity.textContent).toContain('Workspace');
+    // Every ACTION surface lives in controls: permissions, terminal, removal.
+    expect(controls.textContent).toContain('Permissions');
+    expect([...controls.querySelectorAll('button')].some(b => b.textContent === 'Change')).toBe(true);
+    expect(controls.querySelector('[data-gate="terminal-access"]')).not.toBeNull();
+    expect(controls.querySelector('[data-gate="remove-from-room"]')).not.toBeNull();
+    expect(identity.querySelector('[data-gate="terminal-access"], [data-gate="remove-from-room"]')).toBeNull();
+    const chip = document.querySelector('[data-gate="presence-chip"]')!;
+    expect(chip.textContent).toContain('Listening now');
+  });
+
   it('a dismissed process keeps its access block but warns the tmux line is dead', async () => {
     mockAgentsResponse([summoned({ status: 'dismissed', dismissedAt: 2, access: ACCESS })]);
     render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onClose={() => {}} />);
