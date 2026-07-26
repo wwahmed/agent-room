@@ -179,6 +179,21 @@ describe('room list agent facepile (T-34)', () => {
     expect(room.agents.find(a => a.name === 'Busy')!.state).toBe('working');
   });
 
+  // T-05: a guest viewer is an observer, not an attached agent — it must not
+  // inflate counts, occupy a facepile slot, or trip the health badge.
+  it('excludes guest viewers from agent counts, faces, and health', async () => {
+    const store = facepileStore([
+      { ...agent('Auditor', { staleMs: 60 * 60_000 }), viewer: true },
+      agent('Live', { listening: true }),
+    ]);
+    const page = await listIndexedRoomPage(store, 0, 10);
+    const room = page.rooms[0]!;
+    expect(room.agentCount).toBe(1);
+    expect(room.agentStaleCount).toBe(0);
+    expect(room.agentsAllHealthy).toBe(true);
+    expect(room.agents.map(a => a.name)).toEqual(['Live']);
+  });
+
   it('reports zero agents for a humans-only room', async () => {
     const store = facepileStore([{ name: 'Waqas', client: 'web', lastSeenAt: Date.now() }]);
     const page = await listIndexedRoomPage(store, 0, 10);

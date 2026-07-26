@@ -7,6 +7,8 @@ export function statusForError(err: Error): number {
       return 404;
     case 'HostNameTakenError':
     case 'MutedError':
+    // T-05: a guest viewer tried to speak — same refusal tier as muted.
+    case 'ViewerError':
     case 'NotYourTurnError':
     case 'NotHostError':
     case 'MemberAuthError':

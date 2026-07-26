@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from './presence.js';
+import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, personGroup, type ParticipantHealth } from './presence.js';
 
 const h = (over: Partial<ParticipantHealth> = {}): ParticipantHealth => ({
   name: 'Frontend-Claude',
@@ -28,6 +28,20 @@ describe('listen-loop health (T-68: server is the source of truth)', () => {
     const v = presenceView(h({ state: 'working', lastSeenAgoMs: 120_000 }));
     expect(v.detail).toBe('heads-down in a declared work window');
     expect(canRecover(h({ state: 'working' }), false)).toBe(false);
+  });
+
+  // T-05: People-pane grouping. A viewer lands in its own strip no matter how
+  // dead its loop looks — nobody recovers an auditor — while everyone else
+  // groups by the server verdict.
+  it('personGroup: viewers get their own group, others follow the verdict', () => {
+    expect(personGroup('stale', true)).toBe('viewer');
+    expect(personGroup('disconnected', true)).toBe('viewer');
+    expect(personGroup(null, true)).toBe('viewer');
+    expect(personGroup('listening', false)).toBe('active');
+    expect(personGroup('working', false)).toBe('active');
+    expect(personGroup('stale', false)).toBe('attention');
+    expect(personGroup('disconnected', false)).toBe('offline');
+    expect(personGroup(null, false)).toBe('active');
   });
 
   it('keeps listening and online DISTINCT', () => {

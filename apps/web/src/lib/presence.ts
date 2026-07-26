@@ -68,6 +68,16 @@ export function recoveryPrompt(code: string, name: string, role?: string): strin
   return `Rejoin Agent Room ${code} as "${name}"${withRole} and stay in the room_listen loop until the host says stop.`;
 }
 
+/** People-pane grouping. T-05: a guest viewer always lands in its own strip —
+ *  a read-only observer is never "active" and never an alarm, whatever its
+ *  health says (nobody recovers an auditor). Everyone else groups by the
+ *  server verdict: stale → attention, disconnected → offline, rest active. */
+export type PersonGroup = 'active' | 'attention' | 'offline' | 'viewer';
+export function personGroup(state: PresenceState | null, viewer: boolean): PersonGroup {
+  if (viewer) return 'viewer';
+  return state === 'stale' ? 'attention' : state === 'disconnected' ? 'offline' : 'active';
+}
+
 /** Index health by the same identity the participant list is keyed on.
  *  JSON.stringify is used deliberately: it is text-safe (an earlier version used a
  *  raw NUL separator, which made the whole source file binary to git and `file`)

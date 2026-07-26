@@ -25,6 +25,11 @@ export interface Participant {
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally
+  // T-05: guest viewer — joined to observe, not to participate. Read-only
+  // (sends are rejected server-side), excluded from agent counts/facepiles,
+  // turn order, and presence alarms; the People pane lists viewers in their
+  // own dimmed strip so "who's active" stays clean.
+  viewer?: boolean;
   // T-04: declared work window. Stamped by a room_status ping or a task claim
   // — the two acts that already mean "I'm heads-down". While unexpired, the
   // participant reads as `working` instead of decaying toward stale, so a

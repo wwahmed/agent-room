@@ -801,6 +801,18 @@ export class MutedError extends Error {
 /** @deprecated Same shape as MutedError, kept for backward compat. */
 export const NotApprovedError = MutedError;
 
+/**
+ * T-05: thrown by `appendMessage` when the sender joined as a guest viewer.
+ * Distinct from MutedError so clients can explain "you chose read-only"
+ * rather than "the host silenced you".
+ */
+export class ViewerError extends Error {
+  constructor(name: string) {
+    super(`"${name}" joined as a guest viewer — viewers are read-only. Rejoin without viewer mode to participate.`);
+    this.name = 'ViewerError';
+  }
+}
+
 // Remove a participant from the room. Only the host (createdBy) may kick.
 // Upstash has no per-call auth so this is a soft guard inside the CAS — anyone
 // with the REST token can still bypass it, but no path through the public web

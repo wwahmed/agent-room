@@ -189,7 +189,7 @@ export function pickLeadForSequential(room: Room): { name: string; client: Clien
   const wantName = room.modeConfig?.leadAgentName;
   const wantClient = room.modeConfig?.leadAgentClient;
   const ccAgents = room.participants
-    .filter(p => p.client === 'cc' && p.canSpeak !== false && p.name !== room.createdBy)
+    .filter(p => p.client === 'cc' && p.canSpeak !== false && p.viewer !== true && p.name !== room.createdBy)
     .sort((a, b) => a.joinedAt - b.joinedAt);
   if (wantName && wantClient) {
     const explicit = ccAgents.find(p => p.name === wantName && p.client === wantClient);
@@ -203,7 +203,8 @@ export function pickLeadForSequential(room: Room): { name: string; client: Clien
 }
 
 // Sequential mode: build the supplement queue from remaining cc agents in
-// join order. Excludes the Lead and the host. Filters out muted agents.
+// join order. Excludes the Lead and the host. Filters out muted agents and
+// guest viewers (T-05: a viewer never holds a turn).
 export function buildSupplementQueue(
   room: Room,
   lead: { name: string; client: ClientKind } | undefined,
@@ -211,6 +212,7 @@ export function buildSupplementQueue(
   return room.participants
     .filter(p => p.client === 'cc')
     .filter(p => p.canSpeak !== false)
+    .filter(p => p.viewer !== true)
     .filter(p => p.name !== room.createdBy)
     .filter(p => !(lead && p.name === lead.name && p.client === lead.client))
     .sort((a, b) => a.joinedAt - b.joinedAt)
@@ -237,7 +239,7 @@ export function newModeratorTurn(
   const wantClient = room.modeConfig?.moderatorAgentClient;
   if (!wantName || !wantClient) return null;
   const mod = room.participants.find(p =>
-    p.name === wantName && p.client === wantClient && p.canSpeak !== false,
+    p.name === wantName && p.client === wantClient && p.canSpeak !== false && p.viewer !== true,
   );
   if (!mod) return null;
   return {
@@ -707,7 +709,7 @@ export async function sweepTimeouts(
   if (room.replyMode === 'moderator' && prev.moderatorName && prev.moderatorClient) {
     // Moderator absent from participants → fallback.
     const modPresent = room.participants.some(p =>
-      p.name === prev.moderatorName && p.client === prev.moderatorClient && p.canSpeak !== false,
+      p.name === prev.moderatorName && p.client === prev.moderatorClient && p.canSpeak !== false && p.viewer !== true,
     );
     if (!modPresent) {
       fallback = {
@@ -727,7 +729,7 @@ export async function sweepTimeouts(
     // Lead absent from participants → fallback (and only while a turn
     // is in flight — if the turn already drained, no fallback needed).
     const leadPresent = room.participants.some(p =>
-      p.name === prev.leadName && p.client === prev.leadClient && p.canSpeak !== false,
+      p.name === prev.leadName && p.client === prev.leadClient && p.canSpeak !== false && p.viewer !== true,
     );
     if (!leadPresent && (state?.currentName || (state?.queue.length ?? 0) > 0)) {
       fallback = {

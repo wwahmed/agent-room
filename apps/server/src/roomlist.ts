@@ -86,7 +86,9 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
     // People panel uses — the list must never invent its own health verdicts.
     // The raw room JSON is already in hand, so this costs no extra reads.
     const participants = Array.isArray(room.participants) ? (room.participants as Participant[]) : [];
-    const agents = participants.filter(p => p?.client === 'cc');
+    // T-05: guest viewers observe — they are not "agents attached to the
+    // room" and must not appear in facepiles or health badges.
+    const agents = participants.filter(p => p?.client === 'cc' && p?.viewer !== true);
     const agentStates = agents.map(p => presenceState(p, now));
     // T-04: `working` is a healthy state — a declared-busy agent must not
     // trip the room card's "needs attention" badge.

@@ -103,6 +103,17 @@ describe('buildSupplementQueue', () => {
     const queue = buildSupplementQueue(r, { name: 'Lead', client: 'cc' });
     expect(queue).toEqual([{ name: 'B', client: 'cc', role: 'supplement' }]);
   });
+
+  // T-05: a guest viewer never holds a turn — neither as Lead nor supplement.
+  it('filters out guest viewers, and never elects one as Lead', () => {
+    const viewer = { ...part('Auditor', 'cc', 5), viewer: true };
+    const r = room({
+      participants: [part('host', 'web', 0), viewer, part('Lead', 'cc', 10), part('B', 'cc', 30)],
+    });
+    expect(pickLeadForSequential(r)).toEqual({ name: 'Lead', client: 'cc' });
+    const queue = buildSupplementQueue(r, { name: 'Lead', client: 'cc' });
+    expect(queue).toEqual([{ name: 'B', client: 'cc', role: 'supplement' }]);
+  });
 });
 
 describe('newSequentialTurn', () => {

@@ -41,6 +41,7 @@ export class RoomNotFoundError extends Error { constructor(m: string) { super(m)
 export class HostNameTakenError extends Error { constructor(m: string) { super(m); this.name = 'HostNameTakenError'; } }
 export class InterviewRoomBusyError extends Error { constructor(m: string) { super(m); this.name = 'InterviewRoomBusyError'; } }
 export class MutedError extends Error { constructor(m: string) { super(m); this.name = 'MutedError'; } }
+export class ViewerError extends Error { constructor(m: string) { super(m); this.name = 'ViewerError'; } }
 export class NotYourTurnError extends Error { constructor(m: string) { super(m); this.name = 'NotYourTurnError'; } }
 export class NotHostError extends Error { constructor(m: string) { super(m); this.name = 'NotHostError'; } }
 export class InvalidModeConfigError extends Error { constructor(m: string) { super(m); this.name = 'InvalidModeConfigError'; } }
@@ -52,6 +53,7 @@ function errorFromBody(error: string | undefined, message: string, status: numbe
     case 'HostNameTakenError': return new HostNameTakenError(message);
     case 'InterviewRoomBusyError': return new InterviewRoomBusyError(message);
     case 'MutedError': return new MutedError(message);
+    case 'ViewerError': return new ViewerError(message);
     case 'NotYourTurnError': return new NotYourTurnError(message);
     case 'NotHostError': return new NotHostError(message);
     case 'InvalidModeConfigError': return new InvalidModeConfigError(message);

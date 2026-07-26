@@ -125,6 +125,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   setListenUntil,
   setMuted,
   setWorkingUntil,
+  ViewerError,
   setReplyMode,
   sha256Hex,
   sweepTimeouts,
@@ -933,6 +934,9 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       const joinStamp = Date.now();
       if (!Number(participant.lastSeenAt)) participant.lastSeenAt = joinStamp;
       if (!Number(participant.joinedAt)) participant.joinedAt = joinStamp;
+      // T-05: the viewer flag is an explicit opt-in boolean, nothing else —
+      // a truthy string must not silently make a row read-only.
+      if (participant.viewer !== true) delete participant.viewer;
       const hostKey = payload.hostKey as string | undefined;
       const priorIdentity = payload.priorIdentity as { name: string; client: 'web' | 'cc' } | undefined;
       const room = await getRoom(client, code);
@@ -1088,7 +1092,15 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           ...stamped,
           metadata: { ...(stamped as { metadata?: Record<string, unknown> }).metadata, kind: 'status' },
         } as Message;
-        await getRoom(client, code);
+        const statusRoom = await getRoom(client, code);
+        // T-05: status pings bypass the appendMessage speaker gate, so the
+        // viewer check must live here too — read-only means no pings either.
+        const statusRow = statusRoom.participants.find(
+          (x) => x.name === message.name && x.client === ((message.client as 'web' | 'cc') || 'cc'),
+        );
+        if (statusRow?.viewer === true) {
+          throw new ViewerError(String(message.name));
+        }
         // T-04: a status ping is a declared "I'm heads-down" — arm the work
         // window so the sender reads as `working` instead of decaying to
         // stale mid-task. Fire-and-forget: never fail a ping on this.

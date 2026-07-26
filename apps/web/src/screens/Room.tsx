@@ -57,7 +57,7 @@ import { fetchHealth } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
-import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, type ParticipantHealth } from '../lib/presence.js';
+import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, personGroup, type ParticipantHealth } from '../lib/presence.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
@@ -2081,7 +2081,10 @@ export function Room() {
                   const canMuteToggle = isMeHost && !isSelf && !ended;
                   const canAsk = canConfigureReplyMode && p.client === 'cc' && !isMuted;
                   const h = healthById.get(healthKey(p.name, p.client));
-                  const presence = h ? presenceView(h) : null;
+                  // T-05: a viewer's liveness is nobody's problem — suppress
+                  // the presence verdict (and with it the recovery affordance)
+                  // rather than alarming about a read-only observer.
+                  const presence = h && p.viewer !== true ? presenceView(h) : null;
                   // Whole-row visual fade for participants who haven't been
                   // seen in a while — keeps the row legible but signals
                   // "probably gone" without screaming about it.
@@ -2116,6 +2119,7 @@ export function Room() {
                         <div className="msg-author flex flex-wrap items-center gap-1 truncate">
                           {p.name}
                           {p.name === room.createdBy && <span className="rounded bg-accent-tint px-1 py-px text-[12px] font-semibold text-accent">host</span>}
+                          {p.viewer === true && <span className="rounded bg-surface-softer px-1 py-px text-[12px] font-semibold text-ink-soft">viewer · read-only</span>}
                           {isMuted && <span className="rounded bg-amber-500/15 px-1 py-px text-[12px] font-semibold text-amber-300">muted</span>}
                         </div>
                         <div className="msg-meta truncate">
@@ -2258,13 +2262,13 @@ export function Room() {
 
   const personGroupOf = (p: (typeof room.participants)[number]) => {
     const h = healthById.get(healthKey(p.name, p.client));
-    const s = h ? presenceView(h).state : null;
-    return s === 'stale' ? 'attention' as const : s === 'disconnected' ? 'offline' as const : 'active' as const;
+    return personGroup(h ? presenceView(h).state : null, p.viewer === true);
   };
   const peopleGroups = {
     active: room.participants.filter(p => personGroupOf(p) === 'active'),
     attention: room.participants.filter(p => personGroupOf(p) === 'attention'),
     offline: room.participants.filter(p => personGroupOf(p) === 'offline'),
+    viewers: room.participants.filter(p => personGroupOf(p) === 'viewer'),
   };
   const peoplePanel = (
     <div>
@@ -2292,6 +2296,14 @@ export function Room() {
             Offline · {peopleGroups.offline.length}
           </button>
           {showOffline && <div className="space-y-2">{peopleGroups.offline.map(renderPersonRow)}</div>}
+        </section>
+      )}
+      {/* T-05: read-only observers live in their own dimmed strip so the
+          groups above stay an honest census of who can actually act. */}
+      {peopleGroups.viewers.length > 0 && (
+        <section aria-label="Viewers (read-only)" className="mt-5 opacity-70">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Viewers · {peopleGroups.viewers.length}</h3>
+          <div className="space-y-2">{peopleGroups.viewers.map(renderPersonRow)}</div>
         </section>
       )}
     </div>
@@ -2413,7 +2425,8 @@ export function Room() {
     );
 
   const headerAgents = activeRoom.participants
-    .filter(participant => participant.client === 'cc')
+    // T-05: viewers observe — the header rail lists acting agents only.
+    .filter(participant => participant.client === 'cc' && participant.viewer !== true)
     .map(participant => ({
       name: participant.name,
       color: participant.color,

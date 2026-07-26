@@ -2,7 +2,7 @@ import type { Message, MessageMetadata, MessageReaction, MessageReactionKind, Me
 import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS, extractArtifacts } from '@agent-room/shared';
 import { artifactAppendCommands } from './artifactStore.js';
 import type { UpstashClient } from './client.js';
-import { findSpeaker, MutedError, NotYourTurnError, getRoom } from './rooms.js';
+import { findSpeaker, MutedError, NotYourTurnError, ViewerError, getRoom } from './rooms.js';
 import type { TurnSpokenEntry } from './turnState.js';
 import {
   advanceOnTimeout,
@@ -112,6 +112,12 @@ export async function appendMessage(
   message: Message
 ): Promise<AppendResult> {
   const room = await getRoom(client, code);
+  // T-05: viewers are read-only BY THEIR OWN CHOICE — reject before the mute
+  // gate so the error says "you joined as a viewer", not "the host muted you".
+  const row = room.participants.find(x => x.name === message.name && x.client === message.client);
+  if (row?.viewer === true) {
+    throw new ViewerError(message.name);
+  }
   if (!findSpeaker(room, message.name, message.client)) {
     throw new MutedError(message.name, room.createdBy);
   }

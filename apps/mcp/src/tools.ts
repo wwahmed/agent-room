@@ -28,6 +28,7 @@ import {
   listOwnerQuestions,
   HostNameTakenError,
   MutedError,
+  ViewerError,
   NotYourTurnError,
   NotHostError,
   InvalidModeConfigError,
@@ -451,6 +452,11 @@ export function registerTools(server: Server) {
             account: { type: 'string', description: 'The account/identity you run on — a human-readable LABEL such as your login email or org (e.g. "wwahmed@gmail.com"). Display-only, shown in the People pane. NEVER send a password, API key, or token here.' },
             workspace: { type: 'string', description: 'Absolute path or repo name of the workspace/directory you are operating in (optional, display-only).' },
             capabilities: { type: 'string', description: 'Short summary of what you can do in this room, e.g. "chat only", "can edit files", "read-only review" (optional, display-only).' },
+            viewer: {
+              type: 'boolean',
+              description:
+                'T-05: join as a GUEST VIEWER — read-only observation. Your row is listed in a separate dimmed "Viewers" strip, excluded from agent counts/facepiles, turn order, and presence alarms, and every room_send/room_status is rejected with error "viewer". Use this when you only need to inspect or audit a room (e.g. an admin checking on another room) without polluting "who\'s active". Rejoin without the flag to participate.',
+            },
             listenAfterJoin: {
               type: 'boolean',
               description:
@@ -938,6 +944,8 @@ export function registerTools(server: Server) {
         ...(a.account ? { account: String(a.account).slice(0, 120) } : {}),
         ...(a.workspace ? { workspace: String(a.workspace).slice(0, 300) } : {}),
         ...(a.capabilities ? { capabilities: String(a.capabilities).slice(0, 200) } : {}),
+        // T-05: explicit opt-in to read-only observation.
+        ...(a.viewer === true ? { viewer: true } : {}),
         joinedAt: Date.now(),
         lastSeenAt: Date.now(),
       };
@@ -1182,6 +1190,14 @@ export function registerTools(server: Server) {
         appendResult = await appendMessage(
           client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code));
       } catch (e) {
+        if (e instanceof ViewerError) {
+          // T-05: this identity joined read-only by its own choice.
+          return ok({
+            sent: false,
+            error: 'viewer',
+            hint: `${e.message} You joined with viewer:true, so sends are rejected by design. Keep observing with room_listen, or leave and rejoin WITHOUT the viewer flag to participate.`,
+          });
+        }
         if (e instanceof MutedError) {
           // The host has muted this participant. Tell the user explicitly
           // — retrying without unmute will fail again.
@@ -1273,6 +1289,14 @@ export function registerTools(server: Server) {
         appendResult = await appendMessage(
           client, a.code, msg, await readHostKey(a.code), 'status', await readMemberKey(a.code));
       } catch (e) {
+        if (e instanceof ViewerError) {
+          // T-05: viewers don't ping either — read-only is read-only.
+          return ok({
+            sent: false,
+            error: 'viewer',
+            hint: `${e.message} You joined with viewer:true; status pings are rejected by design. Keep observing with room_listen.`,
+          });
+        }
         if (e instanceof MutedError) {
           return ok({
             sent: false,

@@ -19,6 +19,11 @@ describe('statusForError', () => {
     expect(statusForError(named('RoomNotFoundError'))).toBe(404);
   });
 
+  // T-05: a viewer's send is a refusal, same tier as muted — not a server bug.
+  it('maps ViewerError to 403', () => {
+    expect(statusForError(named('ViewerError'))).toBe(403);
+  });
+
   it('falls back to 500 only for genuinely unknown errors', () => {
     expect(statusForError(new Error('kaboom'))).toBe(500);
   });
