@@ -21,6 +21,12 @@ self.addEventListener('push', (event) => {
   let payload = { title: 'WakiChat', body: '', url: '/', tag: undefined };
   try { payload = { ...payload, ...event.data.json() }; } catch { /* keep defaults */ }
   event.waitUntil((async () => {
+    // App in the foreground → the message is (about to be) on screen; a tray
+    // entry would just sit there as noise. Skipping showNotification while a
+    // window is visible is exempt from the userVisibleOnly requirement, so
+    // this never triggers the browser's generic fallback notification.
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (wins.some(w => w.visibilityState === 'visible' || w.focused)) return;
     await self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,

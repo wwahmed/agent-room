@@ -95,10 +95,29 @@ export async function setNotifyLevel(level: NotifyLevel): Promise<{ ok: boolean;
   return { ok: true };
 }
 
-/** The app icon badge clears whenever the app comes to the foreground. */
+/** Close every notification this app is showing in the system tray. Waqas:
+ *  opening the app must clean the tray — the messages are on screen now, so
+ *  a stale stack of "X sent a message" entries is just noise. */
+export async function clearShownNotifications(): Promise<number> {
+  if (!('serviceWorker' in navigator)) return 0;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) return 0;
+    const shown = await reg.getNotifications();
+    for (const n of shown) n.close();
+    return shown.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** The app icon badge AND the tray notifications clear whenever the app
+ *  comes to the foreground (launch, tab focus, PWA resume). */
 export function installBadgeClearing(): void {
-  if (!('clearAppBadge' in navigator)) return;
-  const clear = () => { void navigator.clearAppBadge().catch(() => undefined); };
+  const clear = () => {
+    if ('clearAppBadge' in navigator) void navigator.clearAppBadge().catch(() => undefined);
+    void clearShownNotifications();
+  };
   window.addEventListener('focus', clear);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') clear();
