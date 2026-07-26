@@ -10,6 +10,7 @@ import { splitRooms } from '../lib/roomSections.js';
 import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, sortRooms, type RoomSort } from '../lib/roomSort.js';
 import { useLiveRooms } from '../hooks/useLiveRooms.js';
 import { createClient, unarchiveRoomAction } from '../lib/api.js';
+import { RoomContextMenu, useRoomCardMenu } from '../components/RoomContextMenu.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -44,6 +45,8 @@ export function Home() {
   // T-40: Active is the default view; Ended renders only when selected.
   const [view, setView] = useState<'active' | 'ended' | 'archived'>('active');
   const homeClient = useRef(createClient()).current;
+  // Long-press (touch) / right-click (desktop) room actions on every card.
+  const { menu: roomMenu, closeMenu: closeRoomMenu, bind: bindRoomMenu } = useRoomCardMenu();
   async function handleUnarchive(code: string) {
     try { await unarchiveRoomAction(homeClient, code); window.location.reload(); }
     catch (e) { window.alert(`Could not unarchive: ${e instanceof Error ? e.message : String(e)}`); }
@@ -297,6 +300,7 @@ export function Home() {
               return (
                 <div
                   key={r.code}
+                  {...bindRoomMenu({ code: r.code, topic: r.topic, status: r.status, archived: r.archived })}
                   className="room-list-row relative flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface px-4 py-3.5 text-left shadow-card transition hover:border-accent-tint-border hover:bg-accent-tint focus-within:border-accent-tint-border"
                   style={{ contentVisibility: 'auto', containIntrinsicSize: '72px' }}
                 >
@@ -350,6 +354,7 @@ export function Home() {
             {endedRooms.map(r => (
               <button
                 key={r.code}
+                {...bindRoomMenu({ code: r.code, topic: r.topic, status: r.status, archived: r.archived })}
                 onClick={() => navigate(`/r/${r.code}`)}
                 className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface-softer px-4 py-2.5 text-left opacity-70 transition hover:opacity-100"
                 style={{ contentVisibility: 'auto', containIntrinsicSize: '58px' }}
@@ -369,7 +374,11 @@ export function Home() {
               <div className="rounded-xl border border-border-faint bg-surface p-5 text-sm text-ink-soft">No archived rooms.</div>
             )}
             {archivedRooms.map(r => (
-              <div key={r.code} className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface-softer px-4 py-2.5">
+              <div
+                key={r.code}
+                {...bindRoomMenu({ code: r.code, topic: r.topic, status: r.status, archived: true })}
+                className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border-faint bg-surface-softer px-4 py-2.5"
+              >
                 <button
                   onClick={() => navigate(`/r/${r.code}`)}
                   className="min-w-0 flex-1 text-left opacity-70 transition hover:opacity-100"
@@ -388,6 +397,17 @@ export function Home() {
               </div>
             ))}
           </section>
+        )}
+
+        {roomMenu && (
+          <RoomContextMenu
+            menu={roomMenu}
+            selfName={identity?.name}
+            onClose={closeRoomMenu}
+            // Matches the existing unarchive pattern: a reload re-pulls every
+            // page of the merged room list in one move.
+            onChanged={() => window.location.reload()}
+          />
         )}
 
         {/* T-40 R2: when EVERY row in the segment is a collapsed test room, say

@@ -101,6 +101,13 @@ interface HostAuth {
   hostKey?: string | null;
 }
 
+/** Whether this browser holds the host key for a room — the practical "am I
+ *  the host here" test for gating host-only controls client-side. The server
+ *  re-verifies on every action; this only decides what's worth showing. */
+export function hasHostKey(code: string): boolean {
+  return Boolean(storedHostKey(code));
+}
+
 function storedHostKey(code: string): string | undefined {
   try {
     return (
