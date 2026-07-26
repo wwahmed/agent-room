@@ -467,7 +467,13 @@ export function nativeLaunchSpec(cfg) {
     const args = [
       '--additional-mcp-config', mcpJson,
       ...(model ? ['--model', model] : []),
-      ...(canWrite ? ['--add-dir', workspace, '--allow-all-tools'] : []), // write perms only when granted
+      // Write perms only when granted. --allow-all-tools does NOT cover paths
+      // outside the allowed directories: copilot creates scratch worktrees
+      // under /tmp (e.g. /tmp/copilot-<task>) and then blocks FOREVER on an
+      // interactive "Allow directory access?" dialog no one is attached to
+      // answer — observed live as an agent "going quiet" mid-task. Pre-allow
+      // the temp roots so the unattended session never hits that prompt.
+      ...(canWrite ? ['--add-dir', workspace, '--add-dir', '/tmp', '--add-dir', tmpdir(), '--allow-all-tools'] : []),
       '--no-color',
       '-n', name,
     ];

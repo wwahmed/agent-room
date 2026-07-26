@@ -57,6 +57,16 @@ function sessionAlive(session) {
 function killSession(session) {
   tmux(['kill-session', '-t', session]);
 }
+// A native harness can stall FOREVER on an interactive dialog (observed live:
+// copilot's "Allow directory access?" for a /tmp worktree) while reading as
+// "online" — a live tmux session says nothing about being blocked. Sniff the
+// visible pane tail for dialog furniture so the roster can say so.
+function paneBlockedOnPrompt(session) {
+  const out = tmux(['capture-pane', '-p', '-t', session]);
+  if (out.status !== 0) return false;
+  const tail = String(out.stdout || '').split('\n').slice(-35).join('\n');
+  return /Do you want to allow this\?|↑\/↓ to navigate|enter to select · esc|Do you trust the files/.test(tail);
+}
 
 // ---------- helpers ----------
 function sanitizeName(s) {
@@ -70,8 +80,10 @@ function health(agent) {
   if (!sessionAlive(agent.tmuxSession)) return 'stopped';
   // Native agents own their own room loop (no summoner heartbeat file); a live
   // tmux session means the harness is running. True in-room presence is the
-  // server's job (lease/heartbeat), shown in the room itself.
-  if (agent.native) return 'online';
+  // server's job (lease/heartbeat), shown in the room itself. One exception a
+  // live session CAN reveal: the harness is sitting on an interactive dialog
+  // (permission/trust prompt) that unattended sessions can never answer.
+  if (agent.native) return paneBlockedOnPrompt(agent.tmuxSession) ? 'blocked-on-prompt' : 'online';
   try {
     const beat = Number(readFileSync(agent.heartbeat, 'utf8').trim());
     if (Date.now() - beat < 320000) return 'online';
