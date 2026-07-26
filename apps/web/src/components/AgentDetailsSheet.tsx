@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { listRoomAgentHistory, relaunchAgentWithMode, respondToAgentPrompt, type PromptRespondVerb, type SummonedAgent } from '../lib/api.js';
 import { brandFor } from '../lib/agentBrand.js';
+import { canRecover, recoveryPrompt, type ParticipantHealth } from '../lib/presence.js';
 
 // Permission levels a summoned agent can be relaunched at. Labels mirror the
 // SummonAgentSheet copy so both surfaces describe the same contract.
@@ -28,7 +29,7 @@ interface DetailParticipant {
 // Full detail view for a room participant — pulls the summoner record (account,
 // model, provider, session, join/leave dates) when it's an agent we summoned,
 // and falls back to the participant row for join-code agents.
-export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
+export function AgentDetailsSheet({ code, participant, onClose, onRemove, health, ended }: {
   code: string;
   participant: DetailParticipant;
   onClose: () => void;
@@ -36,6 +37,12 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
    *  People-row ×) — stops the summoned process if we manage one, then frees
    *  the participant row. Absent for non-hosts and for the host's own row. */
   onRemove?: () => void;
+  /** The server's listen-loop verdict for this participant (T-68). When it says
+   *  a CLI agent is stale/disconnected — the "hit its usage limits and went
+   *  quiet" failure mode — the sheet surfaces the recovery path right here,
+   *  not only on the People row. */
+  health?: ParticipantHealth | null;
+  ended?: boolean;
 }) {
   const [agent, setAgent] = useState<SummonedAgent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,8 +109,20 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
     }
   }
 
-  const resume = agent?.access?.find((l) => /Resume this|Chat directly/i.test(l));
-  const resumeCmd = resume ? resume.split(':  ').slice(1).join(':  ') : '';
+  // Full terminal-access block from the summoner record — the same lines the
+  // Summon screen shows (tmux attach, resume command, provider/model,
+  // workspace). This used to be regex-reduced to just the resume line here,
+  // which left the host with no way to locate an offline agent from People.
+  const accessLines = agent?.access ?? [];
+  // The one action that works when a CLI agent stops listening (usage limits,
+  // crashed harness, closed terminal): paste the recovery prompt into its
+  // terminal. Same contract as the People-row button.
+  const offline = Boolean(health && canRecover(health, ended ?? false));
+  const recoveryText = recoveryPrompt(code, participant.name, participant.role);
+  const [copiedWhat, setCopiedWhat] = useState<string | null>(null);
+  const copy = (text: string, what: string) => {
+    try { void navigator.clipboard.writeText(text); setCopiedWhat(what); } catch { /* no clipboard */ }
+  };
 
   const rows: Array<[string, ReactNode]> = [
     ['Provider', agent ? agent.provider : (brand?.label ?? participant.harness ?? 'Agent')],
@@ -186,6 +205,29 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
               )}
               {promptNote && (
                 <p role="status" className="mb-3 rounded-lg bg-surface-softer px-3 py-2 text-[13px] text-ink-soft">{promptNote}</p>
+              )}
+              {offline && (
+                <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/10 p-3" data-gate="recovery-banner" role="alert">
+                  <div className="text-[13px] font-bold text-red-300">
+                    {health?.state === 'disconnected' ? 'Disconnected' : 'Not listening'} — needs a nudge to come back
+                  </div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                    {participant.name} isn't in its room-listen loop. This happens when the model hits its
+                    usage limits, the harness exits, or its terminal closes. The app can't restart a CLI
+                    process, but you can: copy the recovery prompt and paste it into the agent's terminal
+                    {accessLines.length > 0 ? ' — the commands below reach that terminal' : ''}.
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => copy(recoveryText, 'recovery')}
+                      className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                    >
+                      Copy recovery prompt
+                    </button>
+                    {copiedWhat === 'recovery' && <span role="status" className="text-[12px] font-semibold text-accent">Copied</span>}
+                  </div>
+                </div>
               )}
               <dl className="divide-y divide-border-faint">
                 {rows.map(([k, v]) => (
@@ -274,16 +316,60 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove }: {
                 </div>
               )}
 
-              {resumeCmd && (
-                <div className="mt-4">
-                  <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Reach it directly</div>
-                  <div className="flex items-start gap-2">
-                    <code className="min-w-0 flex-1 break-all rounded bg-surface-softer px-2 py-1.5 font-mono text-[11px] text-ink-soft">{resumeCmd}</code>
-                    <button type="button" onClick={() => { try { void navigator.clipboard.writeText(resumeCmd); } catch { /* no clipboard */ } }}
-                      className="shrink-0 rounded-md px-2 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/10">Copy</button>
-                  </div>
+              {/* The SAME terminal-access block the Summon screen shows — tmux
+                  attach, resume command, provider/model, workspace — so an
+                  agent can be located and reached from here long after the
+                  summon sheet is gone. Join-code agents get an honest
+                  explanation instead of a false-empty. */}
+              <div className="mt-4" data-gate="terminal-access">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Reach it from a terminal</div>
+                  {accessLines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => copy(accessLines.join('\n'), 'all')}
+                      className="rounded-md px-2 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/10"
+                    >
+                      {copiedWhat === 'all' ? 'Copied' : 'Copy all'}
+                    </button>
+                  )}
                 </div>
-              )}
+                {accessLines.length > 0 ? (
+                  <>
+                    {agent && agent.status !== 'active' && (
+                      <p className="mb-1.5 text-[12px] leading-relaxed text-ink-faint">
+                        Its process was dismissed — the live-loop (tmux) line won't attach anymore, but the
+                        resume command still reopens this exact session.
+                      </p>
+                    )}
+                    <ul className="space-y-1.5">
+                      {accessLines.map((line, i) => {
+                        const parts = line.split(':  ');
+                        const cmd = parts.length > 1 ? parts.slice(1).join(':  ') : line;
+                        return (
+                          <li key={i} className="flex items-start gap-2">
+                            <code className="min-w-0 flex-1 break-all rounded bg-surface-softer px-2 py-1.5 font-mono text-[11px] leading-relaxed text-ink-soft">{line}</code>
+                            <button
+                              type="button"
+                              onClick={() => copy(cmd, `line-${i}`)}
+                              className="shrink-0 rounded-md px-2 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/10"
+                            >
+                              {copiedWhat === `line-${i}` ? 'Copied' : 'Copy'}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="text-[13px] leading-relaxed text-ink-soft">
+                    Joined via invite code — its process runs wherever it was started
+                    {participant.workspace ? <> (workspace <code className="rounded bg-surface-softer px-1.5 py-0.5 font-mono text-[11px]">{participant.workspace}</code>)</> : null},
+                    so there are no app-managed terminal commands for it. To interact with it directly, use
+                    the terminal it was launched from{offline ? ' — and paste the recovery prompt above to bring it back into the room' : ''}.
+                  </p>
+                )}
+              </div>
             </>
           )}
         </div>

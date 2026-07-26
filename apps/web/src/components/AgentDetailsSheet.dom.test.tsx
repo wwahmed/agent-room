@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { AgentDetailsSheet } from './AgentDetailsSheet.js';
 import type { SummonedAgent } from '../lib/api.js';
+import { recoveryPrompt, type ParticipantHealth } from '../lib/presence.js';
 
 // Change-permissions flow: the Permissions row on a live SUMMONED agent gains
 // a Change control that discloses a chat/edit/build picker; choosing a new
@@ -115,5 +116,88 @@ describe('AgentDetailsSheet — change permissions', () => {
     expect(JSON.parse(String(relaunchCall[1]?.body))).toEqual({ agentId: 'room-claude-abc123', mode: 'build' });
     // The row now shows the summoner's post-relaunch record.
     expect(document.body.textContent).toContain('Build — edits files and runs commands autonomously');
+  });
+});
+
+// T-02: the info needed to locate and interact with an agent — the full
+// terminal-access block plus the recovery prompt for an offline agent — must
+// live on the details sheet, not only on the transient Summon screen.
+
+const health = (over: Partial<ParticipantHealth> = {}): ParticipantHealth => ({
+  name: 'ClaudeBuilder', client: 'cc', role: 'AI Agent',
+  state: 'stale', lastSeenAgoMs: 120_000, listenRemainingMs: 0,
+  ...over,
+});
+
+const ACCESS = [
+  'Watch the live agent loop:  TMUX_TMPDIR=/x tmux attach -t sm-x   (detach: Ctrl-b then d)',
+  'Resume this exact agent:  cd /tmp/ws && claude --resume abc-123',
+  'Provider / model:  claude-corporate / claude-fable-5',
+  'Workspace:  /tmp/ws',
+];
+
+async function waitLoaded() {
+  await waitFor(() => {
+    if (document.body.textContent?.includes('Loading')) throw new Error('still loading');
+  });
+}
+
+describe('AgentDetailsSheet — terminal access + recovery (T-02)', () => {
+  it('shows the FULL summon-screen access block with per-line copy and copy-all', async () => {
+    mockAgentsResponse([summoned({ access: ACCESS })]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onClose={() => {}} />);
+    await waitLoaded();
+    const section = document.querySelector('[data-gate="terminal-access"]')!;
+    expect(section).not.toBeNull();
+    for (const line of ACCESS) expect(section.textContent).toContain(line);
+    expect(section.querySelectorAll('li code').length).toBe(4); // every line, not just the resume regex hit
+    expect([...section.querySelectorAll('button')].some(b => b.textContent === 'Copy all')).toBe(true);
+  });
+
+  it('offers the recovery prompt when the presence verdict says stale/disconnected', async () => {
+    const writeText = vi.fn(async () => {});
+    mockAgentsResponse([summoned({ access: ACCESS })]);
+    vi.stubGlobal('navigator', { ...window.navigator, clipboard: { writeText } });
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health()} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    const banner = document.querySelector('[data-gate="recovery-banner"]')!;
+    expect(banner).not.toBeNull();
+    expect(banner.textContent).toContain('usage limits'); // names the failure mode the host actually hits
+    fireEvent.click([...banner.querySelectorAll('button')].find(b => b.textContent === 'Copy recovery prompt')!);
+    expect(writeText).toHaveBeenCalledWith(recoveryPrompt('abc-def-ghj', 'ClaudeBuilder', 'AI Agent'));
+  });
+
+  it('shows NO recovery banner while listening, and none after the room ended', async () => {
+    mockAgentsResponse([summoned()]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant}
+      health={health({ state: 'listening', listenRemainingMs: 60_000 })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    expect(document.querySelector('[data-gate="recovery-banner"]')).toBeNull();
+
+    cleanup();
+    mockAgentsResponse([summoned()]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health()} ended={true} onClose={() => {}} />);
+    await waitLoaded();
+    expect(document.querySelector('[data-gate="recovery-banner"]')).toBeNull();
+  });
+
+  it('join-code agent (no summoner record) gets an honest explanation plus recovery, not a false-empty', async () => {
+    mockAgentsResponse([]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={{ ...participant, workspace: '/Users/x/proj' }}
+      health={health({ state: 'disconnected' })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    const section = document.querySelector('[data-gate="terminal-access"]')!;
+    expect(section.textContent).toContain('Joined via invite code');
+    expect(section.textContent).toContain('/Users/x/proj');
+    expect(document.querySelector('[data-gate="recovery-banner"]')).not.toBeNull();
+  });
+
+  it('a dismissed process keeps its access block but warns the tmux line is dead', async () => {
+    mockAgentsResponse([summoned({ status: 'dismissed', dismissedAt: 2, access: ACCESS })]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onClose={() => {}} />);
+    await waitLoaded();
+    const section = document.querySelector('[data-gate="terminal-access"]')!;
+    expect(section.textContent).toContain("won't attach");
+    expect(section.textContent).toContain('claude --resume abc-123');
   });
 });

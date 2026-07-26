@@ -3384,6 +3384,11 @@ export function Room() {
         <AgentDetailsSheet
           code={code}
           participant={detailsFor}
+          // The listen-loop verdict rides along so the sheet can offer the
+          // recovery path for an offline agent (limits/crash/closed terminal)
+          // — previously that only existed on the People row.
+          health={healthById.get(healthKey(detailsFor.name, detailsFor.client)) ?? null}
+          ended={ended}
           onClose={() => setDetailsFor(null)}
           // Same unified verb as the People-row × — one confirm, both halves.
           onRemove={isHost && !ended && !(detailsFor.name === self.name && detailsFor.client === 'web')
