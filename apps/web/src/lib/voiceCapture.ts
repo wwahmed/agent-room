@@ -70,6 +70,12 @@ export class VoiceCaptureController {
   private droppedCount = 0;    // segments the server permanently rejected (poison)
   private pumpRunning = false;
   private offline = false;     // last upload attempt failed -> buffering locally
+  // Caught-up detector: did the most recent RESOLVED segment contain no
+  // recognized speech? Segments cut every segmentMs regardless of speech, so a
+  // text-less resolve means the speaker went quiet ≥ one segment ago and the
+  // transcript is complete. (pending===0 alone is true most of the time even
+  // mid-sentence — it only pulses during each upload round-trip.)
+  private lastResolveEmpty = false;
 
   constructor(opts: VoiceCaptureOptions) {
     this.o = {
@@ -107,6 +113,13 @@ export class VoiceCaptureController {
       offline: this.offline,
       droppedSegments: this.droppedCount,
       lastTransientError: null,
+      caughtUp: this.state === 'recording'
+        && this.finalText.length > 0
+        && this.pendingCount === 0
+        && !this.pumpRunning
+        && !this.offline
+        && this.droppedCount === 0
+        && this.lastResolveEmpty,
     };
   }
 
@@ -122,6 +135,7 @@ export class VoiceCaptureController {
     this.stopping = false;
     this.settled = false;
     this.offline = false;
+    this.lastResolveEmpty = false;
     await this.o.store.clear().catch(() => {});
     try {
       this.stream = await this.o.getStream();
@@ -199,6 +213,8 @@ export class VoiceCaptureController {
           // commit or emit late text over the draft the user is now editing.
           if (this.settled) return;
           this.offline = false;
+          const heard = Boolean(res && res.text && res.text.trim());
+          this.lastResolveEmpty = !heard;
           if (res && res.text) this.finalText = mergeTranscript(this.finalText, res.text);
           await this.o.store.delete(item.seq);
           this.pendingCount = Math.max(0, this.pendingCount - 1);

@@ -35,7 +35,7 @@ interface Harness {
   transcribeCalls: () => number;
 }
 
-function makeHarness(opts: { getStreamRejects?: boolean } = {}): Harness {
+function makeHarness(opts: { getStreamRejects?: boolean; transcribeAs?: (label: string) => string } = {}): Harness {
   const snaps: DictationSnapshot[] = [];
   const finals: string[] = [];
   const store = createMemoryStore();
@@ -57,7 +57,7 @@ function makeHarness(opts: { getStreamRejects?: boolean } = {}): Harness {
       calls++;
       if (!serverUp) throw new Error('server down');
       const label = await blob.text();
-      return { text: label };
+      return { text: opts.transcribeAs ? opts.transcribeAs(label) : label };
     },
     store,
     onChange: (s) => snaps.push(s),
@@ -230,5 +230,45 @@ describe('VoiceCaptureController (durable)', () => {
     expect(h.finals.length).toBe(0);
     expect(await h.storeCount()).toBe(0);
     expect(h.streamStopped()).toBe(true);
+  });
+});
+
+// Caught-up: the transcript has caught up with SPEECH, not just with uploads.
+// pending===0 is true most of the time even mid-sentence (segments cut every
+// segmentMs and only pulse pending during the round-trip), so the detector
+// keys on the last resolved segment containing no recognized speech.
+describe('caughtUp — transcription caught up with speech', () => {
+  it('mid-speech segments keep it false; a silent segment resolving flips it true', async () => {
+    const h = makeHarness({ transcribeAs: (l) => (l === 'seg2' ? '' : l) });
+    await h.ctrl.start();
+    expect(h.ctrl.snapshot().caughtUp).toBe(false); // nothing heard yet
+    h.tick(); await flush(); // seg0: speech
+    expect(h.ctrl.snapshot().caughtUp).toBe(false); // last resolve had text — speaker may still be going
+    h.tick(); await flush(); // seg1: speech
+    expect(h.ctrl.snapshot().caughtUp).toBe(false);
+    h.tick(); await flush(); // seg2: silence → everything said is in the transcript
+    expect(h.ctrl.snapshot().caughtUp).toBe(true);
+  });
+
+  it('silence before any speech is NOT caught up (nothing to send)', async () => {
+    const h = makeHarness({ transcribeAs: () => '' });
+    await h.ctrl.start();
+    h.tick(); await flush();
+    expect(h.ctrl.snapshot().caughtUp).toBe(false);
+  });
+
+  it('re-arms on new speech and never claims caught-up while buffering offline', async () => {
+    const h = makeHarness({ transcribeAs: (l) => (l === 'seg0' || l === 'seg2' ? 'words' : '') });
+    await h.ctrl.start();
+    h.tick(); await flush(); // seg0: speech
+    h.tick(); await flush(); // seg1: silence → caught up
+    expect(h.ctrl.snapshot().caughtUp).toBe(true);
+    h.setServerUp(false);
+    h.tick(); await flush(); // seg2: speech, buffered locally (offline)
+    expect(h.ctrl.snapshot().caughtUp).toBe(false); // pending + offline both veto
+    expect(h.ctrl.snapshot().offline).toBe(true);
+    h.setServerUp(true);
+    h.fireRetry(); await flush(); // seg2 resolves WITH text → still in-flight speech-wise
+    expect(h.ctrl.snapshot().caughtUp).toBe(false);
   });
 });

@@ -29,6 +29,13 @@ export interface DictationSnapshot {
   offline?: boolean;
   // Segments the server permanently rejected (undecodable audio) and gave up on.
   droppedSegments?: number;
+  // Transcription has CAUGHT UP with speech: everything said so far is in the
+  // transcript, so it's safe to eyeball-check and send. Capture path: the last
+  // resolved segment contained no recognized speech (pending===0 alone is 0
+  // most of the time even mid-sentence — segments cut every 2.5s — so it would
+  // flicker). Built-in engine: heard speech and the interim buffer is empty.
+  // Always false while offline / uploads pending / segments dropped.
+  caughtUp?: boolean;
 }
 
 export interface RecognizerLike {
@@ -158,15 +165,20 @@ export class DictationController {
   }
 
   snapshot(): DictationSnapshot {
+    const committed = mergeTranscript(this.finalText, this.liveFinal);
     return {
       state: this.state,
-      finalText: mergeTranscript(this.finalText, this.liveFinal),
+      finalText: committed,
       interim: this.interim,
       elapsedMs: this.elapsed(),
       error: this.error,
       hasHeardSpeech: this.hasHeardSpeech,
       restarts: this.restarts,
       lastTransientError: this.lastTransientError,
+      // The engine promotes recognized words to finals on a pause; an empty
+      // interim buffer means nothing spoken is still in flight. (The UI holds
+      // this briefly before showing it — finals clear interim mid-speech too.)
+      caughtUp: this.state === 'recording' && this.hasHeardSpeech && !this.interim && committed.length > 0,
     };
   }
 

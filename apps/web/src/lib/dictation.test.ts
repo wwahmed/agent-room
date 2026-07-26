@@ -192,6 +192,18 @@ describe('DictationController', () => {
     expect(h.finals).toEqual(['committed trailing']);
   });
 
+  it('caughtUp: false with interim in flight, true once recognized speech is fully committed', () => {
+    const h = harness();
+    h.c.start();
+    expect(h.snap().caughtUp).toBe(false); // heard nothing yet
+    h.cur().emit([{ final: false, text: 'hello wor' }]);
+    expect(h.snap().caughtUp).toBe(false); // words still in flight
+    h.cur().emit([{ final: true, text: 'hello world ' }]);
+    expect(h.snap().caughtUp).toBe(true);  // committed, interim drained
+    h.cur().emit([{ final: true, text: 'hello world ' }, { final: false, text: 'and' }]);
+    expect(h.snap().caughtUp).toBe(false); // speaking again
+  });
+
   it('explicit Stop with an empty transcript still finalizes, delivering \'\'', () => {
     // The recorder's one-tap Send routes through onFinalize; a silent session
     // must still complete that round-trip or a typed base draft in the

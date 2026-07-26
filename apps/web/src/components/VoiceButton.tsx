@@ -7,7 +7,7 @@ import {
   type RecorderLike,
   type SegmentStoreLike,
 } from '../lib/voiceCapture.js';
-import { playWarmingCue, playReadyCue, playSendCue } from '../lib/audioCue.js';
+import { playWarmingCue, playReadyCue, playSendCue, playCaughtUpCue } from '../lib/audioCue.js';
 import { ScreenWakeLockController } from '../lib/screenWakeLock.js';
 
 // A controller the button can drive uniformly, whether it is the built-in
@@ -180,6 +180,16 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   // (possibly async — server-STT segments may still be draining) finalize to
   // onSendTranscript instead of the insert-only onTranscript.
   const sendOnStopRef = useRef(false);
+  // Caught-up indicator (Waqas): a visible ✓ plus ONE soft tick when the
+  // transcript has caught up with speech, so he knows it's safe to send. The
+  // snapshot's caughtUp must HOLD briefly before showing: the built-in
+  // engine's finals clear the interim buffer for a beat mid-speech, and a
+  // flickering ✓ (or a tick per flicker) is noise. The tick re-arms only
+  // after caught-up drops again (new speech in flight), so a long silence
+  // ticks once, not once per hold window.
+  const [caughtUpShown, setCaughtUpShown] = useState(false);
+  const caughtUpSinceRef = useRef<number | null>(null);
+  const caughtUpTickedRef = useRef(false);
 
   const recording = snap.state === 'recording';
   const active = snap.state !== 'idle';
@@ -205,10 +215,32 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   // waveform never moves. Re-read the snapshot (fresh elapsedMs + interim) and
   // advance the animation phase ~5×/sec.
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      // Session over: never carry a stale ✓ (or a spent tick arm) into the next one.
+      setCaughtUpShown(false);
+      caughtUpSinceRef.current = null;
+      caughtUpTickedRef.current = false;
+      return;
+    }
     const id = window.setInterval(() => {
       const c = ctrlRef.current;
-      if (c) setSnap(c.snapshot());
+      const s = c ? c.snapshot() : null;
+      if (s) setSnap(s);
+      if (s?.caughtUp) {
+        const now = Date.now();
+        if (caughtUpSinceRef.current === null) caughtUpSinceRef.current = now;
+        if (now - caughtUpSinceRef.current >= 600) {
+          setCaughtUpShown(true);
+          if (!caughtUpTickedRef.current) {
+            caughtUpTickedRef.current = true;
+            playCaughtUpCue();
+          }
+        }
+      } else {
+        caughtUpSinceRef.current = null;
+        caughtUpTickedRef.current = false;
+        setCaughtUpShown(false);
+      }
       setTick(t => t + 1);
     }, 200);
     return () => window.clearInterval(id);
@@ -374,6 +406,23 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                 title={noSignalMessage(snap)}
               >
                 {noSignalMessage(snap)}
+              </span>
+            ) : caughtUpShown && recording ? (
+              // Caught up: everything said so far is in the transcript. Shares
+              // the waveform's flexible slot (the eye is already here, next to
+              // Discard/Send), and the T-108/T-131 problem states above keep
+              // precedence — green never shows over buffered/dropped audio.
+              <span
+                role="status"
+                aria-live="polite"
+                data-gate="caught-up"
+                className="flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 overflow-hidden text-[12px] font-semibold text-emerald-300"
+                title="Transcription has caught up with your speech — safe to send"
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m3 8.5 3.1 3.1L13 4.7" />
+                </svg>
+                <span className="truncate">Caught up — safe to send</span>
               </span>
             ) : (
             /* T-85 hotfix: min-w-0 lets the waveform shrink below its bars'

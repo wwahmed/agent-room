@@ -61,3 +61,11 @@ export function playSendCue(): void {
   blip(880, 100, 0.09);
   setTimeout(() => blip(660, 160, 0.09), 95);
 }
+
+/** Transcription caught up with speech: one very soft, short, high tick —
+ *  clearly quieter than the start/send chimes and a single note, so it reads
+ *  as "ready when you are", not an event. Fired once per utterance-end (the
+ *  arming lives with the caught-up detector in VoiceButton). */
+export function playCaughtUpCue(): void {
+  blip(990, 60, 0.03);
+}
