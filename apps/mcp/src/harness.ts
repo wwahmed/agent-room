@@ -9,6 +9,7 @@ export type ClientKind =
   | 'claude-code'
   | 'cursor'
   | 'codex'
+  | 'copilot'
   | 'gemini-cli'
   | 'claude-desktop'
   | 'cline'
@@ -50,6 +51,23 @@ export function detectHarness(env: NodeJS.ProcessEnv = process.env): HarnessInfo
   // single env var the host harness is documented to set. Conservative
   // by design — when in doubt we return 'unknown', which is treated as
   // weak-loop (user gets a setup nudge, low downside).
+
+  // Explicit override beats every heuristic: the summoner KNOWS which harness
+  // it launched and stamps this into the MCP server env. Copilot in particular
+  // sets no detectable env of its own, so summoned copilot agents were joining
+  // rooms branded as the wrong provider (Waqas: logos must be consistent).
+  const override = String(env.AGENT_ROOM_HARNESS || '').toLowerCase();
+  if (override === 'copilot') {
+    // Weak-loop like the pre-override 'unknown' classification, so join/listen
+    // pacing is unchanged — this override exists for IDENTITY (correct brand),
+    // not to alter loop behavior.
+    return { kind: 'copilot', needsPersistenceSetup: true, label: 'GitHub Copilot', maxListenMs: WEAK_MAX_LISTEN_MS };
+  }
+  if (override === 'claude-code' || override.startsWith('claude')) return KNOWN_STRONG_LOOP[0]!;
+  if (override === 'codex') return KNOWN_STRONG_LOOP[1]!;
+  if (override === 'gemini' || override === 'gemini-cli') {
+    return { kind: 'gemini-cli', needsPersistenceSetup: true, label: 'Gemini CLI', maxListenMs: WEAK_MAX_LISTEN_MS };
+  }
 
   if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT) {
     return KNOWN_STRONG_LOOP[0]!;

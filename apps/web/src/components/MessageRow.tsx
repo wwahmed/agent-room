@@ -6,7 +6,7 @@ import { MessageMenu } from './MessageMenu.js';
 import { EdgeActionRail, HoverActionTray, readActionTreatment } from './MessageActionTray.js';
 import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
-import { BrandedLogoAvatar, GenericAgentBadge } from './AgentAvatar.js';
+import { BrandedLogoAvatar, brandLogoFor, GenericAgentBadge } from './AgentAvatar.js';
 import type { AgentBrand } from '../lib/agentBrand.js';
 import { textMentionsSelf } from '../lib/mentions.js';
 
@@ -64,7 +64,7 @@ export function isSameGroup(prev: Message | undefined, m: Message): boolean {
 // humans stay the plain monogram.
 function SenderAvatar({ message, brand, sizeClass = 'h-9 w-9', textClass = 'text-[12px]' }: { message: Message; brand?: AgentBrand | null; sizeClass?: string; textClass?: string }) {
   const agent = message.client === 'cc';
-  if (brand && (brand.mark === 'claude' || brand.mark === 'codex' || brand.mark === 'copilot')) {
+  if (brand && brandLogoFor(brand.mark)) {
     return <BrandedLogoAvatar brand={brand} initials={message.initials} color={message.color} sizeClass={sizeClass} />;
   }
   return (

@@ -12,11 +12,16 @@ import { brandFor, type AgentBrand } from '../lib/agentBrand.js';
 // Chip initials render at 9px — the floor for avatar-internal text (T-47);
 // text-fixed opts them out of the T-61 prose floor, same as Avatar itself.
 
-export const BRAND_LOGOS: Record<'claude' | 'codex' | 'copilot', string> = {
+export const BRAND_LOGOS: Record<'claude' | 'codex' | 'copilot' | 'gemini', string> = {
   claude: '/brand/agents/claude.png',
   codex: '/brand/agents/codex.png',
   copilot: '/brand/agents/copilot.svg',
+  gemini: '/brand/agents/gemini.svg',
 };
+
+export function brandLogoFor(mark: string): string | null {
+  return mark in BRAND_LOGOS ? BRAND_LOGOS[mark as keyof typeof BRAND_LOGOS] : null;
+}
 
 const GENERIC_MARK = (
   <svg viewBox="0 0 16 16" width="8" height="8" fill="currentColor" aria-hidden="true">
@@ -50,17 +55,20 @@ export function GenericAgentBadge() {
   );
 }
 
-/** Logo-base avatar with the initials chip; sizeClass sizes the square. */
-export function BrandedLogoAvatar({ brand, initials, color, sizeClass }: { brand: AgentBrand; initials: string; color: string; sizeClass: string }) {
+/** Logo-base avatar with the initials chip; sizeClass sizes the square.
+ *  withChip=false renders the bare mark — used below 28px, where an overlay
+ *  chip is illegible but the provider logo itself still reads (Waqas:
+ *  provider logos consistently, at every size). */
+export function BrandedLogoAvatar({ brand, initials, color, sizeClass, withChip = true }: { brand: AgentBrand; initials: string; color: string; sizeClass: string; withChip?: boolean }) {
   return (
-    <span className={`relative inline-flex ${sizeClass} flex-shrink-0`} title={brand.label}>
+    <span className={`relative inline-flex ${sizeClass} flex-shrink-0`} title={`${brand.label} · ${initials}`}>
       <img
-        src={BRAND_LOGOS[brand.mark as 'claude' | 'codex' | 'copilot']}
+        src={brandLogoFor(brand.mark) ?? undefined}
         alt=""
         className={`${sizeClass} select-none rounded-lg object-cover`}
         aria-hidden="true"
       />
-      <InitialsChip initials={initials} color={color} />
+      {withChip && <InitialsChip initials={initials} color={color} />}
     </span>
   );
 }
@@ -73,12 +81,11 @@ interface Props {
 export function AgentAvatar({ participant, size = 'md' }: Props) {
   const brand = brandFor(participant);
   if (!brand) return <Avatar initials={participant.initials} color={participant.color} size={size} />;
-  if (brand.mark === 'claude' || brand.mark === 'codex' || brand.mark === 'copilot') {
+  if (brandLogoFor(brand.mark)) {
     const sizeClass = size === 'lg' ? 'h-8 w-8' : size === 'md' ? 'h-6 w-6' : 'h-5 w-5';
-    // Waqas: show the provider logo at md+ too (only the tiny sm chip inverts to
-    // monogram, where a logo+overlay would be illegible).
-    if (size === 'sm') return <Avatar initials={participant.initials} color={participant.color} size={size} />;
-    return <BrandedLogoAvatar brand={brand} initials={participant.initials} color={participant.color} sizeClass={sizeClass} />;
+    // Waqas: the provider logo at EVERY size. Below 28px the initials chip is
+    // illegible, so sm drops the chip rather than dropping the logo.
+    return <BrandedLogoAvatar brand={brand} initials={participant.initials} color={participant.color} sizeClass={sizeClass} withChip={size !== 'sm'} />;
   }
   return (
     <span className="relative inline-flex flex-shrink-0" title={brand.label}>

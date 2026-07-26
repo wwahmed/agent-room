@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { BRAND_LOGOS, InitialsChip } from './AgentAvatar.js';
+import { brandLogoFor, InitialsChip } from './AgentAvatar.js';
 import { brandFor } from '../lib/agentBrand.js';
 import {
   facepileLabel,
@@ -140,14 +140,13 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
       >
         <span className="relative flex items-center">
           {visible.map((agent, i) => {
-            // T-47: at 28px a known provider face uses the real app mark as
-            // the base with the colored initials chip overlaid; below 28px
-            // (compact) it inverts to monogram-only. Unknown providers keep
-            // the monogram fallback at every size.
-            const brand = !compact && agent.harness ? brandFor({ client: 'cc', harness: agent.harness }) : null;
-            const logo = brand && (brand.mark === 'claude' || brand.mark === 'codex' || brand.mark === 'copilot')
-              ? BRAND_LOGOS[brand.mark as 'claude' | 'codex' | 'copilot']
-              : null;
+            // T-47 rev (Waqas: provider logos consistently, every size): a
+            // known provider face uses the real app mark as the base at EVERY
+            // density. The initials chip overlays only at 28px; the compact
+            // 20px face is logo-only (a chip there is illegible, the mark is
+            // not). Unknown providers keep the monogram fallback.
+            const brand = agent.harness ? brandFor({ client: 'cc', harness: agent.harness }) : null;
+            const logo = brand ? brandLogoFor(brand.mark) : null;
             return (
               <span
                 key={`${agent.name}-${i}`}
@@ -160,7 +159,7 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
                 {logo ? (
                   <>
                     <img src={logo} alt="" className="h-full w-full select-none rounded-full object-cover" />
-                    <InitialsChip initials={agent.initials} color={agent.color} />
+                    {!compact && <InitialsChip initials={agent.initials} color={agent.color} />}
                   </>
                 ) : agent.initials}
               </span>

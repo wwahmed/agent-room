@@ -11,6 +11,8 @@ describe('brandFor', () => {
     expect(brandFor({ client: 'cc', harness: 'claude-code' })?.mark).toBe('claude');
     expect(brandFor({ client: 'cc', harness: 'claude-desktop' })?.mark).toBe('claude');
     expect(brandFor({ client: 'cc', harness: 'codex' })).toEqual({ mark: 'codex', label: 'Codex' });
+    expect(brandFor({ client: 'cc', harness: 'copilot' })?.mark).toBe('copilot');
+    expect(brandFor({ client: 'cc', harness: 'gemini-cli' })?.mark).toBe('gemini');
   });
 
   it('labels unverified web rows as "web session", never asserting "human"', () => {

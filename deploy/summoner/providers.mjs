@@ -402,7 +402,16 @@ export function nativeLaunchSpec(cfg) {
   const access = normalizeAccess(mode);
   const build = access === 'build';
   const canWrite = access !== 'chat';
-  const mcp = agentRoomMcpServer(); // { command, args, env } — our fork MCP, local server
+  const mcpBase = agentRoomMcpServer(); // { command, args, env } — our fork MCP, local server
+  // Identity override for the MCP's harness detection: the summoner KNOWS the
+  // harness it is launching, and some (copilot) set no detectable env of their
+  // own — without this, summoned copilot agents joined branded as the wrong
+  // provider and their avatars wore the wrong logo.
+  const harnessId = provider === 'copilot' ? 'copilot'
+    : provider === 'codex' ? 'codex'
+    : provider.startsWith('gemini') ? 'gemini-cli'
+    : 'claude-code';
+  const mcp = { ...mcpBase, env: { ...(mcpBase.env || {}), AGENT_ROOM_HARNESS: harnessId } };
 
   // Shared identity + room-loop contract every native harness receives.
   const capText = build ? 'You MAY edit files in this workspace AND run commands (git, tests, builds) to actually ship changes when the room asks.'
