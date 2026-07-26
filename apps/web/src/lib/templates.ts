@@ -15,6 +15,9 @@ export interface RoomTemplate {
   label: string;
   emoji: string;
   description: string;
+  /** One-line "pick me when…" shown on the creation picker card — the moment
+   *  of choosing a room type is the moment the host learns what types exist. */
+  whenToUse: string;
   // Placeholder topic the host can edit. `{X}` markers signal "edit me here"
   // — we don't auto-replace, just hint visually.
   topicSeed: string;
@@ -35,6 +38,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Blank room',
     emoji: '◇',
     description: 'Start with just a topic — no opening message, no role suggestions.',
+    whenToUse: 'You just need a space and a topic — no structure wanted.',
     topicSeed: '',
     suggestedRoleIds: [],
     openingMessage: '',
@@ -44,6 +48,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Code Review',
     emoji: '🔍',
     description: 'Walk a PR / patch through Builder, QA, and Skeptic agents and capture the verdict.',
+    whenToUse: 'A PR, diff, or commit needs eyes and a merge/block verdict.',
     topicSeed: 'Code review: {pr-title-or-link}',
     suggestedRoleIds: ['builder', 'qa-reviewer', 'skeptic'],
     openingMessage:
@@ -59,6 +64,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Feature Build',
     emoji: '🛠️',
     description: 'Greenfield development room — design, implement, and verify a new feature with Builder + QA + Facilitator.',
+    whenToUse: "You're building something new and want story → tasks → tests discipline.",
     topicSeed: 'Build: {feature-name}',
     suggestedRoleIds: ['facilitator', 'builder', 'qa-reviewer'],
     openingMessage:
@@ -74,6 +80,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Bug Fix',
     emoji: '🐛',
     description: 'Reproduce → root-cause → fix → verify. Builder + QA + Skeptic make sure the fix actually holds.',
+    whenToUse: "Something's broken; you need repro → root cause → verified fix.",
     topicSeed: 'Bug: {short-description}',
     suggestedRoleIds: ['builder', 'qa-reviewer', 'skeptic'],
     openingMessage:
@@ -89,6 +96,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Incident Response',
     emoji: '🚨',
     description: 'Triage a production issue with structured timeline, decisions, and follow-ups.',
+    whenToUse: 'Production is on fire right now and needs coordinated triage.',
     topicSeed: 'Incident: {short-summary}',
     suggestedRoleIds: ['facilitator', 'builder', 'qa-reviewer'],
     openingMessage:
@@ -104,6 +112,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Strategy / Brainstorm',
     emoji: '🧭',
     description: 'Explore options with Researcher + Skeptic, converge on a direction with explicit decisions.',
+    whenToUse: 'Direction is unclear — explore options, then commit to one.',
     topicSeed: '{topic} — direction & next steps',
     suggestedRoleIds: ['facilitator', 'researcher', 'skeptic'],
     openingMessage:
@@ -119,6 +128,7 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
     label: 'Delivery Planning',
     emoji: '📦',
     description: 'Plan a deliverable with Builder + Writer and produce a client-ready report.',
+    whenToUse: 'You owe someone a deliverable with a deadline and owners.',
     topicSeed: '{deliverable} — plan & ownership',
     suggestedRoleIds: ['facilitator', 'builder', 'writer'],
     openingMessage:

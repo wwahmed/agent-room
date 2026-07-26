@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { createClient, getRoom, joinRoom, verifyHostKey, HostNameTakenError, RoomNotFoundError } from '../lib/api.js';
 import type { Room } from '@agent-room/shared';
-import { isValidCode, canonicalizeCode, ROLE_PRESETS } from '@agent-room/shared';
+import { isValidCode, canonicalizeCode } from '@agent-room/shared';
 import { CodeInput } from '../components/CodeInput.js';
+import { RolePicker } from '../components/RolePicker.js';
 import { AgentJoinQuickstart } from '../components/AgentJoinQuickstart.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { fetchIdentity, lastRole, rememberRole, type WhoAmI } from '../lib/identity.js';
@@ -198,19 +199,12 @@ export function Join() {
                   onKeyDown={e => { if (e.key === 'Enter' && name.trim() && !busy) void join(); }}
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
               </label>
-              <label className="mb-5 block">
-                <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Your role <span className="font-medium text-ink-faint">optional</span></span>
-                <select
-                  value={ROLE_PRESETS.some(p => p.role === role) ? role : ''}
-                  onChange={e => setRole(e.target.value)}
-                  className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
-                >
-                  <option value="">Custom role</option>
-                  {ROLE_PRESETS.map(p => <option key={p.id} value={p.role}>{p.label}</option>)}
-                </select>
-                <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Reviewer"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint" />
-              </label>
+              <RolePicker
+                value={role}
+                onChange={setRole}
+                className="mb-5"
+                fieldClass="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint"
+              />
               <button disabled={busy || !name.trim()} onClick={join}
                 className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
                 {busy ? 'Joining…' : 'Join room →'}
