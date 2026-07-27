@@ -98,13 +98,22 @@ describe('Room hook-order stability across bootstrap transitions', () => {
 
   it('same-tree Chat -> Project -> People -> Outputs -> Chat keeps hook order stable', { timeout: 20000 }, async () => {
     await mountRoomAt({ room: loadedRoom });
-    const tab = (label: string) => {
-      const btn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+    // T-15: Outputs/Settings live behind the More overflow now — reach a
+    // folded destination the way a user does: open More, pick the menu item.
+    const tab = async (label: string) => {
+      let btn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+      if (!btn) {
+        const more = document.querySelector('[data-gate="tab-overflow"]') as HTMLButtonElement | null;
+        expect(more, `More overflow control (seeking "${label}")`).toBeTruthy();
+        await act(async () => { more!.click(); });
+        btn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+      }
       expect(btn, `workspace tab "${label}"`).toBeTruthy();
       return btn!;
     };
     for (const label of ['Board', 'People', 'Outputs', 'Chat']) {
-      await act(async () => { tab(label).click(); });
+      const target = await tab(label);
+      await act(async () => { target.click(); });
       expect(document.querySelector('[data-gate="feed"], main, [role="tablist"]')).not.toBeNull();
     }
     expect(document.querySelector('textarea')).not.toBeNull(); // back in chat
