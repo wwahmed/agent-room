@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  presenceState, participantHealth, roomHealth,
+  presenceState, participantHealth, roomHealth, ghostRows,
   clampWorkingUntil, WORKING_WINDOW_MS, WORKING_WINDOW_CAP_MS,
 } from './health.js';
 import type { Participant } from '@agent-room/shared';
@@ -92,6 +92,21 @@ describe('T-66 presence health — stop presence from lying', () => {
       expect(clampWorkingUntil(NOW, NaN)).toBe(NOW + WORKING_WINDOW_MS);
       expect(clampWorkingUntil(NOW, NOW - 1)).toBe(NOW + WORKING_WINDOW_MS);
     });
+  });
+
+  // T-13: the ghost selector feeds the host's one-tap sweep — only cc rows
+  // the server considers disconnected qualify; live agents and web humans
+  // must never be sweepable.
+  it('ghostRows selects only disconnected cc rows', () => {
+    const rows = [
+      p({ name: 'live', listenUntil: NOW + 1000 }),
+      p({ name: 'busy', workingUntil: NOW + 1000, lastSeenAt: NOW - 120_000 }),
+      p({ name: 'stale-not-ghost', lastSeenAt: NOW - 120_000 }),
+      p({ name: 'ghost', lastSeenAt: NOW - 900_000 }),
+      p({ name: 'ghost-viewer', lastSeenAt: NOW - 900_000, viewer: true }),
+      p({ name: 'dead-human', client: 'web', lastSeenAt: NOW - 900_000 }),
+    ];
+    expect(ghostRows(rows, NOW).map(g => g.name)).toEqual(['ghost', 'ghost-viewer']);
   });
 
   // T-143: a server restart can leave a rejoined row with a null lastSeenAt.

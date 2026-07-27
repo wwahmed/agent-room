@@ -17,3 +17,18 @@ describe('Get help — page the platform admin from any room', () => {
     expect(api).toContain("action: 'requestAdminHelp'");
   });
 });
+
+// T-13: the ghost sweep — host-only, confirmed, and wired to the API.
+describe('Sweep ghost agents — one host tap clears disconnected rows', () => {
+  it('the People pane carries the host-gated sweep control with a confirm', () => {
+    expect(room).toContain('data-gate="sweep-ghosts"');
+    expect(room).toContain('room.createdBy === self.name && ghostAgentNames.length > 0');
+    expect(room).toContain('window.confirm');
+    expect(room).toContain('sweepGhostAgents(code)');
+  });
+
+  it('the API client posts the sweepGhostAgents action with the host proof', () => {
+    expect(api).toContain("action: 'sweepGhostAgents'");
+    expect(api.slice(api.indexOf("action: 'sweepGhostAgents'"))).toContain('hostKey: storedHostKey(code)');
+  });
+});

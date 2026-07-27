@@ -481,6 +481,12 @@ export async function fetchHealth(_client: ApiClient, code: string): Promise<Par
   return out.health ?? [];
 }
 
+// T-13: host-only bulk removal of every disconnected cc row — the ghosts that
+// pile up when an agent's leave fails or its credential is lost.
+export async function sweepGhostAgents(code: string): Promise<{ removed: string[] }> {
+  return call<{ removed: string[] }>({ action: 'sweepGhostAgents', code, hostKey: storedHostKey(code) });
+}
+
 // T-10: page the platform admin from this room. The server posts an @mention
 // into the admin HQ room (where the admin agent keeps a standing listen loop)
 // and a confirmation line here.

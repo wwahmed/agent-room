@@ -98,3 +98,12 @@ export function participantHealth(p: Participant, now: number): ParticipantHealt
 export function roomHealth(participants: Participant[], now: number): ParticipantHealth[] {
   return participants.map((p) => participantHealth(p, now));
 }
+
+// T-13: ghost rows — cc agents the server considers disconnected. These are
+// the rows that pile up when an agent's leave fails or its credential is
+// lost (the anti-hijack guard rightly refuses reclaim), and today each one
+// costs the host a separate tap. One selector, one definition, host sweep
+// consumes it. Viewers included: a dead auditor row is still clutter.
+export function ghostRows(participants: Participant[], now: number): Participant[] {
+  return participants.filter((p) => p.client === 'cc' && presenceState(p, now) === 'disconnected');
+}

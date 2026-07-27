@@ -54,7 +54,7 @@ import { withinAnchoredMutation } from '../lib/readingAnchor.js';
 import { scrollReadCount } from '../lib/scrollRead.js';
 import { processBadge, removalPlan, staleAgentRows } from '../lib/removal.js';
 import { startReadingHeartbeat } from '../lib/readSync.js';
-import { fetchHealth, requestAdminHelp } from '../lib/api.js';
+import { fetchHealth, requestAdminHelp, sweepGhostAgents } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
@@ -2271,8 +2271,30 @@ export function Room() {
     offline: room.participants.filter(p => personGroupOf(p) === 'offline'),
     viewers: room.participants.filter(p => personGroupOf(p) === 'viewer'),
   };
+  // T-13: ghost census for the host's one-tap sweep — every disconnected cc
+  // row, wherever it renders (Offline group or a dead viewer in the strip).
+  const ghostAgentNames = room.participants
+    .filter(p => p.client === 'cc' && healthById.get(healthKey(p.name, p.client))?.state === 'disconnected')
+    .map(p => p.name);
   const peoplePanel = (
     <div>
+      {room.createdBy === self.name && ghostAgentNames.length > 0 && !ended && (
+        <button
+          type="button"
+          data-gate="sweep-ghosts"
+          onClick={() => {
+            if (!window.confirm(`Remove ${ghostAgentNames.length} disconnected agent row${ghostAgentNames.length === 1 ? '' : 's'}? (${ghostAgentNames.join(', ')})`)) return;
+            void sweepGhostAgents(code)
+              .then(r => import('../components/Toast.js').then(({ showToast }) =>
+                showToast(`Swept ${r.removed.length} ghost row${r.removed.length === 1 ? '' : 's'}`)))
+              .catch(e => import('../components/Toast.js').then(({ showToast }) =>
+                showToast(e instanceof Error ? e.message : 'Sweep failed', 'error')));
+          }}
+          className="mb-4 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-warning/50 hover:text-warning"
+        >
+          🧹 Sweep {ghostAgentNames.length} disconnected agent row{ghostAgentNames.length === 1 ? '' : 's'}
+        </button>
+      )}
       {peopleGroups.active.length > 0 && (
         <section aria-label="Active participants" className="mb-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Active · {peopleGroups.active.length}</h3>

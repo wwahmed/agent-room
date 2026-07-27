@@ -67,7 +67,7 @@ import {
 } from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
 import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
-import { clampWorkingUntil, roomHealth } from './health.js';
+import { clampWorkingUntil, ghostRows, roomHealth } from './health.js';
 import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
@@ -1036,6 +1036,29 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     case 'health': {
       const room = await getRoom(client, code);
       return { health: roomHealth(room.participants, Date.now()) };
+    }
+    case 'sweepGhostAgents': {
+      // T-13: one host tap removes every disconnected cc row instead of a tap
+      // per ghost. Host-only — this is bulk removal. Each removal goes through
+      // the normal removeParticipant path so T-32 provenance records are kept;
+      // the chat gets ONE summary line instead of N kick lines.
+      await requireHost(code, payload.hostKey as string | undefined, caller);
+      const room = await getRoom(client, code);
+      const ghosts = ghostRows(room.participants, Date.now()).filter((p) => p.name !== room.createdBy);
+      const removed: string[] = [];
+      for (const g of ghosts) {
+        try {
+          await removeParticipant(client, code, room.createdBy, g.name, g.client);
+          removed.push(g.name);
+        } catch { /* a row that vanished mid-sweep is already gone — skip */ }
+      }
+      if (removed.length > 0) {
+        await appendSystemMessage(client, code, sysMessage(
+          `🧹 Host swept ${removed.length} disconnected agent row${removed.length === 1 ? '' : 's'}: ${removed.join(', ')}.`,
+          { eventType: 'ghost_sweep', removedNames: removed },
+        )).catch(() => { /* summary line is best-effort */ });
+      }
+      return { removed };
     }
     case 'requestAdminHelp': {
       // T-10: page the platform admin from any room. The page is an @mention
