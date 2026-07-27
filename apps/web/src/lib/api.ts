@@ -652,6 +652,14 @@ export interface BoardTask {
   createdAt?: number;
   submittedAt?: number;
   verifiedAt?: number;
+  // T-19: submitted proof, rendered in the Board tab so a web verifier can
+  // actually inspect what they are ruling on.
+  evidence?: {
+    fileListing: string;
+    fileExcerpt: string;
+    runOutput: string;
+    exitCode: number;
+  };
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {
@@ -706,6 +714,23 @@ export async function getRoomArtifacts(_client: ApiClient, code: string): Promis
 
 export async function getTaskBoard(_client: ApiClient, code: string): Promise<{ tasks: BoardTask[] }> {
   return (await call<{ board: { tasks: BoardTask[] } }>({ action: 'taskBoard', code })).board;
+}
+
+// T-19: rule on a submitted task from the web. Presents the member credential
+// (same self-healing retry as send) — the server authenticates it, then
+// enforces the board rules (never the owner; designated verifier wins).
+export async function verifyTask(
+  _client: ApiClient,
+  code: string,
+  id: string,
+  verdict: 'done' | 'rejected',
+  name: string,
+  note?: string,
+): Promise<{ task: BoardTask }> {
+  return keyedCall<{ task: BoardTask }>(
+    mk => ({ action: 'taskVerify', code, id, verdict, name, client: 'web', ...(note ? { note } : {}), memberKey: mk }),
+    code,
+  );
 }
 
 export async function attachProject(

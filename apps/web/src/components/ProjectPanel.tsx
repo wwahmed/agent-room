@@ -9,10 +9,12 @@ import {
   listProjectCandidates,
   listProjects,
   readProjectDoc,
+  verifyTask,
   type BoardTask,
   type ProjectCandidate,
   type ProjectSummary,
 } from '../lib/api.js';
+import { showToast } from './Toast.js';
 import { boardCountsView, projectViewState, taskLinkKey } from '../lib/projectView.js';
 import {
   PENDING_TASK_STATES,
@@ -96,6 +98,8 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
   const [taskPreferences, setTaskPreferences] = useState<TaskPreferences>(() => loadTaskPreferences(room.code));
   const [completedLimit, setCompletedLimit] = useState(COMPLETED_PAGE_SIZE);
   const [docRole, setDocRole] = useState<string | null>(null);
+  // T-19: task id currently mid-verify (disables its verdict buttons).
+  const [verifyBusy, setVerifyBusy] = useState<string | null>(null);
   const [doc, setDoc] = useState<{ rel: string; content: string; truncated: boolean } | null>(null);
   const handledTaskLinkRef = useRef<string | null>(null);
 
@@ -286,6 +290,37 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
     );
   }
 
+  // T-19: mirror of the server's verify eligibility — never the owner; a
+  // designated verifier (that differs from the owner) wins, otherwise any
+  // other participant may rule. The server re-enforces all of it.
+  const canVerify = (t: BoardTask): boolean => {
+    if (t.state !== 'awaiting_review' || !selfName) return false;
+    if (t.owner && t.owner === selfName) return false;
+    const designated = t.verifier && t.verifier !== t.owner ? t.verifier : null;
+    return designated ? designated === selfName : true;
+  };
+
+  async function ruleOn(t: BoardTask, verdict: 'done' | 'rejected') {
+    let note: string | undefined;
+    if (verdict === 'rejected') {
+      const entered = window.prompt(`Reject ${t.id} — what needs another pass? (sent to the owner)`);
+      if (entered === null) return; // cancelled
+      note = entered.trim() || undefined;
+    } else if (!window.confirm(`Verify ${t.id} as DONE? This is the board's final state.`)) {
+      return;
+    }
+    setVerifyBusy(t.id);
+    try {
+      await verifyTask(createClient(), room.code, t.id, verdict, selfName, note);
+      showToast(verdict === 'done' ? `${t.id} verified done` : `${t.id} rejected — the owner has been paged`);
+      onRetryBoard?.();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Verify failed', 'error');
+    } finally {
+      setVerifyBusy(null);
+    }
+  }
+
   const evidenceLine = (t: BoardTask): string | null => {
     if (t.state === 'done') return t.verifiedBy ? `Verified by ${t.verifiedBy}` : 'Verified';
     if (t.state === 'awaiting_review') return t.verifier ? `Submitted, awaiting ${t.verifier}` : 'Submitted, awaiting review';
@@ -404,6 +439,55 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
               </div>
             )}
             {t.note && <div className="mt-1.5 line-clamp-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">{t.note}</div>}
+            {/* T-19: the submitted proof, inspectable where the verdict is
+                made. Folded — evidence blocks are long by design. */}
+            {(t.evidence || t.dod) && (t.state === 'awaiting_review' || t.state === 'done' || t.state === 'rejected') && (
+              <details data-gate="task-evidence" className="mt-2 rounded-lg border border-border-faint bg-surface-sunken">
+                <summary className="cursor-pointer select-none px-3 py-2 text-[14px] font-semibold text-ink-soft hover:text-ink">
+                  Evidence{t.evidence ? ` · exit ${t.evidence.exitCode}` : ' · none submitted'}
+                </summary>
+                <div className="space-y-2 px-3 pb-3 text-[14px] leading-relaxed">
+                  {t.dod && (
+                    <div>
+                      <div className="mb-0.5 text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Done when</div>
+                      <div className="whitespace-pre-wrap break-words text-ink-soft">{t.dod}</div>
+                    </div>
+                  )}
+                  {t.evidence && ([
+                    ['Files', t.evidence.fileListing],
+                    ['Excerpt', t.evidence.fileExcerpt],
+                    ['Run output', t.evidence.runOutput],
+                  ] as const).map(([label, body]) => (
+                    <div key={label}>
+                      <div className="mb-0.5 text-[12px] font-semibold uppercase tracking-wide text-ink-faint">{label}</div>
+                      <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface-softer p-2 text-[13px] leading-relaxed text-ink-muted">{body}</pre>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+            {/* T-19: the verdict, one tap from the evidence. Rendered only
+                for the eligible verifier; the server re-checks everything. */}
+            {canVerify(t) && (
+              <div className="mt-2.5 flex gap-2" data-gate="task-verify">
+                <button
+                  type="button"
+                  disabled={verifyBusy === t.id}
+                  onClick={() => { void ruleOn(t, 'done'); }}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-success/15 px-3 text-[14px] font-bold text-success transition hover:bg-success/25 disabled:opacity-50"
+                >
+                  ✓ Verify done
+                </button>
+                <button
+                  type="button"
+                  disabled={verifyBusy === t.id}
+                  onClick={() => { void ruleOn(t, 'rejected'); }}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-danger/15 px-3 text-[14px] font-bold text-danger transition hover:bg-danger/25 disabled:opacity-50"
+                >
+                  ✗ Reject
+                </button>
+              </div>
+            )}
           </div>
         ))}
         {preferences.segment === 'completed' && visible.length < matchingTasks.length && (

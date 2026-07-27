@@ -1711,6 +1711,14 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       const task = requireTask(board, String(payload.id || ''));
       const name = String(payload.name || '');
       const verdict = String(payload.verdict || '');
+      // T-19: a caller that PRESENTS a member credential gets it checked —
+      // the web verify path always does. Credential-less agent calls keep
+      // the existing name-only behavior (registry runtimes don't send keys
+      // on verify), so this tightens without breaking.
+      if (typeof payload.memberKey === 'string' && payload.memberKey) {
+        const verifierClient = (payload.client as 'web' | 'cc') || 'web';
+        await authenticateSender(code, name, verifierClient, payload.memberKey, caller);
+      }
       if (task.state !== 'awaiting_review') {
         throw taskError('BadRequestError', `Task ${task.id} is ${task.state}; only awaiting_review tasks can be verified.`);
       }
