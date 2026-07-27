@@ -29,7 +29,7 @@ describe('unified agent removal (one verb, both halves)', () => {
   });
 
   it('People rows badge the PROCESS state from the summoner registry', () => {
-    expect(room).toContain('const proc = processBadge(p, summonerAgents);');
+    expect(room).toContain('const proc = processBadge(p, summonerAgents, presence?.state ?? null);');
   });
 
   it('a one-shot sweep on room open clears ghost rows (dismissed process + disconnected)', () => {
