@@ -55,6 +55,7 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | People rows show each agent's claimed board task (current-work chip) | Shipped | hail-cow-dart T-17 |
 | Process badge: live presence vetoes stale-row claims | Shipped | hail-cow-dart T-18 |
 | Web verify: Board evidence viewer + one-tap verifier verdicts | Shipped | hail-cow-dart T-19 |
+| Delivered markers: per-agent listen-loop delivery on your own messages | Shipped | hail-cow-dart T-20 |
 
 
 | Capability | Status | Board reference |
@@ -91,7 +92,7 @@ Board: **T-05**.
 ### Attention and navigation — Planned
 
 - Unread counts and per-room activity indicators.
-- Passive per-agent delivered/read markers on the human's messages, using truthful cursor/listen state without forcing a reply or interrupting active work.
+- Passive per-agent delivered/read markers on the human's messages, using truthful cursor/listen state without forcing a reply or interrupting active work. **Shipped (delivered): hail-cow-dart T-20** — read markers still open.
 - Jump to first unread and jump to latest without losing the reader's scroll position.
 - Search across the retained room window with jump-to-message results.
 - Pinned decisions, results, links, and files. **Shipped (messages): hail-cow-dart T-14** — pinned files/attachments still open.
