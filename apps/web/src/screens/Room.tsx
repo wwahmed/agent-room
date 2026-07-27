@@ -2243,7 +2243,7 @@ export function Room() {
                             dismissed-process row is the "ghost" the host can
                             (and the open-sweep will) clean up. */}
                         {(() => {
-                          const proc = processBadge(p, summonerAgents);
+                          const proc = processBadge(p, summonerAgents, presence?.state ?? null);
                           if (!proc) return null;
                           const tone = proc.tone === 'ok' ? 'text-emerald-300'
                             : proc.tone === 'warn' ? 'text-amber-300'

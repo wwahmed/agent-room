@@ -76,6 +76,24 @@ describe('processBadge — process truth, not presence', () => {
     expect(processBadge({ name: 'Stranger', client: 'cc' }, [rec({})]))
       .toEqual({ label: 'process not managed here', tone: 'muted' });
   });
+
+  // T-18: the server's presence verdict vetoes the "row is stale" claim — a
+  // row that is listening/working/online is a NEW session sharing the name,
+  // not the leftover of the dismissed summon.
+  it('never calls a LIVE row stale over an old dismissed summon record', () => {
+    for (const state of ['listening', 'working', 'online']) {
+      expect(processBadge({ name: 'Agent', client: 'cc' }, [rec({ status: 'dismissed' })], state))
+        .toEqual({ label: 'process not managed here', tone: 'muted' });
+    }
+    // Dead presence keeps the honest dead badge.
+    for (const state of ['stale', 'disconnected', null, undefined]) {
+      expect(processBadge({ name: 'Agent', client: 'cc' }, [rec({ status: 'dismissed' })], state as string | null))
+        .toEqual({ label: 'process dismissed — row is stale', tone: 'dead' });
+    }
+    // A genuinely live process badge is untouched by presence.
+    expect(processBadge({ name: 'Agent', client: 'cc' }, [rec({})], 'listening'))
+      .toEqual({ label: 'process online', tone: 'ok' });
+  });
 });
 
 describe('staleAgentRows — the room-open ghost sweep', () => {

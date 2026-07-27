@@ -78,13 +78,28 @@ export interface ProcessBadge {
 
 /** People-pane badge for an agent row's PROCESS (summoner registry view) —
  *  distinct from room presence, which is the server's listen-loop verdict.
- *  null for web rows (no process of ours) and while records are unknown. */
-export function processBadge(p: RemovalParticipant, records: SummonedAgent[] | null): ProcessBadge | null {
+ *  null for web rows (no process of ours) and while records are unknown.
+ *  T-18: `presenceState` (the server's verdict) vetoes the "row is stale"
+ *  claim — a row that is listening/working/online right now is NOT the
+ *  leftover of a dismissed summon, it's a NEW session (rejoined by code or
+ *  resumed elsewhere) that merely shares the name. The dead badge on a live
+ *  row read as "this agent is broken" (witnessed on ClaudeAdmin's own row
+ *  minutes after it was actively shipping). */
+export function processBadge(
+  p: RemovalParticipant,
+  records: SummonedAgent[] | null,
+  presenceState?: string | null,
+): ProcessBadge | null {
   if (p.client !== 'cc' || records === null) return null;
+  const rowIsLive = presenceState === 'listening' || presenceState === 'working' || presenceState === 'online';
   const newest = newestAgentFor(records, p.name);
   if (!newest) return { label: 'process not managed here', tone: 'muted' };
   const live = liveAgentFor(records, p.name);
-  if (!live) return { label: 'process dismissed — row is stale', tone: 'dead' };
+  if (!live) {
+    return rowIsLive
+      ? { label: 'process not managed here', tone: 'muted' }
+      : { label: 'process dismissed — row is stale', tone: 'dead' };
+  }
   if (live.health === 'online') return { label: 'process online', tone: 'ok' };
   if (live.health === 'starting') return { label: 'process starting', tone: 'warn' };
   // Not dead — the harness is alive but stopped on an interactive permission
