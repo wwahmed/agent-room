@@ -107,6 +107,13 @@ const MAIN_TABS: Array<{ key: MainTab; label: string; icon: React.ReactNode }> =
   { key: 'room', label: 'Settings', icon: <><circle cx="8" cy="8" r="2" /><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8 3.4 3.4" /></> },
 ];
 
+// T-15 (host: "tabs at the top are too busy — promote some, put the rest in
+// overflow"): the everyday work surfaces stay promoted; the occasional
+// destinations fold behind one More control. MAIN_TABS stays the full list so
+// ?panel= deep links and back-stack labels keep resolving every key.
+const PRIMARY_TABS = MAIN_TABS.filter(t => t.key === 'chat' || t.key === 'project' || t.key === 'people');
+const OVERFLOW_TABS = MAIN_TABS.filter(t => t.key === 'outputs' || t.key === 'room');
+
 // T-71 page anatomy (Notion-borrowed): every workspace destination is a PAGE
 // — title, one-sentence purpose, compact live summary, one primary action —
 // never a bare pane of rows.
@@ -2666,7 +2673,8 @@ export function Room() {
                content-sizing it starves the five tabs and truncates labels. */
             <div className="flex w-full min-w-0 items-center gap-1.5 lg:w-auto">
               <WorkspaceSwitcher
-                destinations={MAIN_TABS}
+                destinations={PRIMARY_TABS}
+                overflow={OVERFLOW_TABS}
                 active={mainTab}
                 onSelect={key => selectTab(key as MainTab)}
               />
