@@ -16,11 +16,15 @@ describe('Pinned outcomes — pin any message, strip with jump-to-message', () =
     expect(room).toContain('togglePinById(p.id, false)');
   });
 
-  it('every message action menu carries the Pin/Unpin toggle', () => {
+  it('every message action affordance carries the Pin/Unpin toggle', () => {
     expect(menu).toContain('data-gate="pin-toggle"');
     expect(menu).toContain("pinned ? 'Unpin message' : 'Pin message'");
-    // MessageRow threads the pin affordance into all its menu call sites.
-    expect(row.match(/onPin=\{onPin\} pinned=\{pinned\}/g)?.length).toBe(3);
+    // MessageRow threads the pin affordance into all its menu call sites
+    // AND both hover treatments (the SHIPPED desktop tray + the rail).
+    expect(row.match(/onPin=\{onPin\} pinned=\{pinned\}/g)?.length).toBe(5);
+    const tray = readFileSync(new URL('../components/MessageActionTray.tsx', import.meta.url), 'utf8');
+    expect(tray).toContain("pinned ? 'Unpin message' : 'Pin message'");
+    expect(tray.match(/onPin=\{onPin\} pinned=\{pinned\}/g)?.length).toBe(2);
     expect(room).toContain('pinned={pinnedIds.has(m.id)}');
   });
 

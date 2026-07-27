@@ -267,10 +267,10 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
   // T-124/T-136: the tray is a CARD child (anchored to the bubble's top-right),
   // so it hugs the card at every width. The rail variant stays a row overlay.
   const cardTray = treatment === 'tray' && message.type === 'msg'
-    ? <HoverActionTray message={message} onReact={onReact} onReply={onReply} selfName={selfName} />
+    ? <HoverActionTray message={message} onReact={onReact} onReply={onReply} onPin={onPin} pinned={pinned} selfName={selfName} />
     : null;
   const hoverOverlay = treatment === 'rail' && message.type === 'msg'
-    ? <EdgeActionRail message={message} onReact={onReact} onReply={onReply} selfName={selfName} mirror={self} />
+    ? <EdgeActionRail message={message} onReact={onReact} onReply={onReply} onPin={onPin} pinned={pinned} selfName={selfName} mirror={self} />
     : null;
 
   if (message.type === 'sys') {

@@ -50,12 +50,13 @@ export function readActionTreatment(): ActionTreatment {
 // and an aria-label, so it reads for colorblind and screen-reader users and
 // stays legible on light and dark. `tone` sets the resting color and the hover
 // wash; the resting state is slightly muted so the cluster is calm until used.
-type Tone = 'blue' | 'green' | 'rose' | 'slate';
+type Tone = 'blue' | 'green' | 'rose' | 'slate' | 'amber';
 const TONE: Record<Tone, string> = {
   blue: 'text-blue-500/80 hover:bg-blue-500/15 hover:text-blue-500 dark:text-blue-400/90 dark:hover:text-blue-300',
   green: 'text-emerald-500/80 hover:bg-emerald-500/15 hover:text-emerald-500 dark:text-emerald-400/90 dark:hover:text-emerald-300',
   rose: 'text-rose-500/80 hover:bg-rose-500/15 hover:text-rose-500 dark:text-rose-400/90 dark:hover:text-rose-300',
   slate: 'text-slate-500/80 hover:bg-slate-500/15 hover:text-slate-600 dark:text-slate-300/80 dark:hover:text-slate-200',
+  amber: 'text-amber-500 hover:bg-amber-500/15 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300',
 };
 
 function GlyphButton({ label, tone, onClick, children }: { label: string; tone: Tone; onClick?: () => void; children: React.ReactNode }) {
@@ -84,6 +85,13 @@ const CopyGlyph = () => (
   </svg>
 );
 
+const PinGlyph = () => (
+  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m9.7 1.8 4.5 4.5-1.8.6-.4 2.6-3.2 1L6 12l-4 2 2-4 1.5-2.8 1-3.2 2.6-.4z" />
+    <path d="M6 10 2 14" />
+  </svg>
+);
+
 /** T-124/T-136 shipped: the auto-reveal action panel. It is a child of the
  *  message CARD (msg-content is position:relative), anchored to the card's
  *  top-right corner — never the full-width row — so it hugs the bubble at every
@@ -91,10 +99,13 @@ const CopyGlyph = () => (
  *  overlays the margin above the card (absolute, z-30), fades in on hover/focus
  *  and out on leave, and reflows nothing (reading-anchor law). Desktop only
  *  (sm:flex); phones keep the always-visible dots since touch has no hover. */
-function PanelButtons({ message, onReact, onReply }: {
+function PanelButtons({ message, onReact, onReply, onPin, pinned }: {
   message: Message;
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
   onReply?: (m: Message) => void;
+  /** T-14: toggle this message on the room's pinned-outcomes strip. */
+  onPin?: (m: Message) => void;
+  pinned?: boolean;
 }) {
   return (
     <>
@@ -107,15 +118,20 @@ function PanelButtons({ message, onReact, onReply }: {
       {onReact && (
         <GlyphButton label="Reject message" tone="rose" onClick={() => onReact(message, 'reject')}><ThumbDownIcon /></GlyphButton>
       )}
+      {onPin && (
+        <GlyphButton label={pinned ? 'Unpin message' : 'Pin message'} tone={pinned ? 'amber' : 'slate'} onClick={() => onPin(message)}><PinGlyph /></GlyphButton>
+      )}
       <GlyphButton label="Copy text" tone="slate" onClick={() => copyMessageText(message)}><CopyGlyph /></GlyphButton>
     </>
   );
 }
 
-export function HoverActionTray({ message, onReact, onReply }: {
+export function HoverActionTray({ message, onReact, onReply, onPin, pinned }: {
   message: Message;
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
   onReply?: (m: Message) => void;
+  onPin?: (m: Message) => void;
+  pinned?: boolean;
   selfName?: string;
 }) {
   return (
@@ -123,7 +139,7 @@ export function HoverActionTray({ message, onReact, onReply }: {
       data-gate="action-tray"
       className="absolute -top-3.5 right-1 z-30 hidden items-center gap-0.5 rounded-full border border-border bg-surface px-1 py-0.5 shadow-md transition-opacity duration-150 sm:flex opacity-0 focus-within:opacity-100 group-hover:opacity-100"
     >
-      <PanelButtons message={message} onReact={onReact} onReply={onReply} />
+      <PanelButtons message={message} onReact={onReact} onReply={onReply} onPin={onPin} pinned={pinned} />
     </div>
   );
 }
@@ -133,10 +149,12 @@ export function HoverActionTray({ message, onReact, onReply }: {
  *  spec's "thin vertical bar alongside the message wall" reading). The pill
  *  sits in the top margin like treatment A but anchored to the wall side,
  *  visually connected to the bar. */
-export function EdgeActionRail({ message, onReact, onReply, selfName, mirror = false }: {
+export function EdgeActionRail({ message, onReact, onReply, onPin, pinned, selfName, mirror = false }: {
   message: Message;
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
   onReply?: (m: Message) => void;
+  onPin?: (m: Message) => void;
+  pinned?: boolean;
   selfName?: string;
   /** Own messages sit against the RIGHT wall — the rail mirrors with them
    *  (verifier note on the first frame set). */
@@ -149,7 +167,7 @@ export function EdgeActionRail({ message, onReact, onReply, selfName, mirror = f
     >
       <span className={`absolute inset-y-0 w-[3px] rounded-full bg-accent/60 ${mirror ? 'right-0' : 'left-0'}`} aria-hidden="true" />
       <div className={`absolute -top-9 flex items-center gap-0.5 rounded-full border border-accent/40 bg-surface px-1.5 py-0.5 shadow-md ${mirror ? 'right-2' : 'left-2'}`}>
-        <PanelButtons message={message} onReact={onReact} onReply={onReply} />
+        <PanelButtons message={message} onReact={onReact} onReply={onReply} onPin={onPin} pinned={pinned} />
       </div>
     </div>
   );
