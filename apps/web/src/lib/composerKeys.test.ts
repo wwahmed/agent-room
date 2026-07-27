@@ -26,4 +26,22 @@ describe('composerEnterAction', () => {
   it('ignores unrelated keys', () => {
     expect(composerEnterAction({ key: 'Tab' })).toBe('ignore');
   });
+
+  // T-22 (host): on the phone, the touch keyboard's Enter is a NEWLINE —
+  // the Send button is the send affordance; accidental sends shipped
+  // half-written messages.
+  it('on the phone, plain Enter inserts a newline, never sends', () => {
+    expect(composerEnterAction({ key: 'Enter', isPhone: true })).toBe('newline');
+    expect(composerEnterAction({ key: 'Enter', isPhone: true, shiftKey: true })).toBe('newline');
+  });
+
+  it('an external keyboard on a phone-width window still sends with Cmd/Ctrl+Enter', () => {
+    expect(composerEnterAction({ key: 'Enter', isPhone: true, metaKey: true })).toBe('send');
+    expect(composerEnterAction({ key: 'Enter', isPhone: true, ctrlKey: true })).toBe('send');
+  });
+
+  it('phone Enter still respects IME composition and the mention picker', () => {
+    expect(composerEnterAction({ key: 'Enter', isPhone: true, isComposing: true })).toBe('ignore');
+    expect(composerEnterAction({ key: 'Enter', isPhone: true, mentionPickerOpen: true })).toBe('ignore');
+  });
 });

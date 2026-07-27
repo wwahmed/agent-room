@@ -3444,13 +3444,16 @@ export function Room() {
                       metaKey: e.metaKey,
                       altKey: e.altKey,
                       isComposing,
+                      isPhone,
                     });
                     if (enterAction === 'send') {
                       e.preventDefault();
                       void send();
                     }
                   }}
-                  aria-label="Message the room. Enter sends; Shift or Control plus Enter adds a new line."
+                  aria-label={isPhone
+                    ? 'Message the room. Enter adds a new line; use the Send button to send.'
+                    : 'Message the room. Enter sends; Shift or Control plus Enter adds a new line.'}
                   placeholder="Message…"
                   rows={1}
                   style={{
