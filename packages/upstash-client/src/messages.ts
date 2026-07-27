@@ -333,6 +333,22 @@ export class MessageNotFoundError extends Error {
   }
 }
 
+// Locate a stored message by id. Scans from the tail — reactions and pins
+// overwhelmingly land on recent messages. Returns the list index too so
+// callers that rewrite the row in place (LSET) know where it lives.
+export async function findStoredMessage(
+  client: UpstashClient,
+  code: string,
+  messageId: number,
+): Promise<{ index: number; message: Message } | null> {
+  const raw = await client.command<string[]>(['LRANGE', msgsKey(code), 0, -1]);
+  for (let i = raw.length - 1; i >= 0; i--) {
+    const parsed = JSON.parse(raw[i]!) as Message;
+    if (parsed.id === messageId) return { index: i, message: parsed };
+  }
+  return null;
+}
+
 export interface ReactionResult {
   /** true = the reaction is now present; false = it was toggled off. */
   added: boolean;
@@ -349,15 +365,9 @@ export async function applyMessageReaction(
   reactor: { name: string; client: Message['client'] },
   kind: MessageReactionKind,
 ): Promise<ReactionResult> {
-  const raw = await client.command<string[]>(['LRANGE', msgsKey(code), 0, -1]);
-  let index = -1;
-  let message: Message | null = null;
-  // Scan from the tail — reactions overwhelmingly land on recent messages.
-  for (let i = raw.length - 1; i >= 0; i--) {
-    const parsed = JSON.parse(raw[i]!) as Message;
-    if (parsed.id === messageId) { index = i; message = parsed; break; }
-  }
-  if (index === -1 || !message) throw new MessageNotFoundError(messageId);
+  const found = await findStoredMessage(client, code, messageId);
+  if (!found) throw new MessageNotFoundError(messageId);
+  const { index, message } = found;
   if (message.type === 'sys') {
     const err = new Error('Reactions can only be applied to participant messages, not system rows.');
     err.name = 'BadRequestError';

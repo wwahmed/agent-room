@@ -127,6 +127,7 @@ export type SystemEventType =
   | 'moderator_dispatched'
   | 'question_created'
   | 'reaction'
+  | 'pin'
   | 'template_changed';
 
 // Default per-role timeout values (in ms). Used when a room hasn't been
@@ -193,6 +194,23 @@ export interface RemovalRecord {
   anchorHash?: string;
 }
 
+// T-14: a pinned outcome — a decision, result, or link promoted out of the
+// scroll. DENORMALIZED (sender + snippet travel on the pin, like
+// MessageReplyRef) so the pinned strip renders even after the original
+// message pages out of the loaded window or is LTRIMmed from history.
+export interface PinnedMessage {
+  /** id of the pinned message. */
+  id: number;
+  /** The pinned message's sender display name. */
+  name: string;
+  /** Server-truncated snippet of the pinned message body. */
+  text: string;
+  /** Who pinned it. */
+  by: string;
+  /** Epoch ms when it was pinned. */
+  at: number;
+}
+
 export interface Room {
   code: string;
   topic: string;
@@ -238,6 +256,10 @@ export interface Room {
   // means untyped/blank. This is what turns templates from a create-form
   // veneer into a shared fact every joiner (human or agent) can read.
   templateId?: string;
+  // T-14: pinned outcomes, oldest pin first, bounded (MAX_PINNED_MESSAGES).
+  // Lives on the room record so every client sees the same strip from the
+  // ordinary room poll — no extra fetch, survives message trimming.
+  pinnedMessages?: PinnedMessage[];
 }
 
 // Structured prompts stored as private owner-decision documents. A safe link

@@ -13,12 +13,16 @@ import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 // Acknowledge, Reject. The ⋯ anchor is persistent on desktop (faint until
 // hover, never fully hidden) and always visible on phone. Acknowledge/Reject
 // store structured reactions the server relays to listening agents.
-export function MessageMenu({ message, align = 'right', onReply, onReact, selfName }: {
+export function MessageMenu({ message, align = 'right', onReply, onReact, onPin, pinned, selfName }: {
   message: Message;
   align?: 'left' | 'right';
   onReply?: (m: Message) => void;
   /** T-121: toggle an ack/reject reaction on this message. */
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
+  /** T-14: toggle this message on the room's pinned-outcomes strip. */
+  onPin?: (m: Message) => void;
+  /** T-14: whether this message is currently pinned (labels the toggle). */
+  pinned?: boolean;
   /** Viewer's display name, to label toggle-off state on their own reaction. */
   selfName?: string;
 }) {
@@ -115,6 +119,21 @@ export function MessageMenu({ message, align = 'right', onReply, onReact, selfNa
                 {mine?.kind === 'reject' ? 'Remove rejection' : 'Reject'}
               </button>
             </>
+          )}
+          {onPin && message.type === 'msg' && (
+            <button
+              type="button"
+              role="menuitem"
+              data-gate="pin-toggle"
+              onClick={() => { setOpen(false); onPin(message); }}
+              className={itemClass}
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9.7 1.8 4.5 4.5-1.8.6-.4 2.6-3.2 1L6 12l-4 2 2-4 1.5-2.8 1-3.2 2.6-.4z" />
+                <path d="M6 10 2 14" />
+              </svg>
+              {pinned ? 'Unpin message' : 'Pin message'}
+            </button>
           )}
           {onReply && message.type === 'msg' && (
             <button

@@ -103,6 +103,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
   applyMessageReaction,
+  setMessagePinned,
   casRoom,
   createRoom as createStoredRoom,
   createRoomReport,
@@ -1268,6 +1269,53 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       };
       await appendSystemMessage(client, code, eventRow);
       return { result: { added: outcome.added, reactions: outcome.reactions } };
+    }
+    case 'pinMessage':
+    case 'unpinMessage': {
+      // T-14: pin/unpin a message to the room's pinned-outcomes strip. Same
+      // authentication bar as 'send' and 'react' — a display name alone never
+      // mutates the room record. Viewers are read-only by their own choice, so
+      // they cannot pin either (pins bypass appendMessage, so the T-05 gate
+      // lives here like the status-ping one does).
+      const pin = action === 'pinMessage';
+      const actorName = String(payload.name || '');
+      const actorClient = (payload.client as 'web' | 'cc') || 'web';
+      const targetMessageId = Number(payload.messageId);
+      if (!actorName) {
+        const err = new Error('name is required. Pass your display name.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
+        const err = new Error('messageId must be the id of a stored message.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      await authenticateSender(code, actorName, actorClient, payload.memberKey as string | undefined, caller);
+      const pinRoom = await getRoom(client, code);
+      const actorRow = pinRoom.participants.find(p => p.name === actorName && p.client === actorClient);
+      if (actorRow?.viewer === true) throw new ViewerError(actorName);
+      const outcome = await setMessagePinned(client, code, targetMessageId, { name: actorName }, pin);
+      // Audit line: humans see who promoted what to the strip; listening
+      // agents learn a decision/result was pinned (the strip itself is a web
+      // rendering of room.pinnedMessages, which every client polls anyway).
+      const pinLine = outcome.target
+        ? `📌 ${actorName} ${pin ? 'pinned' : 'unpinned'} ${outcome.target.name}'s message: "${outcome.target.text}"`
+        : `📌 ${actorName} unpinned a message that has left history (id ${targetMessageId}).`;
+      const pinEventRow: Message = {
+        id: Date.now(),
+        type: 'sys',
+        name: 'system',
+        initials: 'SY',
+        color: '#64748b',
+        role: '',
+        client: 'cc',
+        time: Date.now(),
+        text: pinLine,
+        metadata: { eventType: 'pin', targetMessageId },
+      };
+      await appendSystemMessage(client, code, pinEventRow);
+      return { result: { pinned: outcome.pinned, pinnedMessages: outcome.pinnedMessages } };
     }
     case 'attachmentDownload': {
       // T-123: agent-native secure download. Authorized by the caller's

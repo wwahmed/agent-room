@@ -530,6 +530,23 @@ export async function reactToMessage(
   )).result;
 }
 
+// T-14: pin/unpin a message to the room's pinned-outcomes strip. Same
+// credential bar and self-healing retry as send/react. Returns the room's
+// full post-change pin list so the caller can patch the rendered strip
+// immediately (everyone else converges on the next room poll).
+export async function setMessagePinned(
+  _client: ApiClient,
+  code: string,
+  messageId: number,
+  pinned: boolean,
+  name: string,
+): Promise<{ pinned: boolean; pinnedMessages: import('@agent-room/shared').PinnedMessage[] }> {
+  return (await keyedCall<{ result: { pinned: boolean; pinnedMessages: import('@agent-room/shared').PinnedMessage[] } }>(
+    mk => ({ action: pinned ? 'pinMessage' : 'unpinMessage', code, messageId, name, client: 'web', memberKey: mk }),
+    code,
+  )).result;
+}
+
 // ---------- turn state ----------
 
 export async function getTurnState(_client: ApiClient, code: string): Promise<TurnState | null> {

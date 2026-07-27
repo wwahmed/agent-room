@@ -34,7 +34,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
@@ -235,7 +235,7 @@ export function Room() {
     })();
     return () => { cancelled = true; };
   }, [self, code, navigate]);
-  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal, hasOlder, loadingOlder, loadOlder, patchMessageReactions } = useRoom(code, self?.name ?? '');
+  const { room, messages, error, degraded, sendMessage, refreshRoom, forceRefresh, messageTotal, hasOlder, loadingOlder, loadOlder, patchMessageReactions, patchRoomPins } = useRoom(code, self?.name ?? '');
   const [text, setText] = useState('');
   // T-09: active @mention query in the composer — where the token starts, what
   // has been typed so far, and which candidate is keyboard-highlighted.
@@ -245,6 +245,11 @@ export function Room() {
   // position); seekingOlder drives the paged-out-history search.
   const [mentionCursorId, setMentionCursorId] = useState<number | null>(null);
   const [mentionSeeking, setMentionSeeking] = useState(false);
+  // T-14: pinned-outcomes strip — expanded/collapsed, plus a jump target whose
+  // message may still live in paged-out history (the effect below pages older
+  // until it surfaces, same pattern as the mention seek).
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [pinSeekId, setPinSeekId] = useState<number | null>(null);
   // T-59: the composer draft captured when dictation starts, so live transcript
   // can stream in as `base + spoken` without clobbering what was already typed.
   const dictationBaseRef = useRef<string | null>(null);
@@ -1345,6 +1350,33 @@ export function Room() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mentionSeeking, selfMentionIds, hasOlder, loadingOlder]);
 
+  // --- T-14: pinned outcomes. The list is the ROOM RECORD's denormalized
+  // entries (survives message paging/trimming); the id set drives the
+  // Pin/Unpin menu label on each message. Hooks live above the early returns.
+  const pinnedList = useMemo(() => room?.pinnedMessages ?? [], [room?.pinnedMessages]);
+  const pinnedIds = useMemo(() => new Set(pinnedList.map(p => p.id)), [pinnedList]);
+
+  // Continues a pin jump whose target message sits in paged-out history: each
+  // prepend re-runs this; jump the moment the row exists, keep paging while
+  // history remains, give up quietly when it is exhausted (the original may
+  // be LTRIMmed away — the denormalized strip entry is all that's left).
+  useEffect(() => {
+    if (pinSeekId == null) return;
+    const el = document.getElementById(`msg-${pinSeekId}`);
+    if (el) {
+      const id = pinSeekId;
+      setPinSeekId(null);
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('reply-flash');
+      window.setTimeout(() => document.getElementById(`msg-${id}`)?.classList.remove('reply-flash'), 1200);
+    } else if (!hasOlder) {
+      setPinSeekId(null);
+    } else if (!loadingOlder) {
+      void loadOlder();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinSeekId, messages, hasOlder, loadingOlder]);
+
   // T-82: hook topology must remain stable through bootstrap/error/join
   // transitions. Derive the pinning state defensively before every early
   // return, then run the restoring effect unconditionally. Keeping this hook
@@ -1610,6 +1642,30 @@ export function Room() {
       void import('../components/Toast.js').then(({ showToast }) =>
         showToast(e instanceof Error ? e.message : 'Reaction failed', 'error'));
     }
+  }
+
+  // T-14: toggle a message on the pinned-outcomes strip. The response carries
+  // the room's full post-change pin list — patch it in so the pinner sees the
+  // strip move without waiting a room-poll cycle.
+  async function togglePinById(id: number, pin: boolean) {
+    if (!self) return;
+    try {
+      const out = await setMessagePinned(createClient(), code, id, pin, self.name);
+      patchRoomPins(out.pinnedMessages);
+    } catch (e) {
+      void import('../components/Toast.js').then(({ showToast }) =>
+        showToast(e instanceof Error ? e.message : 'Pin failed', 'error'));
+    }
+  }
+
+  // T-14: jump to a pinned message — directly when loaded, via the older-page
+  // seek effect when it still lives in paged-out history.
+  function jumpToPin(id: number) {
+    if (document.getElementById(`msg-${id}`)) {
+      jumpToMessage(id);
+      return;
+    }
+    if (hasOlder) setPinSeekId(id);
   }
 
   // T-54: jump to (and briefly highlight) the quoted original by id.
@@ -2729,6 +2785,57 @@ export function Room() {
           className="relative flex min-h-0 min-w-0 flex-1 flex-col"
           style={{ '--composer-h': `${composerH}px` } as React.CSSProperties}
         >
+            {/* T-14: pinned outcomes — a compact floating strip below the
+                header. Collapsed it is one quiet pill; expanded it lists every
+                pin (sender + snippet, tap to jump, ✕ to unpin). Entries are
+                the room record's DENORMALIZED pins, so they render even after
+                the original message paged out or was trimmed. On phones the
+                chat pane is full-bleed under the fixed bar, hence the top
+                offset; sm+ panes already start below the header. */}
+            {pinnedList.length > 0 && !ended && (
+              <div data-gate="pinned-strip" className="pointer-events-none absolute inset-x-0 top-[108px] z-30 flex justify-center px-3 sm:top-2">
+                <div className="pointer-events-auto w-full max-w-[620px]">
+                  <button
+                    type="button"
+                    onClick={() => setPinsOpen(v => !v)}
+                    aria-expanded={pinsOpen}
+                    className="mx-auto flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink-soft shadow-md transition hover:text-ink"
+                  >
+                    <span aria-hidden="true">📌</span>
+                    Pinned · {pinnedList.length}
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={pinsOpen ? 'rotate-180' : ''}>
+                      <path d="m3.5 6 4.5 5 4.5-5" />
+                    </svg>
+                  </button>
+                  {pinsOpen && (
+                    <div className="mt-1.5 max-h-72 overflow-y-auto rounded-xl border border-border bg-surface shadow-lg">
+                      {[...pinnedList].reverse().map(p => (
+                        <div key={p.id} className="flex items-start gap-1 border-b border-border-faint px-2 py-1.5 last:border-b-0">
+                          <button
+                            type="button"
+                            onClick={() => { setPinsOpen(false); jumpToPin(p.id); }}
+                            className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition hover:bg-surface-softer"
+                          >
+                            <span className="block text-[12px] font-semibold text-accent-deep">{p.name || 'Earlier message'}</span>
+                            <span className="line-clamp-2 block text-[13px] leading-snug text-ink-soft [overflow-wrap:anywhere]">{p.text || '…'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void togglePinById(p.id, false)}
+                            aria-label={`Unpin ${p.name || 'this'} message`}
+                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-softer hover:text-ink"
+                          >
+                            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                              <path d="m4 4 8 8M12 4l-8 8" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="relative flex-1 overflow-y-auto max-sm:py-0 sm:py-4">
               {/* T-48: center a generous conversation rail on wide desktops.
@@ -2814,6 +2921,8 @@ export function Room() {
                       onReply={startReply}
                       onJumpToQuote={jumpToMessage}
                       onReact={reactTo}
+                      onPin={mm => void togglePinById(mm.id, !pinnedIds.has(mm.id))}
+                      pinned={pinnedIds.has(m.id)}
                       selfName={self.name}
                       senderBrand={brandForSender(m, activeRoom.participants)}
                     />

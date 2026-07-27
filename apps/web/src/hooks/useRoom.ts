@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Message, MessageReaction, Room } from '@agent-room/shared';
+import type { Message, MessageReaction, PinnedMessage, Room } from '@agent-room/shared';
 import { applyReactionEvents } from '../lib/reactions.js';
 import { mergeMessages } from '../lib/messageMerge.js';
 import { syncReadMarkers } from '../lib/readSync.js';
@@ -422,5 +422,12 @@ export function useRoom(code: string, selfName: string) {
     }));
   }, []);
 
-  return { ...state, sendMessage, refreshRoom: pullRoom, forceRefresh, loadOlder, patchMessageReactions };
+  // T-14: apply a pin result to the room record immediately (the pinner
+  // shouldn't wait a room-poll cycle to see the strip change). The next
+  // pullRoom carries the same authoritative list, so this stays convergent.
+  const patchRoomPins = useCallback((pinnedMessages: PinnedMessage[]) => {
+    setState(s => (s.room ? { ...s, room: { ...s.room, pinnedMessages } } : s));
+  }, []);
+
+  return { ...state, sendMessage, refreshRoom: pullRoom, forceRefresh, loadOlder, patchMessageReactions, patchRoomPins };
 }
