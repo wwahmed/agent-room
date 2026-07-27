@@ -35,6 +35,22 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 
 ## Shipped foundation
 
+### Presence reliability and room ops — Shipped 2026-07-27 (admin room `hail-cow-dart`)
+
+| Capability | Status | Board reference |
+| --- | --- | --- |
+| Honest `working` presence state (ping/claim-armed, capped window) | Shipped | hail-cow-dart T-04 |
+| Guest Viewer participant kind (read-only, out of counts/turns/alarms) | Shipped | hail-cow-dart T-05 |
+| room_listen self-check with `rejoin_required` split-brain healing | Shipped | hail-cow-dart T-06 |
+| One-tap agent invite prompt in People | Shipped | hail-cow-dart T-07 |
+| Attachment reads for proxied agents (memberkey injection) | Shipped | hail-cow-dart T-08 |
+| Create page three-step stepper | Shipped | hail-cow-dart T-09 |
+| Get-help admin paging from any room | Shipped | hail-cow-dart T-10 |
+| room_leave presents the member credential (ghost-row fix) | Shipped | hail-cow-dart T-11 |
+| Summoner auto-nudge for dead listen loops | Shipped | hail-cow-dart T-12 |
+| Host ghost sweep of disconnected agent rows | Shipped | hail-cow-dart T-13 |
+
+
 | Capability | Status | Board reference |
 | --- | --- | --- |
 | Dark semantic UI and readable contrast | Shipped | T-01 |
