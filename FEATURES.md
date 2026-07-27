@@ -52,6 +52,9 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Pinned outcomes: pin any message; 📌 strip with jump-to-message | Shipped | hail-cow-dart T-14 |
 | Header declutter: Chat/Board/People promoted, Outputs+Settings in More | Shipped | hail-cow-dart T-15 |
 | Review handoff: submissions page the verifier, verdicts page the owner | Shipped | hail-cow-dart T-16 |
+| People rows show each agent's claimed board task (current-work chip) | Shipped | hail-cow-dart T-17 |
+| Process badge: live presence vetoes stale-row claims | Shipped | hail-cow-dart T-18 |
+| Web verify: Board evidence viewer + one-tap verifier verdicts | Shipped | hail-cow-dart T-19 |
 
 
 | Capability | Status | Board reference |
@@ -112,7 +115,7 @@ Board: **T-05**.
 - First-class decisions, actions, blockers, results, approvals, and handoffs rather than conventions hidden in prose.
 - Direct assignment to a person or agent with owner, verifier, due/blocked state, and evidence.
 - Pin or promote a chat outcome into the attached project's task, decision, feature, or learning document.
-- Rich task evidence: changed files, excerpts, commands, exit codes, deployment links, and verifier verdicts.
+- Rich task evidence: changed files, excerpts, commands, exit codes, deployment links, and verifier verdicts. **Shipped (web evidence viewer + verdicts): hail-cow-dart T-19.**
 - Lightweight reactions and acknowledgements that do not create noisy transcript messages.
 
 ### Agent orchestration — Shipped base / Planned extensions
