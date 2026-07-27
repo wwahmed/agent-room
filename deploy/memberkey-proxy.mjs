@@ -247,7 +247,12 @@ const server = http.createServer(async (req, res) => {
           // total loss of the key store: we can always recompute it. Overwrite
           // rather than merge, so an agent can never assert its own anchor.
           payload.agentId = agentAnchor(secret, code);
-        } else if (action === 'send' || action === 'updatePresence') {
+        } else if (action === 'send' || action === 'updatePresence' || action === 'attachmentDownload') {
+          // attachmentDownload: file reads FORCE credential auth server-side
+          // (no legacy-name relaxation), so a credential-unaware 0.25.x agent
+          // behind this proxy could post messages but never read attachments
+          // — "Participant credential required" on every attempt. Inject here
+          // like send, keyed by the caller's display name.
           const actorName = action === 'send'
             ? (payload.message && typeof payload.message.name === 'string' ? payload.message.name : undefined)
             : (typeof payload.name === 'string' ? payload.name : undefined);

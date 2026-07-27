@@ -285,3 +285,48 @@ test('sibling sessions on one secret keep separate keys per name', async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// T-08 (attachment fix): file reads force credential auth server-side with no
+// legacy-name fallback, so the proxy MUST inject the stored key into
+// attachmentDownload exactly as it does for send — otherwise a 0.25.x agent
+// can talk in a room it can never read attachments from.
+test('injects the stored key into attachmentDownload requests', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agent-room-proxy-'));
+  const store = join(dir, 'member-keys.json');
+  const token = 'fedcba9876543210fedcba9876543210';
+  const seen = [];
+  const upstream = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    seen.push(body);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(body.action === 'join'
+      ? { room: { code: body.code, participants: [] }, participant: body.participant, memberKey: 'member-key-att' }
+      : { result: { ok: true } }));
+  });
+
+  let child;
+  try {
+    const upstreamPort = await listen(upstream);
+    const probe = createServer();
+    const proxyPort = await listen(probe);
+    await stop(probe);
+    child = await startProxy({ port: proxyPort, upstream: `http://127.0.0.1:${upstreamPort}`, token, store });
+
+    await joinThrough(proxyPort, token); // mints + stores member-key-att for Robin
+
+    const dl = await fetch(`http://127.0.0.1:${proxyPort}/t/${token}/api/room`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'attachmentDownload', code: 'ABC-DEF-GHJ', name: 'Robin', attachmentName: 'report.md' }),
+    });
+    assert.equal(dl.status, 200);
+    const forwarded = seen.find((b) => b.action === 'attachmentDownload');
+    assert.equal(forwarded.memberKey, 'member-key-att', 'proxy must present the stored key on attachment reads');
+  } finally {
+    if (child) await stopChild(child);
+    await stop(upstream);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
