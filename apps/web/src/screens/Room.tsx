@@ -2213,6 +2213,29 @@ export function Room() {
                             )}
                           </div>
                         )}
+                        {/* T-17: what this participant is DOING — the board's
+                            in_progress task they own, so People answers "who's
+                            on what" without a tab hop. Board-truth (claimed
+                            work), complementing the presence verdict (alive-
+                            ness) above. Tap → Board tab. */}
+                        {(() => {
+                          if (p.viewer === true) return null;
+                          const cur = (taskPulse ?? []).find(t =>
+                            t.state === 'in_progress' && t.owner === p.name && (!t.ownerClient || t.ownerClient === p.client));
+                          if (!cur) return null;
+                          return (
+                            <button
+                              type="button"
+                              data-gate="current-work"
+                              onClick={() => selectTab('project')}
+                              title={`${cur.id} · ${cur.title} — open the Board`}
+                              className="msg-meta mt-0.5 flex w-full items-center gap-1 truncate text-left font-medium text-accent hover:underline"
+                            >
+                              <span aria-hidden="true">🔧</span>
+                              <span className="truncate">on {cur.id} · {cur.title}</span>
+                            </button>
+                          );
+                        })()}
                         {/* Process-level truth from the summoner registry —
                             deliberately separate from the presence verdict
                             above: presence says whether the loop is armed,
