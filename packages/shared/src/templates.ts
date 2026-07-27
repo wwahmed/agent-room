@@ -59,6 +59,23 @@ export const ROOM_TEMPLATES_SHARED: RoomTemplateInfo[] = [
     label: 'Support Desk',
     brief: 'Ongoing triage desk: acknowledge each incoming issue with [STATUS], route or fix it, close with a [RESULT] stating the resolution; escalate real defects to a bug-fix room.',
   },
+  // T-24: the v2 architecture's recommended set (owner interview) plus the
+  // roadmap's release/research rooms.
+  {
+    id: 'owner-interview',
+    label: 'Owner Interview',
+    brief: 'Requirements-extraction room: agents ask the owner focused questions (prefer room_question_create for durable answers), distill each answer into a [DECISION], and close with a [RESULT] summarizing the agreed requirements.',
+  },
+  {
+    id: 'release',
+    label: 'Release / Go-live',
+    brief: 'Release room: walk the checklist with [STATUS] per step, record the go/no-go as a [DECISION], deploy, verify, and close with a [RESULT] naming version, evidence, and the rollback plan.',
+  },
+  {
+    id: 'research',
+    label: 'Research / Investigation',
+    brief: 'Research room: state the question, post findings as [RESULT]s with sources, mark dead ends honestly, and converge on a [DECISION] answering the question with its confidence and gaps.',
+  },
 ];
 
 export function templateInfo(id: string | null | undefined): RoomTemplateInfo | null {

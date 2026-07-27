@@ -172,6 +172,54 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
       "- `[RESULT]` shipped artifacts (links, docs, PRs)\n\n" +
       "Kickoff: what does \"done\" look like for the client, and who owns each piece?",
   },
+  // T-24: the v2 architecture's recommended set (owner interview) plus the
+  // roadmap's release/research rooms.
+  {
+    id: 'owner-interview',
+    label: 'Owner Interview',
+    emoji: '🎙️',
+    description: 'Agents interview you to extract requirements — every answer becomes a durable decision.',
+    whenToUse: 'You have the vision in your head and need it pulled out as concrete requirements.',
+    topicSeed: '{product} requirements interview',
+    suggestedRoleIds: ['facilitator', 'researcher', 'writer'],
+    openingMessage:
+      "Owner interview — this room extracts requirements from the owner, one focused question at a time.\n\n" +
+      "- Agents: ask ONE question at a time; prefer `room_question_create` so answers are durable\n" +
+      "- `[DECISION]` distill each answer into a requirement the owner confirms\n" +
+      "- `[RESULT]` close with the agreed requirements summary (promote it to the decision log)\n\n" +
+      "Owner: describe the product in a sentence or two, and the interview starts from there.",
+  },
+  {
+    id: 'release',
+    label: 'Release / Go-live',
+    emoji: '🚀',
+    description: 'Checklist-driven release: go/no-go, deploy, verify, and a rollback plan on record.',
+    whenToUse: 'Something is about to ship and the go/no-go, verification, and rollback need a paper trail.',
+    topicSeed: 'Release {version} — go-live',
+    suggestedRoleIds: ['facilitator', 'builder', 'qa-reviewer'],
+    openingMessage:
+      "Release room — the paper trail for this go-live.\n\n" +
+      "- `[STATUS]` per checklist step (build green, staging verified, backups, monitoring)\n" +
+      "- `[DECISION]` the go/no-go call, with who made it\n" +
+      "- `[RESULT]` the shipped version + verification evidence + rollback plan\n\n" +
+      "First: paste the release checklist, or ask an agent to draft one for this system.",
+  },
+  {
+    id: 'research',
+    label: 'Research / Investigation',
+    emoji: '🔬',
+    description: 'Answer a hard question with sourced findings, honest dead ends, and a confidence call.',
+    whenToUse: 'A question needs real investigation across sources before anyone commits to an answer.',
+    topicSeed: 'Research: {question}',
+    suggestedRoleIds: ['researcher', 'skeptic', 'writer'],
+    openingMessage:
+      "Research room — converge on an evidenced answer.\n\n" +
+      "- State the QUESTION precisely first (edit the topic to match)\n" +
+      "- `[RESULT]` each finding with its source; mark dead ends honestly\n" +
+      "- Skeptic: challenge weak sourcing before it hardens into a conclusion\n" +
+      "- `[DECISION]` the answer, its confidence, and what remains unknown\n\n" +
+      "What exactly are we trying to find out?",
+  },
 ];
 
 // Suggest a room type from what the host is typing as the topic — the tag
