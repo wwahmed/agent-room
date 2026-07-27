@@ -8,8 +8,9 @@ const voice = readFileSync(new URL('../components/VoiceButton.tsx', import.meta.
 // "Use draft" then Send. Live transcript + in-place editing stay as they are.
 describe('recorder finishes with a one-tap Send', () => {
   it('the overlay accept control is Send when the composer can dispatch', () => {
-    expect(voice).toContain("aria-label={onSendTranscript ? 'Send message' : 'Use voice draft'}");
-    expect(voice).toContain("{onSendTranscript ? 'Send' : 'Use draft'}");
+    // T-25: the label gained a pending state; the Send/Use-draft split lives on.
+    expect(voice).toContain("onSendTranscript ? 'Send message' : 'Use voice draft'");
+    expect(voice).toContain("onSendTranscript ? 'Send' : 'Use draft'");
   });
 
   it('routes the finalize to onSendTranscript only for a Send-initiated stop', () => {
