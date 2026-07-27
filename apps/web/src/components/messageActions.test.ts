@@ -25,7 +25,7 @@ describe('message action cluster (T-121)', () => {
   });
 
   it('renders the identical cluster on all three row anatomies (self, grouped, ungrouped)', () => {
-    const clusters = row.match(/<MessageMenu message=\{message\} onReply=\{onReply\} onReact=\{onReact\} selfName=\{selfName\} \/>/g) ?? [];
+    const clusters = row.match(/<MessageMenu message=\{message\} onReply=\{onReply\} onReact=\{onReact\} onPin=\{onPin\} pinned=\{pinned\} selfName=\{selfName\} \/>/g) ?? [];
     expect(clusters.length).toBe(3);
   });
 
