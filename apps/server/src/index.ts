@@ -68,6 +68,7 @@ import {
 import { redactRoomPayload } from './redact.js';
 import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
 import { clampWorkingUntil, roomHealth } from './health.js';
+import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
@@ -1035,6 +1036,54 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     case 'health': {
       const room = await getRoom(client, code);
       return { health: roomHealth(room.participants, Date.now()) };
+    }
+    case 'requestAdminHelp': {
+      // T-10: page the platform admin from any room. The page is an @mention
+      // in the admin HQ room (where the admin agent keeps a standing listen
+      // loop); the source room gets a confirmation line. Participant-gated —
+      // help is not destructive, but a page must name a real requester.
+      const requester = String(payload.name || '').trim();
+      if (!requester) {
+        const err = new Error('name (your display name) is required to request help.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      const sourceRoom = await getRoom(client, code);
+      if (!sourceRoom.participants.some((p) => p.name === requester)) {
+        const err = new Error(`"${requester}" is not a participant of this room.`);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      let hqRoom;
+      try {
+        hqRoom = await getRoom(client, ADMIN_HQ_ROOM);
+      } catch {
+        const err = new Error(`The admin HQ room (${ADMIN_HQ_ROOM}) is not reachable — nobody can be paged right now.`);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      const note = typeof payload.note === 'string' ? payload.note.slice(0, 280) : undefined;
+      const page = adminHelpPage({
+        admin: ADMIN_AGENT_NAME,
+        requester,
+        code,
+        topic: sourceRoom.topic,
+        origin: PUBLIC_ORIGIN,
+        note,
+      });
+      await appendSystemMessage(client, ADMIN_HQ_ROOM, sysMessage(page, {
+        eventType: 'admin_help',
+        sourceRoom: code,
+        requestedBy: requester,
+      }));
+      // Same-room page (help requested from the HQ itself) still works — the
+      // confirmation just lands next to the page.
+      await appendSystemMessage(client, code, sysMessage(helpConfirmation(ADMIN_AGENT_NAME, requester), {
+        eventType: 'admin_help_sent',
+        requestedBy: requester,
+      })).catch(() => { /* the page itself succeeded; confirmation is best-effort */ });
+      void hqRoom;
+      return { paged: true, admin: ADMIN_AGENT_NAME, hq: ADMIN_HQ_ROOM };
     }
     case 'sweep': {
       const room = await getRoom(client, code);

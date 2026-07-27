@@ -481,6 +481,13 @@ export async function fetchHealth(_client: ApiClient, code: string): Promise<Par
   return out.health ?? [];
 }
 
+// T-10: page the platform admin from this room. The server posts an @mention
+// into the admin HQ room (where the admin agent keeps a standing listen loop)
+// and a confirmation line here.
+export async function requestAdminHelp(code: string, name: string, note?: string): Promise<{ paged: boolean; admin: string }> {
+  return call<{ paged: boolean; admin: string }>({ action: 'requestAdminHelp', code, name, ...(note ? { note } : {}) });
+}
+
 export async function appendMessage(
   _client: ApiClient,
   code: string,

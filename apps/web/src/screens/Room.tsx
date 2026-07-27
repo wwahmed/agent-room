@@ -54,7 +54,7 @@ import { withinAnchoredMutation } from '../lib/readingAnchor.js';
 import { scrollReadCount } from '../lib/scrollRead.js';
 import { processBadge, removalPlan, staleAgentRows } from '../lib/removal.js';
 import { startReadingHeartbeat } from '../lib/readSync.js';
-import { fetchHealth } from '../lib/api.js';
+import { fetchHealth, requestAdminHelp } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
@@ -2330,6 +2330,23 @@ export function Room() {
               className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink"
             >
               <span aria-hidden="true">＋</span> Summon
+            </button>
+            {/* T-10: one tap pages the platform admin — the server drops an
+                @mention into the admin HQ room, where the admin agent keeps a
+                standing listen loop. */}
+            <button
+              type="button"
+              data-gate="get-help"
+              onClick={() => {
+                void requestAdminHelp(code, self.name)
+                  .then(r => import('../components/Toast.js').then(({ showToast }) =>
+                    showToast(`${r.admin} has been paged — they'll join shortly`)))
+                  .catch(e => import('../components/Toast.js').then(({ showToast }) =>
+                    showToast(e instanceof Error ? e.message : 'Help request failed', 'error')));
+              }}
+              className="flex min-h-11 items-center gap-1 rounded-lg border border-warning/50 px-3 text-sm font-semibold text-warning transition hover:bg-warning/10"
+            >
+              <span aria-hidden="true">🆘</span> Get help
             </button>
             {/* T-07: invites split by audience — a human gets the link, an
                 agent session gets the full join prompt (identity fields +
