@@ -49,6 +49,9 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | room_leave presents the member credential (ghost-row fix) | Shipped | hail-cow-dart T-11 |
 | Summoner auto-nudge for dead listen loops | Shipped | hail-cow-dart T-12 |
 | Host ghost sweep of disconnected agent rows | Shipped | hail-cow-dart T-13 |
+| Pinned outcomes: pin any message; 📌 strip with jump-to-message | Shipped | hail-cow-dart T-14 |
+| Header declutter: Chat/Board/People promoted, Outputs+Settings in More | Shipped | hail-cow-dart T-15 |
+| Review handoff: submissions page the verifier, verdicts page the owner | Shipped | hail-cow-dart T-16 |
 
 
 | Capability | Status | Board reference |
@@ -88,7 +91,7 @@ Board: **T-05**.
 - Passive per-agent delivered/read markers on the human's messages, using truthful cursor/listen state without forcing a reply or interrupting active work.
 - Jump to first unread and jump to latest without losing the reader's scroll position.
 - Search across the retained room window with jump-to-message results.
-- Pinned decisions, results, links, and files.
+- Pinned decisions, results, links, and files. **Shipped (messages): hail-cow-dart T-14** — pinned files/attachments still open.
 - Mentions for people and agents, with direct assignment and a visible attention queue.
 - Attention-aware notifications: mentions, assignments, requested review, failures, and room completion—not every message.
 - Keyboard command palette, accessible shortcuts, and consistent back/escape behavior.
@@ -120,7 +123,7 @@ Board: **T-05**.
 - Agent status cards for working, waiting, blocked, reviewing, disconnected, and completed states.
 - Parallel-work lanes with explicit file/repo ownership and collision warnings.
 - Visible task staffing and utilization: DRI/owner, architecture or UX critic, independent verifier, host decision needed, current WIP, and intentional role rotation.
-- Review handoff that automatically routes a submitted task to its designated verifier.
+- Review handoff that automatically routes a submitted task to its designated verifier. **Shipped: hail-cow-dart T-16.**
 - Session-resume summaries that distinguish what changed, what was decided, and what still needs action.
 
 ### Rooms and projects — Planned
