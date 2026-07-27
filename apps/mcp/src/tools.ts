@@ -195,9 +195,46 @@ async function readReplyModeSnapshot(
 type RoomListenPollResult = {
   messages: Message[];
   cursor: number;
-  terminated?: 'room_ended' | 'kicked';
+  terminated?: 'room_ended' | 'kicked' | 'rejoin_required';
+  self?: SelfRowEcho;
   hint: string;
 };
+
+// T-06: the server's verdict on the CALLER'S OWN row, echoed on every listen.
+// Split-brain presence (harness believes it is joined, server has no row —
+// the listen process died, the row was removed, or a rejoin landed on a
+// suffixed sibling) is only curable if the agent LEARNS about it; this echo
+// plus the rejoin_required signal make divergence self-heal in one cycle.
+export type SelfRowEcho = {
+  exists: boolean;
+  name?: string;
+  canSpeak?: boolean;
+  viewer?: boolean;
+};
+
+/** Pure core of the T-06 self-check: what does the room say about ME?
+ *  Returns exists:false when the row is gone — callers turn that into the
+ *  hard rejoin_required signal instead of a normal quiet window. */
+export function evaluateSelfRow(
+  participants: Array<{ name: string; client: string; canSpeak?: boolean; viewer?: boolean }>,
+  selfName: string,
+): SelfRowEcho {
+  const mine = participants.find((p) => p.name === selfName && p.client === 'cc');
+  if (!mine) return { exists: false };
+  return {
+    exists: true,
+    name: mine.name,
+    canSpeak: mine.canSpeak !== false,
+    ...(mine.viewer === true ? { viewer: true } : {}),
+  };
+}
+
+const REJOIN_REQUIRED_HINT = (code: string, selfName: string): string =>
+  `TERMINATION SIGNAL (rejoin_required): the server has NO participant row for "${selfName}" in room ${code} — ` +
+  `your session believes it is joined but the room disagrees (split-brain: the row was removed, renamed, or lost ` +
+  `while your listen loop was down). Do NOT keep listening on this dead identity. Call room_join NOW with the same ` +
+  `code and name — your stored member credential reclaims your identity, and the join response's removalNotice will ` +
+  `say if a host removed you. Then resume the room_listen loop from the returned cursor.`;
 
 // A message @mentions this agent when its text contains `@<name>` — matching
 // the full display name OR its first word (so "@Claude" reaches "Claude (2)"),
@@ -228,7 +265,31 @@ async function runRoomListenPoll(
 ): Promise<RoomListenPollResult> {
   const cappedMs = Math.min(Math.max(1000, timeoutMs), MAX_LISTEN_MS);
   const start = Date.now();
+  // T-06: self-check BEFORE arming the window. The old flow stamped presence
+  // blind — setListenUntil on a missing row is a silent no-op, so a diverged
+  // agent listened forever without a roster row and nobody learned. One
+  // getRoom up front converts that into a hard rejoin_required in cycle one.
+  let self: SelfRowEcho | undefined;
   if (selfName) {
+    try {
+      const room = await getRoom(client, code);
+      if (room.status === 'ended') {
+        try { await removeRoom(code); } catch { /* non-essential */ }
+        return {
+          messages: [], cursor: since, terminated: 'room_ended',
+          hint: 'TERMINATION SIGNAL: the room has ended. Stop calling room_listen — the meeting is over.',
+        };
+      }
+      self = evaluateSelfRow(room.participants, selfName);
+      if (!self.exists) {
+        // Deliberately NOT removeRoom(): the stored member credential is the
+        // reclaim anchor the rejoin needs — wiping it would orphan the row.
+        return {
+          messages: [], cursor: since, terminated: 'rejoin_required', self,
+          hint: REJOIN_REQUIRED_HINT(code, selfName),
+        };
+      }
+    } catch { /* transient — proceed; the mid-poll probe still covers us */ }
     try {
       await setListenUntil(client, code, selfName, start + cappedMs, await readMemberKey(code));
     } catch { /* presence is non-essential */ }
@@ -259,6 +320,7 @@ async function runRoomListenPoll(
       return {
         messages: msgs,
         cursor,
+        ...(self ? { self } : {}),
         hint: mentionHint + baseHint + attachmentHint,
       };
     }
@@ -295,6 +357,7 @@ async function runRoomListenPoll(
   return {
     messages: [],
     cursor: since,
+    ...(self ? { self } : {}),
     hint:
       `Listened for ${cappedMs}ms — quiet so far. This is normal. ` +
       `${nextListenContract(code, since)} ` +
@@ -555,7 +618,8 @@ export function registerTools(server: Server) {
           'Block up to timeoutMs (default 240000ms = 4min) waiting for new messages, returning as soon as any arrive. ' +
           'THIS IS THE PRIMARY LOOP PRIMITIVE FOR BEING PRESENT IN A CHAT. After room_create / room_join / room_send, call room_listen with the returned cursor, then either reply (room_send) or call room_listen again with the new cursor to keep waiting. ' +
           'An empty return after timeout means nobody spoke during the window — this is normal, just call room_listen again. ' +
-          'STAY IN THE LOOP until you observe one of these termination signals: (a) the room status becomes "ended", (b) the host says something like "you can leave" / "退出会议" / "exit", (c) you are removed from participants. Until then, every turn must end with another room_listen call queued up — do not silently stop listening, and do not final-answer your way out of the room.',
+          'STAY IN THE LOOP until you observe one of these termination signals: (a) the room status becomes "ended", (b) the host says something like "you can leave" / "退出会议" / "exit", (c) you are removed from participants. Until then, every turn must end with another room_listen call queued up — do not silently stop listening, and do not final-answer your way out of the room. ' +
+          'SELF-CHECK (T-06): each response carries `self` — the server\'s verdict on YOUR OWN row (exists / name / canSpeak / viewer). If a response returns terminated="rejoin_required", the server has no row for you (split-brain: your row was removed, renamed, or lost while your loop was down) — call room_join immediately with the same code and name; your stored credential reclaims your identity. Never keep listening through a rejoin_required.',
         inputSchema: {
           type: 'object',
           required: ['code', 'since'],
@@ -1389,6 +1453,9 @@ export function registerTools(server: Server) {
         messages: result.messages,
         cursor: result.cursor,
         ...(result.terminated ? { terminated: result.terminated } : {}),
+        // T-06: the server's verdict on the caller's own row, every cycle —
+        // split-brain presence must never survive a listen unnoticed.
+        ...(result.self ? { self: result.self } : {}),
         ...(snapshot ?? {}),
         ...(roomTemplate ? { roomTemplate } : {}),
         hint: result.hint,
