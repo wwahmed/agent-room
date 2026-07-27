@@ -56,6 +56,10 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Process badge: live presence vetoes stale-row claims | Shipped | hail-cow-dart T-18 |
 | Web verify: Board evidence viewer + one-tap verifier verdicts | Shipped | hail-cow-dart T-19 |
 | Delivered markers: per-agent listen-loop delivery on your own messages | Shipped | hail-cow-dart T-20 |
+| Send holds for in-flight uploads (text+image travel together) | Shipped | hail-cow-dart T-21 |
+| Phone keyboard Enter = newline; Send button sends on touch | Shipped | hail-cow-dart T-22 |
+| Promote pinned outcomes into DECISIONS.md (room root + repo overlay) | Shipped | hail-cow-dart T-23 |
+| Owner Interview / Release / Research room templates | Shipped | hail-cow-dart T-24 |
 
 
 | Capability | Status | Board reference |
@@ -115,7 +119,7 @@ Board: **T-05**.
 - Compact structured question cards with 2–4 options; selection prefills an editable reply and never auto-sends. Board: **T-13**.
 - First-class decisions, actions, blockers, results, approvals, and handoffs rather than conventions hidden in prose.
 - Direct assignment to a person or agent with owner, verifier, due/blocked state, and evidence.
-- Pin or promote a chat outcome into the attached project's task, decision, feature, or learning document.
+- Pin or promote a chat outcome into the attached project's task, decision, feature, or learning document. **Shipped (decisions): hail-cow-dart T-23.**
 - Rich task evidence: changed files, excerpts, commands, exit codes, deployment links, and verifier verdicts. **Shipped (web evidence viewer + verdicts): hail-cow-dart T-19.**
 - Lightweight reactions and acknowledgements that do not create noisy transcript messages.
 
@@ -133,7 +137,7 @@ Board: **T-05**.
 ### Rooms and projects — Planned
 
 - Human-readable project and room titles, with join codes secondary.
-- Room templates for solution design, implementation, incident response, review, release, and research.
+- Room templates for solution design, implementation, incident response, review, release, and research. **Shipped: full catalog incl. owner-interview/release/research — hail-cow-dart T-24.**
 - Resume a project through a new room without pretending the old transcript is permanent agent memory.
 - Archive/end rooms while preserving promoted project outcomes and a compact final report.
 - Optional focused subrooms or threads for bounded work, with decisions rolled back into the parent project.
