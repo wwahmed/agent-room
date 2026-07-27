@@ -250,6 +250,10 @@ export async function removeParticipant(
   targetName: string,
   targetClient: 'web' | 'cc',
   hostKey?: string,
+  // T-11: self-removal (requester === target) authenticates via the member
+  // credential, not a host key — without it the server refuses and the row
+  // is stranded as a permanent ghost.
+  memberKey?: string,
 ): Promise<Room> {
   const body = await client.post<{ room: Room }>({
     action: 'removeParticipant',
@@ -258,6 +262,7 @@ export async function removeParticipant(
     targetName,
     targetClient,
     hostKey,
+    ...(memberKey ? { memberKey } : {}),
   });
   return body.room;
 }

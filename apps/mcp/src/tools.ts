@@ -1529,8 +1529,14 @@ export function registerTools(server: Server) {
         selfName = selfName ?? state.rooms[a.code]?.name;
       } catch { /* state unavailable */ }
       if (selfName) {
+        // T-11: present the member credential — self-removal REQUIRES it
+        // server-side, and the old credential-less call failed silently,
+        // stranding a ghost row in every room this agent ever left. Read
+        // the key BEFORE removeRoom() wipes the local state that holds it.
+        let leaveKey: string | undefined;
+        try { leaveKey = await readMemberKey(a.code); } catch { /* state unavailable */ }
         try {
-          await removeParticipant(client, a.code, selfName, selfName, 'cc');
+          await removeParticipant(client, a.code, selfName, selfName, 'cc', undefined, leaveKey);
         } catch { /* room may be ended or TTL expired — proceed to local cleanup */ }
       }
       await removeRoom(a.code);
