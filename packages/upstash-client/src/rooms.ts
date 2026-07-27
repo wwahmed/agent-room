@@ -967,10 +967,14 @@ export async function setListenUntil(
   name: string,
   until: number
 ): Promise<void> {
+  // T-20: listenArmedAt is the delivery watermark — arming a listen drains
+  // the room up to this instant, so older messages are verifiably in the
+  // participant's hands. Stamped here (the one funnel every runtime's listen
+  // cycle already goes through), no client change required.
   await casRoom(client, code, (current) => ({
     ...current,
     participants: current.participants.map(p =>
-      p.name === name ? { ...p, listenUntil: until, lastSeenAt: Date.now() } : p
+      p.name === name ? { ...p, listenUntil: until, lastSeenAt: Date.now(), listenArmedAt: Date.now() } : p
     ),
   }));
 }

@@ -59,6 +59,7 @@ import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, personGroup, type ParticipantHealth } from '../lib/presence.js';
+import { deliveredAgents } from '../lib/delivered.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
@@ -2954,6 +2955,9 @@ export function Room() {
                       onReact={reactTo}
                       onPin={mm => void togglePinById(mm.id, !pinnedIds.has(mm.id))}
                       pinned={pinnedIds.has(m.id)}
+                      deliveredTo={m.name === self.name && m.client === 'web'
+                        ? deliveredAgents(activeRoom.participants, m.time)
+                        : undefined}
                       selfName={self.name}
                       senderBrand={brandForSender(m, activeRoom.participants)}
                     />

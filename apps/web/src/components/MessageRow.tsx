@@ -96,6 +96,9 @@ interface Props {
   onPin?: (m: Message) => void;
   /** T-14: whether this message is currently pinned. */
   pinned?: boolean;
+  /** T-20: agents whose listen loops verifiably received this message —
+   *  rendered only on the viewer's OWN messages as a quiet delivery meta. */
+  deliveredTo?: string[];
   /** T-12: the VIEWER's display name, for the you-were-mentioned highlight. */
   selfName?: string;
   /** T-47: provider brand for the sender (resolved by Room from participant
@@ -256,7 +259,7 @@ function DictatedChip() {
   );
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, onPin, pinned, selfName, senderBrand }: Props) {
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, onPin, pinned, deliveredTo, selfName, senderBrand }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
   // T-124 prototype flag (default 'legacy' = shipped behavior). When a hover
@@ -311,6 +314,21 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
           <div className="msg-meta mt-1 flex items-center justify-end gap-1.5 leading-none" title={exactTime(message.time)}>
             {message.metadata?.dictated && <DictatedChip />}
+            {/* T-20: truthful delivery meta — these agents' listen loops
+                verifiably received this message (never a "read" claim). */}
+            {deliveredTo && deliveredTo.length > 0 && (
+              <span
+                data-gate="delivered-to"
+                className="flex items-center gap-0.5 text-success"
+                title={`Delivered to ${deliveredTo.join(', ')} — their listen loop received it`}
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m2.5 8.5 3 3L11 6M8.5 11.5 14 6" />
+                </svg>
+                <span className="sr-only">Delivered to {deliveredTo.join(', ')}</span>
+                <span aria-hidden="true">{deliveredTo.length === 1 ? deliveredTo[0] : deliveredTo.length}</span>
+              </span>
+            )}
             <span>{messageTime(message.time, now)}</span>
           </div>
         </div>

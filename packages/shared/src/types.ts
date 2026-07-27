@@ -25,6 +25,12 @@ export interface Participant {
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally
+  // T-20: when this participant LAST ARMED a listen window. Arming a listen
+  // drains the room up to that instant, so every message older than this
+  // timestamp has verifiably been handed to the participant's session — the
+  // truthful "delivered" lower bound behind the web's delivery markers.
+  // Never a claim about reading; only about the listen loop receiving it.
+  listenArmedAt?: number;
   // T-05: guest viewer — joined to observe, not to participate. Read-only
   // (sends are rejected server-side), excluded from agent counts/facepiles,
   // turn order, and presence alarms; the People pane lists viewers in their
