@@ -2008,6 +2008,16 @@ const server = createServer(async (req, res) => {
       const agentName = String(alert.name || 'An agent');
       const roomCode = String(alert.room || '');
       const alertKind = String(alert.kind || '');
+      // T-12: an auto-nudge is the system HANDLING the incident, not raising
+      // one — it leaves a quiet audit line in the room instead of waking the
+      // owner. Only escalate to a push if the nudge apparently didn't take.
+      if (alertKind === 'auto-nudged' && roomCode) {
+        await appendSystemMessage(client, roomCode, sysMessage(
+          `⚡ ${agentName}'s listen loop went quiet — the summoner injected the recovery prompt into its terminal automatically.`,
+          { eventType: 'agent_auto_nudged', targetAgentName: agentName },
+        )).catch(() => { /* best-effort audit line */ });
+        return sendJson(res, 200, { ok: true, kind: 'auto-nudged' });
+      }
       const copy = alertKind === 'blocked-on-prompt'
         ? { title: `${agentName} is waiting for your permission`, body: 'It hit a permission dialog and is paused. Tap to answer it from the People pane.' }
         : alertKind === 'needs-attention'

@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { listGrouped, isValidWorkspace } from './workspaces.mjs';
 import { catalog, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, ensureAgentConfigReady, AUG_PATH } from './providers.mjs';
 import { leave } from './roomcli.mjs';
+import { shouldNudge, recoveryPromptFor, presenceOf } from './nudge.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DRIVER = join(HERE, 'driver.mjs');
@@ -120,6 +121,9 @@ function publicAgent(a) {
 // /agent-event, instant) and the SAMPLER fallback (45s pane sweep) so one
 // incident produces exactly one owner alert no matter which path saw it first.
 const watchState = new Map(); // agentId -> 'ok' | 'blocked' | 'dead'
+// T-12: last auto-nudge per agent, for the cool-down. In-memory on purpose —
+// a summoner restart re-arming one extra nudge is harmless.
+const nudgeState = new Map(); // agentId -> epoch ms of last nudge
 
 // Event-driven attention alert (the architectural fix): a lane-wide Claude
 // Notification hook posts {room,name} here the INSTANT the harness needs a
@@ -529,6 +533,47 @@ if (verb) {
       }
       // Registry rows that left 'active' shouldn't pin memory forever.
       for (const id of watchState.keys()) if (!r.agents[id] || r.agents[id].status !== 'active') watchState.delete(id);
+      for (const id of nudgeState.keys()) if (!r.agents[id] || r.agents[id].status !== 'active') nudgeState.delete(id);
+
+      // T-12 auto-nudge: an agent whose tmux pane is alive and idle but whose
+      // ROOM presence says stale/disconnected has "final-answered its way out
+      // of the room" — no MCP code can fix a loop that is never called again,
+      // so we type the recovery prompt into its own pane, exactly what the
+      // host used to paste by hand. Blocked panes are a human's job; dead
+      // sessions already alert the owner; cool-down stops hammering.
+      void (async () => {
+        try {
+          const reg = loadRegistry();
+          const live = Object.values(reg.agents).filter((a) =>
+            a.status === 'active' && a.native && sessionAlive(a.tmuxSession));
+          const rooms = [...new Set(live.map((a) => a.room))];
+          const healthByRoom = new Map();
+          for (const room of rooms) {
+            try {
+              const res = await fetch(`${ROOM_BASE}/api/room`, {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ action: 'health', code: room }),
+              });
+              if (res.ok) healthByRoom.set(room, (await res.json()).health || []);
+            } catch { /* room unreachable this tick — skip */ }
+          }
+          for (const a of live) {
+            const presenceState = presenceOf(healthByRoom.get(a.room), a.name);
+            const paneBlocked = paneBlockedOnPrompt(a.tmuxSession);
+            if (!shouldNudge({ presenceState, paneBlocked, lastNudgeAt: nudgeState.get(a.agentId), now: Date.now() })) continue;
+            nudgeState.set(a.agentId, Date.now());
+            const prompt = recoveryPromptFor(a.room, a.name, a.role);
+            // -l types the prompt literally (no key-name interpretation); C-m submits.
+            tmux(['send-keys', '-t', a.tmuxSession, '-l', prompt]);
+            tmux(['send-keys', '-t', a.tmuxSession, 'C-m']);
+            console.log(`[auto-nudge] ${a.name} (${a.room}) presence=${presenceState} — recovery prompt injected`);
+            fetch(`${ROOM_BASE}/api/agent-alert`, {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ name: a.name, room: a.room, kind: 'auto-nudged' }),
+            }).catch(() => { /* the sys line is best-effort; the nudge itself landed */ });
+          }
+        } catch { /* auto-nudge must never take the service down */ }
+      })();
     } catch { /* watchdog must never take the service down */ }
   }, 45000);
 }
