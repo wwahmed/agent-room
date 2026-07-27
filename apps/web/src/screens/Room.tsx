@@ -2825,7 +2825,7 @@ export function Room() {
                 chat pane is full-bleed under the fixed bar, hence the top
                 offset; sm+ panes already start below the header. */}
             {pinnedList.length > 0 && !ended && (
-              <div data-gate="pinned-strip" className="pointer-events-none absolute inset-x-0 top-[108px] z-30 flex justify-center px-3 sm:top-2">
+              <div data-gate="pinned-strip" className={`pointer-events-none absolute inset-x-0 z-30 flex justify-center px-3 sm:top-2 ${chromeHidden ? 'top-2' : 'top-[108px]'}`}>
                 <div className="pointer-events-auto w-full max-w-[620px]">
                   <button
                     type="button"
