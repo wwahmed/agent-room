@@ -326,8 +326,15 @@ export function CreateMeeting() {
               ← Back
             </button>
           )}
+          {/* Distinct keys are load-bearing: without them React reuses one
+              <button> DOM node across steps, and the browser's native default
+              action for the click that advanced step 2→3 re-reads the node —
+              now type="submit" — and creates the room straight past Review.
+              Caught live in the T-09 walkthrough; a keyed remount detaches
+              the node mid-dispatch, so the default action dies with it. */}
           {step < 3 ? (
             <button
+              key="step-next"
               type="button"
               onClick={() => goTo((step + 1) as StepN)}
               disabled={step === 2 && !detailsOk}
@@ -336,7 +343,7 @@ export function CreateMeeting() {
               Next →
             </button>
           ) : (
-            <button disabled={busy || Boolean(topicIssue)} type="submit" className="min-h-11 flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50">
+            <button key="step-create" disabled={busy || Boolean(topicIssue)} type="submit" className="min-h-11 flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50">
               {busy ? 'Creating…' : 'Create room →'}
             </button>
           )}

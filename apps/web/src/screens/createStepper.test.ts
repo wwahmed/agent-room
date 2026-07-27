@@ -25,6 +25,14 @@ describe('create page — three-step stepper', () => {
     expect(create).toContain('disabled={step === 2 && !detailsOk}');
   });
 
+  it('Next and Create are keyed so one click can never do both', () => {
+    // Without distinct keys React reuses the button DOM node across the
+    // step 2→3 swap, and the click's native default action re-reads it as
+    // type="submit" — creating the room straight past Review (seen live).
+    expect(create).toContain('key="step-next"');
+    expect(create).toContain('key="step-create"');
+  });
+
   it('review rows link every fact back to the step that owns it', () => {
     expect(create).toContain('reviewRows.map');
     expect(create).toContain('onClick={() => goTo(r.step)}');
