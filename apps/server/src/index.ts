@@ -100,11 +100,13 @@ import {
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
 import { reviewHandoffLine, verdictLine, reviewPushForHost } from './reviewflow.js';
+import { promoteDecision } from './decisions.js';
 import { ensureArtifactIndex, listRoomArtifacts,
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
   applyMessageReaction,
   setMessagePinned,
+  findStoredMessage,
   casRoom,
   createRoom as createStoredRoom,
   createRoomReport,
@@ -1317,6 +1319,58 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       };
       await appendSystemMessage(client, code, pinEventRow);
       return { result: { pinned: outcome.pinned, pinnedMessages: outcome.pinnedMessages } };
+    }
+    case 'promoteDecision': {
+      // T-23: promote a pinned outcome into the room's durable DECISIONS.md
+      // (+ the attached project's repo overlay). Same credential bar and
+      // viewer gate as pin — promotion writes durable state.
+      const actorName = String(payload.name || '');
+      const actorClient = (payload.client as 'web' | 'cc') || 'web';
+      const targetMessageId = Number(payload.messageId);
+      if (!actorName) {
+        const err = new Error('name is required. Pass your display name.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      if (!Number.isFinite(targetMessageId) || targetMessageId <= 0) {
+        const err = new Error('messageId must be the id of a stored message.');
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      await authenticateSender(code, actorName, actorClient, payload.memberKey as string | undefined, caller);
+      const promoRoom = await getRoom(client, code);
+      const promoRow = promoRoom.participants.find(p => p.name === actorName && p.client === actorClient);
+      if (promoRow?.viewer === true) throw new ViewerError(actorName);
+      // Full stored message preferred; the denormalized pin snippet is the
+      // fallback when history already trimmed the original.
+      const stored = await findStoredMessage(client, code, targetMessageId);
+      const pinEntry = (promoRoom.pinnedMessages ?? []).find(p => p.id === targetMessageId);
+      if (!stored && !pinEntry) {
+        const err = new Error(`Message ${targetMessageId} is neither in history nor pinned — nothing to promote.`);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      const promoted = promoteDecision(code, {
+        messageId: targetMessageId,
+        author: stored?.message.name ?? pinEntry!.name,
+        text: (stored?.message.text ?? pinEntry!.text ?? '').trim(),
+        promotedBy: actorName,
+        at: Date.now(),
+      }, promoRoom.projectId);
+      if (!promoted.already) {
+        await appendSystemMessage(client, code, {
+          id: Date.now(),
+          type: 'sys',
+          name: 'system',
+          initials: 'SY',
+          color: '#64748b',
+          role: '',
+          client: 'cc',
+          time: Date.now(),
+          text: `📖 ${actorName} promoted ${stored?.message.name ?? pinEntry!.name}'s pinned message to the decision log${promoted.overlay ? ' (room + project repo)' : ''}.`,
+        });
+      }
+      return { result: { promoted: !promoted.already, already: promoted.already, file: promoted.file, ...(promoted.overlay ? { overlay: promoted.overlay } : {}) } };
     }
     case 'attachmentDownload': {
       // T-123: agent-native secure download. Authorized by the caller's

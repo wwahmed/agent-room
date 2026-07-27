@@ -547,6 +547,20 @@ export async function setMessagePinned(
   )).result;
 }
 
+// T-23: promote a pinned outcome into the room's durable DECISIONS.md
+// (+ project repo overlay when attached). Idempotent per message id.
+export async function promotePinnedDecision(
+  _client: ApiClient,
+  code: string,
+  messageId: number,
+  name: string,
+): Promise<{ promoted: boolean; already: boolean; file: string; overlay?: string }> {
+  return (await keyedCall<{ result: { promoted: boolean; already: boolean; file: string; overlay?: string } }>(
+    mk => ({ action: 'promoteDecision', code, messageId, name, client: 'web', memberKey: mk }),
+    code,
+  )).result;
+}
+
 // ---------- turn state ----------
 
 export async function getTurnState(_client: ApiClient, code: string): Promise<TurnState | null> {

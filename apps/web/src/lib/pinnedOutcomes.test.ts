@@ -42,4 +42,12 @@ describe('Pinned outcomes — pin any message, strip with jump-to-message', () =
     expect(hook).toContain('patchRoomPins');
     expect(room).toContain('patchRoomPins(out.pinnedMessages)');
   });
+
+  // T-23: pins are transient; the 📖 action makes them durable.
+  it('every strip entry can be promoted into the durable decision log', () => {
+    expect(room).toContain('data-gate="promote-decision"');
+    expect(room).toContain('promotePinnedDecision(createClient(), code, p.id, self.name)');
+    expect(api).toContain("action: 'promoteDecision'");
+    expect(api.slice(api.indexOf("action: 'promoteDecision'"))).toContain('memberKey: mk');
+  });
 });

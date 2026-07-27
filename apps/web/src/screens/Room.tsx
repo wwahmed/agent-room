@@ -34,7 +34,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
@@ -2886,6 +2886,24 @@ export function Room() {
                           >
                             <span className="block text-[12px] font-semibold text-accent-deep">{p.name || 'Earlier message'}</span>
                             <span className="line-clamp-2 block text-[13px] leading-snug text-ink-soft [overflow-wrap:anywhere]">{p.text || '…'}</span>
+                          </button>
+                          {/* T-23: one tap turns a transient pin into a durable
+                              DECISIONS.md entry (room data root + repo overlay). */}
+                          <button
+                            type="button"
+                            data-gate="promote-decision"
+                            onClick={() => {
+                              void promotePinnedDecision(createClient(), code, p.id, self.name)
+                                .then(r => import('../components/Toast.js').then(({ showToast }) =>
+                                  showToast(r.already ? 'Already in the decision log' : `Promoted to the decision log${r.overlay ? ' (room + project repo)' : ''}`)))
+                                .catch(e => import('../components/Toast.js').then(({ showToast }) =>
+                                  showToast(e instanceof Error ? e.message : 'Promotion failed', 'error')));
+                            }}
+                            aria-label={`Promote ${p.name || 'this'} message to the decision log`}
+                            title="Promote to the decision log"
+                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-softer hover:text-ink"
+                          >
+                            <span aria-hidden="true">📖</span>
                           </button>
                           <button
                             type="button"
