@@ -99,6 +99,7 @@ import {
 } from './push.js';
 import type { Message, Participant, ReplyMode, ReplyModeConfig, RoomQuestion } from '@agent-room/shared';
 import { answerRoomQuestion, createRoomQuestion, requireQuestionAgent } from './questions.js';
+import { reviewHandoffLine, verdictLine, reviewPushForHost } from './reviewflow.js';
 import { ensureArtifactIndex, listRoomArtifacts,
   appendMessage as appendStoredMessage,
   appendSystemMessage as appendStoredSystemMessage,
@@ -1683,6 +1684,26 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       };
       task.submittedAt = nowMs();
       await commitBoard(code, board);
+      // T-16: route the review instead of waiting to be polled — page the
+      // verifier in-room (the @mention flags a listening agent's loop) and
+      // push the host when THEY are the verifier (humans hold no listen
+      // loop). Best-effort: routing must never fail a submit.
+      try {
+        const submitRoom = await getRoom(client, code);
+        await appendSystemMessage(client, code, {
+          id: Date.now(),
+          type: 'sys',
+          name: 'system',
+          initials: 'SY',
+          color: '#64748b',
+          role: '',
+          client: 'cc',
+          time: Date.now(),
+          text: reviewHandoffLine(task),
+        });
+        const push = reviewPushForHost(task, code, submitRoom.createdBy);
+        if (push) notifyOwnerAsync(push);
+      } catch { /* board state is already committed */ }
       return { board, task };
     }
     case 'taskVerify': {
@@ -1713,6 +1734,21 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       task.verifiedBy = name;
       task.verifiedAt = nowMs();
       await commitBoard(code, board);
+      // T-16: page the owner with the outcome — builders learn accept/reject
+      // from their listen loop, not by re-reading the board. Best-effort.
+      try {
+        await appendSystemMessage(client, code, {
+          id: Date.now(),
+          type: 'sys',
+          name: 'system',
+          initials: 'SY',
+          color: '#64748b',
+          role: '',
+          client: 'cc',
+          time: Date.now(),
+          text: verdictLine(task, verdict as 'done' | 'rejected', name, task.note),
+        });
+      } catch { /* board state is already committed */ }
       return { board, task };
     }
     case 'taskReassignAlias': {
