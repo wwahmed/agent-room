@@ -294,6 +294,10 @@ export function Room() {
     setDictationDraft(true);
   }, []);
   const [attachmentJobs, setAttachmentJobs] = useState<AttachmentUploadJob[]>([]);
+  // T-21: a Send tapped while an upload is in flight is HELD (not dropped,
+  // not sent imageless) and fires automatically when every upload lands.
+  const pendingSendRef = useRef(false);
+  const [sendWaitingOnUpload, setSendWaitingOnUpload] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
   const [turnState, setTurnState] = useState<TurnState | null>(null);
@@ -1385,6 +1389,23 @@ export function Room() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinSeekId, messages, hasOlder, loadingOlder]);
 
+  // T-21: release a held send once no upload is in flight. Success path
+  // fires the send (text + image together); a failed upload releases the
+  // hold WITHOUT sending so the user can retry or remove the attachment.
+  useEffect(() => {
+    if (!pendingSendRef.current) return;
+    if (attachmentJobs.some(j => j.state === 'uploading')) return;
+    pendingSendRef.current = false;
+    setSendWaitingOnUpload(false);
+    if (attachmentJobs.some(j => j.state === 'failed')) {
+      void import('../components/Toast.js').then(({ showToast }) =>
+        showToast('Upload failed — your message is held. Retry or remove the attachment, then Send.', 'error'));
+      return;
+    }
+    void send();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachmentJobs]);
+
   // T-82: hook topology must remain stable through bootstrap/error/join
   // transitions. Derive the pinning state defensively before every early
   // return, then run the restoring effect unconditionally. Keeping this hook
@@ -1713,6 +1734,21 @@ export function Room() {
     // directly — the textarea has not re-rendered with it yet.
     const body = (bodyOverride ?? textareaRef.current?.value ?? text).trim();
     if ((!body && attachments.length === 0) || ended || sendingRef.current) return;
+
+    // T-21 (host bug report): Send racing an in-flight upload shipped the
+    // text WITHOUT its image. If any attachment is still uploading, HOLD the
+    // send — the effect below fires it automatically the moment every upload
+    // lands, so text and image always travel together. A failed upload
+    // releases the hold WITHOUT sending, so the user can retry or remove it.
+    if (attachmentJobs.some(j => j.state === 'uploading')) {
+      if (!pendingSendRef.current) {
+        pendingSendRef.current = true;
+        setSendWaitingOnUpload(true);
+        void import('../components/Toast.js').then(({ showToast }) =>
+          showToast('Waiting for the upload to finish — your message will send itself'));
+      }
+      return;
+    }
 
     // T-139: the /brief command family. A brief COMPOSES a room artifact from
     // real board+message state (server-side, honest by construction) and posts
@@ -3563,13 +3599,20 @@ export function Room() {
                   <button
                     onClick={() => void send()}
                     disabled={!text.trim() && attachments.length === 0}
-                    title="Send"
-                    aria-label="Send message"
+                    title={sendWaitingOnUpload ? 'Waiting for the upload to finish — will send automatically' : 'Send'}
+                    aria-label={sendWaitingOnUpload ? 'Waiting for the upload to finish; the message will send automatically' : 'Send message'}
+                    data-gate="send-waiting-upload-state"
                     className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
-                      <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
-                    </svg>
+                    {/* T-21: a held send shows a spinner — the tap was accepted,
+                        the message rides out the moment the upload lands. */}
+                    {sendWaitingOnUpload ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none" aria-hidden="true" />
+                    ) : (
+                      <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
+                        <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
+                      </svg>
+                    )}
                   </button>
                 </div>
                 </div>
