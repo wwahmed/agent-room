@@ -36,6 +36,7 @@ import { composerEnterAction } from '../lib/composerKeys.js';
 import { artifactLabel, type ArtifactKind, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
 import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
+import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
 import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
@@ -2329,6 +2330,18 @@ export function Room() {
               className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink"
             >
               <span aria-hidden="true">＋</span> Summon
+            </button>
+            {/* T-07: invites split by audience — a human gets the link, an
+                agent session gets the full join prompt (identity fields +
+                listen contract + self-heal rule) so first-try joins stop
+                depending on the host hand-assembling instructions. */}
+            <button
+              type="button"
+              data-gate="invite-agent"
+              onClick={() => copyText(agentInvitePrompt(code, joinUrl, room.topic), 'Agent invite prompt copied — paste it into any agent session')}
+              className="flex min-h-11 items-center rounded-lg border border-accent/50 px-3 text-sm font-semibold text-accent transition hover:bg-accent/10"
+            >
+              Invite agent
             </button>
             <button
               type="button"
