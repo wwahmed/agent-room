@@ -196,6 +196,11 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   // interim pressure, so the sweep reads as continuous progress.
   const [catchup, setCatchup] = useState(0);
   const catchupRef = useRef(0);
+  // T-25 (host): a Send tapped mid-catch-up must ACKNOWLEDGE instantly — the
+  // stop→drain→finalize pipeline can take seconds, and a button that sits
+  // inert reads as broken. The tap flips this synchronously; the button shows
+  // a spinner until the session finalizes and the composer's send fires.
+  const [sendPending, setSendPending] = useState(false);
 
   const recording = snap.state === 'recording';
   const active = snap.state !== 'idle';
@@ -228,6 +233,7 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
       caughtUpTickedRef.current = false;
       catchupRef.current = 0;
       setCatchup(0);
+      setSendPending(false); // the held Send resolved (or the session died)
       return;
     }
     const id = window.setInterval(() => {
@@ -469,7 +475,13 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                 (T-138 pauses dictation), then uses the composer's own Send. */}
             <button
               type="button"
+              data-gate="voice-send"
+              disabled={sendPending}
               onClick={() => {
+                // T-25: acknowledge the tap SYNCHRONOUSLY — the visual flip
+                // happens before the stop/drain pipeline starts, so a Send
+                // during catch-up never reads as a dead button.
+                setSendPending(true);
                 if (onSendTranscript) {
                   // No cue here: the composer's send path plays the send
                   // chime once the message actually dispatches — one tap,
@@ -481,16 +493,18 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                 playSendCue();
                 ctrlRef.current?.stop();
               }}
-              aria-label={onSendTranscript ? 'Send message' : 'Use voice draft'}
-              title={onSendTranscript ? 'Send' : 'Use draft (does not send the message)'}
+              aria-label={sendPending ? 'Finishing the transcript — your message will send itself' : onSendTranscript ? 'Send message' : 'Use voice draft'}
+              title={sendPending ? 'Finishing the transcript — sends automatically' : onSendTranscript ? 'Send' : 'Use draft (does not send the message)'}
               // The action itself signals readiness: when the transcript has
               // caught up, Send lights up green — the second half of the
               // composite meter's "safe to send", still with zero words.
-              className={`flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-white transition hover:opacity-90 ${
-                caughtUpShown ? 'bg-emerald-600 ring-2 ring-emerald-400/50' : 'bg-accent'
+              className={`flex h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-white transition hover:opacity-90 disabled:opacity-90 ${
+                sendPending ? 'bg-emerald-700' : caughtUpShown ? 'bg-emerald-600 ring-2 ring-emerald-400/50' : 'bg-accent'
               }`}
             >
-              {onSendTranscript ? (
+              {sendPending ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none" aria-hidden="true" />
+              ) : onSendTranscript ? (
                 <svg viewBox="0 0 16 16" width="17" height="17" fill="currentColor" aria-hidden="true">
                   <path d="M1.7 7.3 13.6 2a.6.6 0 0 1 .8.8L9.1 14.7a.6.6 0 0 1-1.1 0L6.2 10.5a.6.6 0 0 0-.3-.3L1.7 8.4a.6.6 0 0 1 0-1.1Z" transform="rotate(-8 8 8)" />
                 </svg>
@@ -499,8 +513,27 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                   <path d="m3 8.5 3.1 3.1L13 4.7" />
                 </svg>
               )}
-              <span className="text-sm font-semibold">{onSendTranscript ? 'Send' : 'Use draft'}</span>
+              <span className="text-sm font-semibold">{sendPending ? 'Sending…' : onSendTranscript ? 'Send' : 'Use draft'}</span>
             </button>
+          </div>
+          {/* T-25 (host): an EXPLICIT progress track under the audio indicator
+              — the waveform's color sweep reads as ambience; this bar answers
+              "how much of what I said is in the transcript yet" at a glance.
+              Endpoints stay honest: 100% only via the real caughtUp signal. */}
+          <div
+            data-gate="catchup-progress"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(catchup * 100)}
+            aria-label="Transcription catch-up"
+            title={caughtUpShown ? 'Transcript caught up — safe to send' : `Transcription ${Math.round(catchup * 100)}% caught up with your speech`}
+            className="mx-1 mb-0.5 mt-1 h-1 overflow-hidden rounded-full bg-surface-softer"
+          >
+            <div
+              className={`h-full rounded-full transition-[width] duration-200 ${caughtUpShown ? 'bg-emerald-400' : 'bg-amber-400'}`}
+              style={{ width: `${Math.max(3, Math.round(catchup * 100))}%` }}
+            />
           </div>
           {/* No transcript preview here anymore: the live text streams into the
               textarea directly above (T-01), which stays visible now that this
