@@ -13,9 +13,8 @@ import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 // Acknowledge, Reject. The ⋯ anchor is persistent on desktop (faint until
 // hover, never fully hidden) and always visible on phone. Acknowledge/Reject
 // store structured reactions the server relays to listening agents.
-export function MessageMenu({ message, align = 'right', onReply, onReact, onPin, pinned, selfName }: {
+export function MessageMenu({ message, onReply, onReact, onPin, pinned, selfName }: {
   message: Message;
-  align?: 'left' | 'right';
   onReply?: (m: Message) => void;
   /** T-121: toggle an ack/reject reaction on this message. */
   onReact?: (m: Message, kind: 'ack' | 'reject') => void;
@@ -28,6 +27,40 @@ export function MessageMenu({ message, align = 'right', onReply, onReact, onPin,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // T-42: the popover was absolutely positioned with `right-0`, anchoring its
+  // right edge to the trigger and growing LEFTWARD. On a phone the trigger sits
+  // near the left edge of an own (right-aligned) bubble, so the menu ran off the
+  // screen — the host's screenshot shows three items clipped to "edge", "age",
+  // "t". Unusable, and invisible on desktop where there is room to spare.
+  //
+  // Fixed positioning measured on open solves both halves: it is clamped inside
+  // the viewport, and being out of the normal flow it also escapes any ancestor
+  // that clips overflow.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const MENU_W = 184;   // min-w-[168px] plus border/padding
+  const EDGE = 8;       // never touch the screen edge
+
+  useEffect(() => {
+    if (!open) { setPos(null); return; }
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const maxLeft = Math.max(EDGE, window.innerWidth - MENU_W - EDGE);
+      // Prefer right-aligned to the trigger (the original intent), then clamp.
+      setPos({ top: r.bottom + 6, left: Math.min(Math.max(EDGE, r.right - MENU_W), maxLeft) });
+    };
+    place();
+    // Recompute on resize/orientation change; close on scroll rather than let a
+    // fixed menu drift away from the message it belongs to.
+    const close = () => setOpen(false);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -75,6 +108,7 @@ export function MessageMenu({ message, align = 'right', onReply, onReact, onPin,
   return (
     <div ref={ref} className="relative flex-shrink-0">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="Message actions"
@@ -96,7 +130,10 @@ export function MessageMenu({ message, align = 'right', onReply, onReact, onPin,
       {open && (
         <div
           role="menu"
-          className={`absolute top-7 z-30 min-w-[168px] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg ${align === 'right' ? 'right-0' : 'left-0'}`}
+          data-gate="message-menu"
+          // Rendered only once measured, so it never flashes at the wrong place.
+          style={pos ? { top: pos.top, left: pos.left, width: MENU_W } : { visibility: 'hidden' }}
+          className="fixed z-50 max-w-[calc(100vw-16px)] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg"
         >
           {onReact && message.type === 'msg' && (
             <>
