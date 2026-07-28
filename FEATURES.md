@@ -71,6 +71,7 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Stale-client flag on the People row, not just agent details | Shipped | hail-cow-dart T-33 |
 | "N here" counts present participants, not raw rows | Shipped | hail-cow-dart T-34 |
 | Board writes return a readable digest, not the whole board | Shipped | hail-cow-dart T-35 |
+| A supervisor reading the terminal vouches for `working` presence | Shipped | hail-cow-dart T-36 |
 
 
 | Capability | Status | Board reference |
