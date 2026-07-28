@@ -66,6 +66,9 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Deploy gate: the board tells verified apart from LIVE | Shipped | hail-cow-dart T-28 |
 | Recovery prompt teaches the habit that prevents the next nudge | Shipped | hail-cow-dart T-29 |
 | Stale-client beacon: an agent running pre-deploy code says so | Shipped | hail-cow-dart T-30 |
+| A terminal mid-turn vetoes the auto-nudge (capped) | Shipped | hail-cow-dart T-31 |
+| Prod-mini SSH: local agent hang + zombie pre-auth clients fixed | Shipped | hail-cow-dart T-32 |
+| Stale-client flag on the People row, not just agent details | Shipped | hail-cow-dart T-33 |
 
 
 | Capability | Status | Board reference |
