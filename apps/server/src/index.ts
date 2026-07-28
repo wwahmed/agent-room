@@ -57,6 +57,12 @@ import { effectiveVerifier, verifierCollidesWithOwner } from './taskrules.js';
 import { transcribeSegment, engineStatus } from './transcribe.js';
 import { synthesize } from './tts.js';
 import { roomActivityAt } from './roomactivity.js';
+import { countsAsActivity, lastActivityTime } from './activitySignal.js';
+
+// T-43: how much history the index backfill inspects per room to find the newest
+// REAL activity. A run of heartbeats can easily be a few dozen entries; this is
+// deep enough to see past one, and bounded so a rebuild stays cheap.
+const ACTIVITY_BACKFILL_TAIL = 40;
 import {
   isQaRoom,
   listIndexedRoomPage,
@@ -280,15 +286,21 @@ const createRoom: typeof createStoredRoom = async (...args) => {
   return created;
 };
 
+// T-43: only a real conversational/work event advances "last activity". A
+// heartbeat ping used to mark a room freshly active, which both lied in the room
+// list ("now" beside a silent room) and reshuffled the list under the host's
+// cursor every few minutes.
 const appendMessage: typeof appendStoredMessage = async (...args) => {
   const result = await appendStoredMessage(...args);
-  if (result.appended) await safelyTouchRoomActivityIndex(args[1]);
+  if (result.appended && countsAsActivity(args[2] as never)) {
+    await safelyTouchRoomActivityIndex(args[1]);
+  }
   return result;
 };
 
 const appendSystemMessage: typeof appendStoredSystemMessage = async (...args) => {
   await appendStoredSystemMessage(...args);
-  await safelyTouchRoomActivityIndex(args[1]);
+  if (countsAsActivity(args[2] as never)) await safelyTouchRoomActivityIndex(args[1]);
 };
 
 async function backfillRoomActivityIndex(): Promise<void> {
@@ -301,7 +313,10 @@ async function backfillRoomActivityIndex(): Promise<void> {
     for (const key of keys) {
       reads.get(key);
       const code = key.slice('room:'.length);
-      reads.lindex(`room-msgs:${code}`, -1);
+      // T-43: read a small TAIL rather than just the last message. The newest
+      // entry is very often a heartbeat, and seeding the index from it would
+      // rebuild exactly the lie the append path now avoids.
+      reads.lrange(`room-msgs:${code}`, -ACTIVITY_BACKFILL_TAIL, -1);
     }
     const rows = await reads.exec();
     if (!rows) throw new Error('room index backfill pipeline aborted');
@@ -315,11 +330,14 @@ async function backfillRoomActivityIndex(): Promise<void> {
         const room = JSON.parse(raw) as { code?: unknown; createdAt?: unknown };
         const code = typeof room.code === 'string' ? room.code : '';
         if (!code || key !== `room:${code}`) continue;
+        // T-43: newest message in the tail that actually counts as activity.
         let lastMessageAt: number | undefined;
-        if (typeof lastRaw === 'string') {
-          const parsed = JSON.parse(lastRaw) as { time?: unknown };
-          const time = Number(parsed.time);
-          if (Number.isFinite(time)) lastMessageAt = time;
+        if (Array.isArray(lastRaw)) {
+          const parsed = (lastRaw as unknown[]).flatMap(entry => {
+            if (typeof entry !== 'string') return [];
+            try { return [JSON.parse(entry) as Message]; } catch { return []; }
+          });
+          lastMessageAt = lastActivityTime(parsed);
         }
         writes.zadd(
           ROOM_ACTIVITY_INDEX_KEY,
