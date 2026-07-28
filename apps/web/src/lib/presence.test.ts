@@ -90,7 +90,7 @@ describe('listen-loop health (T-68: server is the source of truth)', () => {
 
     it('omits the role clause when there is no role', () => {
       expect(recoveryPrompt('ABC-DEF-GHJ', 'Codex')).toBe(
-        'Rejoin Agent Room ABC-DEF-GHJ as "Codex" and stay in the room_listen loop until the host says stop.',
+        'Rejoin Agent Room ABC-DEF-GHJ as "Codex" and stay in the room_listen loop until the host says stop. During long work, send a room_status ping every few minutes so the room can tell you are busy instead of dead.',
       );
     });
 

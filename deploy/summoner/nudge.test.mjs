@@ -29,11 +29,11 @@ test('cool-down: no re-nudge inside the window, re-armed after it', () => {
 test('the injected prompt matches the manual copy-button wording', () => {
   assert.equal(
     recoveryPromptFor('mint-mop-cope', 'CodexArchitect', 'Orchestrator'),
-    'Rejoin Agent Room mint-mop-cope as "CodexArchitect" (role: Orchestrator) and stay in the room_listen loop until the host says stop.',
+    'Rejoin Agent Room mint-mop-cope as "CodexArchitect" (role: Orchestrator) and stay in the room_listen loop until the host says stop. During long work, send a room_status ping every few minutes so the room can tell you are busy instead of dead.',
   );
   assert.equal(
     recoveryPromptFor('a-b-c', 'X'),
-    'Rejoin Agent Room a-b-c as "X" and stay in the room_listen loop until the host says stop.',
+    'Rejoin Agent Room a-b-c as "X" and stay in the room_listen loop until the host says stop. During long work, send a room_status ping every few minutes so the room can tell you are busy instead of dead.',
   );
 });
 

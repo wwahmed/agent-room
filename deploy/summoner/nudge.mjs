@@ -32,7 +32,7 @@ export function shouldNudge({ presenceState, paneBlocked, lastNudgeAt, now }) {
  *  so the auto path and the manual copy-button teach the identical behavior. */
 export function recoveryPromptFor(room, name, role) {
   const withRole = role ? ` (role: ${role})` : '';
-  return `Rejoin Agent Room ${room} as "${name}"${withRole} and stay in the room_listen loop until the host says stop.`;
+  return `Rejoin Agent Room ${room} as "${name}"${withRole} and stay in the room_listen loop until the host says stop. During long work, send a room_status ping every few minutes so the room can tell you are busy instead of dead.`;
 }
 
 /** Pull one agent's presence verdict out of a room-health payload. */

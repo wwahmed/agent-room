@@ -65,7 +65,11 @@ export function canRecover(h: ParticipantHealth, ended: boolean): boolean {
  */
 export function recoveryPrompt(code: string, name: string, role?: string): string {
   const withRole = role ? ` (role: ${role})` : '';
-  return `Rejoin Agent Room ${code} as "${name}"${withRole} and stay in the room_listen loop until the host says stop.`;
+  // T-29: the prompt also teaches the habit that PREVENTS the next nudge — a
+  // heads-down agent that never pings reads as disconnected after 5 minutes,
+  // so every recovery doubles as the lesson (room_status arms T-04's honest
+  // `working` window). Byte-identical to the summoner's injected copy.
+  return `Rejoin Agent Room ${code} as "${name}"${withRole} and stay in the room_listen loop until the host says stop. During long work, send a room_status ping every few minutes so the room can tell you are busy instead of dead.`;
 }
 
 /** People-pane grouping. T-05: a guest viewer always lands in its own strip —
