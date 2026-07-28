@@ -11,7 +11,17 @@ export interface RoomSummary {
   archived?: boolean;
   createdBy: string;
   createdAt: number;
+  /** RAW row count, ghosts included. Kept for compatibility — do NOT show this
+   *  to a human as "who's here" (see participantsHere). */
   participants: number;
+  /** T-34b: participants who are actually PRESENT — rows the server does not
+   *  consider disconnected. The raw count above told the host "5 here" for a
+   *  room whose only live participant was himself, the other four being dead
+   *  agent rows; that is the same "I don't trust the counts" complaint the Home
+   *  numbers earned. Threshold is deliberately the same `disconnected` line the
+   *  host's ghost sweep uses, so the count and the sweep can never disagree:
+   *  whatever is missing from "here" is exactly what the sweep would remove. */
+  participantsHere: number;
   lastActivityAt: number;
   messageCount: number;
   /** T-25: agent (cc) participants attached to the room, and whether every one
@@ -115,6 +125,7 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
       createdBy: typeof room.createdBy === 'string' ? room.createdBy : '',
       createdAt,
       participants: participants.length,
+      participantsHere: participants.filter(p => presenceState(p, now) !== 'disconnected').length,
       lastActivityAt: Number.isFinite(entry.score) ? entry.score : createdAt,
       messageCount: Number.isFinite(count) && count >= 0 ? count : 0,
       agentCount: agents.length,

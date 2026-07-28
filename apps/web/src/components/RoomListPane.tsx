@@ -18,6 +18,9 @@ interface RoomSummary {
   status: string;
   archived?: boolean;
   participants: number;
+  /** T-34b: present participants (server verdict), not raw rows. Falls back to
+   *  the raw count only for a server too old to send it. */
+  participantsHere?: number;
   createdAt?: number;
   // T-35 (server contract 825f0ef): last-message time (falls back to createdAt
   // server-side) and message count; list arrives sorted recent-activity-first.
@@ -131,7 +134,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                   )}
                 </div>
                 <div className="room-list-summary truncate text-[12px] text-ink-faint">
-                  {r.participants} here
+                  {r.participantsHere ?? r.participants} here
                   {typeof r.messageCount === 'number' ? ` · ${r.messageCount} msg${r.messageCount === 1 ? '' : 's'}` : ''}
                   {r.status === 'ended' ? ' · ended' : ''}
                 </div>

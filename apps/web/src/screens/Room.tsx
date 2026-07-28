@@ -1970,6 +1970,18 @@ export function Room() {
   }
 
   const listeningCount = activeRoom.participants.filter(p => (p.listenUntil ?? 0) > now).length;
+  // T-34b: who is actually HERE. Uses the server's own verdict (never a second
+  // classification computed in the client) and excludes exactly the rows the
+  // host's ghost sweep would remove, so the count and the sweep always agree.
+  // A row with no health yet (just joined, health poll not back) counts as
+  // present — an arriving participant must not flicker out of the count.
+  // Reads the `health` ARRAY, not the healthById map: that map is built far
+  // below this line, and the comment there records a production crash caused by
+  // reaching into it from above (temporal dead zone).
+  const presentCount = activeRoom.participants.filter(p => {
+    const h = health.find(x => x.name === p.name && x.client === p.client);
+    return !h || h.state !== 'disconnected';
+  }).length;
 
   // Inspector tab contents. These reuse the pre-T-05 side-panel blocks
   // verbatim; only the responsive chrome around them changed (permanent
@@ -2780,6 +2792,7 @@ export function Room() {
             onBack: () => selectTab(prevTabRef.current),
           } : undefined}
           listeningCount={listeningCount}
+          presentCount={presentCount}
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}
           onToggleInspector={() => setInspectorOpen(v => !v)}

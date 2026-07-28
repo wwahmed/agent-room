@@ -13,6 +13,12 @@ interface Props {
   room: Room;
   ended: boolean;
   listeningCount: number;
+  /** T-34b: participants actually PRESENT, not raw rows. The header said
+   *  "6 here" for a room holding two dead agent rows; a count that includes
+   *  ghosts is the same untrustworthy-numbers problem the host has flagged
+   *  repeatedly. Derived from the server's health verdict by the Room screen,
+   *  which already holds it — never recomputed here. */
+  presentCount: number;
   inspectorOpen: boolean;
   onShare: () => void;
   onToggleInspector: () => void;
@@ -40,6 +46,7 @@ export function RoomHeader({
   room,
   ended,
   listeningCount,
+  presentCount,
   inspectorOpen,
   onShare,
   onToggleInspector,
@@ -133,7 +140,7 @@ export function RoomHeader({
             <span className={`header-room-presence mt-0 flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-1.5 py-0.5 text-[12px] font-medium leading-none ${ended ? 'text-red-400' : 'text-ink-soft'}`}>
               {!ended && <span className="header-live-dot inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />}
               <span className="truncate">
-                {ended ? 'Meeting ended' : `${room.participants.length} here`}
+                {ended ? 'Meeting ended' : `${presentCount} here`}
                 {!ended && listeningCount > 0 && <span className="text-ink-faint"> · {listeningCount} listening</span>}
                 {room.workspace && <span className="text-ink-faint"> · <span aria-hidden="true">📁 </span>{room.workspace.split('/').pop()}</span>}
               </span>
