@@ -60,6 +60,9 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Phone keyboard Enter = newline; Send button sends on touch | Shipped | hail-cow-dart T-22 |
 | Promote pinned outcomes into DECISIONS.md (room root + repo overlay) | Shipped | hail-cow-dart T-23 |
 | Owner Interview / Release / Research room templates | Shipped | hail-cow-dart T-24 |
+| Dictation catch-up progress bar + instantly-responsive Send | Shipped | hail-cow-dart T-25 |
+| Auto-nudge fires only on disconnected (no false alarms mid-turn) | Shipped | hail-cow-dart T-26 |
+| Credentials survive state merges (root cause of ghost-row leaves) | Shipped | hail-cow-dart T-27 |
 
 
 | Capability | Status | Board reference |
