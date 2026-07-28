@@ -95,3 +95,32 @@ export function sortRooms<T extends Sortable>(rooms: T[], sort: RoomSort): T[] {
   });
   return keyed.map(k => k.room);
 }
+
+/**
+ * T-45: hold an order still while the user is actually using the list.
+ *
+ * Even with presence noise removed (T-43) and a fixed-order option available
+ * (T-38), REAL activity still reorders an activity-sorted rail — and it does it
+ * while the host is reaching for a room. His instruction: "never let the currently
+ * selected room reading pane be swapped with someone else's even if its order in
+ * the list (rail) changes." The reading pane itself never swaps, but a row moving
+ * out from under a click produces the same outcome: a message sent to the wrong
+ * room. It happened to him repeatedly today.
+ *
+ * So while the pointer or focus is inside the rail, the order is frozen to the
+ * snapshot taken on entry. Rooms that vanish are dropped; rooms that appear are
+ * APPENDED rather than inserted, so nothing already on screen shifts position.
+ * Releasing the freeze (pointer out / blur) lets the live order settle.
+ */
+export function applyFrozenOrder<T extends { code: string }>(rooms: readonly T[], frozen: readonly string[] | null): T[] {
+  if (!frozen || frozen.length === 0) return [...rooms];
+  const byCode = new Map(rooms.map(r => [r.code, r]));
+  const held: T[] = [];
+  for (const code of frozen) {
+    const room = byCode.get(code);
+    if (room) { held.push(room); byCode.delete(code); }
+  }
+  // Anything new goes at the end: inserting it in its "correct" place is exactly
+  // the shift this exists to prevent.
+  return [...held, ...byCode.values()];
+}

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-import { ROOM_SORTS, isRoomSort, resolveRoomSort, sortRooms } from './roomSort.js';
+import { ROOM_SORTS, applyFrozenOrder, isRoomSort, resolveRoomSort, sortRooms } from './roomSort.js';
 
 const rail = readFileSync(new URL('../components/RoomListPane.tsx', import.meta.url), 'utf8');
 const home = readFileSync(new URL('../screens/Home.tsx', import.meta.url), 'utf8');
@@ -67,5 +67,45 @@ describe('Room order that holds still', () => {
     expect(home).toContain('subscribeRoomSort(setRoomSort)');
     expect(home).not.toContain('localStorage.setItem(ROOM_SORT_STORAGE_KEY');
     expect(rail).toContain('saveRoomSort(next)');
+  });
+});
+
+// T-45: the reading pane never swaps, but a ROW moving out from under a click has
+// the same outcome — a message in the wrong room. Freeze the order while the rail
+// is being used.
+describe('Frozen order while the rail is in use', () => {
+  const r = (code: string) => ({ code, topic: code, createdAt: 1, lastActivityAt: 1 });
+
+  it('holds the snapshot order even after the live order changes', () => {
+    const live = [r('c'), r('a'), r('b')];           // activity reshuffled to c,a,b
+    const frozen = ['a', 'b', 'c'];                   // what was on screen when entered
+    expect(applyFrozenOrder(live, frozen).map(x => x.code)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('drops rooms that vanished and APPENDS new ones instead of inserting them', () => {
+    // Inserting a new room at its "correct" position is exactly the shift this
+    // prevents; appending keeps every row already on screen where it was.
+    const live = [r('new'), r('a'), r('b')];
+    expect(applyFrozenOrder(live, ['a', 'gone', 'b']).map(x => x.code)).toEqual(['a', 'b', 'new']);
+  });
+
+  it('is a no-op when nothing is frozen, and never mutates the input', () => {
+    const live = [r('a'), r('b')];
+    expect(applyFrozenOrder(live, null).map(x => x.code)).toEqual(['a', 'b']);
+    expect(applyFrozenOrder(live, []).map(x => x.code)).toEqual(['a', 'b']);
+    const copy = applyFrozenOrder(live, ['b', 'a']);
+    expect(copy).not.toBe(live);
+    expect(live.map(x => x.code)).toEqual(['a', 'b']);
+  });
+
+  it('the rail freezes on pointer/focus entry and thaws on leave', () => {
+    const rail = readFileSync(new URL('../components/RoomListPane.tsx', import.meta.url), 'utf8');
+    expect(rail).toContain('onPointerEnter={freeze}');
+    expect(rail).toContain('onPointerLeave={thaw}');
+    expect(rail).toContain('onFocusCapture={freeze}');
+    // Keyboard: only thaw when focus actually left the rail, not when it moves
+    // between rows inside it.
+    expect(rail).toContain('if (!e.currentTarget.contains(e.relatedTarget as Node)) thaw();');
+    expect(rail).toContain('applyFrozenOrder(ordered, frozen)');
   });
 });

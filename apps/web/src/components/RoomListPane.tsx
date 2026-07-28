@@ -4,7 +4,7 @@ import { relativeTime } from '../lib/relativeTime.js';
 import { RoomBadges } from './RoomBadges.js';
 import { RoomIdentitySlot } from './RoomIdentitySlot.js';
 import { RoomContextMenu, useRoomCardMenu } from './RoomContextMenu.js';
-import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, resolveRoomSort, saveRoomSort, sortRooms, subscribeRoomSort, type RoomSort } from '../lib/roomSort.js';
+import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, applyFrozenOrder, resolveRoomSort, saveRoomSort, sortRooms, subscribeRoomSort, type RoomSort } from '../lib/roomSort.js';
 import { unreadCount } from '../lib/unread.js';
 
 // T-05 desktop room list between the rail and the chat. T-55 makes it
@@ -45,6 +45,10 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
     try { return resolveRoomSort(localStorage.getItem(ROOM_SORT_STORAGE_KEY)); } catch { return resolveRoomSort(null); }
   });
   useEffect(() => subscribeRoomSort(setSort), []);
+  // T-45: while the pointer or keyboard focus is inside the rail, hold the order
+  // still. A row that moves out from under a click sends the message to the wrong
+  // room — which happened to the host repeatedly today.
+  const [frozen, setFrozen] = useState<string[] | null>(null);
   // Shared long-press / right-click room actions (same menu as Home's cards).
   const { menu, closeMenu, bind } = useRoomCardMenu();
   // Resizable width (house taste), persisted; drag the right edge, double-click resets.
@@ -90,11 +94,24 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
     return () => { cancelled = true; window.clearInterval(id); };
   }, []);
 
-  const visible = sortRooms((rooms ?? []).filter((r) => !r.archived), sort);
+  const ordered = sortRooms((rooms ?? []).filter((r) => !r.archived), sort);
+  const visible = applyFrozenOrder(ordered, frozen);
+  const freeze = () => setFrozen(ordered.map(r => r.code));
+  const thaw = () => setFrozen(null);
   if (!rooms || visible.length === 0) return null;
 
   return (
-    <aside ref={asideRef} style={{ width }} className="relative hidden h-full flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex" data-room-list-width="resizable">
+    <aside
+      ref={asideRef}
+      style={{ width }}
+      className="relative hidden h-full flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex"
+      data-room-list-width="resizable"
+      data-order-frozen={frozen ? 'true' : 'false'}
+      onPointerEnter={freeze}
+      onPointerLeave={thaw}
+      onFocusCapture={freeze}
+      onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) thaw(); }}
+    >
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3 modern-scrollbar">
         <div className="flex h-8 items-center gap-2 px-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
           <span>Rooms</span>
