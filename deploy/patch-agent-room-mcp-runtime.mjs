@@ -87,6 +87,60 @@ for (const [oldText, newText] of wordingUpdates) {
   }
 }
 
+// T-27: the credential reader must consult the MERGED state, not only this
+// process's ppid-keyed file. A harness that respawns the MCP gets a new
+// STATE_FILE while rooms joined under the previous file keep their credential
+// there; the single-file read then returned undefined and every credentialed
+// call silently degraded (witnessed: room_leave stranding ghost rows even with
+// the leave-credential fix in place — the key was on disk, in a sibling file).
+const memberKeyMarker = 'WAKICHAT_MERGED_MEMBERKEY_PATCH';
+// Root cause (T-27): mergeStates resolved credentials as `newest.x ?? existing.x`.
+// When the NEWEST entry was the keyless one, `existing` resolved to itself and the
+// sibling file's key was thrown away — so even the merged view lost it. Repair the
+// merge first, then make the reader fall back to it.
+const mergeMarker = 'WAKICHAT_MERGE_CREDENTIAL_SURVIVAL';
+if (!patched.includes(mergeMarker)) {
+  const mBefore = `        hostKey: newest.hostKey ?? existing.hostKey,
+        memberKey: newest.memberKey ?? existing.memberKey`;
+  const mAfter = `        // ${mergeMarker}: a credential on EITHER side survives the merge.
+        hostKey: newest.hostKey ?? room.hostKey ?? existing.hostKey,
+        memberKey: newest.memberKey ?? room.memberKey ?? existing.memberKey`;
+  const mMatches = patched.split(mBefore).length - 1;
+  if (mMatches !== 1) {
+    throw new Error(`refusing to patch ${file}: expected one mergeStates credential block, found ${mMatches}`);
+  }
+  patched = patched.replace(mBefore, mAfter);
+  changed = true;
+}
+if (!patched.includes(memberKeyMarker)) {
+  const before = `async function readMemberKey(code) {
+  try {
+    const state = await readState();
+    return state.rooms[code]?.memberKey;
+  } catch {
+    return void 0;
+  }
+}`;
+  const after = `async function readMemberKey(code) {
+  // ${memberKeyMarker}: fall back to the merged view across every state file.
+  try {
+    const own = (await readState()).rooms[code]?.memberKey;
+    if (own) return own;
+    const files = await listStateFiles();
+    const states = await Promise.all(files.map(readStateFile));
+    return mergeStates(states).rooms[code]?.memberKey;
+  } catch {
+    return void 0;
+  }
+}`;
+  const matches = patched.split(before).length - 1;
+  if (matches !== 1) {
+    throw new Error(`refusing to patch ${file}: expected one readMemberKey, found ${matches}`);
+  }
+  patched = patched.replace(before, after);
+  changed = true;
+}
+
 if (changed) {
   writeFileSync(file, patched, { mode: 0o644 });
   console.log(`Patched WakiChat MCP runtime: ${file}`);

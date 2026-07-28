@@ -96,8 +96,14 @@ export function mergeStates(states: AgentRoomState[]): AgentRoomState {
         cursor: Math.max(existing.cursor, room.cursor),
         joinedAt: newest.joinedAt,
         lastSentAt: Math.max(existing.lastSentAt ?? 0, room.lastSentAt ?? 0) || undefined,
-        hostKey: newest.hostKey ?? existing.hostKey,
-        memberKey: newest.memberKey ?? existing.memberKey,
+        // T-27: credentials survive from EITHER side. `newest.x ?? existing.x`
+        // silently dropped a key whenever the newest entry was the keyless one
+        // (its own `existing` fallback resolves to itself), so a room re-entered
+        // under a fresh ppid file lost the credential written by the older
+        // session — the real cause of room_leave stranding ghost rows despite
+        // T-11: the key was on disk, and the merge threw it away.
+        hostKey: newest.hostKey ?? room.hostKey ?? existing.hostKey,
+        memberKey: newest.memberKey ?? room.memberKey ?? existing.memberKey,
       };
     }
   }

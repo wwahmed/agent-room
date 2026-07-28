@@ -47,7 +47,7 @@ import type {
   ClientKind,
   Room,
 } from '@agent-room/shared';
-import { setRoom, removeRoom, updateCursor, markSent, readState, readRoomStateForJoin } from './state.js';
+import { setRoom, removeRoom, updateCursor, markSent, readState, readMergedState, readRoomStateForJoin } from './state.js';
 import {
   detectHarness,
   defaultListenAfterJoin,
@@ -387,10 +387,20 @@ function resolvedListenTimeoutMs(raw: unknown, maxListenMs: number): number {
 // T-30: the member credential this session holds for a room (issued at join).
 // Threaded into every room_send / room_status / presence call so the server
 // accepts the write when legacy name-auth is disabled (the secure default).
+// T-27: read the credential from the MERGED state, not just this process's
+// own file. STATE_FILE is keyed by process.ppid, so a session whose harness
+// respawned the MCP (new ppid → new file) can hold a room whose credential
+// was written by the previous file. The old single-file read then returned
+// undefined and every credentialed call silently degraded — witnessed as
+// room_leave stranding ghost rows even with T-11's fix in place: the key was
+// on disk, just not in the file this reader looked at. Merge prefers the
+// newest entry per room and carries `memberKey` forward, so this is a strict
+// superset of the previous behavior.
 async function readMemberKey(code: string): Promise<string | undefined> {
   try {
-    const state = await readState();
-    return state.rooms[code]?.memberKey;
+    const own = (await readState()).rooms[code]?.memberKey;
+    if (own) return own;
+    return (await readMergedState()).rooms[code]?.memberKey;
   } catch {
     return undefined;
   }
