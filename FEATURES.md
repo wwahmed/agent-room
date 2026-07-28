@@ -75,6 +75,7 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Adopt a running agent into supervision (and stop owning it) | Shipped | hail-cow-dart T-37 |
 | Room list can hold a fixed order (Name), rail included | Shipped | hail-cow-dart T-38 |
 | A human talking to an empty room is told in the same second | Shipped | hail-cow-dart T-39 |
+| A departure that empties the room is never silent | Shipped | hail-cow-dart T-40 |
 
 
 | Capability | Status | Board reference |
