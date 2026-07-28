@@ -8,6 +8,7 @@ import { RoomBadges } from '../components/RoomBadges.js';
 import { RoomIdentitySlot } from '../components/RoomIdentitySlot.js';
 import { splitRooms } from '../lib/roomSections.js';
 import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, saveRoomSort, sortRooms, subscribeRoomSort, type RoomSort } from '../lib/roomSort.js';
+import { unreadCount } from '../lib/unread.js';
 import { useLiveRooms } from '../hooks/useLiveRooms.js';
 import { createClient, unarchiveRoomAction } from '../lib/api.js';
 import { RoomContextMenu, useRoomCardMenu } from '../components/RoomContextMenu.js';
@@ -297,6 +298,9 @@ export function Home() {
               // all day still read "21h ago" — that's the room's birthday, not its
               // last update. lastActivityAt is the one the host actually wants.
               const updatedAt = r.lastActivityAt ?? r.createdAt;
+              // T-44: bold an unread room here too, so Home and the desktop rail
+              // never disagree about which rooms are waiting on you.
+              const hasUnread = unreadCount(r.code, r.messageCount, identity?.name ?? '') > 0;
               // T-34: stretched-link card. The whole row opens the chat via the
               // absolutely-positioned Link overlay; the facepile is a SIBLING
               // button layered above it (z-10) that opens People — no nested
@@ -323,7 +327,7 @@ export function Home() {
                     agents={r.agents ?? []}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="room-list-title truncate text-[15px]">{r.topic}</div>
+                    <div className={`room-list-title truncate text-[15px] ${hasUnread ? 'font-semibold text-ink' : ''}`}>{r.topic}</div>
                     <div className="room-list-summary mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
                       <span className="truncate">{r.participants} here · updated {timeAgo(updatedAt)}</span>
                     </div>

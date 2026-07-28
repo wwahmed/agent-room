@@ -5,6 +5,7 @@ import { RoomBadges } from './RoomBadges.js';
 import { RoomIdentitySlot } from './RoomIdentitySlot.js';
 import { RoomContextMenu, useRoomCardMenu } from './RoomContextMenu.js';
 import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, resolveRoomSort, saveRoomSort, sortRooms, subscribeRoomSort, type RoomSort } from '../lib/roomSort.js';
+import { unreadCount } from '../lib/unread.js';
 
 // T-05 desktop room list between the rail and the chat. T-55 makes it
 // responsive rather than pinning a large desktop monitor to a cramped 280px.
@@ -114,6 +115,9 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
         </div>
         {visible.map(r => {
           const active = r.code === activeCode;
+          // Same cheap synchronous counter RoomBadges uses as its base, so the
+          // bold state and the badge can never disagree.
+          const hasUnread = !active && unreadCount(r.code, r.messageCount, selfName) > 0;
           // T-34: stretched-link row — the overlay Link opens the chat, the
           // compact facepile is a sibling button (z-10) that opens People.
           return (
@@ -139,7 +143,12 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <div className={`room-list-title min-w-0 flex-1 truncate text-[14px] leading-snug ${active ? 'text-accent' : 'text-ink'}`}>{r.topic}</div>
+                  {/* T-44: an unread room reads BOLD, the way every chat client
+                      the host already uses does it. The count badge alone was
+                      easy to miss in a dense rail — "make the unread or new be
+                      bold and show counts, like Teams does". The active room is
+                      never bold: it is being read. */}
+                  <div className={`room-list-title min-w-0 flex-1 truncate text-[14px] leading-snug ${active ? 'text-accent' : hasUnread ? 'font-semibold text-ink' : 'text-ink'}`}>{r.topic}</div>
                   {/* T-62 badge refined by T-18/T-20 — attention signals only.
                       The active room never shows unread — it is being read. */}
                   <RoomBadges
