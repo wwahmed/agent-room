@@ -74,3 +74,36 @@ export function nobodyListeningText(participants: readonly Participant[], now: n
   // how the agent was started, and a wrong instruction is worse than none.
   return `⚠ ${NOBODY_LISTENING_MARKER} — ${who} Your message has been saved, but nobody will read it until an agent rejoins.`;
 }
+
+/**
+ * T-40: did this departure leave the room with nobody who can answer?
+ *
+ * T-32 deliberately keeps a self-leave quiet — voluntary, and the MCP narrates its
+ * own departures. That reasoning holds while other agents remain, and fails
+ * completely for the LAST one: the Customer Service room lost its only agent to a
+ * silent self-leave, so there was no removal line, no sweep line, nothing. The
+ * host kept talking to a room that had quietly emptied, and only found out by
+ * paging an admin 21 hours later.
+ *
+ * So the noise trade-off gets made per-case rather than once: an ordinary leave
+ * stays quiet, and the leave that empties the room speaks up. Same for a host kick
+ * — the kick is already announced, but "and now nobody is listening" is the part
+ * the host actually needs.
+ */
+export function departureEmptiedRoom(args: {
+  departedClient: string;
+  remaining: readonly Participant[];
+  now: number;
+}): boolean {
+  if (args.departedClient !== 'cc') return false;
+  const agentRows = args.remaining.filter(p => p.client === 'cc' && p.viewer !== true);
+  return !agentRows.some(p => canStillAnswer(p, args.now));
+}
+
+export function lastAgentLeftText(name: string, remaining: readonly Participant[]): string {
+  const others = remaining.filter(p => p.client === 'cc' && p.viewer !== true).length;
+  const tail = others === 0
+    ? 'No agents are left in this room.'
+    : `The ${others === 1 ? 'other agent' : `other ${others} agents`} here ${others === 1 ? 'is' : 'are'} disconnected.`;
+  return `👋 ${name} left the room — ${tail} Messages will wait here until an agent rejoins.`;
+}

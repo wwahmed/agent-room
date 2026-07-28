@@ -74,7 +74,7 @@ import { SERVER_BUILD_AT } from './buildStamp.js';
 // reading as working within about two minutes instead of indefinitely.
 const TERMINAL_WORKING_MAX_MS = 120_000;
 import { clampWorkingUntil, ghostRows, roomHealth } from './health.js';
-import { nobodyListeningText, shouldWarnNobodyListening } from './nobodyListening.js';
+import { departureEmptiedRoom, lastAgentLeftText, nobodyListeningText, shouldWarnNobodyListening } from './nobodyListening.js';
 import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
@@ -1532,6 +1532,19 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           `${targetName} was removed by the host (${effectiveRequester}) (mechanism: host_removal).`,
           { eventType: 'participant_removed', targetAgentName: targetName, targetAgentClient: targetClient, mechanism: 'host_removal', byName: effectiveRequester },
         )).catch(() => { /* best-effort; the removal itself succeeded */ });
+      }
+      // T-40: a departure that empties the room is never silent, whichever way it
+      // happened. A quiet self-leave took the Customer Service room's only agent
+      // and the host went on talking to nobody for 21 hours.
+      if (departureEmptiedRoom({
+        departedClient: targetClient,
+        remaining: roomAfterRemove.participants,
+        now: Date.now(),
+      })) {
+        await appendSystemMessage(client, code, sysMessage(
+          lastAgentLeftText(targetName, roomAfterRemove.participants),
+          { eventType: 'last_agent_left', targetAgentName: targetName },
+        )).catch(() => { /* advisory */ });
       }
       return { room: roomAfterRemove };
     }

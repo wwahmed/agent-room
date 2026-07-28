@@ -6,6 +6,8 @@ import { PRESENCE_DISCONNECTED_MS } from './health.js';
 import {
   NOBODY_LISTENING_MARKER,
   canStillAnswer,
+  departureEmptiedRoom,
+  lastAgentLeftText,
   nobodyListeningText,
   shouldWarnNobodyListening,
 } from './nobodyListening.js';
@@ -86,11 +88,37 @@ describe('Nobody is listening', () => {
     expect(text).not.toMatch(/restart|rejoin the room|run |tmux/i);
   });
 
+  // T-40: the room lost its only agent to a SILENT self-leave — no removal line, no
+  // sweep line, nothing. T-32 keeps self-leaves quiet on the reasoning that they are
+  // voluntary and narrated by the agent; that agent narrated nothing, and the host
+  // talked to an empty room for 21 hours.
+  it('announces a departure that empties the room, and stays quiet otherwise', () => {
+    // The last agent leaving is the case that must speak up.
+    expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [p('Waqas', { client: 'web' })], now: NOW })).toBe(true);
+    // Another live agent remains: T-32's quiet-leave reasoning still holds.
+    expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [p('OpusCoder')], now: NOW })).toBe(false);
+    // Only DEAD agents remain — still an empty room in practice.
+    expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [dead('X')], now: NOW })).toBe(true);
+    // A human closing a tab is not an agent outage.
+    expect(departureEmptiedRoom({ departedClient: 'web', remaining: [dead('X')], now: NOW })).toBe(false);
+  });
+
+  it('the departure notice names who left and what it means', () => {
+    expect(lastAgentLeftText('CustService Dev Fresh', [])).toContain('CustService Dev Fresh left the room');
+    expect(lastAgentLeftText('A', [])).toContain('No agents are left in this room');
+    expect(lastAgentLeftText('A', [dead('B')])).toContain('other agent');
+    expect(lastAgentLeftText('A', [dead('B'), dead('C')])).toContain('other 2 agents');
+    expect(lastAgentLeftText('A', [])).toContain('Messages will wait here');
+  });
+
   it('is wired into the send path as advisory-only, after a real append', () => {
     const hook = serverIndex.slice(serverIndex.indexOf('shouldWarnNobodyListening') - 1400);
     expect(hook).toContain('if (!appendResult.appended) return;');
     expect(hook).toContain("eventType: 'nobody_listening'");
     // Must never break a send: the whole block is fire-and-forget and swallows.
     expect(hook).toContain('advisory only — never fail a send over the warning');
+    // T-40 fires on the removal path for BOTH a self-leave and a host kick.
+    expect(serverIndex).toContain('departureEmptiedRoom({');
+    expect(serverIndex).toContain("eventType: 'last_agent_left'");
   });
 });
