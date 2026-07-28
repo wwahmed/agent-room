@@ -14,6 +14,7 @@ const sheet = readFileSync(new URL('../components/AgentDetailsSheet.tsx', import
 const serverIndex = readFileSync(new URL('../../../../apps/server/src/index.ts', import.meta.url), 'utf8');
 const mcpTools = readFileSync(new URL('../../../../apps/mcp/src/tools.ts', import.meta.url), 'utf8');
 const stamp = readFileSync(new URL('../../../../apps/mcp/src/buildStamp.ts', import.meta.url), 'utf8');
+const roomScreen = readFileSync(new URL('../screens/Room.tsx', import.meta.url), 'utf8');
 
 function health(over: Partial<ParticipantHealth> = {}): ParticipantHealth {
   return { name: 'A', client: 'cc', role: '', state: 'listening', lastSeenAgoMs: 0, listenRemainingMs: 1000, ...over };
@@ -73,6 +74,18 @@ describe('Stale-client beacon', () => {
     expect(banner.slice(0, 400)).toContain('role="status"');
     expect(sheet).toContain('data-gate="recovery-banner"');
     expect(sheet.slice(sheet.indexOf('data-gate="recovery-banner"'), sheet.indexOf('data-gate="recovery-banner"') + 400)).toContain('role="alert"');
+  });
+
+  it('the People row surfaces it too — agent details alone is a place nobody looks', () => {
+    // The whole failure mode is not knowing to check. A flag only reachable by
+    // opening a sheet reproduces it.
+    expect(roomScreen).toContain('data-gate="row-stale-client"');
+    expect(roomScreen).toContain('clientNeedsRestart(h)');
+    expect(roomScreen).toContain('restart to update');
+    // Its own line, not folded into the presence line: an old build is not a
+    // presence failure, and the recovery prompt cannot fix it.
+    const row = roomScreen.slice(roomScreen.indexOf('data-gate="row-stale-client"'));
+    expect(row.slice(0, 300)).not.toContain('presenceGlyph');
   });
 
   it('the stamp is captured once at process boot and cannot be talked forward', () => {

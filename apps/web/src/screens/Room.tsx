@@ -58,7 +58,7 @@ import { fetchHealth, requestAdminHelp, sweepGhostAgents } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
 import { artifactsForRoom, hasLineMarker, focusRecoveryCard, isCurrentSeek, isFailedCard, nextFocusAction, outputsViewState, railSectionCount, seekExitRecovery, seekFailureReducer, seekPageBudget, seekStep, type ArtifactFetchState, type SeekRecovery } from '../lib/outputsState.js';
 import { armArrivalFlash } from '../lib/arrivalFlash.js';
-import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, personGroup, type ParticipantHealth } from '../lib/presence.js';
+import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, personGroup, behindLabel, clientNeedsRestart, clientOutdated, type ParticipantHealth } from '../lib/presence.js';
 import { deliveredAgents } from '../lib/delivered.js';
 import { startsMessageDay } from '../lib/messageDays.js';
 
@@ -2250,6 +2250,29 @@ export function Room() {
                             )}
                           </div>
                         )}
+                        {/* T-30 (client-build): running code, not shipped code.
+                            Deliberately its OWN line rather than folded into the
+                            presence line above: this agent is usually perfectly
+                            alive, and dressing an old build up as a presence
+                            problem would misdirect the host to a recovery prompt
+                            that cannot fix it. Detail lives in agent details; the
+                            row only has to make it noticeable, since the whole
+                            failure mode is that nobody knows to look. */}
+                        {(() => {
+                          if (!h || !clientNeedsRestart(h)) return null;
+                          const measured = clientOutdated(h);
+                          return (
+                            <div data-gate="row-stale-client" className="msg-meta mt-0.5 flex items-center gap-1 font-medium text-amber-300">
+                              <span aria-hidden="true">⟳</span>
+                              <span className="truncate">
+                                {measured
+                                  ? `Older client — ${behindLabel(Number(h.clientBehindMs))}`
+                                  : 'Client build unknown'}
+                                {' · restart to update'}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         {/* T-17: what this participant is DOING — the board's
                             in_progress task they own, so People answers "who's
                             on what" without a tab hop. Board-truth (claimed
