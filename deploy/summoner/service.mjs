@@ -23,6 +23,7 @@ import { listGrouped, isValidWorkspace } from './workspaces.mjs';
 import { catalog, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, ensureAgentConfigReady, AUG_PATH } from './providers.mjs';
 import { leave } from './roomcli.mjs';
 import { shouldNudge, recoveryPromptFor, presenceOf } from './nudge.mjs';
+import { adoptionRejection, dismissPlan, relaunchRejection } from './adoption.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DRIVER = join(HERE, 'driver.mjs');
@@ -135,6 +136,9 @@ function publicAgent(a) {
     model: a.model, workspace: a.workspace, room: a.room, mode: a.mode,
     accessLevel: normalizeAccess(a.mode), accessLabel: accessLabel(a.mode), persistent: a.persistent,
     account: a.account || '', sessionId: a.sessionId, native: Boolean(a.native),
+    // T-37: the app needs this to avoid offering actions the summoner cannot
+    // honour for a session it did not start (relaunch / permission change).
+    adopted: Boolean(a.adopted),
     createdAt: a.createdAt, dismissedAt: a.dismissedAt, status: a.status, health: h,
     tmuxSession: a.tmuxSession,
     // The actual dialog the harness is stuck on, so the app can show the human
@@ -382,6 +386,10 @@ async function doRelaunch(body) {
   const reg = loadRegistry();
   const a = reg.agents[String(body.agentId || '')];
   if (!a) throw httpErr(404, 'unknown agentId');
+  // T-37: no launch spec exists for an adopted agent; relaunching would replace a
+  // working session with a guess.
+  const noRelaunch = relaunchRejection(a);
+  if (noRelaunch) throw httpErr(409, noRelaunch);
   // Loud on misuse: a relaunch is disruptive, so an unrecognized level is a
   // 400, never a silent fall-through to the normalize default.
   if (!['chat', 'edit', 'build'].includes(body.mode)) {
@@ -442,11 +450,39 @@ function doRespond(body) {
   return { agent: publicAgent(a), cleared };
 }
 
+// T-37: place an already-running agent under supervision. Deliberately records
+// only what is TRUE of an externally-started session: no keyfile, no heartbeat, no
+// launch spec, and adopted:true so the lifecycle paths know what they don't own.
+function doAdopt(body) {
+  const r = loadRegistry();
+  const room = String(body.room || '').trim();
+  const name = String(body.name || '').trim();
+  const tmuxSession = String(body.tmuxSession || '').trim();
+  const reason = adoptionRejection({ agents: r.agents, room, name, tmuxSession, isSessionAlive: sessionAlive });
+  if (reason) throw httpErr(400, reason);
+  const agentId = `${room}-${slug(name)}-adopted-${randomUUID().slice(0, 8)}`;
+  const agent = {
+    agentId, name, role: String(body.role || '').trim(),
+    provider: String(body.provider || '').trim(), model: '',
+    workspace: String(body.workspace || '').trim(),
+    room, mode: 'build', persistent: true, account: '',
+    native: true, adopted: true, tmuxSession,
+    createdAt: Date.now(), status: 'active',
+  };
+  r.agents[agentId] = agent;
+  saveRegistry(r);
+  return { agent: publicAgent(agent), adopted: true };
+}
+
 async function doDismiss(body) {
   const r = loadRegistry();
   const a = r.agents[body.agentId];
   if (!a) throw httpErr(404, 'unknown agentId');
-  killSession(a.tmuxSession);
+  // T-37: the summoner may only kill what it started. An adopted session belongs
+  // to whoever launched it — killing it from a "remove from room" button would
+  // have terminated a live release build.
+  const plan = dismissPlan(a);
+  if (plan.killSession) killSession(a.tmuxSession);
   // Only free the shared (room,name) participant row + key if NO OTHER active
   // agent still uses that name in the room — otherwise dismissing an old agent
   // would yank the live agent's row out from under it (the "vanished from the
@@ -461,7 +497,7 @@ async function doDismiss(body) {
   a.status = body.archived ? 'archived' : 'dismissed';
   a.dismissedAt = Date.now();
   saveRegistry(r);
-  return { agent: publicAgent(a) };
+  return { agent: publicAgent(a), note: plan.note };
 }
 
 // ---------- small utils ----------
@@ -495,6 +531,10 @@ async function handle(req, res) {
     if (req.method === 'POST' && url.pathname === '/resummon') {
       const body = JSON.parse((await readBody(req)) || '{}');
       return json(res, 200, doResummon(body));
+    }
+    if (req.method === 'POST' && url.pathname === '/adopt') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      return json(res, 200, doAdopt(body));
     }
     if (req.method === 'POST' && url.pathname === '/relaunch') {
       const body = JSON.parse((await readBody(req)) || '{}');
