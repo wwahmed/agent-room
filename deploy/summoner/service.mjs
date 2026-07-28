@@ -67,6 +67,33 @@ function paneTail(session, lines = 35) {
   if (out.status !== 0) return '';
   return String(out.stdout || '').split('\n').slice(-lines).join('\n');
 }
+// T-31: is the harness in a live model turn RIGHT NOW?
+//
+// Proof of life that presence cannot see: a heads-down agent generates no room
+// traffic for minutes, so presence infers death while the terminal plainly shows
+// work in progress. Same shape as paneBlockedOnPrompt below — sniff the harness's
+// own furniture rather than guessing.
+//
+// The first attempt here compared a pane FINGERPRINT tick-to-tick, on the theory
+// that a working pane changes and an idle one doesn't. Measured against a real
+// agent, that was wrong: Claude Code repaints an animated counter while idle, so
+// the fingerprint changed every sample and the veto would have swallowed every
+// nudge up to its cap. Digit-normalising the tail helped but still flapped.
+//
+// "esc to interrupt" is the honest signal — both Claude Code and Codex print it
+// in the footer only while a turn is in flight. Verified live: it was present on
+// an agent mid-turn, absent on the same pane two minutes later once the turn
+// ended. A harness whose furniture we don't recognise simply gets no veto, which
+// leaves its behaviour exactly as it was before this change.
+// The window is the same 35 lines paneBlockedOnPrompt uses, deliberately. A
+// 10-line tail looked sufficient (both harnesses paint the footer at the bottom)
+// but capture-pane emits the WHOLE pane including its trailing blank padding, so
+// on a sparsely-filled pane the last 10 lines are empty and the marker is missed.
+// Caught by testing the sniffer against a scratch tmux session rather than only
+// against a busy agent, where the bug is invisible.
+function paneWorking(session) {
+  return /esc to interrupt/i.test(paneTail(session, 35));
+}
 function paneBlockedOnPrompt(session) {
   // Copilot furniture (allow/trust dialogs) + codex furniture (per-tool MCP
   // approval: "Allow the agent-room MCP server to run tool X?" with
@@ -124,6 +151,10 @@ const watchState = new Map(); // agentId -> 'ok' | 'blocked' | 'dead'
 // T-12: last auto-nudge per agent, for the cool-down. In-memory on purpose —
 // a summoner restart re-arming one extra nudge is harmless.
 const nudgeState = new Map(); // agentId -> epoch ms of last nudge
+// T-31: pane-activity veto bookkeeping. vetoState holds when we STARTED trusting
+// the terminal over presence, so the veto can be capped instead of holding off a
+// nudge forever on a harness that leaves its in-flight marker on a frozen frame.
+const vetoState = new Map();    // agentId -> epoch ms the current veto began
 
 // Event-driven attention alert (the architectural fix): a lane-wide Claude
 // Notification hook posts {room,name} here the INSTANT the harness needs a
@@ -560,7 +591,22 @@ if (verb) {
           for (const a of live) {
             const presenceState = presenceOf(healthByRoom.get(a.room), a.name);
             const paneBlocked = paneBlockedOnPrompt(a.tmuxSession);
-            if (!shouldNudge({ presenceState, paneBlocked, lastNudgeAt: nudgeState.get(a.agentId), now: Date.now() })) continue;
+            // T-31: does the terminal show a turn in flight right now?
+            const paneActive = paneWorking(a.tmuxSession);
+            // A recovered agent starts its next veto from scratch — otherwise an
+            // old veto timestamp would let the very first disconnected tick blow
+            // straight through the cap.
+            if (presenceState !== 'disconnected') vetoState.delete(a.agentId);
+            const now = Date.now();
+            if (!shouldNudge({ presenceState, paneBlocked, paneActive, vetoSinceAt: vetoState.get(a.agentId), lastNudgeAt: nudgeState.get(a.agentId), now })) {
+              if (presenceState === 'disconnected' && paneActive && !paneBlocked) {
+                if (!vetoState.has(a.agentId)) vetoState.set(a.agentId, now);
+                const heldMs = now - vetoState.get(a.agentId);
+                console.log(`[auto-nudge] ${a.name} (${a.room}) presence=disconnected but pane is live — nudge vetoed (${Math.round(heldMs / 1000)}s held)`);
+              }
+              continue;
+            }
+            vetoState.delete(a.agentId);
             nudgeState.set(a.agentId, Date.now());
             const prompt = recoveryPromptFor(a.room, a.name, a.role);
             // -l types the prompt literally (no key-name interpretation); C-m submits.

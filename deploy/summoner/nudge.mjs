@@ -10,6 +10,16 @@
  *  one model turn or not at all; hammering a wedged harness helps nobody. */
 export const NUDGE_COOLDOWN_MS = 10 * 60_000;
 
+/** T-31: how long a visibly-working pane may hold off a nudge.
+ *
+ *  The veto below trusts the terminal over presence, which is right — but it
+ *  must not be trusted FOREVER. A harness killed mid-turn can leave its
+ *  in-flight marker frozen on screen, and an uncapped veto would then suppress
+ *  the nudge for exactly the agent that needs it. After this long, presence
+ *  wins and the nudge fires: worst case the agent gets one redundant prompt,
+ *  which is the failure we can afford. Sized well above a long model turn and well below a whole night. */
+export const PANE_ACTIVITY_VETO_CAP_MS = 30 * 60_000;
+
 /**
  * Should the sampler nudge this agent now?
  *  - ONLY `disconnected` qualifies (T-26): a healthy agent's natural cycle is
@@ -19,11 +29,21 @@ export const NUDGE_COOLDOWN_MS = 10 * 60_000;
  *    witnessed on OpusCoder). `disconnected` = 5+ minutes silent, which no
  *    healthy turn produces; a genuinely dead loop is still caught in ~5-6min.
  *  - a live-but-blocked pane is a HUMAN's job (permission dialog), never ours;
+ *  - T-31: a terminal showing a turn IN FLIGHT is proof the harness is alive,
+ *    and that proof outranks presence. T-26 cut the false alarms that
+ *    fired at 60s, but a genuinely heads-down agent that doesn't ping still
+ *    crosses 5 minutes and gets interrupted — witnessed live on OpusCoder,
+ *    which was streaming a build into its pane when the summoner typed a
+ *    recovery prompt on top of it. Presence infers life from room traffic; the
+ *    terminal SHOWS it. Same shape as T-18, where a live process vetoes the
+ *    "row is stale" claim. Capped by PANE_ACTIVITY_VETO_CAP_MS so a harness that
+ *    leaves its in-flight marker on a frozen frame can't disable the mechanism.
  *  - and never inside the cool-down window.
  */
-export function shouldNudge({ presenceState, paneBlocked, lastNudgeAt, now }) {
+export function shouldNudge({ presenceState, paneBlocked, paneActive, vetoSinceAt, lastNudgeAt, now }) {
   if (presenceState !== 'disconnected') return false;
   if (paneBlocked) return false;
+  if (paneActive && !(vetoSinceAt && now - vetoSinceAt >= PANE_ACTIVITY_VETO_CAP_MS)) return false;
   if (lastNudgeAt && now - lastNudgeAt < NUDGE_COOLDOWN_MS) return false;
   return true;
 }

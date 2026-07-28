@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { shouldNudge, recoveryPromptFor, presenceOf, NUDGE_COOLDOWN_MS } from './nudge.mjs';
+import { shouldNudge, recoveryPromptFor, presenceOf, NUDGE_COOLDOWN_MS, PANE_ACTIVITY_VETO_CAP_MS } from './nudge.mjs';
 
 // T-12: the sampler's judgement about WHEN to type into an agent's terminal
 // is the safety-critical part — pin every branch.
@@ -24,6 +24,46 @@ test('a blocked pane is a HUMAN incident — never typed into', () => {
 test('cool-down: no re-nudge inside the window, re-armed after it', () => {
   assert.equal(shouldNudge({ presenceState: 'disconnected', paneBlocked: false, lastNudgeAt: NOW - NUDGE_COOLDOWN_MS + 1000, now: NOW }), false);
   assert.equal(shouldNudge({ presenceState: 'disconnected', paneBlocked: false, lastNudgeAt: NOW - NUDGE_COOLDOWN_MS - 1, now: NOW }), true);
+});
+
+// T-31: presence infers life from room traffic; the terminal SHOWS it. Witnessed
+// live — OpusCoder was streaming a build into its pane when the summoner typed a
+// recovery prompt on top of it, because 5 minutes of heads-down silence reads as
+// disconnected. An in-flight marker in the terminal outranks that inference.
+test('a terminal showing a turn in flight vetoes the nudge', () => {
+  assert.equal(shouldNudge({ presenceState: 'disconnected', paneActive: true, paneBlocked: false, now: NOW }), false);
+  // No in-flight marker, or a harness whose furniture we don't recognise:
+  // nothing to veto with, so presence still rules and behaviour is unchanged.
+  assert.equal(shouldNudge({ presenceState: 'disconnected', paneActive: false, paneBlocked: false, now: NOW }), true);
+  assert.equal(shouldNudge({ presenceState: 'disconnected', paneBlocked: false, now: NOW }), true);
+});
+
+test('the pane veto is CAPPED — a frozen in-flight marker cannot disable auto-nudge', () => {
+  // Inside the cap, the terminal keeps winning.
+  assert.equal(shouldNudge({
+    presenceState: 'disconnected', paneActive: true, paneBlocked: false,
+    vetoSinceAt: NOW - PANE_ACTIVITY_VETO_CAP_MS + 1000, now: NOW,
+  }), false);
+  // Past it, presence wins and the agent gets its prompt — one redundant nudge
+  // is a far cheaper failure than a mechanism that silently never fires.
+  assert.equal(shouldNudge({
+    presenceState: 'disconnected', paneActive: true, paneBlocked: false,
+    vetoSinceAt: NOW - PANE_ACTIVITY_VETO_CAP_MS, now: NOW,
+  }), true);
+});
+
+test('a blocked pane still outranks pane activity — typing over a dialog helps nobody', () => {
+  assert.equal(shouldNudge({
+    presenceState: 'disconnected', paneActive: false, paneBlocked: true,
+    vetoSinceAt: NOW - PANE_ACTIVITY_VETO_CAP_MS * 2, now: NOW,
+  }), false);
+});
+
+test('the cool-down survives the veto path — an expired veto does not re-nudge instantly', () => {
+  assert.equal(shouldNudge({
+    presenceState: 'disconnected', paneActive: true, paneBlocked: false,
+    vetoSinceAt: NOW - PANE_ACTIVITY_VETO_CAP_MS, lastNudgeAt: NOW - 1000, now: NOW,
+  }), false);
 });
 
 test('the injected prompt matches the manual copy-button wording', () => {
