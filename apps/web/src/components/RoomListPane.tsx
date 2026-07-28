@@ -4,6 +4,7 @@ import { relativeTime } from '../lib/relativeTime.js';
 import { RoomBadges } from './RoomBadges.js';
 import { RoomIdentitySlot } from './RoomIdentitySlot.js';
 import { RoomContextMenu, useRoomCardMenu } from './RoomContextMenu.js';
+import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, resolveRoomSort, saveRoomSort, sortRooms, subscribeRoomSort, type RoomSort } from '../lib/roomSort.js';
 
 // T-05 desktop room list between the rail and the chat. T-55 makes it
 // responsive rather than pinning a large desktop monitor to a cramped 280px.
@@ -36,6 +37,13 @@ interface RoomSummary {
 
 export function RoomListPane({ activeCode, selfName }: { activeCode: string; selfName: string }) {
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
+  // T-38: the rail used to render the server's activity order and ignore the
+  // sort preference entirely — so choosing a fixed order on Home left the rail
+  // still reshuffling, which is the surface the host actually types into.
+  const [sort, setSort] = useState<RoomSort>(() => {
+    try { return resolveRoomSort(localStorage.getItem(ROOM_SORT_STORAGE_KEY)); } catch { return resolveRoomSort(null); }
+  });
+  useEffect(() => subscribeRoomSort(setSort), []);
   // Shared long-press / right-click room actions (same menu as Home's cards).
   const { menu, closeMenu, bind } = useRoomCardMenu();
   // Resizable width (house taste), persisted; drag the right edge, double-click resets.
@@ -81,14 +89,28 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
     return () => { cancelled = true; window.clearInterval(id); };
   }, []);
 
-  const visible = (rooms ?? []).filter((r) => !r.archived);
+  const visible = sortRooms((rooms ?? []).filter((r) => !r.archived), sort);
   if (!rooms || visible.length === 0) return null;
 
   return (
     <aside ref={asideRef} style={{ width }} className="relative hidden h-full flex-shrink-0 flex-col border-r border-border-faint bg-surface xl:flex" data-room-list-width="resizable">
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3 modern-scrollbar">
-        <div className="flex h-8 items-center px-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
-          Rooms
+        <div className="flex h-8 items-center gap-2 px-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+          <span>Rooms</span>
+          {/* T-38: order control lives HERE, on the rail being mis-clicked, not
+              only on Home. Shares one preference with Home so the two surfaces
+              can never disagree about the order. */}
+          <select
+            value={sort}
+            onChange={e => { const next = resolveRoomSort(e.target.value); setSort(next); saveRoomSort(next); }}
+            aria-label="Sort rooms"
+            data-gate="rail-room-sort"
+            className="ml-auto max-w-[58%] flex-shrink-0 truncate rounded-lg border border-border-faint bg-surface-softer px-1.5 py-0.5 text-[12px] font-semibold normal-case tracking-normal text-ink-soft outline-none transition focus:border-accent"
+          >
+            {ROOM_SORTS.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
         </div>
         {visible.map(r => {
           const active = r.code === activeCode;

@@ -7,7 +7,7 @@ import { AccountMenu } from '../components/AccountMenu.js';
 import { RoomBadges } from '../components/RoomBadges.js';
 import { RoomIdentitySlot } from '../components/RoomIdentitySlot.js';
 import { splitRooms } from '../lib/roomSections.js';
-import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, sortRooms, type RoomSort } from '../lib/roomSort.js';
+import { ROOM_SORTS, ROOM_SORT_STORAGE_KEY, isRoomSort, resolveRoomSort, saveRoomSort, sortRooms, subscribeRoomSort, type RoomSort } from '../lib/roomSort.js';
 import { useLiveRooms } from '../hooks/useLiveRooms.js';
 import { createClient, unarchiveRoomAction } from '../lib/api.js';
 import { RoomContextMenu, useRoomCardMenu } from '../components/RoomContextMenu.js';
@@ -60,8 +60,13 @@ export function Home() {
   function changeRoomSort(value: string) {
     if (!isRoomSort(value)) return;
     setRoomSort(value);
-    try { localStorage.setItem(ROOM_SORT_STORAGE_KEY, value); } catch { /* session-only */ }
+    // T-38: one shared write path, so the desktop rail moves with Home instead of
+    // holding a stale order. localStorage does not notify the writing tab, hence
+    // the event inside saveRoomSort.
+    saveRoomSort(value);
   }
+  // ...and follow the preference when it is changed from the rail.
+  useEffect(() => subscribeRoomSort(setRoomSort), []);
 
   useEffect(() => {
     let cancelled = false;

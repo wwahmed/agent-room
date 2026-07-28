@@ -4,7 +4,7 @@
 // with everything already loaded). Kept free of DOM/state so the virtualized
 // pager can consume the same functions.
 
-export type RoomSort = 'activity-desc' | 'activity-asc' | 'created-desc' | 'created-asc';
+export type RoomSort = 'activity-desc' | 'activity-asc' | 'created-desc' | 'created-asc' | 'name-asc';
 
 export const ROOM_SORT_DEFAULT: RoomSort = 'activity-desc';
 export const ROOM_SORT_STORAGE_KEY = 'wakichat:room-sort';
@@ -14,10 +14,43 @@ export const ROOM_SORTS: { value: RoomSort; label: string }[] = [
   { value: 'activity-asc', label: 'Quietest first' },
   { value: 'created-desc', label: 'Newest created' },
   { value: 'created-asc', label: 'Oldest created' },
+  // T-38: the only order that HOLDS STILL. Every option above is time-keyed, so
+  // all of them reshuffle as rooms get busy — which is what made the host type
+  // into the wrong room three times in one afternoon ("sometimes I start typing
+  // in the wrong room because room position changes"). A name order changes only
+  // when a room is created or renamed.
+  { value: 'name-asc', label: 'Name (A–Z)' },
 ];
 
 export function isRoomSort(v: unknown): v is RoomSort {
-  return v === 'activity-desc' || v === 'activity-asc' || v === 'created-desc' || v === 'created-asc';
+  return v === 'activity-desc' || v === 'activity-asc' || v === 'created-desc'
+    || v === 'created-asc' || v === 'name-asc';
+}
+
+// T-38: the preference is shared by Home and the desktop rail, so changing it in
+// one must move the other — otherwise "fixed order" holds in one surface while the
+// other keeps shuffling. localStorage alone does not notify the same tab, so the
+// write also emits an event both surfaces subscribe to.
+export const ROOM_SORT_EVENT = 'wakichat:room-sort';
+
+export function saveRoomSort(sort: RoomSort): void {
+  try { localStorage.setItem(ROOM_SORT_STORAGE_KEY, sort); } catch { /* private mode: session-only */ }
+  try { window.dispatchEvent(new CustomEvent(ROOM_SORT_EVENT, { detail: sort })); } catch { /* no window */ }
+}
+
+/** Subscribe to preference changes from this tab (custom event) AND other tabs
+ *  (storage event). Returns an unsubscribe. */
+export function subscribeRoomSort(onChange: (sort: RoomSort) => void): () => void {
+  const local = (e: Event) => onChange(resolveRoomSort(String((e as CustomEvent).detail ?? '')));
+  const cross = (e: StorageEvent) => {
+    if (e.key === ROOM_SORT_STORAGE_KEY) onChange(resolveRoomSort(e.newValue));
+  };
+  window.addEventListener(ROOM_SORT_EVENT, local);
+  window.addEventListener('storage', cross);
+  return () => {
+    window.removeEventListener(ROOM_SORT_EVENT, local);
+    window.removeEventListener('storage', cross);
+  };
 }
 
 export function resolveRoomSort(stored: string | null): RoomSort {
@@ -26,19 +59,33 @@ export function resolveRoomSort(stored: string | null): RoomSort {
 
 interface Sortable {
   code: string;
-  createdAt: number;
+  // T-38: optional because the desktop rail's summary payload omits it on some
+  // rows. A missing timestamp must degrade to "oldest known", never crash the
+  // sort or throw the rail away.
+  createdAt?: number;
   lastActivityAt?: number | null;
+  /** T-38: only the name order reads this; time orders ignore it. */
+  topic?: string;
 }
 
 /** Activity falls back to createdAt — a room nobody has spoken in yet is as
  *  fresh as its creation, never "no activity, sink to the bottom". */
 function activityOf(r: Sortable): number {
-  return r.lastActivityAt ?? r.createdAt;
+  return r.lastActivityAt ?? r.createdAt ?? 0;
 }
 
 export function sortRooms<T extends Sortable>(rooms: T[], sort: RoomSort): T[] {
+  // T-38: locale-aware, case-insensitive, digit-aware ("Room 2" before "Room 10"),
+  // with the room CODE as the final tiebreak. That tiebreak is the whole point:
+  // two rooms sharing a topic must not swap places between renders, or a "fixed"
+  // order still moves under the cursor.
+  if (sort === 'name-asc') {
+    const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+    return [...rooms].sort((a, b) =>
+      collator.compare(a.topic ?? '', b.topic ?? '') || collator.compare(a.code, b.code));
+  }
   const keyed = rooms.map((room, index) => ({ room, index }));
-  const key = sort.startsWith('activity') ? activityOf : (r: Sortable) => r.createdAt;
+  const key = sort.startsWith('activity') ? activityOf : (r: Sortable) => r.createdAt ?? 0;
   const dir = sort.endsWith('desc') ? -1 : 1;
   keyed.sort((a, b) => {
     const diff = (key(a.room) - key(b.room)) * dir;
