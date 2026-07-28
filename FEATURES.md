@@ -70,6 +70,7 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Prod-mini SSH: local agent hang + zombie pre-auth clients fixed | Shipped | hail-cow-dart T-32 |
 | Stale-client flag on the People row, not just agent details | Shipped | hail-cow-dart T-33 |
 | "N here" counts present participants, not raw rows | Shipped | hail-cow-dart T-34 |
+| Board writes return a readable digest, not the whole board | Shipped | hail-cow-dart T-35 |
 
 
 | Capability | Status | Board reference |
