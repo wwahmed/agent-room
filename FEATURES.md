@@ -76,6 +76,9 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Room list can hold a fixed order (Name), rail included | Shipped | hail-cow-dart T-38 |
 | A human talking to an empty room is told in the same second | Shipped | hail-cow-dart T-39 |
 | A departure that empties the room is never silent | Shipped | hail-cow-dart T-40 |
+| NUL-byte guard keeps source files reviewable | Shipped | hail-cow-dart T-41 |
+| Message ⋯ menu stays on screen on phones | Shipped | hail-cow-dart T-42 |
+| Presence pings no longer count as room activity | Shipped | hail-cow-dart T-43 |
 
 
 | Capability | Status | Board reference |
