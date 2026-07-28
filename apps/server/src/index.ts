@@ -1795,6 +1795,13 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       task.note = (payload.note as string) || undefined;
       task.verifiedBy = name;
       task.verifiedAt = nowMs();
+      // T-28: a verifier who can prove the work is LIVE records it here, so
+      // 'done' means shipped rather than merely reviewed.
+      if (typeof payload.liveRef === 'string' && payload.liveRef.trim()) {
+        task.liveRef = payload.liveRef.trim().slice(0, 200);
+        task.deployedAt = nowMs();
+        task.deployedBy = name;
+      }
       await commitBoard(code, board);
       // T-16: page the owner with the outcome — builders learn accept/reject
       // from their listen loop, not by re-reading the board. Best-effort.
@@ -1811,6 +1818,30 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           text: verdictLine(task, verdict as 'done' | 'rejected', name, task.note),
         });
       } catch { /* board state is already committed */ }
+      return { board, task };
+    }
+    case 'taskMarkDeployed': {
+      // T-28: record that a task's work is now LIVE. Separate from verify so a
+      // promotion that happens later (the normal case) still closes the loop,
+      // and so the Board can stop showing verified-but-not-deployed.
+      const board = await getTaskBoard(code);
+      const task = requireTask(board, String(payload.id || ''));
+      const name = String(payload.name || '');
+      const liveRef = String(payload.liveRef || '').trim();
+      if (!name) throw taskError('BadRequestError', 'name is required.');
+      if (!liveRef) throw taskError('BadRequestError', 'liveRef is required — the commit SHA, release tag, or URL that proves this is live.');
+      if (task.state !== 'done' && task.state !== 'awaiting_review') {
+        throw taskError('BadRequestError', `Task ${task.id} is ${task.state}; only submitted or verified work can be marked deployed.`);
+      }
+      task.liveRef = liveRef.slice(0, 200);
+      task.deployedAt = nowMs();
+      task.deployedBy = name;
+      await commitBoard(code, board);
+      await appendSystemMessage(client, code, {
+        id: Date.now(), type: 'sys', name: 'system', initials: 'SY', color: '#64748b', role: '', client: 'cc',
+        time: Date.now(),
+        text: `🚀 ${name} marked ${task.id} DEPLOYED (${task.liveRef}).`,
+      }).catch(() => { /* board state already committed */ });
       return { board, task };
     }
     case 'taskReassignAlias': {
@@ -1984,6 +2015,15 @@ interface BoardTask {
   claimedAt?: number;
   submittedAt?: number;
   verifiedAt?: number;
+  // T-28: "verified" and "live" are DIFFERENT facts. A task can pass review
+  // with green tests and never reach production — witnessed in 3dbypixel,
+  // where verified nav/Home work sat unpromoted for days while the board (and
+  // therefore the host) read it as finished. liveRef is the deployed proof
+  // (commit SHA, release tag, or URL); until a done task has one the Board
+  // shows it as verified-but-not-deployed instead of silently "done".
+  liveRef?: string;
+  deployedAt?: number;
+  deployedBy?: string;
 }
 
 interface TaskBoard {

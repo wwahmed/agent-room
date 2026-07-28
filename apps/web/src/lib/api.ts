@@ -561,6 +561,21 @@ export async function promotePinnedDecision(
   )).result;
 }
 
+// T-28: record that a verified task's work is now live. Same credential bar as
+// verify; the server appends a 🚀 audit line.
+export async function markTaskDeployed(
+  _client: ApiClient,
+  code: string,
+  id: string,
+  liveRef: string,
+  name: string,
+): Promise<{ task: BoardTask }> {
+  return keyedCall<{ task: BoardTask }>(
+    mk => ({ action: 'taskMarkDeployed', code, id, liveRef, name, client: 'web', memberKey: mk }),
+    code,
+  );
+}
+
 // ---------- turn state ----------
 
 export async function getTurnState(_client: ApiClient, code: string): Promise<TurnState | null> {
@@ -674,6 +689,11 @@ export interface BoardTask {
     runOutput: string;
     exitCode: number;
   };
+  // T-28: proof the work is LIVE (commit SHA / release tag / URL). A done task
+  // without one is verified-but-not-deployed and the Board says so.
+  liveRef?: string;
+  deployedAt?: number;
+  deployedBy?: string;
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {

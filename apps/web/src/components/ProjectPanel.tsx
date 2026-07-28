@@ -8,6 +8,7 @@ import {
   getTaskBoard,
   listProjectCandidates,
   listProjects,
+  markTaskDeployed,
   readProjectDoc,
   verifyTask,
   type BoardTask,
@@ -321,6 +322,26 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
     }
   }
 
+  // T-28: "verified" and "live" are different facts. Record the deploy proof so
+  // a reviewed-but-unpromoted task stops reading as finished (the 3dbypixel
+  // nav/Home work sat verified-and-invisible for days).
+  async function markDeployed(t: BoardTask) {
+    const ref = window.prompt(`Mark ${t.id} DEPLOYED — paste the live proof (commit SHA, release tag, or URL):`);
+    if (ref === null) return;
+    const liveRef = ref.trim();
+    if (!liveRef) { showToast('A live reference is required', 'error'); return; }
+    setVerifyBusy(t.id);
+    try {
+      await markTaskDeployed(createClient(), room.code, t.id, liveRef, selfName);
+      showToast(`${t.id} marked deployed`);
+      onRetryBoard?.();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not mark deployed', 'error');
+    } finally {
+      setVerifyBusy(null);
+    }
+  }
+
   const evidenceLine = (t: BoardTask): string | null => {
     if (t.state === 'done') return t.verifiedBy ? `Verified by ${t.verifiedBy}` : 'Verified';
     if (t.state === 'awaiting_review') return t.verifier ? `Submitted, awaiting ${t.verifier}` : 'Submitted, awaiting review';
@@ -439,6 +460,28 @@ export function ProjectPanel({ room, isHost, selfName, onAttached, board, boardE
               </div>
             )}
             {t.note && <div className="mt-1.5 line-clamp-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">{t.note}</div>}
+            {/* T-28: reviewed is not shipped. A done task with no live proof
+                says so loudly; one with proof shows what is actually live. */}
+            {t.state === 'done' && !t.liveRef && (
+              <div data-gate="not-deployed" className="mt-1.5 flex flex-wrap items-center gap-2 rounded-lg border border-warning/40 bg-warning-tint px-2.5 py-1.5">
+                <span className="text-[14px] font-semibold text-warning">⚠ Verified, not deployed</span>
+                <span className="text-[13px] text-ink-soft">no live reference recorded</span>
+                <button
+                  type="button"
+                  disabled={verifyBusy === t.id}
+                  onClick={() => { void markDeployed(t); }}
+                  className="ml-auto flex min-h-9 items-center rounded-md border border-border px-2.5 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  Mark deployed…
+                </button>
+              </div>
+            )}
+            {t.liveRef && (
+              <div data-gate="deployed" className="mt-1.5 text-[14px] font-medium text-success">
+                🚀 Live: <span className="font-mono text-[13px]">{t.liveRef}</span>
+                {t.deployedBy ? <span className="text-ink-faint"> · recorded by {t.deployedBy}</span> : null}
+              </div>
+            )}
             {/* T-19: the submitted proof, inspectable where the verdict is
                 made. Folded — evidence blocks are long by design. */}
             {(t.evidence || t.dod) && (t.state === 'awaiting_review' || t.state === 'done' || t.state === 'rejected') && (
