@@ -79,6 +79,8 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | NUL-byte guard keeps source files reviewable | Shipped | hail-cow-dart T-41 |
 | Message ⋯ menu stays on screen on phones | Shipped | hail-cow-dart T-42 |
 | Presence pings no longer count as room activity | Shipped | hail-cow-dart T-43 |
+| Unread rooms read bold in the rail and on Home | Shipped | hail-cow-dart T-44 |
+| The room rail holds still while you are using it | Shipped | hail-cow-dart T-45 |
 
 
 | Capability | Status | Board reference |
