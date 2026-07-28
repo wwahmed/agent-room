@@ -24,6 +24,54 @@ export interface ParticipantHealth {
   lastSeenAgoMs: number;
   /** ms of listen window still parked; 0 when no loop is armed. */
   listenRemainingMs: number;
+  /** T-30 (client-build): build stamp of the bundle this agent's PROCESS loaded. */
+  clientBuildAt?: number;
+  /** T-30 (client-build): ms that running code trails the newest build the room
+   *  can prove exists. Absent/0 = current, or no evidence either way. */
+  clientBehindMs?: number;
+  /** T-30 (client-build): the agent reported no build stamp while the beacon is
+   *  operational — its client predates build reporting. A known-unknown, kept
+   *  separate from the measured gap above. */
+  clientBuildUnknown?: true;
+}
+
+/** T-30 (client-build): is this row executing pre-deploy code? Deliberately
+ *  independent of presence — a stale-BUILD agent is usually perfectly alive,
+ *  which is exactly why it goes unnoticed. The server owns the threshold (it
+ *  holds the watermark); the web only asks whether it reported a gap, so the
+ *  two components can never disagree about what "behind" means. */
+export function clientOutdated(h: ParticipantHealth | null | undefined): boolean {
+  return Boolean(h && h.client === 'cc' && Number(h.clientBehindMs) > 0);
+}
+
+/** T-30 (client-build): the client is old enough that it does not report its
+ *  build at all. Same remedy as an outdated one (restart), different claim — so
+ *  the copy says "unknown", never a delta we cannot measure. */
+export function clientBuildUnknown(h: ParticipantHealth | null | undefined): boolean {
+  return Boolean(h && h.client === 'cc' && h.clientBuildUnknown === true);
+}
+
+/** Either reason to restart an agent's process. Presence-independent: none of
+ *  this means the agent is unhealthy, only that it is running yesterday's code. */
+export function clientNeedsRestart(h: ParticipantHealth | null | undefined): boolean {
+  return clientOutdated(h) || clientBuildUnknown(h);
+}
+
+/** Coarse, honest phrasing for a build gap. Rounded DOWN to the unit — "3h
+ *  behind" must never overstate the gap it is asking someone to act on. */
+export function behindLabel(ms: number): string {
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${Math.max(1, mins)}m behind`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h behind`;
+  return `${Math.floor(hours / 24)}d behind`;
+}
+
+/** The only action that lands a new client: the agent's process must restart.
+ *  Same shape as recoveryPrompt() — text the host can paste into that agent's
+ *  terminal — because "restart" is not a button the web app can press. */
+export function restartForBuildPrompt(code: string, name: string): string {
+  return `Exit this session and start a fresh one, then rejoin Agent Room ${code} as "${name}" and stay in the room_listen loop. Your current process is running an older Agent Room client build; only a new process picks up the fixed one.`;
 }
 
 export interface PresenceView {

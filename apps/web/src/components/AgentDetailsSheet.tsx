@@ -1,7 +1,17 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { listRoomAgentHistory, relaunchAgentWithMode, respondToAgentPrompt, type PromptRespondVerb, type SummonedAgent } from '../lib/api.js';
 import { brandFor } from '../lib/agentBrand.js';
-import { canRecover, presenceView, recoveryPrompt, type ParticipantHealth } from '../lib/presence.js';
+import {
+  behindLabel,
+  canRecover,
+  clientBuildUnknown,
+  clientNeedsRestart,
+  clientOutdated,
+  presenceView,
+  recoveryPrompt,
+  restartForBuildPrompt,
+  type ParticipantHealth,
+} from '../lib/presence.js';
 
 // Header presence chip tones — the server's listen-loop verdict, promoted from
 // a buried mid-list row to the first thing the sheet says about an agent.
@@ -149,6 +159,13 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
   // terminal. Same contract as the People-row button.
   const offline = Boolean(health && canRecover(health, ended ?? false));
   const recoveryText = recoveryPrompt(code, participant.name, participant.role);
+  // T-30 (client-build): running code, not shipped code. A session started
+  // before a deploy keeps executing the bundle it loaded at boot, so the fix can
+  // be live on disk and absent from every agent in the room at the same time.
+  const staleClient = clientNeedsRestart(health);
+  const buildMeasured = clientOutdated(health);
+  const buildUnknown = clientBuildUnknown(health);
+  const restartText = restartForBuildPrompt(code, participant.name);
   const [copiedWhat, setCopiedWhat] = useState<string | null>(null);
   const copy = (text: string, what: string) => {
     try { void navigator.clipboard.writeText(text); setCopiedWhat(what); } catch { /* no clipboard */ }
@@ -174,6 +191,14 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
     ['Joined', fmt(agent?.createdAt ?? participant.joinedAt)],
     ['Left', agent?.dismissedAt ? fmt(agent.dismissedAt) : (agent?.status === 'active' || !agent ? 'Still here' : '—')],
     ['Health', agent?.health || (brand ? 'in room' : '—')],
+    // T-30 (client-build): a fact, not an alarm — the banner above handles the
+    // alarm. Shown for every agent row that reports a stamp so the host can
+    // compare two agents' builds directly.
+    ...(health?.clientBuildAt
+      ? [['Client build', `${fmt(health.clientBuildAt)}${buildMeasured ? ` · ${behindLabel(Number(health.clientBehindMs))}` : ' · current'}`] as [string, ReactNode]]
+      : buildUnknown
+        ? [['Client build', 'Not reported — predates build reporting'] as [string, ReactNode]]
+        : []),
     ['Source', agent ? 'Summoned in-app' : 'Joined via invite link / code'],
   ];
 
@@ -260,6 +285,34 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                       Copy recovery prompt
                     </button>
                     {copiedWhat === 'recovery' && <span role="status" className="text-[12px] font-semibold text-accent">Copied</span>}
+                  </div>
+                </div>
+              )}
+              {staleClient && (
+                <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3" data-gate="stale-client" role="status">
+                  <div className="text-[13px] font-bold text-amber-300">
+                    {buildMeasured
+                      ? `Running an older client — ${behindLabel(Number(health?.clientBehindMs))}`
+                      : 'Client build unknown — older than build reporting'}
+                  </div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft lg:text-[14px]">
+                    {participant.name} is alive, but its process loaded the Agent Room client
+                    {buildUnknown
+                      ? ' so long ago that it does not report a build at all — which itself dates it before this fix shipped'
+                      : ' before the current build'}
+                    . Any fix released since then is on disk and not in this session. Restarting the agent is
+                    the only thing that picks it up; deploying again won't.
+                  </p>
+                  <code className="mt-2 block break-words rounded-lg bg-black/30 p-2.5 font-mono text-[12px] leading-relaxed text-ink-soft lg:text-[13px]">{restartText}</code>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => copy(restartText, 'restart')}
+                      className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                    >
+                      Copy restart prompt
+                    </button>
+                    {copiedWhat === 'restart' && <span role="status" className="text-[12px] font-semibold text-accent">Copied</span>}
                   </div>
                 </div>
               )}

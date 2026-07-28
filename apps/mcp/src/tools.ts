@@ -54,6 +54,7 @@ import {
   mcpTimeoutHint,
   persistenceSetupHint,
 } from './harness.js';
+import { CLIENT_BUILD_AT } from './buildStamp.js';
 import {
   uploadAgentAttachments,
   AttachmentUploadError,
@@ -944,6 +945,9 @@ export function registerTools(server: Server) {
         client: 'cc',
         // T-44/T-47: brand metadata from the DETECTED harness, never the name.
         harness: harness.kind,
+        // T-30 (client-build): the bundle THIS process loaded, so the room can
+        // tell "the fix is deployed" from "the fix is running here".
+        ...(CLIENT_BUILD_AT > 0 ? { clientBuildAt: CLIENT_BUILD_AT } : {}),
         joinedAt: Date.now(),
         lastSeenAt: Date.now(),
       };
@@ -1010,6 +1014,9 @@ export function registerTools(server: Server) {
         client: 'cc',
         // T-44/T-47: brand metadata from the DETECTED harness, never the name.
         harness: harness.kind,
+        // T-30 (client-build): the bundle THIS process loaded, so the room can
+        // tell "the fix is deployed" from "the fix is running here".
+        ...(CLIENT_BUILD_AT > 0 ? { clientBuildAt: CLIENT_BUILD_AT } : {}),
         // T-47b: self-reported identity so a manual join is as legible as a
         // summon. Display-only, capped, and never used for auth (same trust
         // class as the display name). `account` is a label — if a caller ever

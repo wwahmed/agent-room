@@ -67,6 +67,7 @@ import {
 } from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
 import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
+import { SERVER_BUILD_AT } from './buildStamp.js';
 import { clampWorkingUntil, ghostRows, roomHealth } from './health.js';
 import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
@@ -942,6 +943,17 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // T-05: the viewer flag is an explicit opt-in boolean, nothing else —
       // a truthy string must not silently make a row read-only.
       if (participant.viewer !== true) delete participant.viewer;
+      // T-30 (client-build): the build stamp is self-reported and UNTRUSTED, and
+      // it feeds a max() watermark — so a client with a skewed clock claiming a
+      // future build would flag every honest agent in the room as stale. A build
+      // cannot be in the future, so drop anything that isn't a positive stamp at
+      // or before now. Display/diagnostic only either way; never used for auth.
+      const claimedBuild = Number(participant.clientBuildAt);
+      if (!Number.isFinite(claimedBuild) || claimedBuild <= 0 || claimedBuild > joinStamp) {
+        delete participant.clientBuildAt;
+      } else {
+        participant.clientBuildAt = Math.floor(claimedBuild);
+      }
       const hostKey = payload.hostKey as string | undefined;
       const priorIdentity = payload.priorIdentity as { name: string; client: 'web' | 'cc' } | undefined;
       const room = await getRoom(client, code);
@@ -1039,7 +1051,9 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
     // (listenUntil / lastSeenAt); carries no credential material.
     case 'health': {
       const room = await getRoom(client, code);
-      return { health: roomHealth(room.participants, Date.now()) };
+      // T-30 (client-build): seed the watermark with our own bundle stamp, so a
+      // room where EVERY agent predates the deploy still reports them behind.
+      return { health: roomHealth(room.participants, Date.now(), SERVER_BUILD_AT) };
     }
     case 'sweepGhostAgents': {
       // T-13: one host tap removes every disconnected cc row instead of a tap

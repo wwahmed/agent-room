@@ -22,6 +22,13 @@ export interface Participant {
   account?: string;
   workspace?: string;
   capabilities?: string;
+  // T-30 (client-build): build stamp of the MCP bundle this participant's PROCESS loaded,
+  // captured once at that process's boot (apps/mcp/src/buildStamp.ts). Lets the
+  // room tell "the fix is deployed" apart from "the fix is running", which are
+  // different facts for a long-lived agent session. Display/diagnostic only —
+  // same trust class as `harness`, never used for auth or gating. Absent on
+  // humans, web rows, and rows joined before this field existed.
+  clientBuildAt?: number;
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally

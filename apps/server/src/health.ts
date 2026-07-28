@@ -1,5 +1,7 @@
 import type { Participant } from '@agent-room/shared';
 
+import { buildUnknown, buildWatermark, clientBehindMs } from './clientBuild.js';
+
 // T-66: per-participant listen-loop health.
 //
 // Agent presence is NOT self-healing: the listen loop is driven by the agent's
@@ -41,6 +43,17 @@ export interface ParticipantHealth {
   lastSeenAgoMs: number;
   /** ms of listen window still parked; 0 when no loop is armed. */
   listenRemainingMs: number;
+  /** T-30 (client-build): build stamp of the MCP bundle this row's process loaded; omitted
+   *  when the row never reported one (web rows, legacy rows). */
+  clientBuildAt?: number;
+  /** T-30 (client-build): ms this row's running code trails the newest build the room can
+   *  prove exists. 0 = current, or no evidence. Presence is unaffected — a
+   *  stale-BUILD agent can be perfectly alive; these are separate facts. */
+  clientBehindMs?: number;
+  /** T-30 (client-build): this agent reported no build stamp at all while the
+   *  beacon is operational — old enough to predate reporting. Deliberately not
+   *  folded into clientBehindMs: it is a known-unknown, not a measured gap. */
+  clientBuildUnknown?: true;
 }
 
 // `listening` is the only state that proves a loop is actually ARMED — the
@@ -81,13 +94,26 @@ export function presenceState(p: Participant, now: number): PresenceState {
 // Built from room-visible fields only. No memberKeyHash / authIdHash /
 // agentIdHash ever appears here — this payload is handed to every member, and
 // the whole T-66 redaction pass exists because we were shipping those.
-export function participantHealth(p: Participant, now: number): ParticipantHealth {
+export function participantHealth(
+  p: Participant,
+  now: number,
+  // T-30 (client-build): newest build the room can prove exists. Passed in (not computed here)
+  // so one row's health never depends on re-deriving the whole room's watermark.
+  watermark = 0,
+  // T-30 (client-build): the server's OWN stamp, which is what proves the beacon
+  // is operational and therefore that a missing client stamp means something.
+  serverBuildAt = 0,
+): ParticipantHealth {
   const seen = effectiveLastSeen(p);
+  const behind = clientBehindMs(p, watermark);
   return {
     name: p.name,
     client: p.client,
     role: p.role,
     state: presenceState(p, now),
+    ...(Number(p.clientBuildAt) > 0 ? { clientBuildAt: Number(p.clientBuildAt) } : {}),
+    ...(behind > 0 ? { clientBehindMs: behind } : {}),
+    ...(buildUnknown(p, serverBuildAt) ? { clientBuildUnknown: true as const } : {}),
     // -1 signals "unknown" — no timestamp exists, so the UI must render "unknown"
     // rather than a wall-clock (now - 0 -> the epoch -> "1969"). Real ages are >= 0.
     lastSeenAgoMs: seen > 0 ? Math.max(0, now - seen) : -1,
@@ -95,8 +121,13 @@ export function participantHealth(p: Participant, now: number): ParticipantHealt
   };
 }
 
-export function roomHealth(participants: Participant[], now: number): ParticipantHealth[] {
-  return participants.map((p) => participantHealth(p, now));
+export function roomHealth(
+  participants: Participant[],
+  now: number,
+  serverBuildAt = 0,
+): ParticipantHealth[] {
+  const watermark = buildWatermark(participants, serverBuildAt);
+  return participants.map((p) => participantHealth(p, now, watermark, serverBuildAt));
 }
 
 // T-13: ghost rows — cc agents the server considers disconnected. These are
