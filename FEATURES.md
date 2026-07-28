@@ -63,6 +63,9 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | Dictation catch-up progress bar + instantly-responsive Send | Shipped | hail-cow-dart T-25 |
 | Auto-nudge fires only on disconnected (no false alarms mid-turn) | Shipped | hail-cow-dart T-26 |
 | Credentials survive state merges (root cause of ghost-row leaves) | Shipped | hail-cow-dart T-27 |
+| Deploy gate: the board tells verified apart from LIVE | Shipped | hail-cow-dart T-28 |
+| Recovery prompt teaches the habit that prevents the next nudge | Shipped | hail-cow-dart T-29 |
+| Stale-client beacon: an agent running pre-deploy code says so | Shipped | hail-cow-dart T-30 |
 
 
 | Capability | Status | Board reference |
