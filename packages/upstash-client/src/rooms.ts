@@ -991,7 +991,33 @@ export async function setWorkingUntil(
   await casRoom(client, code, (current) => ({
     ...current,
     participants: current.participants.map(p =>
-      p.name === name ? { ...p, workingUntil: until, lastSeenAt: Date.now() } : p
+      p.name === name ? { ...p, workingUntil: until, workingBy: 'self', lastSeenAt: Date.now() } : p
+    ),
+  }));
+}
+
+// T-36: a work window vouched for by the agent's SUPERVISOR, not the agent.
+//
+// The summoner can see the harness's pane; when it shows a turn in flight, the
+// process is provably alive even though the room has heard nothing. Observed
+// live: an agent read `disconnected` to the host for ~40 minutes of continuous
+// work, while the summoner vetoed 13 nudges because it could see the terminal
+// working. The room was telling the host the opposite of what the machinery knew.
+//
+// Deliberately does NOT touch lastSeenAt. We have not heard from this
+// participant — bumping it would corrupt the "last heard 12m ago" figure the
+// host reads, and that number's honesty is the whole point of T-143. Only the
+// work window moves, and `workingBy` records that a supervisor vouched for it.
+export async function setTerminalWorking(
+  client: UpstashClient,
+  code: string,
+  name: string,
+  until: number
+): Promise<void> {
+  await casRoom(client, code, (current) => ({
+    ...current,
+    participants: current.participants.map(p =>
+      p.name === name ? { ...p, workingUntil: until, workingBy: 'terminal' as const } : p
     ),
   }));
 }

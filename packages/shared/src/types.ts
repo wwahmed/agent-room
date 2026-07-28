@@ -49,6 +49,14 @@ export interface Participant {
   // busy agent is not shown as a dying one. Capped server-side; an expired
   // window degrades exactly like silence does today.
   workingUntil?: number;
+  // T-36: WHO vouched for the work window above. 'self' is the participant's own
+  // room_status ping or task claim; 'terminal' is its supervising summoner
+  // reporting that the harness's own pane shows a model turn in flight — which
+  // is strictly better evidence than silence, and the only evidence available
+  // for an agent that works for 40 minutes without pinging. Display-only, so the
+  // People pane can say which it is instead of implying the agent spoke up.
+  // Absent on rows that never had a work window.
+  workingBy?: 'self' | 'terminal';
   // Host approval gate. Undefined for participants joined before this field
   // existed (treated as legacy-approved). New joiners default to false until
   // the host (createdBy) approves them via approveParticipant.

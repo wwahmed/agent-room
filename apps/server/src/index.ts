@@ -68,6 +68,11 @@ import {
 import { redactRoomPayload } from './redact.js';
 import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
 import { SERVER_BUILD_AT } from './buildStamp.js';
+
+// T-36: ceiling on a supervisor-vouched work window. Short on purpose — it is
+// re-armed on every summoner sample (45s), so a frozen or crashed harness stops
+// reading as working within about two minutes instead of indefinitely.
+const TERMINAL_WORKING_MAX_MS = 120_000;
 import { clampWorkingUntil, ghostRows, roomHealth } from './health.js';
 import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
@@ -131,6 +136,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   setListenUntil,
   setMuted,
   setWorkingUntil,
+  setTerminalWorking,
   ViewerError,
   setReplyMode,
   sha256Hex,
@@ -2223,6 +2229,40 @@ const server = createServer(async (req, res) => {
     // harness permission dialog, or its process died. Loopback-only (the
     // watchdog is a local daemon); composes an owner push that deep-links to
     // the People pane where the Approve/Deny buttons live.
+    // T-36: the supervising summoner reports that an agent's TERMINAL shows a
+    // model turn in flight. Loopback-only, exactly like /api/agent-alert: this is
+    // an on-box supervisor vouching for a process it can see, and no remote
+    // caller may claim it on an agent's behalf.
+    //
+    // Why this exists: presence infers life from room traffic, so an agent that
+    // works for 40 minutes without pinging reads `disconnected` to the host while
+    // its summoner is busy vetoing nudges because it can see the pane working.
+    // The room was telling the host the opposite of what the machinery knew.
+    //
+    // The window is short and re-armed each sample, so it decays within a couple
+    // of minutes of the terminal going quiet — a crashed harness cannot look busy
+    // for long. lastSeenAt is deliberately NOT touched (see setTerminalWorking).
+    if (path === '/api/agent-terminal-working' && req.method === 'POST') {
+      const twCaller = await resolveCaller(req);
+      if (twCaller.kind !== 'local') return sendJson(res, 403, { error: 'Forbidden', message: 'loopback only' });
+      let body: { name?: string; room?: string; forMs?: number } = {};
+      try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* keep defaults */ }
+      const twName = String(body.name || '').trim();
+      // canonicalizeCode returns null for anything that isn't a real room code,
+      // so validate rather than letting a null reach the store as a key.
+      const twRoom = canonicalizeCode(String(body.room || '').trim());
+      if (!twName || !twRoom) return sendJson(res, 400, { error: 'BadRequest', message: 'name and a valid room code are required.' });
+      const requested = Number(body.forMs);
+      const forMs = Number.isFinite(requested) && requested > 0
+        ? Math.min(requested, TERMINAL_WORKING_MAX_MS)
+        : TERMINAL_WORKING_MAX_MS;
+      try {
+        await setTerminalWorking(client, twRoom, twName, Date.now() + forMs);
+        return sendJson(res, 200, { ok: true, untilMs: forMs });
+      } catch (e) {
+        return sendJson(res, 404, { error: 'NotFound', message: (e as Error).message });
+      }
+    }
     if (path === '/api/agent-alert' && req.method === 'POST') {
       const alertCaller = await resolveCaller(req);
       if (alertCaller.kind !== 'local') return sendJson(res, 403, { error: 'Forbidden', message: 'loopback only' });

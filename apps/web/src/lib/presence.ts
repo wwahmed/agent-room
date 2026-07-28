@@ -33,6 +33,8 @@ export interface ParticipantHealth {
    *  operational — its client predates build reporting. A known-unknown, kept
    *  separate from the measured gap above. */
   clientBuildUnknown?: true;
+  /** T-36: who vouched for a `working` verdict. */
+  workingBy?: 'self' | 'terminal';
 }
 
 /** T-30 (client-build): is this row executing pre-deploy code? Deliberately
@@ -92,7 +94,14 @@ export function presenceView(h: ParticipantHealth): PresenceView {
   const agent = h.client === 'cc';
   const detail =
     h.state === 'online' && agent ? 'not in a listen window'
-      : h.state === 'working' && agent ? 'heads-down in a declared work window'
+      // T-36: say who vouched. A supervisor reading the harness's terminal is
+      // BETTER evidence than a self-declared window — it cannot be forgotten by
+      // a busy agent — but it is not the agent speaking, and the copy must not
+      // imply it declared anything.
+      : h.state === 'working' && agent
+        ? (h.workingBy === 'terminal'
+            ? 'terminal shows a live turn'
+            : 'heads-down in a declared work window')
       : h.state === 'stale' && agent ? 'no heartbeat — loop may be dead'
       : h.state === 'disconnected' && agent ? 'host can remove'
       : '';

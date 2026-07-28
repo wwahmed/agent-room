@@ -603,6 +603,16 @@ if (verb) {
                 if (!vetoState.has(a.agentId)) vetoState.set(a.agentId, now);
                 const heldMs = now - vetoState.get(a.agentId);
                 console.log(`[auto-nudge] ${a.name} (${a.room}) presence=disconnected but pane is live — nudge vetoed (${Math.round(heldMs / 1000)}s held)`);
+                // T-36: tell the ROOM what we just told ourselves. Vetoing the
+                // nudge silently left the host staring at "Disconnected — host can
+                // remove" for an agent we could see working; the same evidence
+                // that justifies the veto justifies an honest `working` window.
+                // Short-lived and re-armed each sample, so it decays on its own
+                // once the terminal goes quiet.
+                fetch(`${ROOM_BASE}/api/agent-terminal-working`, {
+                  method: 'POST', headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ name: a.name, room: a.room, forMs: 120000 }),
+                }).catch(() => { /* presence hint is best-effort; the veto already landed */ });
               }
               continue;
             }

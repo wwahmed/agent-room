@@ -54,6 +54,10 @@ export interface ParticipantHealth {
    *  beacon is operational — old enough to predate reporting. Deliberately not
    *  folded into clientBehindMs: it is a known-unknown, not a measured gap. */
   clientBuildUnknown?: true;
+  /** T-36: who vouched for a `working` verdict — the participant itself, or its
+   *  supervising summoner reading the harness's terminal. Only present while the
+   *  state IS `working`, because that is the only claim it qualifies. */
+  workingBy?: 'self' | 'terminal';
 }
 
 // `listening` is the only state that proves a loop is actually ARMED — the
@@ -114,6 +118,9 @@ export function participantHealth(
     ...(Number(p.clientBuildAt) > 0 ? { clientBuildAt: Number(p.clientBuildAt) } : {}),
     ...(behind > 0 ? { clientBehindMs: behind } : {}),
     ...(buildUnknown(p, serverBuildAt) ? { clientBuildUnknown: true as const } : {}),
+    ...(presenceState(p, now) === 'working' && (p.workingBy === 'self' || p.workingBy === 'terminal')
+      ? { workingBy: p.workingBy }
+      : {}),
     // -1 signals "unknown" — no timestamp exists, so the UI must render "unknown"
     // rather than a wall-clock (now - 0 -> the epoch -> "1969"). Real ages are >= 0.
     lastSeenAgoMs: seen > 0 ? Math.max(0, now - seen) : -1,
