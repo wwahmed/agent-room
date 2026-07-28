@@ -74,6 +74,7 @@ import { SERVER_BUILD_AT } from './buildStamp.js';
 // reading as working within about two minutes instead of indefinitely.
 const TERMINAL_WORKING_MAX_MS = 120_000;
 import { clampWorkingUntil, ghostRows, roomHealth } from './health.js';
+import { nobodyListeningText, shouldWarnNobodyListening } from './nobodyListening.js';
 import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
@@ -1205,6 +1206,35 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         return { result: { appended: true, metadata: statusMessage.metadata ?? {} } };
       }
       const appendResult = await appendMessage(client, code, stamped);
+      // T-39: a person just spoke into a room where no agent can answer. Three
+      // agents went silent in one day and the expensive part was never the death
+      // — it was the wait: 90 minutes in the Customer Service room, 14 hours in
+      // WakiDrive, both spent believing someone was reading. Checked here rather
+      // than on a timer because a vanished agent leaves no row to poll, and the
+      // notice is only useful in the same second as the message.
+      void (async () => {
+        try {
+          if (!appendResult.appended) return;
+          const roomNow = await getRoom(client, code);
+          // Read only the tail: the message just appended is last, and the one
+          // before it is what suppresses a repeat warning.
+          // Null when the counter key is absent (a room predating it); fall back
+          // to reading from the start rather than skipping the check.
+          const total = Number(await getMessageTotalCount(client, code) ?? 0);
+          const prev = await listMessages(client, code, Math.max(0, total - 3));
+          const priorText = prev.length > 1 ? String(prev[prev.length - 2]?.text ?? '') : '';
+          if (!shouldWarnNobodyListening({
+            senderClient: String(stamped.client || 'cc'),
+            participants: roomNow.participants,
+            now: Date.now(),
+            lastMessageText: priorText,
+          })) return;
+          await appendSystemMessage(client, code, sysMessage(
+            nobodyListeningText(roomNow.participants, Date.now()),
+            { eventType: 'nobody_listening' },
+          ));
+        } catch { /* advisory only — never fail a send over the warning */ }
+      })();
       // T-118: a message that @mentions the owner taps them on the shoulder —
       // app badge + push on every registered device. Fire-and-forget. At the
       // 'all' notify level, ordinary teammate messages push too (suppressed
