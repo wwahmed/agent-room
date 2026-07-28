@@ -55,6 +55,7 @@ import {
   persistenceSetupHint,
 } from './harness.js';
 import { CLIENT_BUILD_AT } from './buildStamp.js';
+import { boardDigest } from './boardDigest.js';
 import {
   uploadAgentAttachments,
   AttachmentUploadError,
@@ -1607,13 +1608,19 @@ export function registerTools(server: Server) {
           title: a.title, id: a.id, owner: a.owner, ownerClient: a.ownerClient,
           verifier: a.verifier, verifierClient: a.verifierClient, dod: a.dod,
         });
-        return ok({ task, board });
+        // T-35: the affected task plus an evidence-free digest. Returning the
+        // whole board here pushed replies past 90k characters and made every
+        // board write unreadable to its own caller.
+        return ok({ task, board: boardDigest(board) });
       } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
     }
     if (name === 'room_task_claim') {
       try {
         const { board, task } = await claimTask(client, a.code, a.id, a.name, 'cc');
-        return ok({ task, board });
+        // T-35: the affected task plus an evidence-free digest. Returning the
+        // whole board here pushed replies past 90k characters and made every
+        // board write unreadable to its own caller.
+        return ok({ task, board: boardDigest(board) });
       } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
     }
     if (name === 'room_task_submit') {
@@ -1622,13 +1629,19 @@ export function registerTools(server: Server) {
           fileListing: String(a.fileListing ?? ''), fileExcerpt: String(a.fileExcerpt ?? ''),
           runOutput: String(a.runOutput ?? ''), exitCode: Number(a.exitCode),
         });
-        return ok({ task, board });
+        // T-35: the affected task plus an evidence-free digest. Returning the
+        // whole board here pushed replies past 90k characters and made every
+        // board write unreadable to its own caller.
+        return ok({ task, board: boardDigest(board) });
       } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
     }
     if (name === 'room_task_verify') {
       try {
         const { board, task } = await verifyTask(client, a.code, a.id, a.name, a.verdict, a.note);
-        return ok({ task, board });
+        // T-35: the affected task plus an evidence-free digest. Returning the
+        // whole board here pushed replies past 90k characters and made every
+        // board write unreadable to its own caller.
+        return ok({ task, board: boardDigest(board) });
       } catch (e) { return ok({ ok: false, error: (e as Error).name, message: (e as Error).message }); }
     }
 
