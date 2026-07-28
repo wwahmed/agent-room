@@ -69,6 +69,7 @@ See [`docs/UPSTREAM-AUDIT.md`](docs/UPSTREAM-AUDIT.md). Board: **T-20**.
 | A terminal mid-turn vetoes the auto-nudge (capped) | Shipped | hail-cow-dart T-31 |
 | Prod-mini SSH: local agent hang + zombie pre-auth clients fixed | Shipped | hail-cow-dart T-32 |
 | Stale-client flag on the People row, not just agent details | Shipped | hail-cow-dart T-33 |
+| "N here" counts present participants, not raw rows | Shipped | hail-cow-dart T-34 |
 
 
 | Capability | Status | Board reference |
