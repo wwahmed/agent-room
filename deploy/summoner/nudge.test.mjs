@@ -7,10 +7,12 @@ import { shouldNudge, recoveryPromptFor, presenceOf, NUDGE_COOLDOWN_MS } from '.
 
 const NOW = 1_000_000_000;
 
-test('nudges only the nobody-is-listening states', () => {
-  assert.equal(shouldNudge({ presenceState: 'stale', paneBlocked: false, now: NOW }), true);
+test('nudges ONLY disconnected — stale is a healthy agent mid-model-turn (T-26)', () => {
   assert.equal(shouldNudge({ presenceState: 'disconnected', paneBlocked: false, now: NOW }), true);
-  for (const s of ['listening', 'online', 'working', undefined]) {
+  // T-26: 'stale' (60s+ silent) is what a normal multi-minute model turn looks
+  // like between listen windows — nudging there interrupted healthy agents
+  // every cool-down (witnessed on OpusCoder all night). Never nudge stale.
+  for (const s of ['stale', 'listening', 'online', 'working', undefined]) {
     assert.equal(shouldNudge({ presenceState: s, paneBlocked: false, now: NOW }), false, `state=${s}`);
   }
 });
@@ -20,8 +22,8 @@ test('a blocked pane is a HUMAN incident — never typed into', () => {
 });
 
 test('cool-down: no re-nudge inside the window, re-armed after it', () => {
-  assert.equal(shouldNudge({ presenceState: 'stale', paneBlocked: false, lastNudgeAt: NOW - NUDGE_COOLDOWN_MS + 1000, now: NOW }), false);
-  assert.equal(shouldNudge({ presenceState: 'stale', paneBlocked: false, lastNudgeAt: NOW - NUDGE_COOLDOWN_MS - 1, now: NOW }), true);
+  assert.equal(shouldNudge({ presenceState: 'disconnected', paneBlocked: false, lastNudgeAt: NOW - NUDGE_COOLDOWN_MS + 1000, now: NOW }), false);
+  assert.equal(shouldNudge({ presenceState: 'disconnected', paneBlocked: false, lastNudgeAt: NOW - NUDGE_COOLDOWN_MS - 1, now: NOW }), true);
 });
 
 test('the injected prompt matches the manual copy-button wording', () => {

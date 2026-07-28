@@ -12,12 +12,17 @@ export const NUDGE_COOLDOWN_MS = 10 * 60_000;
 
 /**
  * Should the sampler nudge this agent now?
- *  - only presence verdicts that mean "nobody is listening" qualify;
+ *  - ONLY `disconnected` qualifies (T-26): a healthy agent's natural cycle is
+ *    listen-window → multi-minute model turn, and presence reads `stale`
+ *    after just 60s of that turn — nudging there interrupted HEALTHY agents
+ *    every cool-down all night ("Just a system nudge. Already present…",
+ *    witnessed on OpusCoder). `disconnected` = 5+ minutes silent, which no
+ *    healthy turn produces; a genuinely dead loop is still caught in ~5-6min.
  *  - a live-but-blocked pane is a HUMAN's job (permission dialog), never ours;
  *  - and never inside the cool-down window.
  */
 export function shouldNudge({ presenceState, paneBlocked, lastNudgeAt, now }) {
-  if (presenceState !== 'stale' && presenceState !== 'disconnected') return false;
+  if (presenceState !== 'disconnected') return false;
   if (paneBlocked) return false;
   if (lastNudgeAt && now - lastNudgeAt < NUDGE_COOLDOWN_MS) return false;
   return true;
