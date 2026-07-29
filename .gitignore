@@ -51,3 +51,7 @@ releases/
 
 # agent-summoner runtime logs
 deploy/summoner/*.log
+
+# Local transcription logs from the voice pipeline — never artifacts.
+whisper.log
+whisper-error.log
