@@ -58,6 +58,7 @@ import { transcribeSegment, engineStatus } from './transcribe.js';
 import { synthesize } from './tts.js';
 import { roomActivityAt } from './roomactivity.js';
 import { countsAsActivity, lastActivityTime } from './activitySignal.js';
+import { checkViewAction, viewActionKey } from './viewAction.js';
 
 // T-43: how much history the index backfill inspects per room to find the newest
 // REAL activity. A run of heartbeats can easily be a few dozen entries; this is
@@ -1222,6 +1223,45 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         void setWorkingUntil(client, code, String(message.name), clampWorkingUntil(Date.now())).catch(() => {});
         await appendSystemMessage(client, code, statusMessage);
         return { result: { appended: true, metadata: statusMessage.metadata ?? {} } };
+      }
+      // T-46 rev3: a structured-view action request is VALIDATED against the real
+      // source message before it can be appended. rev2's protections were entirely
+      // client-side, so they bound an honest client and nothing else — a forged or
+      // replayed request could name any action, any label, any source. The server
+      // now resolves the claim, takes the receipt label from the validated view
+      // rather than the request, and enforces one-fire-per-intent so double clicks,
+      // retries, two tabs and replays all collapse into one.
+      const claim = (stamped as Message).metadata?.viewAction;
+      if (claim) {
+        const verdict = await checkViewAction(claim, async (id) => {
+          const found = await findStoredMessage(client, code, id);
+          return found?.message ?? null;
+        });
+        if (!verdict.ok) {
+          const err = new Error(`Rejected view action: ${verdict.reason}`);
+          err.name = 'BadRequestError';
+          throw err;
+        }
+        // NX = first writer wins. TTL keeps the key from growing without bound; a
+        // day is far longer than any card stays actionable.
+        const fresh = await redis.set(viewActionKey(code, verdict.sourceMessageId, verdict.actionId), '1', 'EX', 86_400, 'NX');
+        if (fresh === null) {
+          const err = new Error('That action has already been requested.');
+          err.name = 'BadRequestError';
+          throw err;
+        }
+        // Rewrite the metadata from validated facts: the label the VIEW declared,
+        // and the lineage of the agent that offered it.
+        (stamped as Message).metadata = {
+          ...(stamped as Message).metadata,
+          viewAction: {
+            actionId: verdict.actionId,
+            label: verdict.label,
+            sourceMessageId: verdict.sourceMessageId,
+            viewVersion: 1,
+            nonce: String(claim.nonce ?? ''),
+          },
+        };
       }
       const appendResult = await appendMessage(client, code, stamped);
       // T-39: a person just spoke into a room where no agent can answer. Three
