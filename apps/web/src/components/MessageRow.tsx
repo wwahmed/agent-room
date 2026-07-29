@@ -7,6 +7,7 @@ import { EdgeActionRail, HoverActionTray, readActionTreatment } from './MessageA
 import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 import { ViewAwareBody } from './StructuredView.js';
+import type { ViewActionLifecycle } from './StructuredView.js';
 import type { ViewAction } from '@agent-room/shared';
 import { BrandedLogoAvatar, brandLogoFor, GenericAgentBadge } from './AgentAvatar.js';
 import type { AgentBrand } from '../lib/agentBrand.js';
@@ -112,7 +113,7 @@ interface Props {
   onViewAction?: (message: Message, action: ViewAction) => void;
   /** T-49: request message ids the addressed session has acknowledged, mapped to who
    *  acknowledged. Computed from the transcript, since the ack is a later message. */
-  ackedViewActions?: Map<number, string>;
+  viewActionStates?: Map<number, ViewActionLifecycle>;
 }
 
 // Exact clock for the hover/title tooltip — precise time behind the relative label.
@@ -268,7 +269,7 @@ function DictatedChip() {
   );
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, onPin, pinned, deliveredTo, selfName, senderBrand, onViewAction, ackedViewActions }: Props) {
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, onPin, pinned, deliveredTo, selfName, senderBrand, onViewAction, viewActionStates }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
   // T-124 prototype flag (default 'legacy' = shipped behavior). When a hover
@@ -316,7 +317,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
               edge-to-edge scan. */}
           {body.trim() && (
             <div className="msg-prose">
-              <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} pickedUpBy={ackedViewActions?.get(message.id)} onAction={onViewAction && message.metadata?.senderLineage ? (a) => onViewAction(message, a) : undefined} />
+              <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} actionState={viewActionStates?.get(message.id)} onAction={onViewAction && message.metadata?.senderLineage ? (a) => onViewAction(message, a) : undefined} />
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -380,7 +381,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div data-gate="msg-content" className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
           {cardTray}
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} pickedUpBy={ackedViewActions?.get(message.id)} onAction={onViewAction && message.metadata?.senderLineage ? (a) => onViewAction(message, a) : undefined} />}
+          {body.trim() && <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} actionState={viewActionStates?.get(message.id)} onAction={onViewAction && message.metadata?.senderLineage ? (a) => onViewAction(message, a) : undefined} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>
@@ -419,7 +420,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} pickedUpBy={ackedViewActions?.get(message.id)} onAction={onViewAction && message.metadata?.senderLineage ? (a) => onViewAction(message, a) : undefined} />}
+          {body.trim() && <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} actionState={viewActionStates?.get(message.id)} onAction={onViewAction && message.metadata?.senderLineage ? (a) => onViewAction(message, a) : undefined} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>

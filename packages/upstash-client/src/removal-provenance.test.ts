@@ -80,6 +80,22 @@ describe('T-32 removal provenance', () => {
     expect(back.removalNotice).toBeUndefined();
   });
 
+  it('restores the exact lineage only when the removed session proves its credential', async () => {
+    const first = await joinRoom(client, code, agent('Builder'), { issueMemberKey: true });
+    const lineage = first.participant.lineageId;
+    expect(lineage).toMatch(/^[0-9a-f]{32}$/);
+    await removeParticipant(client, code, 'Waqas', 'Builder', 'cc');
+
+    const replacement = await joinRoom(client, code, agent('Builder'), { issueMemberKey: true });
+    expect(replacement.participant.lineageId).not.toBe(lineage);
+    await removeParticipant(client, code, 'Waqas', replacement.participant.name, 'cc');
+
+    const restored = await joinRoom(client, code, agent('Builder'), {
+      reclaimMemberKey: first.memberKey,
+    });
+    expect(restored.participant.lineageId).toBe(lineage);
+  });
+
   it('anchor recovery over a LIVE row reports the displacement', async () => {
     // Session A: keyed + anchored, actively listening.
     const a = await joinRoom(client, code, agent('Builder', true), {

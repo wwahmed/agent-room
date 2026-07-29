@@ -3,8 +3,10 @@ import type { Message } from '@agent-room/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
-  checkViewAction, checkViewActionAck, doneRecord, isReceiptFor, parseReservation,
-  pendingRecord, reconcileReservation, viewActionKey,
+  checkViewAction, checkViewActionAck, checkViewActionUpdate, doneRecord, isReceiptFor, parseReservation,
+  claimReservation, completeReservation, pendingRecord, reconcileReservation,
+  releaseReservation, RESERVATION_DELETE_SCRIPT, RESERVATION_REPLACE_SCRIPT,
+  viewActionKey, type ReservationStore,
 } from './viewAction.js';
 
 const serverIndex = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
@@ -209,6 +211,25 @@ describe('View action server validation', () => {
     expect(checkViewActionAck(null, LINEAGE).ok).toBe(false);
   });
 
+  it('only the addressed session may publish a bounded lifecycle outcome', () => {
+    const request = {
+      id: 200, type: 'msg', name: 'Waqas', client: 'web', time: 2,
+      metadata: { viewAction: {
+        actionId: 'draft-reply-m1', label: 'Draft a reply',
+        sourceMessageId: 100, sourceLineage: LINEAGE, viewVersion: 1, nonce: 'n',
+      } },
+    } as unknown as Message;
+    const completed = checkViewActionUpdate(request, LINEAGE, { status: 'completed' });
+    expect(completed.ok).toBe(true);
+    const failed = checkViewActionUpdate(request, LINEAGE, { status: 'failed', note: 'Mailbox unavailable' });
+    expect(failed).toMatchObject({ ok: true, status: 'failed', note: 'Mailbox unavailable' });
+    expect(checkViewActionUpdate(request, 'b'.repeat(32), { status: 'failed' })).toMatchObject({
+      ok: false, forbidden: true,
+    });
+    expect(checkViewActionUpdate(request, LINEAGE, { status: 'invented' }).ok).toBe(false);
+    expect(checkViewActionUpdate(request, LINEAGE, { status: 'failed', note: 'x'.repeat(501) }).ok).toBe(false);
+  });
+
   it('survives a crash in the reservation -> append window', () => {
     // The verifier was right that releasing on caught exceptions is hygiene, not
     // crash safety: a SIGKILL between SET NX and the append burns the intent forever
@@ -236,6 +257,50 @@ describe('View action server validation', () => {
     // A key that vanished under us is not a reason to refuse.
     expect(reconcileReservation(null, false, t)).toBe('takeover');
     expect(parseReservation(undefined)).toBeNull();
+    expect(parseReservation(pendingRecord(t, 'owner-a'))).toEqual({
+      s: 'pending', at: t, token: 'owner-a',
+    });
+    expect(RESERVATION_REPLACE_SCRIPT).toMatch(/GET.*ARGV\[1\].*SET/s);
+    expect(RESERVATION_DELETE_SCRIPT).toMatch(/GET.*ARGV\[1\].*DEL/s);
+  });
+
+  it('allows exactly one stale takeover and protects the successor token', async () => {
+    const values = new Map<string, string>();
+    const store: ReservationStore = {
+      async command<T>(parts: readonly (string | number)[]): Promise<T> {
+        const [op, key] = parts.map(String);
+        if (op === 'GET') return (values.get(key) ?? null) as T;
+        if (op === 'SET') {
+          if (parts.map(String).includes('NX') && values.has(key)) return null as T;
+          values.set(key, String(parts[2]));
+          return 'OK' as T;
+        }
+        if (op === 'EVAL') {
+          const script = String(parts[1]);
+          const redisKey = String(parts[3]);
+          const expected = String(parts[4]);
+          if (values.get(redisKey) !== expected) return 0 as T;
+          if (script === RESERVATION_DELETE_SCRIPT) values.delete(redisKey);
+          else values.set(redisKey, String(parts[5]));
+          return 1 as T;
+        }
+        throw new Error(`unsupported ${op}`);
+      },
+    };
+    const key = 'intent';
+    values.set(key, pendingRecord(1, 'dead-owner'));
+    const [a, b] = await Promise.all([
+      claimReservation(store, key, 20_000, 'owner-a', async () => false),
+      claimReservation(store, key, 20_000, 'owner-b', async () => false),
+    ]);
+    expect([a, b].filter(x => x.ok)).toHaveLength(1);
+    const winner = a.ok ? a : b as Extract<typeof b, { ok: true }>;
+    const loser = a.ok ? b : a;
+    expect(loser.ok).toBe(false);
+    expect(await releaseReservation(store, key, pendingRecord(1, 'dead-owner'))).toBe(false);
+    expect(values.get(key)).toBe(winner.ownedValue);
+    expect(await completeReservation(store, key, winner.ownedValue, doneRecord(21_000, 7))).toBe(true);
+    expect(parseReservation(values.get(key))?.s).toBe('done');
   });
 
   it('the send path gates on validation and enforces the key server-side', async () => {
@@ -243,7 +308,7 @@ describe('View action server validation', () => {
     // make the guarantee hold against a forged or replayed request.
     expect(serverIndex).toContain('const verdict = await checkViewAction(');
     expect(serverIndex).toContain("err.name = 'BadRequestError'");
-    expect(serverIndex).toContain("redis.set(reservation, pendingRecord(now), 'EX', 86_400, 'NX')");
+    expect(serverIndex).toContain('const reservationClaim = await claimReservation(');
     // Liveness is checked against the CURRENT rows, and a missing producer maps to a
     // 409 the client can retry rather than a 400 that reads like a bad card.
     expect(serverIndex).toContain("err.name = verdict.retryable ? 'ViewActionUnavailableError'");
@@ -260,7 +325,8 @@ describe('View action server validation', () => {
   it('a failed or no-op append RELEASES the reservation', () => {
     // Otherwise a crash in the reservation->append window burns the intent forever:
     // no receipt, and no way to retry. A duplicate would have been the better bug.
-    expect(serverIndex).toContain('if (viewActionReservation) await redis.del(viewActionReservation)');
+    expect(serverIndex).toContain('releaseReservation(');
     expect(serverIndex).toContain('if (viewActionReservation && !appendResult.appended)');
+    expect(serverIndex).not.toContain('redis.del(viewActionReservation)');
   });
 });

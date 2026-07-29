@@ -306,15 +306,23 @@ export function Room() {
   // is a later message, so a receipt cannot know its own fate — this maps request id
   // to acknowledger. Only the bound session can produce an ack (the server refuses
   // every other lineage), so "picked up" is a fact rather than optimism.
-  const ackedViewActions = useMemo(() => {
-    const acks = new Map<number, string>();
+  const viewActionStates = useMemo(() => {
+    const states = new Map<number, { status: 'delivered' | 'completed' | 'failed' | 'cancelled'; by: string; note?: string }>();
     for (const m of messages) {
       const ack = m.metadata?.viewActionAck;
       if (ack && Number.isFinite(Number(ack.requestMessageId))) {
-        acks.set(Number(ack.requestMessageId), String(m.name ?? ''));
+        states.set(Number(ack.requestMessageId), { status: 'delivered', by: String(m.name ?? '') });
+      }
+      const update = m.metadata?.viewActionUpdate;
+      if (update && Number.isFinite(Number(update.requestMessageId))) {
+        states.set(Number(update.requestMessageId), {
+          status: update.status,
+          by: String(m.name ?? ''),
+          ...(update.note ? { note: update.note } : {}),
+        });
       }
     }
-    return acks;
+    return states;
   }, [messages]);
   const [sendWaitingOnUpload, setSendWaitingOnUpload] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -3131,7 +3139,7 @@ export function Room() {
                       selfName={self.name}
                       senderBrand={brandForSender(m, activeRoom.participants)}
                       onViewAction={handleViewAction}
-                      ackedViewActions={ackedViewActions}
+                      viewActionStates={viewActionStates}
                     />
                   )}
                   </Fragment>

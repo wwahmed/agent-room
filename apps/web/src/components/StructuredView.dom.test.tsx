@@ -154,9 +154,13 @@ describe('Structured view rendering', () => {
     // agent — and saying "delivered" before it arrives is the same optimism that made
     // the old one-shot button look successful after a server refusal.
     const { container: done } = render(
-      <ViewAwareBody text="Requested action draft-reply-m1" viewAction={action} pickedUpBy="MailAgent" />,
+      <ViewAwareBody
+        text="Requested action draft-reply-m1"
+        viewAction={action}
+        actionState={{ status: 'delivered', by: 'MailAgent' }}
+      />,
     );
-    expect(done.querySelector('[data-gate="view-action-state"]')?.textContent).toContain('picked up by MailAgent');
+    expect(done.querySelector('[data-gate="view-action-state"]')?.textContent).toContain('delivered to MailAgent');
   });
 
   it('a REJECTED request re-enables the button and says it failed', async () => {

@@ -59,8 +59,8 @@ import { synthesize } from './tts.js';
 import { roomActivityAt } from './roomactivity.js';
 import { countsAsActivity, lastActivityTime } from './activitySignal.js';
 import {
-  checkViewAction, checkViewActionAck, doneRecord, isReceiptFor, parseReservation,
-  pendingRecord, reconcileReservation, viewActionKey,
+  checkViewAction, checkViewActionAck, checkViewActionUpdate, claimReservation, completeReservation,
+  doneRecord, isReceiptFor, releaseReservation, viewActionKey,
 } from './viewAction.js';
 import { rowLineage } from './lineage.js';
 
@@ -1276,8 +1276,34 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           },
         };
       }
+      const updateClaim = (stamped as Message).metadata?.viewActionUpdate;
+      if (updateClaim) {
+        const requestId = Number((updateClaim as { requestMessageId?: unknown }).requestMessageId);
+        const found = Number.isFinite(requestId) ? await findStoredMessage(client, code, requestId) : null;
+        const update = checkViewActionUpdate(
+          found?.message ?? null,
+          rowLineage(senderRow ?? ({} as Participant)),
+          updateClaim,
+        );
+        if (!update.ok) {
+          const err = new Error(`Rejected view action update: ${update.reason}`);
+          err.name = update.forbidden ? 'AccessDeniedError' : 'BadRequestError';
+          throw err;
+        }
+        (stamped as Message).metadata = {
+          ...(stamped as Message).metadata,
+          viewActionUpdate: {
+            requestMessageId: update.requestMessageId,
+            status: update.status,
+            actionId: update.actionId,
+            label: update.label,
+            requestedBy: update.requestedBy,
+            ...(update.note ? { note: update.note } : {}),
+          },
+        };
+      }
       const claim = (stamped as Message).metadata?.viewAction;
-      let viewActionReservation: string | null = null;
+      let viewActionReservation: { key: string; ownedValue: string } | null = null;
       if (claim) {
         const liveLineages = new Set(
           (await getRoom(client, code)).participants
@@ -1304,28 +1330,25 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         // claim". TTL keeps keys bounded; a day outlives any actionable card.
         const reservation = viewActionKey(code, verdict.sourceMessageId, verdict.actionId);
         const now = Date.now();
-        let fresh = await redis.set(reservation, pendingRecord(now), 'EX', 86_400, 'NX');
-        if (fresh === null) {
-          const record = parseReservation(await redis.get(reservation));
-          // Only pay for the scan when the record is old enough to be suspicious.
-          const receiptExists = record && record.s === 'pending' && now - record.at >= 10_000
-            ? (await listMessages(client, code, 0)).some(m => isReceiptFor(m, verdict.sourceMessageId, verdict.actionId))
-            : false;
-          const decision = reconcileReservation(record, receiptExists, now);
-          if (decision === 'duplicate' || decision === 'wait') {
-            const err = new Error(
-              decision === 'wait'
-                ? 'That action is already being requested.'
-                : 'That action has already been requested.',
-            );
-            err.name = 'BadRequestError';
-            throw err;
-          }
-          // Takeover: a process died between claiming the intent and writing the
-          // receipt. Reclaim it so the button is not stranded.
-          await redis.set(reservation, pendingRecord(now), 'EX', 86_400);
-          fresh = 'OK';
+        const ownerToken = randomUUID();
+        const reservationClaim = await claimReservation(
+          client,
+          reservation,
+          now,
+          ownerToken,
+          async () => (await listMessages(client, code, 0))
+            .some(m => isReceiptFor(m, verdict.sourceMessageId, verdict.actionId)),
+        );
+        if (!reservationClaim.ok) {
+          const err = new Error(
+            reservationClaim.reason === 'duplicate'
+              ? 'That action has already been requested.'
+              : 'That action is already being requested.',
+          );
+          err.name = 'BadRequestError';
+          throw err;
         }
+        const ownedValue = reservationClaim.ownedValue;
         // Rewrite the metadata from validated facts: the label the VIEW declared,
         // and the identity of the participant whose message offered it.
         (stamped as Message).metadata = {
@@ -1345,7 +1368,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         // forever with no receipt and no way to retry — a worse outcome than a
         // duplicate. Releasing on failure makes the pair reconcilable: either a
         // receipt exists, or the intent is free again.
-        viewActionReservation = reservation;
+        viewActionReservation = { key: reservation, ownedValue };
       }
       let appendResult: Awaited<ReturnType<typeof appendMessage>>;
       try {
@@ -1353,18 +1376,28 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       } catch (e) {
         // Reservation and append must not be able to disagree. A burned intent with
         // no receipt is worse than a duplicate: the user could never retry it.
-        if (viewActionReservation) await redis.del(viewActionReservation).catch(() => undefined);
+        if (viewActionReservation) {
+          await releaseReservation(
+            client, viewActionReservation.key, viewActionReservation.ownedValue,
+          ).catch(() => undefined);
+        }
         throw e;
       }
       // `appended: false` (a no-op dedupe upstream) means no receipt exists either,
       // so the intent must go back to being available.
       if (viewActionReservation && !appendResult.appended) {
-        await redis.del(viewActionReservation).catch(() => undefined);
+        await releaseReservation(
+          client, viewActionReservation.key, viewActionReservation.ownedValue,
+        ).catch(() => undefined);
       } else if (viewActionReservation) {
         // The receipt exists: promote the record from pending to done, so a
         // reconciling attempt refuses it as a duplicate without scanning.
-        await redis
-          .set(viewActionReservation, doneRecord(Date.now(), (stamped as Message).id ?? null), 'EX', 86_400)
+        await completeReservation(
+          client,
+          viewActionReservation.key,
+          viewActionReservation.ownedValue,
+          doneRecord(Date.now(), (stamped as Message).id ?? null),
+        )
           .catch(() => undefined);
       }
       // T-39: a person just spoke into a room where no agent can answer. Three

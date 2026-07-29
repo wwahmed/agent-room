@@ -216,17 +216,23 @@ export function StructuredViewFallback({ reason, unsupportedVersion }: { reason:
  * renders, because the agent's sentence ("here are today's emails") is context the
  * card does not carry, and losing it would make the transcript unreadable later.
  */
-export function ViewAwareBody({ text, selfName, onAction, viewAction, pickedUpBy }: {
+export interface ViewActionLifecycle {
+  status: 'delivered' | 'completed' | 'failed' | 'cancelled';
+  by: string;
+  note?: string;
+}
+
+export function ViewAwareBody({ text, selfName, onAction, viewAction, actionState }: {
   text: string;
   selfName?: string;
   onAction?: (action: ViewAction) => void;
   /** Name of the addressed session that acknowledged this request, if it has. */
-  pickedUpBy?: string;
+  actionState?: ViewActionLifecycle;
   /** Present when THIS message is itself an action request; the receipt replaces
    *  the host-authored token text, which nobody needs to read. */
   viewAction?: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; sourceLineage?: string; viewVersion: number; nonce: string };
 }) {
-  if (viewAction) return <ViewActionReceipt action={viewAction} pickedUpBy={pickedUpBy} />;
+  if (viewAction) return <ViewActionReceipt action={viewAction} actionState={actionState} />;
   const block = extractViewBlock(text);
   if (!block) return <CollapsibleMessageBody text={text} selfName={selfName} />;
   const parsed = parseStructuredView(block.json);
@@ -257,12 +263,12 @@ export function ViewAwareBody({ text, selfName, onAction, viewAction, pickedUpBy
  * agent-authored label displayed as text (a React child, so inert) and the binding
  * available for anyone auditing what was requested against which message.
  */
-export function ViewActionReceipt({ action, pickedUpBy }: {
+export function ViewActionReceipt({ action, actionState }: {
   action: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; sourceLineage?: string; viewVersion: number; nonce: string };
   /** T-49: the addressed session confirmed it took the request. Only that session
    *  can produce this — the server refuses an ack from anyone else — so it is a fact
    *  about delivery rather than an optimistic guess. */
-  pickedUpBy?: string;
+  actionState?: ViewActionLifecycle;
 }) {
   return (
     <div
@@ -280,8 +286,22 @@ export function ViewActionReceipt({ action, pickedUpBy }: {
           "delivered" before the addressed session confirms would be the same
           optimism that made the old one-shot button look successful when the server
           had refused it. */}
-      <span className={pickedUpBy ? 'text-emerald-600 dark:text-emerald-400' : 'text-ink-faint'} data-gate="view-action-state">
-        {pickedUpBy ? `· picked up by ${pickedUpBy}` : '· requested'}
+      <span
+        className={
+          actionState?.status === 'failed' ? 'text-red-600 dark:text-red-400'
+            : actionState?.status === 'cancelled' ? 'text-ink-faint'
+              : actionState ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-ink-faint'
+        }
+        data-gate="view-action-state"
+        role="status"
+        aria-live="polite"
+      >
+        {actionState?.status === 'delivered' ? `· delivered to ${actionState.by}`
+          : actionState?.status === 'completed' ? `· completed by ${actionState.by}`
+            : actionState?.status === 'failed' ? `· failed${actionState.note ? ` — ${actionState.note}` : ''}`
+              : actionState?.status === 'cancelled' ? `· cancelled${actionState.note ? ` — ${actionState.note}` : ''}`
+                : '· requested'}
       </span>
     </div>
   );

@@ -369,6 +369,16 @@ export interface MessageMetadata {
     /** Who asked — resolved server-side from the request message. */
     requestedBy: string;
   };
+  /** Durable lifecycle update authored only by the bound producer session. */
+  viewActionUpdate?: {
+    requestMessageId: number;
+    status: 'completed' | 'failed' | 'cancelled';
+    actionId: string;
+    label: string;
+    requestedBy: string;
+    /** Short inert explanation for failed/cancelled outcomes. */
+    note?: string;
+  };
   // The sender dictated this message by voice. Recipients (human and agent)
   // should read transcription artifacts charitably — odd words may be the
   // speech engine, not the speaker. Set by the web composer at send time.

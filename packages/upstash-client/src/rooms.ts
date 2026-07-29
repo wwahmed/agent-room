@@ -261,9 +261,6 @@ const removalKey = (name: string, client: Participant['client']) => `${name}\n${
  * record so an anchor hash never rides along in a room payload.
  */
 const lineageTombKey = (code: string, anchorHash: string) => `lineagetomb:${code}:${anchorHash}`;
-/** Long enough to outlive a machine reboot or a weekend; not forever. */
-const LINEAGE_TOMB_TTL_S = 30 * 24 * 60 * 60;
-
 /** T-49: 128 bits of randomness. Opaque and public — it identifies a session
  *  without revealing anything about the credential that proves it. */
 function newLineageId(): string {
@@ -872,17 +869,15 @@ export async function removeParticipant(
   targetClient: 'web' | 'cc'
 ): Promise<Room> {
   // T-49: remember the departing row's lineage against each anchor that could prove
-  // ownership of it, BEFORE the row disappears. Best-effort and outside the CAS: a
-  // missing tombstone degrades to "the card is unavailable until that session
-  // rejoins with a live row", which is the same fail-closed answer, never a hijack.
+  // ownership of it, BEFORE the row disappears. This write is REQUIRED: if durable
+  // continuity cannot be recorded, removal fails and the live row remains rather
+  // than silently orphaning every action the session authored.
   const before = await getRoom(client, code);
   const leaving = before.participants.find(p => p.name === targetName && p.client === targetClient);
   if (leaving?.lineageId) {
     for (const anchor of [leaving.agentIdHash, leaving.memberKeyHash, leaving.authIdHash]) {
       if (!anchor) continue;
-      await client
-        .command(['SET', lineageTombKey(code, anchor), leaving.lineageId, 'EX', String(LINEAGE_TOMB_TTL_S)])
-        .catch(() => undefined);
+      await client.command(['SET', lineageTombKey(code, anchor), leaving.lineageId]);
     }
   }
   return casRoom(client, code, (current) => {

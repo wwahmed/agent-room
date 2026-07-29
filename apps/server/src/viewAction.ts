@@ -162,12 +162,16 @@ export interface ReservationRecord {
   /** 'pending' = claimed, receipt not confirmed. 'done' = a receipt exists. */
   s: 'pending' | 'done';
   at: number;
+  /** Unique owner of this attempt. Every takeover/release/promotion is
+   * compare-and-set against this token so a stale process cannot mutate a
+   * successor's reservation. */
+  token?: string;
   /** Message id of the receipt, once there is one. */
   id?: number;
 }
 
-export function pendingRecord(now: number): string {
-  return JSON.stringify({ s: 'pending', at: now } satisfies ReservationRecord);
+export function pendingRecord(now: number, token?: string): string {
+  return JSON.stringify({ s: 'pending', at: now, ...(token ? { token } : {}) } satisfies ReservationRecord);
 }
 export function doneRecord(now: number, messageId: number | null): string {
   return JSON.stringify({ s: 'done', at: now, ...(messageId === null ? {} : { id: messageId }) } satisfies ReservationRecord);
@@ -189,7 +193,80 @@ export function parseReservation(raw: unknown): ReservationRecord | null {
   if (typeof v !== 'object' || v === null) return undatable;
   const rec = v as Partial<ReservationRecord>;
   if (rec.s !== 'pending' && rec.s !== 'done') return undatable;
-  return { s: rec.s, at: Number(rec.at) || 0, ...(typeof rec.id === 'number' ? { id: rec.id } : {}) };
+  return {
+    s: rec.s,
+    at: Number(rec.at) || 0,
+    ...(typeof rec.id === 'number' ? { id: rec.id } : {}),
+    ...(typeof rec.token === 'string' && rec.token ? { token: rec.token } : {}),
+  };
+}
+
+/** Atomic compare-and-replace/delete scripts. The expected value is the exact
+ * serialized record observed by the caller, eliminating the stale GET→SET and
+ * stale-owner DEL races. */
+export const RESERVATION_REPLACE_SCRIPT =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3]); return 1 else return 0 end";
+export const RESERVATION_DELETE_SCRIPT =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+
+export interface ReservationStore {
+  command<T>(command: readonly (string | number)[]): Promise<T>;
+}
+
+export type ReservationClaim =
+  | { ok: true; ownedValue: string }
+  | { ok: false; reason: 'in_flight' | 'duplicate' | 'lost_race' };
+
+/** Claim or safely take over one action intent. Every mutation compares the exact
+ * record observed, so two stale reclaimers cannot both win. */
+export async function claimReservation(
+  store: ReservationStore,
+  key: string,
+  now: number,
+  token: string,
+  receiptExists: () => Promise<boolean>,
+): Promise<ReservationClaim> {
+  const ownedValue = pendingRecord(now, token);
+  const fresh = await store.command<string | null>(['SET', key, ownedValue, 'EX', 86_400, 'NX']);
+  if (fresh !== null) return { ok: true, ownedValue };
+
+  const observed = await store.command<string | null>(['GET', key]);
+  if (observed === null) {
+    const retry = await store.command<string | null>(['SET', key, ownedValue, 'EX', 86_400, 'NX']);
+    return retry === null ? { ok: false, reason: 'lost_race' } : { ok: true, ownedValue };
+  }
+  const record = parseReservation(observed);
+  if (record?.s === 'done') return { ok: false, reason: 'duplicate' };
+  if (record && now - record.at < PENDING_RECONCILE_MS) return { ok: false, reason: 'in_flight' };
+  if (await receiptExists()) return { ok: false, reason: 'duplicate' };
+
+  const replaced = Number(await store.command([
+    'EVAL', RESERVATION_REPLACE_SCRIPT, 1, key, observed, ownedValue, 86_400,
+  ]));
+  return replaced === 1
+    ? { ok: true, ownedValue }
+    : { ok: false, reason: 'lost_race' };
+}
+
+export async function releaseReservation(
+  store: ReservationStore,
+  key: string,
+  ownedValue: string,
+): Promise<boolean> {
+  return Number(await store.command([
+    'EVAL', RESERVATION_DELETE_SCRIPT, 1, key, ownedValue,
+  ])) === 1;
+}
+
+export async function completeReservation(
+  store: ReservationStore,
+  key: string,
+  ownedValue: string,
+  doneValue: string,
+): Promise<boolean> {
+  return Number(await store.command([
+    'EVAL', RESERVATION_REPLACE_SCRIPT, 1, key, ownedValue, doneValue, 86_400,
+  ])) === 1;
 }
 
 export type ReservationVerdict = 'duplicate' | 'takeover' | 'wait';
@@ -261,5 +338,32 @@ export function checkViewActionAck(
     actionId: String(va.actionId ?? ''),
     label: String(va.label ?? ''),
     requestedBy: String(requestMessage.name ?? ''),
+  };
+}
+
+export type ActionUpdateCheck =
+  | {
+      ok: true; requestMessageId: number; status: 'completed' | 'failed' | 'cancelled';
+      actionId: string; label: string; requestedBy: string; note?: string;
+    }
+  | { ok: false; reason: string; forbidden?: boolean };
+
+export function checkViewActionUpdate(
+  requestMessage: Message | null,
+  updaterLineage: string | null,
+  claim: { status?: unknown; note?: unknown },
+): ActionUpdateCheck {
+  const bound = checkViewActionAck(requestMessage, updaterLineage);
+  if (!bound.ok) return bound;
+  const status = claim.status;
+  if (status !== 'completed' && status !== 'failed' && status !== 'cancelled') {
+    return { ok: false, reason: 'status must be completed, failed, or cancelled' };
+  }
+  const rawNote = typeof claim.note === 'string' ? claim.note.trim() : '';
+  if (rawNote.length > 500) return { ok: false, reason: 'status note is too long' };
+  return {
+    ...bound,
+    status,
+    ...(rawNote ? { note: rawNote } : {}),
   };
 }

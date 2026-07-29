@@ -257,6 +257,15 @@ function messageMentionsSelf(text: string | undefined, selfName: string | undefi
   return false;
 }
 
+/** Public transcript rows stay public to humans, but an agent listener receives
+ * only structured actions addressed to its immutable session lineage. */
+export function messagesForLineage(messages: Message[], lineage?: string): Message[] {
+  return messages.filter(m => {
+    const target = m.metadata?.viewAction?.sourceLineage;
+    return !target || (lineage !== undefined && target === lineage);
+  });
+}
+
 /** Long-poll for new messages; shared by room_listen and post-join/create first listen. */
 async function runRoomListenPoll(
   client: RoomApiClient,
@@ -272,6 +281,7 @@ async function runRoomListenPoll(
   // agent listened forever without a roster row and nobody learned. One
   // getRoom up front converts that into a hard rejoin_required in cycle one.
   let self: SelfRowEcho | undefined;
+  let selfLineage: string | undefined;
   if (selfName) {
     try {
       const room = await getRoom(client, code);
@@ -283,6 +293,7 @@ async function runRoomListenPoll(
         };
       }
       self = evaluateSelfRow(room.participants, selfName);
+      selfLineage = room.participants.find(p => p.name === selfName && p.client === 'cc')?.lineageId;
       if (!self.exists) {
         // Deliberately NOT removeRoom(): the stored member credential is the
         // reclaim anchor the rejoin needs — wiping it would orphan the row.
@@ -302,7 +313,12 @@ async function runRoomListenPoll(
     if (msgs.length > 0) {
       const cursor = since + msgs.length;
       await updateCursor(code, cursor);
-      const attachmentCount = msgs.reduce(
+      // Structured actions are public receipts in the human transcript, but
+      // executable work is delivered only to the exact producer session.
+      // Advancing over hidden requests preserves cursor ordering without giving
+      // another agent an instruction it could accidentally execute.
+      const visibleMsgs = messagesForLineage(msgs, selfLineage);
+      const attachmentCount = visibleMsgs.reduce(
         (acc: number, m: Message) => acc + (Array.isArray(m.attachments) ? m.attachments.length : 0),
         0,
       );
@@ -310,20 +326,23 @@ async function runRoomListenPoll(
       // unmissable directive so it always replies to being addressed — even in
       // a noisy batch where it might otherwise stay quiet.
       const mentioners = selfName
-        ? msgs.filter((mm) => mm.name !== selfName && messageMentionsSelf(mm.text, selfName)).map((mm) => mm.name)
+        ? visibleMsgs.filter((mm) => mm.name !== selfName && messageMentionsSelf(mm.text, selfName)).map((mm) => mm.name)
         : [];
       const mentionHint = mentioners.length > 0
         ? `🔔 YOU WERE @MENTIONED by ${[...new Set(mentioners)].join(', ')} — you are being directly addressed. Reply to them now with room_send (do not stay silent), then room_listen again. `
         : '';
-      const baseHint = `${msgs.length} new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening. ${nextListenContract(code, cursor)}`;
+      const actionHint = visibleMsgs.some(m => m.metadata?.viewAction)
+        ? ' TARGETED ACTION: call room_action_ack with the request message id before doing the work; ordinary room_send text does not claim it. '
+        : '';
+      const baseHint = `${visibleMsgs.length} visible new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening. ${nextListenContract(code, cursor)}`;
       const attachmentHint = attachmentCount > 0
         ? ` ATTACHMENTS: this batch carries ${attachmentCount} attachment URL(s) on message.attachments[]. To inspect their contents (read a screenshot, parse a PDF, etc.), fetch the .url with your environment's URL/file/vision tool. Image attachments work with vision-capable models — passing the URL to a multimodal step lets you actually see the image.`
         : '';
       return {
-        messages: msgs,
+        messages: visibleMsgs,
         cursor,
         ...(self ? { self } : {}),
-        hint: mentionHint + baseHint + attachmentHint,
+        hint: mentionHint + actionHint + baseHint + attachmentHint,
       };
     }
     if (pollCount > 0 && pollCount % 10 === 0) {
@@ -573,6 +592,41 @@ export function registerTools(server: Server) {
                 },
               },
             },
+          },
+        },
+      },
+      {
+        name: 'room_action_ack',
+        description:
+          'Acknowledge a structured-view action that was addressed to YOUR exact session lineage. ' +
+          'The server rejects acknowledgements from every other session and derives the action label/requester from the stored request. ' +
+          'Use this before acting on a view-action request; ordinary room_send text is not an acknowledgement.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'requestMessageId'],
+          properties: {
+            code: { type: 'string', description: 'Room code' },
+            name: { type: 'string', description: 'Your display name' },
+            requestMessageId: { type: 'number', description: 'Stored id of the view-action request' },
+            role: { type: 'string', description: 'Your role (optional)' },
+          },
+        },
+      },
+      {
+        name: 'room_action_update',
+        description:
+          'Publish the durable outcome of a structured action you previously acknowledged. ' +
+          'Only the exact producer session may update it; status is completed, failed, or cancelled.',
+        inputSchema: {
+          type: 'object',
+          required: ['code', 'name', 'requestMessageId', 'status'],
+          properties: {
+            code: { type: 'string' },
+            name: { type: 'string' },
+            requestMessageId: { type: 'number' },
+            status: { type: 'string', enum: ['completed', 'failed', 'cancelled'] },
+            note: { type: 'string', description: 'Optional short inert explanation' },
+            role: { type: 'string' },
           },
         },
       },
@@ -1328,6 +1382,68 @@ export function registerTools(server: Server) {
         ...(appendResult.metadata?.roleAtSend ? { roleAtSend: appendResult.metadata.roleAtSend } : {}),
         ...(appendResult.metadata?.turnId !== undefined ? { turnId: appendResult.metadata.turnId } : {}),
         hint: `Sent. ${nextListenContract(a.code, msgs.length)}`,
+      });
+    }
+
+    if (name === 'room_action_ack') {
+      const room = await getRoom(client, a.code);
+      const speaker = room.participants.find((p: Participant) => p.name === a.name && p.client === 'cc');
+      const msg: Message = {
+        id: Date.now(),
+        type: 'msg',
+        name: a.name,
+        initials: speaker?.initials ?? initialsFor(a.name),
+        color: speaker?.color ?? colorForName(a.name),
+        role: a.role ?? speaker?.role ?? '',
+        text: 'Picked up a structured action request.',
+        client: 'cc',
+        time: Date.now(),
+        metadata: { viewActionAck: { requestMessageId: Number(a.requestMessageId) } as never },
+      };
+      const result = await appendMessage(
+        client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code),
+      );
+      const msgs = await listMessages(client, a.code, 0);
+      await updateCursor(a.code, msgs.length);
+      await markSent(a.code, Date.now());
+      return ok({
+        acknowledged: result.appended,
+        cursor: msgs.length,
+        metadata: result.metadata,
+        hint: nextListenContract(a.code, msgs.length),
+      });
+    }
+
+    if (name === 'room_action_update') {
+      const room = await getRoom(client, a.code);
+      const speaker = room.participants.find((p: Participant) => p.name === a.name && p.client === 'cc');
+      const msg: Message = {
+        id: Date.now(),
+        type: 'msg',
+        name: a.name,
+        initials: speaker?.initials ?? initialsFor(a.name),
+        color: speaker?.color ?? colorForName(a.name),
+        role: a.role ?? speaker?.role ?? '',
+        text: 'Updated a structured action request.',
+        client: 'cc',
+        time: Date.now(),
+        metadata: { viewActionUpdate: {
+          requestMessageId: Number(a.requestMessageId),
+          status: String(a.status),
+          ...(a.note ? { note: String(a.note) } : {}),
+        } as never },
+      };
+      const result = await appendMessage(
+        client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code),
+      );
+      const msgs = await listMessages(client, a.code, 0);
+      await updateCursor(a.code, msgs.length);
+      await markSent(a.code, Date.now());
+      return ok({
+        updated: result.appended,
+        cursor: msgs.length,
+        metadata: result.metadata,
+        hint: nextListenContract(a.code, msgs.length),
       });
     }
 
