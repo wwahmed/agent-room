@@ -297,6 +297,11 @@ export function Room() {
   // T-21: a Send tapped while an upload is in flight is HELD (not dropped,
   // not sent imageless) and fires automatically when every upload lands.
   const pendingSendRef = useRef(false);
+  // T-46: one-shot guard for structured-view actions. Declared HERE with the other
+  // refs, above the bootstrap early-returns — the hook-order test caught this ref
+  // sitting below `if (!self) return`, which is exactly the conditional-hook crash
+  // that T-82 comment warns about a few lines further down.
+  const firedActionsRef = useRef<Set<string>>(new Set());
   const [sendWaitingOnUpload, setSendWaitingOnUpload] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
@@ -1745,7 +1750,6 @@ export function Room() {
   // token, while the label and the binding travel in metadata for a first-party
   // receipt to render. The event is bound to its source message, view version and
   // a nonce, so it is attributable and replay-detectable rather than free-floating.
-  const firedActionsRef = useRef<Set<string>>(new Set());
   function handleViewAction(m: Message, action: ViewAction) {
     if (!ACTION_ID_RE.test(action.id)) return;                 // defence in depth
     const key = `${m.id}:${action.id}`;
