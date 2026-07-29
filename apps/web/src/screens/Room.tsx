@@ -1727,6 +1727,15 @@ export function Room() {
     }
   }
 
+  // T-46: a structured-view button was pressed. The app does NOT act on it — it
+  // sends an ordinary room message naming the action id, so the agent's next turn
+  // decides what it means. That keeps every effect behind the agent's own reasoning
+  // and behind the same authority checks any other request goes through, instead of
+  // letting a payload the agent authored trigger app behaviour directly.
+  function handleViewAction(_m: Message, action: { id: string; label: string }) {
+    void send(`[action:${action.id}] ${action.label}`);
+  }
+
   async function send(bodyOverride?: string) {
     // T-142: read the LIVE composer value so a fast type+Enter parses exactly
     // what is in the box, never a React state that has not committed yet.
@@ -3050,6 +3059,7 @@ export function Room() {
                         : undefined}
                       selfName={self.name}
                       senderBrand={brandForSender(m, activeRoom.participants)}
+                      onViewAction={handleViewAction}
                     />
                   )}
                   </Fragment>

@@ -6,6 +6,8 @@ import { MessageMenu } from './MessageMenu.js';
 import { EdgeActionRail, HoverActionTray, readActionTreatment } from './MessageActionTray.js';
 import { ThumbDownIcon, ThumbUpIcon } from './ThumbIcons.js';
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
+import { ViewAwareBody } from './StructuredView.js';
+import type { ViewAction } from '@agent-room/shared';
 import { BrandedLogoAvatar, brandLogoFor, GenericAgentBadge } from './AgentAvatar.js';
 import type { AgentBrand } from '../lib/agentBrand.js';
 import { textMentionsSelf } from '../lib/mentions.js';
@@ -104,6 +106,10 @@ interface Props {
   /** T-47: provider brand for the sender (resolved by Room from participant
    *  harness metadata, name fallback), rendered as the avatar base/badge. */
   senderBrand?: AgentBrand | null;
+  /** T-46: a button inside an agent's structured view was pressed. The app never
+   *  executes what the agent asked for — it sends a normal room message naming the
+   *  action id, and the agent's next turn decides what that means. */
+  onViewAction?: (message: Message, action: ViewAction) => void;
 }
 
 // Exact clock for the hover/title tooltip — precise time behind the relative label.
@@ -259,7 +265,7 @@ function DictatedChip() {
   );
 }
 
-export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, onPin, pinned, deliveredTo, selfName, senderBrand }: Props) {
+export function MessageRow({ message, self, grouped, ambiguousNames, now, onReply, onJumpToQuote, onReact, onPin, pinned, deliveredTo, selfName, senderBrand, onViewAction }: Props) {
   const body = message.text ?? '';
   const swipe = useSwipeReply(onReply && message.type === 'msg' ? () => onReply(message) : undefined);
   // T-124 prototype flag (default 'legacy' = shipped behavior). When a hover
@@ -307,7 +313,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
               edge-to-edge scan. */}
           {body.trim() && (
             <div className="msg-prose">
-              <CollapsibleMessageBody text={body} selfName={selfName} />
+              <ViewAwareBody text={body} selfName={selfName} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -371,7 +377,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div data-gate="msg-content" className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
           {cardTray}
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
+          {body.trim() && <ViewAwareBody text={body} selfName={selfName} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>
@@ -410,7 +416,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <CollapsibleMessageBody text={body} selfName={selfName} />}
+          {body.trim() && <ViewAwareBody text={body} selfName={selfName} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>

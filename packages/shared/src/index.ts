@@ -3,6 +3,7 @@ export * from './constants.js';
 export * from './codeGen.js';
 export * from './roles.js';
 export * from './artifacts.js';
+export * from './structuredView.js';
 export * from './text.js';
 export * from './roomTopic.js';
 export * from './conventions.js';
