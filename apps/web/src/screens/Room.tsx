@@ -27,14 +27,15 @@ import { QuestionArtifactSheet } from '../components/QuestionArtifactSheet.js';
 import { VoiceButton, type VoiceButtonHandle } from '../components/VoiceButton.js';
 import { AttachmentSheet } from '../components/AttachmentSheet.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
+import { OutputInstructionsEditor } from '../components/OutputInstructionsEditor.js';
 import { Avatar } from '../components/Avatar.js';
 import { AgentAvatar } from '../components/AgentAvatar.js';
 import { brandForSender, participantKindLabel } from '../lib/agentBrand.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
-import { ACTION_ID_RE, STRUCTURED_VIEW_VERSION, artifactLabel, type ArtifactKind, type ViewAction, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
+import { ACTION_ID_RE, STRUCTURED_VIEW_VERSION, artifactLabel, templateInfo, type ArtifactKind, type ViewAction, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
+import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomOutputInstructionsAction, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
@@ -1060,6 +1061,14 @@ export function Room() {
       const { showToast } = await import('../components/Toast.js');
       showToast(e instanceof Error ? `Could not set room type: ${e.message}` : 'Could not set room type', 'error');
     }
+  }
+
+  async function handleSaveOutputInstructions(outputInstructions: string) {
+    if (!room || !self || room.createdBy !== self.name) {
+      throw new Error('Only the room host can edit output instructions.');
+    }
+    await setRoomOutputInstructionsAction(createClient(), code, outputInstructions);
+    await refreshRoom();
   }
 
   async function handleArchiveRoom() {
@@ -2222,6 +2231,20 @@ export function Room() {
               <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>
             ))}
           </select>
+        </section>
+      )}
+      {!ended && (
+        <section aria-label="Output instructions" className="rounded-xl border border-border-faint bg-surface p-4">
+          {settingsSectionHead('Output instructions')}
+          <p className="mb-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
+            Controls how agents present work in this room. It does not grant authority or change what tools can do.
+          </p>
+          <OutputInstructionsEditor
+            currentOverride={room.outputInstructions}
+            defaultInstructions={templateInfo(room.templateId)?.defaultOutputInstructions}
+            isHost={room.createdBy === self.name}
+            onSave={handleSaveOutputInstructions}
+          />
         </section>
       )}
       {room.createdBy === self.name && (

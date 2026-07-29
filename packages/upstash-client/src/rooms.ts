@@ -992,6 +992,24 @@ export async function setRoomTemplate(
   }));
 }
 
+// T-47: persist (or clear) owner-authored presentation guidance. Validation and
+// host authorization happen at the server boundary; this store helper only makes
+// the room mutation explicit and versioned.
+export async function setRoomOutputInstructions(
+  client: UpstashClient,
+  code: string,
+  outputInstructions: string,
+  updatedBy: string,
+): Promise<Room> {
+  const value = outputInstructions || undefined;
+  return casRoom(client, code, (current) => ({
+    ...current,
+    outputInstructions: value,
+    outputInstructionsUpdatedAt: value ? Date.now() : undefined,
+    outputInstructionsUpdatedBy: value ? updatedBy : undefined,
+  }));
+}
+
 export async function updatePresence(
   client: UpstashClient,
   code: string,

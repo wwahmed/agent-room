@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StructuredViewCard, StructuredViewFallback, ViewAwareBody } from './StructuredView.js';
 
-// Read via a cwd-relative path: under jsdom, import.meta.url is an http:// URL and
-// readFileSync rejects the scheme.
-const source = readFileSync(resolve(process.cwd(), 'apps/web/src/components/StructuredView.tsx'), 'utf8');
+// Vitest runs this file both from the monorepo root and through the web
+// workspace script (where cwd is apps/web). Keep the static safety assertion
+// valid in both real test entry points.
+const sourcePath = process.cwd().endsWith('/apps/web')
+  ? resolve(process.cwd(), 'src/components/StructuredView.tsx')
+  : resolve(process.cwd(), 'apps/web/src/components/StructuredView.tsx');
+const source = readFileSync(sourcePath, 'utf8');
 
 afterEach(() => cleanup());
 
@@ -77,6 +81,66 @@ describe('Structured view rendering', () => {
     );
     expect(confirm.querySelectorAll('button').length).toBe(2);
     expect(confirm.textContent).toContain('Cancel');
+
+    const { container: loading } = render(
+      <StructuredViewCard view={{ v: 1, kind: 'status', state: 'loading', title: 'Loading mail' }} />,
+    );
+    expect(loading.querySelector('[role="status"]')?.getAttribute('aria-busy')).toBe('true');
+    const { container: error } = render(
+      <StructuredViewCard view={{ v: 1, kind: 'status', state: 'error', message: 'Mailbox unavailable' }} />,
+    );
+    expect(error.querySelector('[role="alert"]')?.textContent).toContain('Mailbox unavailable');
+  });
+
+  it('renders validated external links in an isolated browsing context', () => {
+    render(
+      <StructuredViewCard view={{
+        v: 1,
+        kind: 'detail',
+        title: 'Source',
+        fields: [],
+        links: [{ label: 'Open source', href: 'https://example.com/report' }],
+      }} />,
+    );
+    const link = screen.getByRole('link', { name: /Open source/ });
+    expect(link.getAttribute('href')).toBe('https://example.com/report');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('makes list rows keyboard-native one-shot actions with an honest accessible name', async () => {
+    const onAction = vi.fn();
+    render(
+      <StructuredViewCard
+        view={{ v: 1, kind: 'list', title: 'Today', items: [{
+          id: 'm1', title: 'Invoice overdue',
+          action: { id: 'open-m1', label: 'Open message' },
+        }] }}
+        onAction={onAction}
+      />,
+    );
+    const row = screen.getByRole('button', { name: 'Open message: Invoice overdue' });
+    fireEvent.click(row);
+    fireEvent.click(row);
+    expect(onAction).toHaveBeenCalledWith({ id: 'open-m1', label: 'Open message' });
+    expect(onAction).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText('Open message requested')).toBeTruthy());
+  });
+
+  it('makes a failed list-row request visibly retryable', async () => {
+    const onAction = vi.fn().mockRejectedValue(new Error('Producer offline'));
+    render(
+      <StructuredViewCard
+        view={{ v: 1, kind: 'list', items: [{
+          id: 'm1', title: 'Invoice overdue',
+          action: { id: 'open-m1', label: 'Open message' },
+        }] }}
+        onAction={onAction}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open message: Invoice overdue' }));
+    await waitFor(() => expect(screen.getByText('Request failed — retry Open message')).toBeTruthy());
+    expect((screen.getByRole('button', { name: 'Retry Open message: Invoice overdue' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('an action reports the id the agent declared, and nothing more', () => {

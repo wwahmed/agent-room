@@ -27,7 +27,7 @@ export const VIEW_LIMITS = {
   totalJson: 64 * 1024,
 } as const;
 
-export type ViewKind = 'list' | 'detail' | 'draft' | 'confirm';
+export type ViewKind = 'list' | 'detail' | 'draft' | 'confirm' | 'status';
 
 /**
  * An action id is an OPAQUE TOKEN, not text.
@@ -55,20 +55,37 @@ export interface ViewAction {
   label: string;
 }
 
+export interface ViewLink {
+  label: string;
+  /** Absolute HTTPS only. No javascript/data/http/custom schemes and no embedded
+   * credentials; the renderer also isolates the new browsing context. */
+  href: string;
+}
+
 export interface ListItem {
   id: string;
   title: string;
   subtitle?: string;
   meta?: string;
   badges?: string[];
+  action?: ViewAction;
 }
 
 export interface ListView { v: number; kind: 'list'; title?: string; empty?: string; items: ListItem[] }
 export interface DetailField { label: string; value: string }
-export interface DetailView { v: number; kind: 'detail'; title: string; fields: DetailField[]; body?: string; actions?: ViewAction[] }
+export interface DetailView { v: number; kind: 'detail'; title: string; fields: DetailField[]; body?: string; links?: ViewLink[]; actions?: ViewAction[] }
 export interface DraftView { v: number; kind: 'draft'; to?: string; subject?: string; body: string; note?: string; actions?: ViewAction[] }
 export interface ConfirmView { v: number; kind: 'confirm'; prompt: string; confirmLabel: string; cancelLabel?: string }
-export type StructuredView = ListView | DetailView | DraftView | ConfirmView;
+export interface StatusView {
+  v: number;
+  kind: 'status';
+  state: 'loading' | 'error';
+  title?: string;
+  message?: string;
+  links?: ViewLink[];
+  action?: ViewAction;
+}
+export type StructuredView = ListView | DetailView | DraftView | ConfirmView | StatusView;
 
 export type ParseResult =
   | { ok: true; view: StructuredView }
@@ -123,6 +140,29 @@ function actions(value: unknown): ViewAction[] | { error: string } {
   return out;
 }
 
+function links(value: unknown): ViewLink[] | { error: string } {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return { error: 'links must be an array' };
+  if (value.length > VIEW_LIMITS.actions) return { error: `links exceeds ${VIEW_LIMITS.actions} entries` };
+  const out: ViewLink[] = [];
+  for (const [i, raw] of value.entries()) {
+    if (!isRecord(raw)) return { error: `links[${i}] must be an object` };
+    const label = text(raw.label, VIEW_LIMITS.shortText, `links[${i}].label`);
+    const href = text(raw.href, 2048, `links[${i}].href`);
+    if (typeof label !== 'string') return label;
+    if (typeof href !== 'string') return href;
+    if (!label.trim()) return { error: `links[${i}] needs a non-empty label` };
+    let parsed: URL;
+    try { parsed = new URL(href); }
+    catch { return { error: `links[${i}].href must be an absolute HTTPS URL` }; }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+      return { error: `links[${i}].href must be an absolute HTTPS URL without embedded credentials` };
+    }
+    out.push({ label: label.replace(/[\r\n]+/g, ' ').trim(), href: parsed.toString() });
+  }
+  return out;
+}
+
 /**
  * Validate untrusted input into a renderable view.
  *
@@ -146,7 +186,7 @@ export function parseStructuredView(input: unknown): ParseResult {
   }
 
   const kind = input.kind;
-  if (kind !== 'list' && kind !== 'detail' && kind !== 'draft' && kind !== 'confirm') {
+  if (kind !== 'list' && kind !== 'detail' && kind !== 'draft' && kind !== 'confirm' && kind !== 'status') {
     return { ok: false, reason: `unknown view kind ${JSON.stringify(kind)}` };
   }
 
@@ -157,6 +197,7 @@ export function parseStructuredView(input: unknown): ParseResult {
     if (!Array.isArray(input.items)) return fail('list.items must be an array');
     if (input.items.length > VIEW_LIMITS.items) return fail(`list.items exceeds ${VIEW_LIMITS.items} entries`);
     const items: ListItem[] = [];
+    const listActionIds = new Set<string>();
     for (const [i, raw] of input.items.entries()) {
       if (!isRecord(raw)) return fail(`list.items[${i}] must be an object`);
       const id = text(raw.id, VIEW_LIMITS.shortText, `items[${i}].id`);
@@ -174,6 +215,13 @@ export function parseStructuredView(input: unknown): ParseResult {
       const badges = strArray(raw.badges, 6, `items[${i}].badges`);
       if (!Array.isArray(badges)) return fail(badges);
       if (badges.length) item.badges = badges;
+      if (raw.action !== undefined) {
+        const parsedAction = actions([raw.action]);
+        if (!Array.isArray(parsedAction)) return fail(parsedAction);
+        if (listActionIds.has(parsedAction[0]!.id)) return fail(`duplicate list action id ${JSON.stringify(parsedAction[0]!.id)}`);
+        listActionIds.add(parsedAction[0]!.id);
+        item.action = parsedAction[0];
+      }
       items.push(item);
     }
     const view: ListView = { v, kind, items };
@@ -203,6 +251,8 @@ export function parseStructuredView(input: unknown): ParseResult {
     }
     const acts = actions(input.actions);
     if (!Array.isArray(acts)) return fail(acts);
+    const viewLinks = links(input.links);
+    if (!Array.isArray(viewLinks)) return fail(viewLinks);
     const view: DetailView = { v, kind, title, fields };
     if (input.body !== undefined) {
       const b = text(input.body, VIEW_LIMITS.bodyText, 'body');
@@ -210,6 +260,7 @@ export function parseStructuredView(input: unknown): ParseResult {
       view.body = b;
     }
     if (acts.length) view.actions = acts;
+    if (viewLinks.length) view.links = viewLinks;
     return { ok: true, view };
   }
 
@@ -227,6 +278,29 @@ export function parseStructuredView(input: unknown): ParseResult {
       }
     }
     if (acts.length) view.actions = acts;
+    return { ok: true, view };
+  }
+
+  if (kind === 'status') {
+    if (input.state !== 'loading' && input.state !== 'error') {
+      return fail('status.state must be loading or error');
+    }
+    const view: StatusView = { v, kind, state: input.state };
+    for (const key of ['title', 'message'] as const) {
+      if (input[key] !== undefined) {
+        const t = text(input[key], key === 'message' ? VIEW_LIMITS.bodyText : VIEW_LIMITS.shortText, key);
+        if (typeof t !== 'string') return fail(t);
+        view[key] = t;
+      }
+    }
+    if (input.action !== undefined) {
+      const parsedAction = actions([input.action]);
+      if (!Array.isArray(parsedAction)) return fail(parsedAction);
+      view.action = parsedAction[0];
+    }
+    const viewLinks = links(input.links);
+    if (!Array.isArray(viewLinks)) return fail(viewLinks);
+    if (viewLinks.length) view.links = viewLinks;
     return { ok: true, view };
   }
 

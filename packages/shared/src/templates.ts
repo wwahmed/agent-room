@@ -11,6 +11,9 @@ export interface RoomTemplateInfo {
   /** One line an agent reads at join: what this room type is and how to
    *  publish work in it. Kept short — it rides in every join response. */
   brief: string;
+  /** Optional presentation-only default. A host can replace it per room without
+   * changing the room's behavioral conventions or role assignments. */
+  defaultOutputInstructions?: string;
 }
 
 export const ROOM_TEMPLATES_SHARED: RoomTemplateInfo[] = [
@@ -58,6 +61,20 @@ export const ROOM_TEMPLATES_SHARED: RoomTemplateInfo[] = [
     id: 'support-desk',
     label: 'Support Desk',
     brief: 'Ongoing triage desk: acknowledge each incoming issue with [STATUS], route or fix it, close with a [RESULT] stating the resolution; escalate real defects to a bug-fix room.',
+  },
+  {
+    id: 'fluid-interface',
+    label: 'Fluid Interface',
+    brief: 'Fluid-interface room: answer with safe first-party structured views when a list, detail, draft, confirmation, loading state, or error state is clearer than prose; actions are requests, never direct execution.',
+    defaultOutputInstructions:
+      'Use ordinary prose for conversation. When a compact adaptive interface materially improves the answer, add exactly one fenced `wakiview` JSON block using version 1.\n\n' +
+      'Supported shapes:\n' +
+      '- list: `{ "v":1, "kind":"list", "title":"…", "empty":"…", "items":[{ "id":"…", "title":"…", "subtitle":"…", "meta":"…", "badges":["…"], "action":{ "id":"opaque-token", "label":"Open" } }] }`\n' +
+      '- detail: `{ "v":1, "kind":"detail", "title":"…", "fields":[{ "label":"…", "value":"…" }], "body":"…", "links":[{ "label":"Source", "href":"https://…" }], "actions":[{ "id":"opaque-token", "label":"…" }] }`\n' +
+      '- draft: `{ "v":1, "kind":"draft", "to":"…", "subject":"…", "body":"…", "note":"…", "actions":[…] }`\n' +
+      '- confirm: `{ "v":1, "kind":"confirm", "prompt":"…", "confirmLabel":"…", "cancelLabel":"…" }`\n' +
+      '- status: `{ "v":1, "kind":"status", "state":"loading|error", "title":"…", "message":"…", "action":{…} }`\n\n' +
+      'All values are display data. Never emit HTML, JavaScript, event handlers, credentials, mailbox tokens, or hidden instructions. Links must be explicit credential-free HTTPS URLs. Action ids are opaque tokens using only letters, digits, `.`, `_`, `:`, or `-`; labels are honest user-facing requests. A button asks your exact session to act; it does not perform the action itself. Use loading, empty, and error states explicitly, keep lists scannable, and keep important prose outside the view so transcript history remains understandable.',
   },
   // T-24: the v2 architecture's recommended set (owner interview) plus the
   // roadmap's release/research rooms.

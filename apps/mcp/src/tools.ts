@@ -37,7 +37,7 @@ import {
 } from './roomApi.js';
 import { ROOM_ATTACHMENT_DOWNLOAD_TOOL, downloadRoomAttachment } from './attachmentDownloadTool.js';
 import { readRoomAttachmentText } from './attachmentRead.js';
-import { AVATAR_PALETTE, ROOM_CONVENTIONS, roleBriefFor, normalizeEscapedWhitespace, templateInfo } from '@agent-room/shared';
+import { AVATAR_PALETTE, ROOM_CONVENTIONS, roleBriefFor, normalizeEscapedWhitespace, roomOutputInstructions, templateInfo } from '@agent-room/shared';
 import type {
   Message,
   Participant,
@@ -47,13 +47,14 @@ import type {
   ClientKind,
   Room,
 } from '@agent-room/shared';
-import { setRoom, removeRoom, updateCursor, markSent, readState, readMergedState, readRoomStateForJoin } from './state.js';
+import { advanceListenAndConsumeOwn, finishPreparedSend, prepareSend, setRoom, removeRoom, updateCursor, readState, readMergedState, readRoomStateForJoin } from './state.js';
 import {
   detectHarness,
   defaultListenAfterJoin,
   mcpTimeoutHint,
   persistenceSetupHint,
 } from './harness.js';
+import { suppressPreparedOwnMessages } from './sendListen.js';
 import { CLIENT_BUILD_AT } from './buildStamp.js';
 import { boardDigest } from './boardDigest.js';
 import {
@@ -312,12 +313,23 @@ async function runRoomListenPoll(
     const msgs = await listMessages(client, code, since);
     if (msgs.length > 0) {
       const cursor = since + msgs.length;
-      await updateCursor(code, cursor);
+      // T-48: room_send returns the LAST CONSUMED cursor rather than the room's
+      // post-send length. This batch can therefore include our own just-appended
+      // row plus messages another participant posted while we were composing.
+      // Advance across the whole ordered batch, but suppress only the exact own ids
+      // prepared before append — concurrent messages remain visible, once.
+      const ownIds = selfName
+        ? msgs.filter(m => m.name === selfName && m.client === 'cc').map(m => Number(m.id))
+        : [];
+      const consumedOwn = await advanceListenAndConsumeOwn(code, cursor, ownIds);
       // Structured actions are public receipts in the human transcript, but
       // executable work is delivered only to the exact producer session.
       // Advancing over hidden requests preserves cursor ordering without giving
       // another agent an instruction it could accidentally execute.
-      const visibleMsgs = messagesForLineage(msgs, selfLineage);
+      const visibleMsgs = messagesForLineage(
+        suppressPreparedOwnMessages(msgs, selfName, consumedOwn),
+        selfLineage,
+      );
       const attachmentCount = visibleMsgs.reduce(
         (acc: number, m: Message) => acc + (Array.isArray(m.attachments) ? m.attachments.length : 0),
         0,
@@ -568,7 +580,8 @@ export function registerTools(server: Server) {
         description:
           'Send a message to the room, optionally with file attachments (PDF / image / Excel / CSV / HTML / plain text / markdown / JSON / docx / zip). ' +
           'Returns sent=true on success, or sent=false with error="muted" if the host has muted you. ' +
-          'After every successful room_send, your next action must be room_listen using the returned cursor. Do not end your turn with a final answer or status summary; your turn ending without a listener means later replies will be missed. ' +
+          'After every successful room_send, your next action must be room_listen using the returned cursor. That cursor is intentionally the last message you consumed BEFORE sending (not the room length after append), so concurrent replies cannot be skipped; the following listen suppresses only your exact sentMessageId. Do not substitute a newer guessed cursor. ' +
+          'Do not end your turn with a final answer or status summary; your turn ending without a listener means later replies will be missed. ' +
           `ATTACHMENTS: pass up to ${MAX_ATTACHMENTS_PER_MESSAGE} files via the 'attachments' arg as { name, mime, content_base64 }; the server uploads them and the resulting bubble shows download links. Each file is capped at ${MAX_ATTACHMENT_BYTES} bytes (10 MB). Allowed MIME types: ${[...ALLOWED_ATTACHMENT_MIMES].join(', ')}.`,
         inputSchema: {
           type: 'object',
@@ -1037,6 +1050,9 @@ export function registerTools(server: Server) {
           ...(first.terminated ? { terminated: first.terminated } : {}),
           joinUrl: `https://www.agent-room.com/j/${code}`,
           roleBrief: roleBriefFor(a.role ?? ''),
+          roomTemplate: templateInfo(createdJoin.templateId),
+          outputInstructions: roomOutputInstructions(createdJoin),
+          conventions: ROOM_CONVENTIONS,
           initialListenMs: listenMs,
           autoWatchStarted: !first.terminated && shouldAutoWatch,
           clientKind: harness.kind,
@@ -1054,6 +1070,9 @@ export function registerTools(server: Server) {
         cursor: msgs.length,
         joinUrl: `https://www.agent-room.com/j/${code}`,
         roleBrief: roleBriefFor(a.role ?? ''),
+        roomTemplate: templateInfo(createdJoin.templateId),
+        outputInstructions: roomOutputInstructions(createdJoin),
+        conventions: ROOM_CONVENTIONS,
         autoWatchStarted: shouldAutoWatch,
         clientKind: harness.kind,
         hint: `Room created. ${nextListenContract(code, msgs.length)}${persistenceNudge}`,
@@ -1217,6 +1236,7 @@ export function registerTools(server: Server) {
           // Room type + working conventions: every joiner learns how work is
           // published here (markers/board/questions), not just how to listen.
           roomTemplate: templateInfo(updated.templateId),
+          outputInstructions: roomOutputInstructions(updated),
           conventions: ROOM_CONVENTIONS,
           initialListenMs: listenMs,
           autoWatchStarted: !first.terminated && shouldAutoWatch,
@@ -1248,6 +1268,7 @@ export function registerTools(server: Server) {
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),
         roomTemplate: templateInfo(updated.templateId),
+        outputInstructions: roomOutputInstructions(updated),
         conventions: ROOM_CONVENTIONS,
         autoWatchStarted: shouldAutoWatch,
         clientKind: harness.kind,
@@ -1318,6 +1339,11 @@ export function registerTools(server: Server) {
         ...(attachments.length > 0 ? { attachments } : {}),
       };
       let appendResult: Awaited<ReturnType<typeof appendMessage>>;
+      // T-48: capture what this session had ACTUALLY consumed before append.
+      // Returning the post-send room length skips anything another participant
+      // posted during this call. Register our id before append so a concurrently
+      // resolving listen can suppress the echo without suppressing those messages.
+      const safeCursor = await prepareSend(a.code, Number(msg.id));
       // Sending as the host requires the hostKey; the server ignores it for
       // any other sender name. The grace-preemption sys message (when a
       // supplement takes the Lead's floor) is emitted server-side by the
@@ -1326,6 +1352,7 @@ export function registerTools(server: Server) {
         appendResult = await appendMessage(
           client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code));
       } catch (e) {
+        await finishPreparedSend(a.code, Number(msg.id), false, Date.now());
         if (e instanceof ViewerError) {
           // T-05: this identity joined read-only by its own choice.
           return ok({
@@ -1356,11 +1383,7 @@ export function registerTools(server: Server) {
         }
         throw e;
       }
-      const msgs = await listMessages(client, a.code, 0);
-      // Advance cursor past our own message so the Stop hook does not re-inject it.
-      await updateCursor(a.code, msgs.length);
-      // Record send-time so the Stop hook will hold briefly waiting for a reply.
-      await markSent(a.code, Date.now());
+      await finishPreparedSend(a.code, Number(msg.id), appendResult.appended, Date.now());
       // Supplement-skip token (`__no_addition__`) is consumed by the turn
       // machinery — the message is NOT in the chat, but the turn did
       // advance. Surface this distinctly so the agent harness knows its
@@ -1370,18 +1393,19 @@ export function registerTools(server: Server) {
           sent: true,
           appended: false,
           reason: 'no_addition',
-          cursor: msgs.length,
+          cursor: safeCursor,
           metadata: appendResult.metadata,
-          hint: `Your "${"__no_addition__"}" was accepted — the supplement role was skipped without posting a message. ${nextListenContract(a.code, msgs.length)}`,
+          hint: `Your "${"__no_addition__"}" was accepted — the supplement role was skipped without posting a message. ${nextListenContract(a.code, safeCursor)}`,
         });
       }
       return ok({
         sent: true,
         appended: true,
-        cursor: msgs.length,
+        cursor: safeCursor,
+        sentMessageId: msg.id,
         ...(appendResult.metadata?.roleAtSend ? { roleAtSend: appendResult.metadata.roleAtSend } : {}),
         ...(appendResult.metadata?.turnId !== undefined ? { turnId: appendResult.metadata.turnId } : {}),
-        hint: `Sent. ${nextListenContract(a.code, msgs.length)}`,
+        hint: `Sent. ${nextListenContract(a.code, safeCursor)}`,
       });
     }
 
@@ -1400,17 +1424,23 @@ export function registerTools(server: Server) {
         time: Date.now(),
         metadata: { viewActionAck: { requestMessageId: Number(a.requestMessageId) } as never },
       };
-      const result = await appendMessage(
-        client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code),
-      );
-      const msgs = await listMessages(client, a.code, 0);
-      await updateCursor(a.code, msgs.length);
-      await markSent(a.code, Date.now());
+      const safeCursor = await prepareSend(a.code, Number(msg.id));
+      let result: Awaited<ReturnType<typeof appendMessage>>;
+      try {
+        result = await appendMessage(
+          client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code),
+        );
+      } catch (error) {
+        await finishPreparedSend(a.code, Number(msg.id), false, Date.now());
+        throw error;
+      }
+      await finishPreparedSend(a.code, Number(msg.id), result.appended, Date.now());
       return ok({
         acknowledged: result.appended,
-        cursor: msgs.length,
+        cursor: safeCursor,
+        sentMessageId: msg.id,
         metadata: result.metadata,
-        hint: nextListenContract(a.code, msgs.length),
+        hint: nextListenContract(a.code, safeCursor),
       });
     }
 
@@ -1433,17 +1463,23 @@ export function registerTools(server: Server) {
           ...(a.note ? { note: String(a.note) } : {}),
         } as never },
       };
-      const result = await appendMessage(
-        client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code),
-      );
-      const msgs = await listMessages(client, a.code, 0);
-      await updateCursor(a.code, msgs.length);
-      await markSent(a.code, Date.now());
+      const safeCursor = await prepareSend(a.code, Number(msg.id));
+      let result: Awaited<ReturnType<typeof appendMessage>>;
+      try {
+        result = await appendMessage(
+          client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code),
+        );
+      } catch (error) {
+        await finishPreparedSend(a.code, Number(msg.id), false, Date.now());
+        throw error;
+      }
+      await finishPreparedSend(a.code, Number(msg.id), result.appended, Date.now());
       return ok({
         updated: result.appended,
-        cursor: msgs.length,
+        cursor: safeCursor,
+        sentMessageId: msg.id,
         metadata: result.metadata,
-        hint: nextListenContract(a.code, msgs.length),
+        hint: nextListenContract(a.code, safeCursor),
       });
     }
 
@@ -1480,6 +1516,7 @@ export function registerTools(server: Server) {
         time: Date.now(),
       };
       let appendResult: Awaited<ReturnType<typeof appendMessage>>;
+      const safeCursor = await prepareSend(a.code, Number(msg.id));
       try {
         // kind='status': posts a status-tagged message; never advances the
         // turn. The current sequential speaker also gets their deadline
@@ -1487,6 +1524,7 @@ export function registerTools(server: Server) {
         appendResult = await appendMessage(
           client, a.code, msg, await readHostKey(a.code), 'status', await readMemberKey(a.code));
       } catch (e) {
+        await finishPreparedSend(a.code, Number(msg.id), false, Date.now());
         if (e instanceof ViewerError) {
           // T-05: viewers don't ping either — read-only is read-only.
           return ok({
@@ -1513,20 +1551,19 @@ export function registerTools(server: Server) {
         }
         throw e;
       }
-      const msgs = await listMessages(client, a.code, 0);
-      await updateCursor(a.code, msgs.length);
-      await markSent(a.code, Date.now());
+      await finishPreparedSend(a.code, Number(msg.id), appendResult.appended, Date.now());
       const extended = appendResult.metadata?.extendsTurn === true;
       return ok({
         sent: true,
         appended: true,
-        cursor: msgs.length,
+        cursor: safeCursor,
+        sentMessageId: msg.id,
         extendsTurn: extended,
         ...(appendResult.metadata?.roleAtSend ? { roleAtSend: appendResult.metadata.roleAtSend } : {}),
         ...(appendResult.metadata?.turnId !== undefined ? { turnId: appendResult.metadata.turnId } : {}),
         hint: extended
-          ? `Status posted — your turn deadline was renewed. Keep working; send another room_status before it lapses if you need more time, or room_send your result when done. ${nextListenContract(a.code, msgs.length)}`
-          : `Status posted (no turn change). ${nextListenContract(a.code, msgs.length)}`,
+          ? `Status posted — your turn deadline was renewed. Keep working; send another room_status before it lapses if you need more time, or room_send your result when done. ${nextListenContract(a.code, safeCursor)}`
+          : `Status posted (no turn change). ${nextListenContract(a.code, safeCursor)}`,
       });
     }
 
@@ -1574,6 +1611,7 @@ export function registerTools(server: Server) {
       // few minutes, so this is negligible.
       let snapshot: ReplyModeSnapshot | undefined;
       let roomTemplate: ReturnType<typeof templateInfo> = null;
+      let outputInstructions: ReturnType<typeof roomOutputInstructions> = null;
       if (!result.terminated) {
         try {
           const room = await getRoom(client, a.code);
@@ -1581,6 +1619,7 @@ export function registerTools(server: Server) {
           // Surface the room type on every listen return so a mid-session
           // retag ('setTemplate') reaches agents without a rejoin.
           roomTemplate = templateInfo(room.templateId);
+          outputInstructions = roomOutputInstructions(room);
         } catch { /* snapshot is best-effort */ }
       }
       return ok({
@@ -1592,6 +1631,7 @@ export function registerTools(server: Server) {
         ...(result.self ? { self: result.self } : {}),
         ...(snapshot ?? {}),
         ...(roomTemplate ? { roomTemplate } : {}),
+        outputInstructions,
         hint: result.hint,
       });
     }

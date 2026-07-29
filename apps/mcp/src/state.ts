@@ -29,6 +29,11 @@ export interface RoomState {
   cursor: number;
   joinedAt: number;
   lastSentAt?: number;
+  // T-48: ids prepared by this exact MCP session before append. The following
+  // listen must advance across them without returning the agent's own send as a
+  // duplicate, while still returning messages another participant posted in the
+  // send window. Bounded below; never an unbounded transcript mirror.
+  pendingOwnMessageIds?: number[];
   // Stored when this MCP session is the host of the room (room_create).
   // Required to claim the host display name on rejoin / reconnect; without
   // it, joinRoom rejects with HostNameTakenError. Plain text on disk under
@@ -91,20 +96,28 @@ export function mergeStates(states: AgentRoomState[]): AgentRoomState {
       }
 
       const newest = room.joinedAt >= existing.joinedAt ? room : existing;
+      const pendingOwnMessageIds = Array.from(new Set([
+        ...(existing.pendingOwnMessageIds ?? []),
+        ...(room.pendingOwnMessageIds ?? []),
+      ])).slice(-50);
+      const hostKey = newest.hostKey ?? room.hostKey ?? existing.hostKey;
+      const memberKey = newest.memberKey ?? room.memberKey ?? existing.memberKey;
       merged.rooms[code] = {
         ...newest,
         cursor: Math.max(existing.cursor, room.cursor),
         joinedAt: newest.joinedAt,
         lastSentAt: Math.max(existing.lastSentAt ?? 0, room.lastSentAt ?? 0) || undefined,
+        ...(pendingOwnMessageIds.length ? { pendingOwnMessageIds } : {}),
         // T-27: credentials survive from EITHER side. `newest.x ?? existing.x`
         // silently dropped a key whenever the newest entry was the keyless one
         // (its own `existing` fallback resolves to itself), so a room re-entered
         // under a fresh ppid file lost the credential written by the older
         // session — the real cause of room_leave stranding ghost rows despite
         // T-11: the key was on disk, and the merge threw it away.
-        hostKey: newest.hostKey ?? room.hostKey ?? existing.hostKey,
-        memberKey: newest.memberKey ?? room.memberKey ?? existing.memberKey,
+        ...(hostKey ? { hostKey } : {}),
+        ...(memberKey ? { memberKey } : {}),
       };
+      if (!merged.rooms[code]!.lastSentAt) delete merged.rooms[code]!.lastSentAt;
     }
   }
 
@@ -207,6 +220,86 @@ export async function markSent(code: string, at: number): Promise<void> {
   if (!room) return;
   room.lastSentAt = at;
   await writeState(state);
+}
+
+// Serialize the new send/listen state transitions inside one MCP process. The
+// earlier read→write helpers can race when a listen resolves during room_send;
+// these two transitions must be atomic with respect to each other or a pending
+// own-message id can be lost before the listener filters it.
+let sendListenMutation = Promise.resolve();
+
+async function mutateSendListenState<T>(mutator: (state: AgentRoomState) => T): Promise<T> {
+  let resolveValue!: (value: T) => void;
+  let rejectValue!: (reason?: unknown) => void;
+  const result = new Promise<T>((resolve, reject) => {
+    resolveValue = resolve;
+    rejectValue = reject;
+  });
+  sendListenMutation = sendListenMutation.catch(() => undefined).then(async () => {
+    try {
+      const state = await readState();
+      const value = mutator(state);
+      await writeState(state);
+      resolveValue(value);
+    } catch (error) {
+      rejectValue(error);
+    }
+  });
+  await sendListenMutation;
+  return result;
+}
+
+/** Capture the last cursor the agent actually consumed BEFORE append and register
+ * the exact own-message id the next listen should suppress. */
+export async function prepareSend(code: string, messageId: number): Promise<number> {
+  return mutateSendListenState((state) => {
+    const room = state.rooms[code];
+    if (!room) return 0;
+    room.pendingOwnMessageIds = Array.from(new Set([
+      ...(room.pendingOwnMessageIds ?? []),
+      messageId,
+    ])).slice(-50);
+    return room.cursor;
+  });
+}
+
+/** Finish a prepared send. A failed/swallowed append removes the suppression id;
+ * a real append keeps it until the next listen observes that row. */
+export async function finishPreparedSend(
+  code: string,
+  messageId: number,
+  appended: boolean,
+  at: number,
+): Promise<void> {
+  await mutateSendListenState((state) => {
+    const room = state.rooms[code];
+    if (!room) return;
+    if (appended) {
+      room.lastSentAt = at;
+    } else {
+      room.pendingOwnMessageIds = (room.pendingOwnMessageIds ?? []).filter(id => id !== messageId);
+    }
+  });
+}
+
+/** Advance one delivered batch and atomically consume only this session's own
+ * prepared ids. Returns the ids to suppress from the visible listen payload. */
+export async function advanceListenAndConsumeOwn(
+  code: string,
+  cursor: number,
+  observedOwnIds: number[],
+): Promise<Set<number>> {
+  const consumed = await mutateSendListenState((state) => {
+    const room = state.rooms[code];
+    if (!room) return [] as number[];
+    const pending = new Set(room.pendingOwnMessageIds ?? []);
+    const matched = observedOwnIds.filter(id => pending.has(id));
+    const matchedSet = new Set(matched);
+    room.pendingOwnMessageIds = (room.pendingOwnMessageIds ?? []).filter(id => !matchedSet.has(id));
+    if (cursor > room.cursor) room.cursor = cursor;
+    return matched;
+  });
+  return new Set(consumed);
 }
 
 export async function bumpBlockStreak(): Promise<number> {

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
-import { extractViewBlock, parseStructuredView, type StructuredView, type ViewAction } from '@agent-room/shared';
+import { extractViewBlock, parseStructuredView, type StructuredView, type ViewAction, type ViewLink } from '@agent-room/shared';
 
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
 
@@ -28,6 +28,71 @@ interface Props {
 const CARD = 'my-1 overflow-hidden rounded-xl border border-border bg-surface';
 const HEAD = 'border-b border-border-faint px-3 py-2 text-[13px] font-semibold text-ink';
 const LABEL = 'text-[12px] font-semibold uppercase tracking-wide text-ink-faint';
+
+function Links({ links }: { links?: ViewLink[] }) {
+  if (!links?.length) return null;
+  return (
+    <nav className="flex flex-wrap gap-2 border-t border-border-faint px-3 py-2" aria-label="Related links">
+      {links.map((link, index) => (
+        <a
+          key={`${link.href}-${index}`}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {link.label}
+          <span aria-hidden="true">↗</span>
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function InteractiveListRow({
+  action,
+  onAction,
+  title,
+  children,
+}: {
+  action: ViewAction;
+  onAction?: Props['onAction'];
+  title: string;
+  children: ReactNode;
+}) {
+  const [state, setState] = useState<'idle' | 'pending' | 'done' | 'failed'>('idle');
+  const locked = state === 'pending' || state === 'done';
+  return (
+    <button
+      type="button"
+      disabled={!onAction || locked}
+      aria-disabled={!onAction || locked}
+      aria-busy={state === 'pending'}
+      onClick={() => {
+        if (!onAction || locked) return;
+        setState('pending');
+        void Promise.resolve(onAction(action))
+          .then(() => setState('done'))
+          .catch(() => setState('failed'));
+      }}
+      className={`min-h-11 w-full px-3 py-2 text-left transition hover:bg-surface-softer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent disabled:cursor-not-allowed ${
+        !onAction ? 'opacity-60' : state === 'failed' ? 'bg-red-500/5' : ''
+      }`}
+      aria-label={`${state === 'failed' ? 'Retry ' : ''}${action.label}: ${title}`}
+    >
+      {children}
+      {state !== 'idle' && (
+        <span className={`mt-1 block text-[12px] font-semibold ${
+          state === 'failed' ? 'text-red-400' : state === 'done' ? 'text-emerald-400' : 'text-accent'
+        }`} role="status" aria-live="polite">
+          {state === 'pending' ? `Requesting ${action.label}…`
+            : state === 'done' ? `${action.label} requested`
+              : `Request failed — retry ${action.label}`}
+        </span>
+      )}
+    </button>
+  );
+}
 
 function Actions({ actions, onAction }: { actions?: ViewAction[]; onAction?: Props['onAction'] }) {
   // T-46 rev2: a verifier pointed out that "Archive" reads like the app archiving
@@ -92,22 +157,33 @@ export function StructuredViewCard({ view, onAction }: Props) {
           <p className="px-3 py-4 text-center text-[13px] text-ink-faint">{view.empty || 'Nothing to show.'}</p>
         ) : (
           <ul className="divide-y divide-border-faint" role="list">
-            {view.items.map(item => (
-              <li key={item.id} className="px-3 py-2" role="listitem">
-                <div className="flex items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-ink">{item.title}</span>
-                  {item.meta && <span className="flex-shrink-0 text-[12px] tabular-nums text-ink-faint">{item.meta}</span>}
-                </div>
-                {item.subtitle && <div className="truncate text-[13px] text-ink-soft">{item.subtitle}</div>}
-                {item.badges?.length ? (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {item.badges.map((b, i) => (
-                      <span key={`${item.id}-b${i}`} className="rounded-full bg-surface-softer px-2 py-0.5 text-[12px] font-semibold text-ink-soft">{b}</span>
-                    ))}
+            {view.items.map(item => {
+              const content = (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-ink">{item.title}</span>
+                    {item.meta && <span className="flex-shrink-0 text-[12px] tabular-nums text-ink-faint">{item.meta}</span>}
                   </div>
-                ) : null}
-              </li>
-            ))}
+                  {item.subtitle && <div className="truncate text-[13px] text-ink-soft">{item.subtitle}</div>}
+                  {item.badges?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {item.badges.map((b, i) => (
+                        <span key={`${item.id}-b${i}`} className="rounded-full bg-surface-softer px-2 py-0.5 text-[12px] font-semibold text-ink-soft">{b}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              );
+              return (
+                <li key={item.id} role="listitem">
+                  {item.action ? (
+                    <InteractiveListRow action={item.action} onAction={onAction} title={item.title}>
+                      {content}
+                    </InteractiveListRow>
+                  ) : <div className="px-3 py-2">{content}</div>}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -135,6 +211,7 @@ export function StructuredViewCard({ view, onAction }: Props) {
           // a long unbroken token push the card wider than the column.
           <div className="whitespace-pre-wrap break-words border-t border-border-faint px-3 py-2 text-[14px] leading-relaxed text-ink">{view.body}</div>
         )}
+        <Links links={view.links} />
         <Actions actions={view.actions} onAction={onAction} />
       </section>
     );
@@ -162,27 +239,44 @@ export function StructuredViewCard({ view, onAction }: Props) {
     );
   }
 
-  return (
+  if (view.kind === 'confirm') return (
     <section className={CARD} data-gate="view-confirm" aria-label="Confirmation">
       <p className="px-3 py-2 text-[14px] text-ink">{view.prompt}</p>
-      <div className="flex flex-wrap gap-2 border-t border-border-faint px-3 py-2">
-        <button
-          type="button"
-          disabled={!onAction}
-          onClick={() => onAction?.({ id: 'confirm', label: view.confirmLabel })}
-          className="min-h-11 rounded-lg bg-accent px-4 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
-        >
-          {view.confirmLabel}
-        </button>
-        <button
-          type="button"
-          disabled={!onAction}
-          onClick={() => onAction?.({ id: 'cancel', label: view.cancelLabel || 'Cancel' })}
-          className="min-h-11 rounded-lg border border-border px-4 text-[13px] font-semibold text-ink transition hover:border-accent disabled:opacity-40"
-        >
-          {view.cancelLabel || 'Cancel'}
-        </button>
+      <Actions
+        actions={[
+          { id: 'confirm', label: view.confirmLabel },
+          { id: 'cancel', label: view.cancelLabel || 'Cancel' },
+        ]}
+        onAction={onAction}
+      />
+    </section>
+  );
+
+  return (
+    <section
+      className={`${CARD} px-3 py-3`}
+      data-gate={`view-status-${view.state}`}
+      aria-label={view.title || (view.state === 'loading' ? 'Loading' : 'Error')}
+      role={view.state === 'error' ? 'alert' : 'status'}
+      aria-live="polite"
+      aria-busy={view.state === 'loading'}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className={`mt-1 h-2.5 w-2.5 flex-none rounded-full ${
+            view.state === 'loading' ? 'animate-pulse bg-accent' : 'bg-red-500'
+          }`}
+        />
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink">
+            {view.title || (view.state === 'loading' ? 'Working…' : 'Something went wrong')}
+          </div>
+          {view.message && <p className="mt-0.5 break-words text-[13px] text-ink-soft">{view.message}</p>}
+        </div>
       </div>
+      <Links links={view.links} />
+      {view.action && <Actions actions={[view.action]} onAction={onAction} />}
     </section>
   );
 }

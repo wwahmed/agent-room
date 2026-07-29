@@ -157,6 +157,22 @@ export const ROOM_TEMPLATES: RoomTemplate[] = [
       "Paste or forward the first issue to start the queue.",
   },
   {
+    id: 'fluid-interface',
+    label: 'Fluid Interface',
+    emoji: '◫',
+    description: 'Adaptive, first-party list, detail, draft, confirmation, loading, and error views — without executing agent-authored HTML.',
+    whenToUse: 'The room should behave like a focused app workspace instead of a stream of text.',
+    topicSeed: '{workflow} workspace',
+    suggestedRoleIds: ['facilitator', 'builder', 'qa-reviewer'],
+    openingMessage:
+      "Fluid-interface room open. Use normal conversation for context, and safe `wakiview` cards when a list, detail, draft, confirmation, loading state, or error state is materially clearer.\n\n" +
+      "- Views are first-party UI rendered from strict JSON — never model-authored HTML\n" +
+      "- Buttons request an agent action; they do not silently perform it\n" +
+      "- Keep the transcript understandable even without the card\n" +
+      "- Use the room's Output instructions in Settings to preview or tailor the presentation contract\n\n" +
+      "What workflow should this room turn into?",
+  },
+  {
     id: 'delivery',
     label: 'Delivery Planning',
     emoji: '📦',

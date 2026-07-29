@@ -289,6 +289,13 @@ export interface Room {
   // means untyped/blank. This is what turns templates from a create-form
   // veneer into a shared fact every joiner (human or agent) can read.
   templateId?: string;
+  // T-47: owner-authored PRESENTATION guidance delivered to agents on every
+  // join/listen. It is not system authority and cannot change tool schemas,
+  // security rules, room conventions, or the participant's assigned role.
+  // Undefined means "use the selected room type's default, if it has one."
+  outputInstructions?: string;
+  outputInstructionsUpdatedAt?: number;
+  outputInstructionsUpdatedBy?: string;
   // T-14: pinned outcomes, oldest pin first, bounded (MAX_PINNED_MESSAGES).
   // Lives on the room record so every client sees the same strip from the
   // ordinary room poll — no extra fetch, survives message trimming.

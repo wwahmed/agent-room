@@ -16,12 +16,15 @@ const list = (over: Record<string, unknown> = {}) =>
 // sketch had the agent emitting raw HTML into a session holding a live mailbox
 // token. Everything here is about making that impossible by construction.
 describe('Structured view contract', () => {
-  it('accepts the four view kinds and rejects anything else', () => {
+  it('accepts the first-party view kinds and rejects anything else', () => {
     for (const view of [
       list(),
       { v: 1, kind: 'detail', title: 'T', fields: [{ label: 'From', value: 'a@b.c' }] },
+      { v: 1, kind: 'detail', title: 'T', fields: [], links: [{ label: 'Open source', href: 'https://example.com/path?q=1' }] },
       { v: 1, kind: 'draft', body: 'Hello' },
       { v: 1, kind: 'confirm', prompt: 'Send it?', confirmLabel: 'Send' },
+      { v: 1, kind: 'status', state: 'loading', title: 'Loading mail' },
+      { v: 1, kind: 'status', state: 'error', message: 'Mailbox unavailable', action: { id: 'retry-mail', label: 'Retry' } },
     ]) {
       expect(parseStructuredView(view).ok, JSON.stringify(view).slice(0, 40)).toBe(true);
     }
@@ -30,6 +33,21 @@ describe('Structured view contract', () => {
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.reason).toMatch(/unknown view kind/);
     }
+  });
+
+  it('validates interactive list rows and rejects duplicate hidden action ids', () => {
+    const good = parseStructuredView(list({
+      items: [{ id: 'm1', title: 'Invoice', action: { id: 'open-m1', label: 'Open message' } }],
+    }));
+    expect(good.ok).toBe(true);
+    const duplicate = parseStructuredView(list({
+      items: [
+        { id: 'm1', title: 'One', action: { id: 'open', label: 'Open one' } },
+        { id: 'm2', title: 'Two', action: { id: 'open', label: 'Open two' } },
+      ],
+    }));
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok) expect(duplicate.reason).toMatch(/duplicate list action id/);
   });
 
   it('reports an UNSUPPORTED VERSION distinctly from corruption', () => {
@@ -67,6 +85,33 @@ describe('Structured view contract', () => {
       // into something that might round-trip back into markup.
       expect(r.view.items[0]?.title).toBe('<script>alert("xss")</script>');
       expect(r.view.items[0]?.subtitle).toBe('javascript:alert(1)');
+    }
+  });
+
+  it('allows only explicit credential-free HTTPS links', () => {
+    const good = parseStructuredView({
+      v: 1,
+      kind: 'detail',
+      title: 'Source',
+      fields: [],
+      links: [{ label: 'Open source', href: 'https://example.com/report?q=1' }],
+    });
+    expect(good.ok).toBe(true);
+    if (good.ok && good.view.kind === 'detail') {
+      expect(good.view.links).toEqual([{ label: 'Open source', href: 'https://example.com/report?q=1' }]);
+    }
+    for (const href of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'http://example.com',
+      'https://user:password@example.com/private',
+      '/relative',
+    ]) {
+      const bad = parseStructuredView({
+        v: 1, kind: 'detail', title: 'T', fields: [], links: [{ label: 'Open', href }],
+      });
+      expect(bad.ok, href).toBe(false);
+      if (!bad.ok) expect(bad.reason).toMatch(/HTTPS URL/);
     }
   });
 

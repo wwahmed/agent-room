@@ -37,7 +37,7 @@ import { homedir } from 'node:os';
 import { extname, join, normalize, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
-import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, ROOM_CONVENTIONS, ROOM_TEMPLATES_SHARED, ROOM_TTL_SECONDS, isKnownTemplateId, roomTopicIssue, buildOwnerBrief, briefToSpeech, composeBrief, templateInfo } from '@agent-room/shared';
+import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, normalizeRoomOutputInstructions, ROOM_CONVENTIONS, ROOM_TEMPLATES_SHARED, ROOM_TTL_SECONDS, isKnownTemplateId, roomTopicIssue, buildOwnerBrief, briefToSpeech, composeBrief, templateInfo } from '@agent-room/shared';
 import type { MessageAttachment } from '@agent-room/shared';
 import { parseMultipart } from './multipart.js';
 import {
@@ -142,6 +142,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   archiveRoom,
   unarchiveRoom,
   setRoomTemplate,
+  setRoomOutputInstructions,
   setRoomWorkspace,
   removeParticipant,
   RoomNotFoundError,
@@ -1803,6 +1804,40 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
           metadata: { eventType: 'template_changed', ...(templateId ? { templateId } : {}) },
         } as Message);
       } catch { /* announcement is best-effort; the retag itself succeeded */ }
+      return { room };
+    }
+    case 'setOutputInstructions': {
+      // T-47: this is owner-authored room guidance, so unlike operational local
+      // mutations it has NO local-process bypass. Only the host credential may
+      // change what future agents receive.
+      await requireHost(code, payload.hostKey as string | undefined, caller);
+      const normalized = normalizeRoomOutputInstructions(payload.outputInstructions);
+      if (!normalized.ok) {
+        const err = new Error(normalized.reason);
+        err.name = 'BadRequestError';
+        throw err;
+      }
+      const before = await getRoom(client, code);
+      const room = await setRoomOutputInstructions(client, code, normalized.value, before.createdBy);
+      // Never echo the instructions into chat: they may contain private workflow
+      // context and the transcript is not the editing surface. Announce only that
+      // the presentation contract changed, so live agents know to read the envelope
+      // returned by their next listen.
+      const now = Date.now();
+      await appendSystemMessage(client, code, {
+        id: now,
+        type: 'sys',
+        name: 'system',
+        initials: '⚙️',
+        color: '#6B7280',
+        role: '',
+        client: 'cc',
+        time: now,
+        text: normalized.value
+          ? 'Room output instructions were updated by the host. Agents receive the new presentation guidance on their next listen.'
+          : 'Room output instructions were reset to the selected room type default.',
+        metadata: { eventType: 'output_instructions_changed' },
+      } as Message);
       return { room };
     }
     case 'createReport': {

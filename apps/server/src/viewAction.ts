@@ -102,7 +102,13 @@ export async function checkViewAction(
   if (!parsed.ok) return { ok: false, reason: `the source view is not valid: ${parsed.reason}` };
 
   const view = parsed.view;
-  const declared = view.kind === 'detail' || view.kind === 'draft' ? view.actions ?? [] : [];
+  const declared = view.kind === 'detail' || view.kind === 'draft'
+    ? view.actions ?? []
+    : view.kind === 'list'
+      ? view.items.flatMap(item => item.action ? [item.action] : [])
+      : view.kind === 'status' && view.action
+        ? [view.action]
+        : [];
   // `confirm` offers its two buttons implicitly rather than in an actions array.
   const implicit = view.kind === 'confirm'
     ? [{ id: 'confirm', label: view.confirmLabel }, { id: 'cancel', label: view.cancelLabel || 'Cancel' }]

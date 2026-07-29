@@ -285,6 +285,22 @@ export async function setRoomTemplateAction(_client: ApiClient, code: string, te
   })).room;
 }
 
+/** Replace the room's owner-authored presentation guidance. An empty string
+ * clears the override and restores the selected room type's default. */
+export async function setRoomOutputInstructionsAction(
+  _client: ApiClient,
+  code: string,
+  outputInstructions: string,
+  auth: HostAuth = {},
+): Promise<Room> {
+  return (await call<{ room: Room }>({
+    action: 'setOutputInstructions',
+    code,
+    outputInstructions,
+    hostKey: auth.hostKey ?? storedHostKey(code),
+  })).room;
+}
+
 /** Bind (or clear) the room's workspace — the source of truth agents inherit. */
 export async function setRoomWorkspaceAction(_client: ApiClient, code: string, workspace: string, auth: HostAuth = {}): Promise<Room> {
   return (await call<{ room: Room }>({

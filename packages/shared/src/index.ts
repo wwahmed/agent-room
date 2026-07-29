@@ -8,6 +8,7 @@ export * from './text.js';
 export * from './roomTopic.js';
 export * from './conventions.js';
 export * from './templates.js';
+export * from './outputInstructions.js';
 export * from './agentLifecycle.js';
 export * from './ownerBrief.js';
 export * from './briefProtocol.js';
