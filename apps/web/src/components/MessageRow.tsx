@@ -313,7 +313,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
               edge-to-edge scan. */}
           {body.trim() && (
             <div className="msg-prose">
-              <ViewAwareBody text={body} selfName={selfName} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />
+              <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />
             </div>
           )}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
@@ -377,7 +377,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div data-gate="msg-content" className={`${bubbleShape} px-4 py-3 ${bodyText}`} style={swipe.style}>
           {cardTray}
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <ViewAwareBody text={body} selfName={selfName} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />}
+          {body.trim() && <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>
@@ -416,7 +416,7 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
-          {body.trim() && <ViewAwareBody text={body} selfName={selfName} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />}
+          {body.trim() && <ViewAwareBody text={body} selfName={selfName} viewAction={message.metadata?.viewAction} onAction={onViewAction ? (a) => onViewAction(message, a) : undefined} />}
           {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
           <ReactionChips message={message} onReact={onReact} selfName={selfName} />
         </div>

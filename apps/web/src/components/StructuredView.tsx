@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { extractViewBlock, parseStructuredView, type StructuredView, type ViewAction } from '@agent-room/shared';
 
 import { CollapsibleMessageBody } from './CollapsibleMessageBody.js';
@@ -28,21 +30,38 @@ const HEAD = 'border-b border-border-faint px-3 py-2 text-[13px] font-semibold t
 const LABEL = 'text-[12px] font-semibold uppercase tracking-wide text-ink-faint';
 
 function Actions({ actions, onAction }: { actions?: ViewAction[]; onAction?: Props['onAction'] }) {
+  // T-46 rev2: a verifier pointed out that "Archive" reads like the app archiving
+  // something, when in fact pressing it only ASKS the agent to. The button now says
+  // what it does, and once pressed it stays pressed — an action fires once, and a
+  // second click cannot replay it.
+  const [requested, setRequested] = useState<Set<string>>(new Set());
   if (!actions?.length) return null;
   return (
-    <div className="flex flex-wrap gap-2 border-t border-border-faint px-3 py-2" data-gate="view-actions">
-      {actions.map(a => (
-        <button
-          key={a.id}
-          type="button"
-          disabled={!onAction}
-          onClick={() => onAction?.(a)}
-          title={onAction ? undefined : 'Actions are unavailable here'}
-          className="min-h-11 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:border-accent disabled:opacity-40"
-        >
-          {a.label}
-        </button>
-      ))}
+    <div className="border-t border-border-faint px-3 py-2" data-gate="view-actions">
+      <div className="flex flex-wrap gap-2">
+        {actions.map(a => {
+          const done = requested.has(a.id);
+          return (
+            <button
+              key={a.id}
+              type="button"
+              disabled={!onAction || done}
+              aria-disabled={!onAction || done}
+              onClick={() => {
+                if (!onAction || requested.has(a.id)) return;
+                setRequested(prev => new Set(prev).add(a.id));
+                onAction(a);
+              }}
+              title={onAction ? `Ask the agent to: ${a.label}` : 'Actions are unavailable here'}
+              className="min-h-11 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:border-accent disabled:opacity-40"
+            >
+              {done ? `Requested: ${a.label}` : a.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* Says the true effect once, rather than implying each button acts. */}
+      <p className="mt-1.5 text-[12px] text-ink-faint">These ask the agent to act — they do not act themselves.</p>
     </div>
   );
 }
@@ -180,11 +199,15 @@ export function StructuredViewFallback({ reason, unsupportedVersion }: { reason:
  * renders, because the agent's sentence ("here are today's emails") is context the
  * card does not carry, and losing it would make the transcript unreadable later.
  */
-export function ViewAwareBody({ text, selfName, onAction }: {
+export function ViewAwareBody({ text, selfName, onAction, viewAction }: {
   text: string;
   selfName?: string;
   onAction?: (action: ViewAction) => void;
+  /** Present when THIS message is itself an action request; the receipt replaces
+   *  the host-authored token text, which nobody needs to read. */
+  viewAction?: { actionId: string; label: string; sourceMessageId: number; viewVersion: number; nonce: string };
 }) {
+  if (viewAction) return <ViewActionReceipt action={viewAction} />;
   const block = extractViewBlock(text);
   if (!block) return <CollapsibleMessageBody text={text} selfName={selfName} />;
   const parsed = parseStructuredView(block.json);
@@ -202,6 +225,31 @@ export function ViewAwareBody({ text, selfName, onAction }: {
           </>
         )}
       {block.after && <CollapsibleMessageBody text={block.after} selfName={selfName} />}
+    </div>
+  );
+}
+
+/**
+ * T-46 rev2: honest receipt for a pressed action.
+ *
+ * The transcript used to show raw protocol syntax (`[action:draft-reply-m1] …`),
+ * which is both ugly and misleading — it reads like the host typed a command. This
+ * renders the same event as a compact receipt built from METADATA, with the
+ * agent-authored label displayed as text (a React child, so inert) and the binding
+ * available for anyone auditing what was requested against which message.
+ */
+export function ViewActionReceipt({ action }: {
+  action: { actionId: string; label: string; sourceMessageId: number; viewVersion: number; nonce: string };
+}) {
+  return (
+    <div
+      className="my-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-border-faint bg-surface-softer px-2.5 py-1.5 text-[13px]"
+      data-gate="view-action-receipt"
+      title={`action ${action.actionId} · from message ${action.sourceMessageId} · view v${action.viewVersion}`}
+    >
+      <span aria-hidden="true">↳</span>
+      <span className="text-ink-soft">Asked the agent to</span>
+      <span className="font-semibold text-ink">{action.label}</span>
     </div>
   );
 }

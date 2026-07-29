@@ -92,6 +92,55 @@ describe('Structured view rendering', () => {
     expect(onAction).toHaveBeenCalledWith({ id: 'send-42', label: 'Send it' });
   });
 
+  it('an action fires ONCE — a second click cannot replay it', () => {
+    // The verifier's point: nothing stopped repeated clicks, so one intent could
+    // become several requests.
+    const onAction = vi.fn();
+    render(
+      <StructuredViewCard
+        view={{ v: 1, kind: 'draft', body: 'Hi', actions: [{ id: 'send-1', label: 'Send it' }] }}
+        onAction={onAction}
+      />,
+    );
+    const btn = screen.getByText('Send it');
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    // And it says so, rather than looking pressable while doing nothing.
+    expect(screen.getByText('Requested: Send it')).toBeTruthy();
+  });
+
+  it('says the buttons only ASK — "Archive" does not archive', () => {
+    // "Archive" read like the app archiving something when it only asks the agent.
+    const { container } = render(
+      <StructuredViewCard
+        view={{ v: 1, kind: 'detail', title: 'T', fields: [], actions: [{ id: 'archive-1', label: 'Archive' }] }}
+        onAction={() => {}}
+      />,
+    );
+    expect(container.textContent).toContain('These ask the agent to act');
+    expect(container.querySelector('button')?.getAttribute('title')).toBe('Ask the agent to: Archive');
+  });
+
+  it('an action request renders an honest receipt, not raw protocol syntax', () => {
+    const { container } = render(
+      <ViewAwareBody
+        text="Requested action draft-reply-m1"
+        viewAction={{ actionId: 'draft-reply-m1', label: 'Draft a reply', sourceMessageId: 42, viewVersion: 1, nonce: 'n1' }}
+      />,
+    );
+    expect(container.querySelector('[data-gate="view-action-receipt"]')).not.toBeNull();
+    expect(container.textContent).toContain('Asked the agent to');
+    expect(container.textContent).toContain('Draft a reply');
+    // The transcript no longer shows `[action:...]` or the bare token line.
+    expect(container.textContent).not.toContain('[action:');
+    expect(container.textContent).not.toContain('Requested action draft-reply-m1');
+    // The binding stays available for audit without shouting it at the reader.
+    expect(container.querySelector('[data-gate="view-action-receipt"]')?.getAttribute('title'))
+      .toBe('action draft-reply-m1 · from message 42 · view v1');
+  });
+
   it('read-only contexts DISABLE actions rather than hiding them', () => {
     const { container } = render(
       <StructuredViewCard view={{ v: 1, kind: 'draft', body: 'Hi', actions: [{ id: 'a', label: 'Do it' }] }} />,

@@ -319,6 +319,20 @@ export type MessageKind = 'msg' | 'sys';
 // for prompt construction (a Sequential supplement agent needs to see prior
 // turn messages to know what was already said).
 export interface MessageMetadata {
+  // T-46: a button inside an agent's structured view was pressed. Carried as
+  // METADATA rather than in the message text, because the label is agent-authored
+  // and message text is host-authored prose — the first version interpolated both
+  // into the body and a verifier showed that a hidden id could make the host's own
+  // account post an instruction to another agent. Bound to its source message,
+  // view version and a nonce so the request is attributable and replay-detectable
+  // instead of free-floating. Display-only for the label; never executed.
+  viewAction?: {
+    actionId: string;
+    label: string;
+    sourceMessageId: number;
+    viewVersion: number;
+    nonce: string;
+  };
   // The sender dictated this message by voice. Recipients (human and agent)
   // should read transcription artifacts charitably — odd words may be the
   // speech engine, not the speaker. Set by the web composer at send time.
