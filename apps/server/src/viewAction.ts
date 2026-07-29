@@ -24,6 +24,8 @@
 import type { Message } from '@agent-room/shared';
 import { extractViewBlock, parseStructuredView } from '@agent-room/shared';
 
+import { isWellFormedLineage } from './lineage.js';
+
 export interface ViewActionClaim {
   actionId?: unknown;
   label?: unknown;
@@ -33,7 +35,14 @@ export interface ViewActionClaim {
 }
 
 export type ViewActionCheck =
-  | { ok: true; actionId: string; label: string; sourceMessageId: number; sourceSender: string; sourceSenderClient: string }
+  | {
+      ok: true; actionId: string; label: string; sourceMessageId: number;
+      sourceSender: string; sourceSenderClient: string;
+      /** T-49: lineage of the session that OFFERED the action. Requests bind to
+       *  this, so a request routes back to the producer session rather than to a
+       *  display name that another participant could be wearing. */
+      sourceLineage: string;
+    }
   | { ok: false; reason: string };
 
 /** The idempotency key that actually matters. A client nonce identifies a click;
@@ -63,6 +72,15 @@ export async function checkViewAction(
   // appending a request nobody can trace back.
   if (!source) return { ok: false, reason: 'the message this action came from no longer exists' };
 
+  // T-49: an UNBOUND source cannot authorise anything. Messages predating lineage
+  // carry no session identity, and the alternative — inferring the producer from
+  // name + client — is precisely the guesswork this replaced: names are mutable,
+  // they duplicate, and a rejoined session wears the same one. Fail closed.
+  const sourceLineage = source.metadata?.senderLineage;
+  if (!isWellFormedLineage(sourceLineage)) {
+    return { ok: false, reason: 'the source message has no session lineage, so its actions are disabled' };
+  }
+
   const block = extractViewBlock(String(source.text ?? ''));
   if (!block) return { ok: false, reason: 'the source message contains no structured view' };
 
@@ -88,5 +106,6 @@ export async function checkViewAction(
     sourceMessageId,
     sourceSender: String(source.name ?? ''),
     sourceSenderClient: String(source.client ?? ''),
+    sourceLineage,
   };
 }

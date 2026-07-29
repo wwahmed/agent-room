@@ -6,10 +6,13 @@ import { checkViewAction, viewActionKey } from './viewAction.js';
 
 const serverIndex = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
+const LINEAGE = 'a'.repeat(32);   // well-formed 128-bit hex lineage
+
 function sourceMessage(viewJson: string, over: Partial<Message> = {}): Message {
   return {
     id: 100, type: 'msg', name: 'MailAgent', client: 'cc', role: 'AI Agent',
     initials: 'MA', color: '#000', time: 1, text: 'Here you go:\n\n```wakiview\n' + viewJson + '\n```',
+    metadata: { senderLineage: LINEAGE },
     ...over,
   } as Message;
 }
@@ -34,6 +37,8 @@ describe('View action server validation', () => {
       // rather than to whichever agent answers first.
       expect(r.sourceSender).toBe('MailAgent');
       expect(r.sourceSenderClient).toBe('cc');
+      // Bound to the producer SESSION, which is what a request should route to.
+      expect(r.sourceLineage).toBe(LINEAGE);
     }
   });
 
@@ -60,7 +65,7 @@ describe('View action server validation', () => {
     if (!gone.ok) expect(gone.reason).toMatch(/no longer exists/);
 
     const plain = await checkViewAction({ actionId: 'a', sourceMessageId: 100 },
-      finder(sourceMessage('', { text: 'just a message' })));
+      finder(sourceMessage('', { text: 'just a message', metadata: { senderLineage: LINEAGE } })));
     expect(plain.ok).toBe(false);
     if (!plain.ok) expect(plain.reason).toMatch(/no structured view/);
 
@@ -68,6 +73,23 @@ describe('View action server validation', () => {
       finder(sourceMessage('{"v":1,"kind":"nope"}')));
     expect(corrupt.ok).toBe(false);
     if (!corrupt.ok) expect(corrupt.reason).toMatch(/not valid/);
+  });
+
+  it('T-49: an UNBOUND source fails closed — never attributed by name', async () => {
+    // Messages predating lineage carry no session identity. Inferring the producer
+    // from name + client is exactly the guesswork lineage replaced: names are
+    // mutable, they duplicate, and a rejoined session wears the same one.
+    const unbound = await checkViewAction({ actionId: 'draft-reply-m1', sourceMessageId: 100 },
+      finder(sourceMessage(detail, { metadata: {} })));
+    expect(unbound.ok).toBe(false);
+    if (!unbound.ok) expect(unbound.reason).toMatch(/no session lineage/);
+
+    // A client-invented lineage that is not well-formed is refused too.
+    for (const bogus of ['short', 'A'.repeat(32), 'z'.repeat(32), 123, null]) {
+      const forged = await checkViewAction({ actionId: 'draft-reply-m1', sourceMessageId: 100 },
+        finder(sourceMessage(detail, { metadata: { senderLineage: bogus as never } })));
+      expect(forged.ok, String(bogus)).toBe(false);
+    }
   });
 
   it('validates confirm buttons, which are implicit rather than declared', async () => {

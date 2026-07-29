@@ -319,6 +319,13 @@ export type MessageKind = 'msg' | 'sys';
 // for prompt construction (a Sequential supplement agent needs to see prior
 // turn messages to know what was already said).
 export interface MessageMetadata {
+  // T-49: server-derived identity of the SESSION that sent this message. Stable
+  // across display-name changes, distinct for two participants sharing a name, and
+  // distinct again for a session that left and rejoined. Never a credential — it is
+  // a one-way room-scoped digest, not the row's anchor hash, which must never be
+  // published per message. Absent on messages predating this ('unbound'), whose
+  // structured actions are disabled rather than attributed by guesswork.
+  senderLineage?: string;
   // T-46: a button inside an agent's structured view was pressed. Carried as
   // METADATA rather than in the message text, because the label is agent-authored
   // and message text is host-authored prose — the first version interpolated both
@@ -334,6 +341,8 @@ export interface MessageMetadata {
      *  SERVER-SIDE from the real source message. Lets the receipt say who the
      *  request was addressed to instead of "the agent". */
     sourceSender?: string;
+    /** T-49: lineage of the producer session this request is bound to. */
+    sourceLineage?: string;
     viewVersion: number;
     nonce: string;
   };

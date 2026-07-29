@@ -222,7 +222,7 @@ export function ViewAwareBody({ text, selfName, onAction, viewAction }: {
   onAction?: (action: ViewAction) => void;
   /** Present when THIS message is itself an action request; the receipt replaces
    *  the host-authored token text, which nobody needs to read. */
-  viewAction?: { actionId: string; label: string; sourceMessageId: number; viewVersion: number; nonce: string };
+  viewAction?: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; sourceLineage?: string; viewVersion: number; nonce: string };
 }) {
   if (viewAction) return <ViewActionReceipt action={viewAction} />;
   const block = extractViewBlock(text);
@@ -256,7 +256,7 @@ export function ViewAwareBody({ text, selfName, onAction, viewAction }: {
  * available for anyone auditing what was requested against which message.
  */
 export function ViewActionReceipt({ action }: {
-  action: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; viewVersion: number; nonce: string };
+  action: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; sourceLineage?: string; viewVersion: number; nonce: string };
 }) {
   return (
     <div

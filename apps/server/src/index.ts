@@ -59,6 +59,7 @@ import { synthesize } from './tts.js';
 import { roomActivityAt } from './roomactivity.js';
 import { countsAsActivity, lastActivityTime } from './activitySignal.js';
 import { checkViewAction, viewActionKey } from './viewAction.js';
+import { deriveLineage } from './lineage.js';
 
 // T-43: how much history the index backfill inspects per room to find the newest
 // REAL activity. A run of heartbeats can easily be a few dozen entries; this is
@@ -739,12 +740,14 @@ async function authenticateSender(
   clientKind: 'web' | 'cc',
   memberKey: string | undefined,
   caller: Caller,
-): Promise<void> {
+): Promise<Participant | null> {
+  // T-49: returns the row it actually verified, so the send path can derive that
+  // session's lineage from the authenticated identity rather than from the claim.
   const room = await getRoom(client, code);
   const rows = room.participants.filter(p => p.name === name && p.client === clientKind);
   // No row yet: let the downstream speaker gate (findSpeaker → MutedError)
   // produce the not-in-room signal; there is nothing to authenticate against.
-  if (rows.length === 0) return;
+  if (rows.length === 0) return null;
 
   const presentedHash = memberKey ? await sha256Hex(memberKey) : undefined;
   const verifiedAuthIdHash =
@@ -754,7 +757,8 @@ async function authenticateSender(
     if (decision.via === 'legacy-name') {
       securityEvent(`send/presence as "${name}" (${clientKind}) on ${code} via legacy name path (ALLOW_LEGACY_NAME_AUTH); caller=${caller.kind}`);
     }
-    return;
+    // Prefer the row the decision matched; fall back to the sole candidate.
+    return (decision as { row?: Participant }).row ?? rows[0] ?? null;
   }
   switch (decision.reason) {
     case 'wrong-auth-id':
@@ -1182,7 +1186,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // T-30 (F2): the sender must prove it owns the row it claims. A member
       // credential (if the row has one) or the flag-gated legacy path — a
       // display name alone never authenticates a send.
-      await authenticateSender(
+      const senderRow = await authenticateSender(
         code,
         String(message.name),
         (message.client as 'web' | 'cc') || 'cc',
@@ -1231,6 +1235,20 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // now resolves the claim, takes the receipt label from the validated view
       // rather than the request, and enforces one-fire-per-intent so double clicks,
       // retries, two tabs and replays all collapse into one.
+      // T-49: stamp the sender's session lineage from the AUTHENTICATED row, never
+      // from anything the client sent. A client-supplied value is discarded even if
+      // it is well-formed.
+      if ((stamped as Message).type !== 'sys' && senderRow) {
+        const lineage = await deriveLineage(code, senderRow, sha256Hex);
+        (stamped as Message).metadata = {
+          ...(stamped as Message).metadata,
+          ...(lineage ? { senderLineage: lineage } : {}),
+        };
+        if (!lineage) delete (stamped as Message).metadata?.senderLineage;
+      } else {
+        const meta = (stamped as Message).metadata;
+        if (meta?.senderLineage) delete meta.senderLineage;
+      }
       const claim = (stamped as Message).metadata?.viewAction;
       let viewActionReservation: string | null = null;
       if (claim) {
@@ -1261,6 +1279,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
             label: verdict.label,
             sourceMessageId: verdict.sourceMessageId,
             sourceSender: verdict.sourceSender,
+            sourceLineage: verdict.sourceLineage,
             viewVersion: 1,
             nonce: String(claim.nonce ?? ''),
           },
