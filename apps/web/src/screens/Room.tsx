@@ -302,6 +302,20 @@ export function Room() {
   // sitting below `if (!self) return`, which is exactly the conditional-hook crash
   // that T-82 comment warns about a few lines further down.
   const firedActionsRef = useRef<Set<string>>(new Set());
+  // T-49: which requests the addressed session has confirmed it picked up. The ack
+  // is a later message, so a receipt cannot know its own fate — this maps request id
+  // to acknowledger. Only the bound session can produce an ack (the server refuses
+  // every other lineage), so "picked up" is a fact rather than optimism.
+  const ackedViewActions = useMemo(() => {
+    const acks = new Map<number, string>();
+    for (const m of messages) {
+      const ack = m.metadata?.viewActionAck;
+      if (ack && Number.isFinite(Number(ack.requestMessageId))) {
+        acks.set(Number(ack.requestMessageId), String(m.name ?? ''));
+      }
+    }
+    return acks;
+  }, [messages]);
   const [sendWaitingOnUpload, setSendWaitingOnUpload] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
@@ -3117,6 +3131,7 @@ export function Room() {
                       selfName={self.name}
                       senderBrand={brandForSender(m, activeRoom.participants)}
                       onViewAction={handleViewAction}
+                      ackedViewActions={ackedViewActions}
                     />
                   )}
                   </Fragment>

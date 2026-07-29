@@ -97,6 +97,18 @@ export interface Participant {
   // hash is stored; the plaintext is injected by the agent's own proxy and
   // never reaches the agent, its transcript, or the chat.
   agentIdHash?: string;
+  // T-49: opaque, RANDOM, room-scoped id for this participant SESSION.
+  //
+  // Deliberately not derived from any credential hash. An earlier version computed
+  // it as sha256(room:anchor:joinedAt), which was clever and wrong: it coupled a
+  // public identifier to secret material for no benefit, and tying it to joinedAt
+  // meant an ordinary reconnect silently retired every card the session had posted.
+  //
+  // Continuity follows the session CREDENTIAL instead. A reclaiming join (same
+  // anchor / member key / verified identity) keeps this value, so reconnects revive
+  // the session's old cards; a genuinely new credential gets a new one, so a
+  // replacement can never inherit them by wearing the same display name.
+  lineageId?: string;
 }
 
 // How agent responses are coordinated in this room.
@@ -345,6 +357,17 @@ export interface MessageMetadata {
     sourceLineage?: string;
     viewVersion: number;
     nonce: string;
+  };
+  /** T-49: the addressed session confirming it picked the request up. The server
+   *  refuses this from anyone whose lineage is not the request's `sourceLineage`,
+   *  which is what turns "bound to the producer" from a record into an enforcement,
+   *  and lets the receipt move from Requested to Delivered honestly. */
+  viewActionAck?: {
+    requestMessageId: number;
+    actionId: string;
+    label: string;
+    /** Who asked — resolved server-side from the request message. */
+    requestedBy: string;
   };
   // The sender dictated this message by voice. Recipients (human and agent)
   // should read transcription artifacts charitably — odd words may be the

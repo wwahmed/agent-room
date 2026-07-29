@@ -58,8 +58,11 @@ import { transcribeSegment, engineStatus } from './transcribe.js';
 import { synthesize } from './tts.js';
 import { roomActivityAt } from './roomactivity.js';
 import { countsAsActivity, lastActivityTime } from './activitySignal.js';
-import { checkViewAction, viewActionKey } from './viewAction.js';
-import { deriveLineage } from './lineage.js';
+import {
+  checkViewAction, checkViewActionAck, doneRecord, isReceiptFor, parseReservation,
+  pendingRecord, reconcileReservation, viewActionKey,
+} from './viewAction.js';
+import { rowLineage } from './lineage.js';
 
 // T-43: how much history the index backfill inspects per room to find the newest
 // REAL activity. A run of heartbeats can easily be a few dozen entries; this is
@@ -1239,7 +1242,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // from anything the client sent. A client-supplied value is discarded even if
       // it is well-formed.
       if ((stamped as Message).type !== 'sys' && senderRow) {
-        const lineage = await deriveLineage(code, senderRow, sha256Hex);
+        const lineage = rowLineage(senderRow);
         (stamped as Message).metadata = {
           ...(stamped as Message).metadata,
           ...(lineage ? { senderLineage: lineage } : {}),
@@ -1249,26 +1252,79 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         const meta = (stamped as Message).metadata;
         if (meta?.senderLineage) delete meta.senderLineage;
       }
+      // T-49: an ACK closes the loop, and it is where target binding stops being a
+      // record and becomes an enforcement — only the session the request was
+      // addressed to may claim it.
+      const ackClaim = (stamped as Message).metadata?.viewActionAck;
+      if (ackClaim) {
+        const requestId = Number((ackClaim as { requestMessageId?: unknown }).requestMessageId);
+        const found = Number.isFinite(requestId) ? await findStoredMessage(client, code, requestId) : null;
+        const ack = checkViewActionAck(found?.message ?? null, rowLineage(senderRow ?? ({} as Participant)));
+        if (!ack.ok) {
+          const err = new Error(`Rejected view action ack: ${ack.reason}`);
+          err.name = ack.forbidden ? 'AccessDeniedError' : 'BadRequestError';
+          throw err;
+        }
+        // Rebuilt from validated facts, exactly like the request itself.
+        (stamped as Message).metadata = {
+          ...(stamped as Message).metadata,
+          viewActionAck: {
+            requestMessageId: ack.requestMessageId,
+            actionId: ack.actionId,
+            label: ack.label,
+            requestedBy: ack.requestedBy,
+          },
+        };
+      }
       const claim = (stamped as Message).metadata?.viewAction;
       let viewActionReservation: string | null = null;
       if (claim) {
-        const verdict = await checkViewAction(claim, async (id) => {
-          const found = await findStoredMessage(client, code, id);
-          return found?.message ?? null;
-        });
+        const liveLineages = new Set(
+          (await getRoom(client, code)).participants
+            .map(p => rowLineage(p))
+            .filter((v): v is string => v !== null),
+        );
+        const verdict = await checkViewAction(
+          claim,
+          async (id) => {
+            const found = await findStoredMessage(client, code, id);
+            return found?.message ?? null;
+          },
+          (lineage) => liveLineages.has(lineage),
+        );
         if (!verdict.ok) {
           const err = new Error(`Rejected view action: ${verdict.reason}`);
-          err.name = 'BadRequestError';
+          // A missing producer session is a temporary state, not a bad request:
+          // 409 so the client offers a retry instead of retiring the card.
+          err.name = verdict.retryable ? 'ViewActionUnavailableError' : 'BadRequestError';
           throw err;
         }
-        // NX = first writer wins. TTL keeps the key from growing without bound; a
-        // day is far longer than any card stays actionable.
+        // NX = first writer wins, and the value is a durable RECORD rather than a
+        // flag so a later attempt can tell "in flight" from "died holding the
+        // claim". TTL keeps keys bounded; a day outlives any actionable card.
         const reservation = viewActionKey(code, verdict.sourceMessageId, verdict.actionId);
-        const fresh = await redis.set(reservation, '1', 'EX', 86_400, 'NX');
+        const now = Date.now();
+        let fresh = await redis.set(reservation, pendingRecord(now), 'EX', 86_400, 'NX');
         if (fresh === null) {
-          const err = new Error('That action has already been requested.');
-          err.name = 'BadRequestError';
-          throw err;
+          const record = parseReservation(await redis.get(reservation));
+          // Only pay for the scan when the record is old enough to be suspicious.
+          const receiptExists = record && record.s === 'pending' && now - record.at >= 10_000
+            ? (await listMessages(client, code, 0)).some(m => isReceiptFor(m, verdict.sourceMessageId, verdict.actionId))
+            : false;
+          const decision = reconcileReservation(record, receiptExists, now);
+          if (decision === 'duplicate' || decision === 'wait') {
+            const err = new Error(
+              decision === 'wait'
+                ? 'That action is already being requested.'
+                : 'That action has already been requested.',
+            );
+            err.name = 'BadRequestError';
+            throw err;
+          }
+          // Takeover: a process died between claiming the intent and writing the
+          // receipt. Reclaim it so the button is not stranded.
+          await redis.set(reservation, pendingRecord(now), 'EX', 86_400);
+          fresh = 'OK';
         }
         // Rewrite the metadata from validated facts: the label the VIEW declared,
         // and the identity of the participant whose message offered it.
@@ -1304,6 +1360,12 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // so the intent must go back to being available.
       if (viewActionReservation && !appendResult.appended) {
         await redis.del(viewActionReservation).catch(() => undefined);
+      } else if (viewActionReservation) {
+        // The receipt exists: promote the record from pending to done, so a
+        // reconciling attempt refuses it as a duplicate without scanning.
+        await redis
+          .set(viewActionReservation, doneRecord(Date.now(), (stamped as Message).id ?? null), 'EX', 86_400)
+          .catch(() => undefined);
       }
       // T-39: a person just spoke into a room where no agent can answer. Three
       // agents went silent in one day and the expensive part was never the death

@@ -165,7 +165,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                       easy to miss in a dense rail — "make the unread or new be
                       bold and show counts, like Teams does". The active room is
                       never bold: it is being read. */}
-                  <div className={`room-list-title min-w-0 flex-1 truncate text-[14px] leading-snug ${active ? 'text-accent' : hasUnread ? 'font-semibold text-ink' : 'text-ink'}`}>{r.topic}</div>
+                  <div className={`room-list-title min-w-0 flex-1 truncate text-[14px] leading-snug ${active ? 'text-accent' : hasUnread ? 'font-bold text-ink' : 'text-ink'}`}>{r.topic}</div>
                   {/* T-62 badge refined by T-18/T-20 — attention signals only.
                       The active room never shows unread — it is being read. */}
                   <RoomBadges

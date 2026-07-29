@@ -216,15 +216,17 @@ export function StructuredViewFallback({ reason, unsupportedVersion }: { reason:
  * renders, because the agent's sentence ("here are today's emails") is context the
  * card does not carry, and losing it would make the transcript unreadable later.
  */
-export function ViewAwareBody({ text, selfName, onAction, viewAction }: {
+export function ViewAwareBody({ text, selfName, onAction, viewAction, pickedUpBy }: {
   text: string;
   selfName?: string;
   onAction?: (action: ViewAction) => void;
+  /** Name of the addressed session that acknowledged this request, if it has. */
+  pickedUpBy?: string;
   /** Present when THIS message is itself an action request; the receipt replaces
    *  the host-authored token text, which nobody needs to read. */
   viewAction?: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; sourceLineage?: string; viewVersion: number; nonce: string };
 }) {
-  if (viewAction) return <ViewActionReceipt action={viewAction} />;
+  if (viewAction) return <ViewActionReceipt action={viewAction} pickedUpBy={pickedUpBy} />;
   const block = extractViewBlock(text);
   if (!block) return <CollapsibleMessageBody text={text} selfName={selfName} />;
   const parsed = parseStructuredView(block.json);
@@ -255,8 +257,12 @@ export function ViewAwareBody({ text, selfName, onAction, viewAction }: {
  * agent-authored label displayed as text (a React child, so inert) and the binding
  * available for anyone auditing what was requested against which message.
  */
-export function ViewActionReceipt({ action }: {
+export function ViewActionReceipt({ action, pickedUpBy }: {
   action: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; sourceLineage?: string; viewVersion: number; nonce: string };
+  /** T-49: the addressed session confirmed it took the request. Only that session
+   *  can produce this — the server refuses an ack from anyone else — so it is a fact
+   *  about delivery rather than an optimistic guess. */
+  pickedUpBy?: string;
 }) {
   return (
     <div
@@ -270,6 +276,13 @@ export function ViewActionReceipt({ action }: {
           server-side from the real source message, not from the click. */}
       <span className="text-ink-soft">You asked{action.sourceSender ? ` ${action.sourceSender}` : ' the agent'} to</span>
       <span className="font-semibold text-ink">{action.label}</span>
+      {/* Requested is what WE know; Delivered is what the producer told us. Saying
+          "delivered" before the addressed session confirms would be the same
+          optimism that made the old one-shot button look successful when the server
+          had refused it. */}
+      <span className={pickedUpBy ? 'text-emerald-600 dark:text-emerald-400' : 'text-ink-faint'} data-gate="view-action-state">
+        {pickedUpBy ? `· picked up by ${pickedUpBy}` : '· requested'}
+      </span>
     </div>
   );
 }

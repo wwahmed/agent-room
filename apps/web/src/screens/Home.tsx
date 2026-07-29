@@ -327,7 +327,7 @@ export function Home() {
                     agents={r.agents ?? []}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className={`room-list-title truncate text-[15px] ${hasUnread ? 'font-semibold text-ink' : ''}`}>{r.topic}</div>
+                    <div className={`room-list-title truncate text-[15px] ${hasUnread ? 'font-bold text-ink' : ''}`}>{r.topic}</div>
                     <div className="room-list-summary mt-0.5 flex items-center gap-2 text-xs text-ink-soft">
                       <span className="truncate">{r.participants} here · updated {timeAgo(updatedAt)}</span>
                     </div>

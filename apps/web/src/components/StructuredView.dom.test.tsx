@@ -143,6 +143,22 @@ describe('Structured view rendering', () => {
       .toBe('action draft-reply-m1 · from message 42 · view v1');
   });
 
+  it('a receipt says REQUESTED until the addressed session confirms', () => {
+    const action = { actionId: 'draft-reply-m1', label: 'Draft a reply', sourceMessageId: 42, sourceSender: 'MailAgent', viewVersion: 1, nonce: 'n1' };
+    const { container: waiting } = render(<ViewAwareBody text="Requested action draft-reply-m1" viewAction={action} />);
+    expect(waiting.querySelector('[data-gate="view-action-state"]')?.textContent).toContain('requested');
+    expect(waiting.textContent).not.toContain('picked up');
+
+    // Delivered is only claimed once the bound session acknowledges. The server
+    // refuses an ack from any other lineage, so this cannot be faked by a bystander
+    // agent — and saying "delivered" before it arrives is the same optimism that made
+    // the old one-shot button look successful after a server refusal.
+    const { container: done } = render(
+      <ViewAwareBody text="Requested action draft-reply-m1" viewAction={action} pickedUpBy="MailAgent" />,
+    );
+    expect(done.querySelector('[data-gate="view-action-state"]')?.textContent).toContain('picked up by MailAgent');
+  });
+
   it('a REJECTED request re-enables the button and says it failed', async () => {
     // The earlier version latched on click and never came back, so a server refusal
     // left a dead button and no sign anything was wrong.

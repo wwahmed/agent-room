@@ -21,6 +21,10 @@ export function statusForError(err: Error): number {
     // conflicts with an identity already bound to that row. Without this it
     // fell through to a 500, which reads as "server bug" rather than "refused".
     case 'AgentAnchorConflictError':
+    // T-49: the session that offered a view action is not in the room right now.
+    // 409, not 400: the request is well-formed and will succeed once that exact
+    // session resumes, so the client must offer a retry rather than retire the card.
+    case 'ViewActionUnavailableError':
       return 409;
     case 'InvalidModeConfigError':
     case 'ModeNotSupportedError':

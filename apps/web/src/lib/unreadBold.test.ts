@@ -12,7 +12,10 @@ const badges = readFileSync(new URL('../components/RoomBadges.tsx', import.meta.
 // room.
 describe('Unread rooms read bold', () => {
   it('the rail bolds an unread room title', () => {
-    expect(rail).toContain("hasUnread ? 'font-semibold text-ink' : 'text-ink'");
+    // font-bold (700), not font-semibold (600): the rail's base weight is
+    // already 500, so 600 is a single step and measured as too subtle to read as
+    // "unread" at 14px. Verified by computed style, not by eye.
+    expect(rail).toContain("hasUnread ? 'font-bold text-ink' : 'text-ink'");
     expect(rail).toContain('const hasUnread = !active && unreadCount(r.code, r.messageCount, selfName) > 0;');
   });
 
@@ -26,7 +29,7 @@ describe('Unread rooms read bold', () => {
   it('Home bolds it too, from the same counter', () => {
     // Two surfaces disagreeing about which rooms are waiting on you is worse than
     // neither bolding: it teaches you to trust neither.
-    expect(home).toContain("hasUnread ? 'font-semibold text-ink' : ''");
+    expect(home).toContain("hasUnread ? 'font-bold text-ink' : ''");
     expect(home).toContain('const hasUnread = unreadCount(r.code, r.messageCount,');
     expect(home).toContain("import { unreadCount } from '../lib/unread.js';");
   });

@@ -253,6 +253,25 @@ export type JoinRoomResult = Room & {
 
 const removalKey = (name: string, client: Participant['client']) => `${name}\n${client}`;
 
+/**
+ * T-49 tombstone: a removed row's lineage, keyed by the ANCHOR HASH that proves
+ * ownership of it. Leaving or being kicked must not permanently retire the cards a
+ * session posted — but restoring them has to require the credential, or the
+ * restoration is just the name-guessing this scheme replaced. Kept outside the room
+ * record so an anchor hash never rides along in a room payload.
+ */
+const lineageTombKey = (code: string, anchorHash: string) => `lineagetomb:${code}:${anchorHash}`;
+/** Long enough to outlive a machine reboot or a weekend; not forever. */
+const LINEAGE_TOMB_TTL_S = 30 * 24 * 60 * 60;
+
+/** T-49: 128 bits of randomness. Opaque and public — it identifies a session
+ *  without revealing anything about the credential that proves it. */
+function newLineageId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // A row that spoke/listened inside this window is a LIVE session; removing it
 // is displacement, not cleanup. Matches ANCHOR_RECLAIM_LIVE_MS semantics.
 function rowIsLive(row: Participant, now: number): boolean {
@@ -406,6 +425,16 @@ export async function joinRoom(
     : undefined;
   const authIdHash = options.authId ? await sha256Hex(options.authId) : undefined;
   const agentIdHash = options.agentId ? await sha256Hex(options.agentId) : undefined;
+  // T-49: if this session's row is GONE (it left, or the host removed it), its
+  // lineage may be tombstoned. Presenting the credential is what reactivates it, so
+  // the cards it posted start working again — while a replacement wearing the same
+  // display name gets a fresh lineage and inherits nothing.
+  let restoredLineage: string | undefined;
+  for (const anchor of [agentIdHash, reclaimMemberKeyHash, authIdHash]) {
+    if (!anchor || restoredLineage) continue;
+    const found = await client.command<string | null>(['GET', lineageTombKey(code, anchor)]);
+    if (typeof found === 'string' && found) restoredLineage = found;
+  }
   const room = await casRoom(client, code, (current) => {
     // T-25/T-66: find the caller's existing row to reclaim (agentIdHash →
     // memberKeyHash → authIdHash → priorIdentity). Reclaiming updates that row
@@ -503,6 +532,16 @@ export async function joinRoom(
     next = {
       ...next,
       color: uniqueColorForRoom(next.color, current, reclaim),
+      // T-49: identity continuity follows the session credential. Reclaiming the
+      // same row (proved by anchor / member key / verified identity) KEEPS its
+      // lineage, so a reconnect revives the cards that session posted. A genuinely
+      // new identity mints a fresh one, so a replacement session cannot inherit
+      // them by taking the same display name. Never accepted from the client.
+      // A CREDENTIAL-proved tombstone outranks the reclaimed row's own value: a
+      // reclaim can land on a row this session never posted from (an unprotected row
+      // matched by name), and adopting that row's lineage would hand this session
+      // someone else's cards while leaving its own dead.
+      lineageId: restoredLineage ?? reclaim?.lineageId ?? newLineageId(),
     };
 
     // Default canSpeak: TRUE for everyone (host, agents, walk-ins). The
@@ -832,6 +871,20 @@ export async function removeParticipant(
   targetName: string,
   targetClient: 'web' | 'cc'
 ): Promise<Room> {
+  // T-49: remember the departing row's lineage against each anchor that could prove
+  // ownership of it, BEFORE the row disappears. Best-effort and outside the CAS: a
+  // missing tombstone degrades to "the card is unavailable until that session
+  // rejoins with a live row", which is the same fail-closed answer, never a hijack.
+  const before = await getRoom(client, code);
+  const leaving = before.participants.find(p => p.name === targetName && p.client === targetClient);
+  if (leaving?.lineageId) {
+    for (const anchor of [leaving.agentIdHash, leaving.memberKeyHash, leaving.authIdHash]) {
+      if (!anchor) continue;
+      await client
+        .command(['SET', lineageTombKey(code, anchor), leaving.lineageId, 'EX', String(LINEAGE_TOMB_TTL_S)])
+        .catch(() => undefined);
+    }
+  }
   return casRoom(client, code, (current) => {
     // Self-removal is always allowed — agents that finish their turn or
     // were told to leave call this with requesterName === targetName.

@@ -39,26 +39,25 @@ export function lineageAnchor(row: Participant): string | null {
 }
 
 /**
- * Derive the lineage id for a row. `hash` is injected so this stays pure and
- * testable; callers pass the server's sha256Hex.
+ * The lineage of an authenticated row.
  *
- * Returns null when the row cannot be bound. Callers must treat that as "no
- * lineage" and never substitute name+client.
+ * An earlier version DERIVED this as sha256(room:anchor:joinedAt). A verifier
+ * pointed out two problems and both were right: it coupled a public identifier to
+ * secret material for no benefit, and keying on joinedAt meant an ordinary
+ * reconnect minted a new identity, silently retiring every card that session had
+ * posted. The value is now random and stored on the row at first join, preserved
+ * by a reclaiming join, so continuity follows the session credential.
+ *
+ * Returns null for a row with no lineage — a row that predates this. Callers must
+ * treat that as unbound and never substitute name+client.
  */
-export async function deriveLineage(
-  roomCode: string,
-  row: Participant,
-  hash: (input: string) => Promise<string>,
-): Promise<string | null> {
-  const anchor = lineageAnchor(row);
-  if (!anchor) return null;
-  const joined = Number(row.joinedAt) || 0;
-  const digest = await hash(`${roomCode}:${anchor}:${joined}`);
-  return digest.slice(0, LINEAGE_HEX_LENGTH);
+export function rowLineage(row: Participant): string | null {
+  const id = row.lineageId;
+  return isWellFormedLineage(id) ? id : null;
 }
 
-/** Is this lineage value one we could have produced? Guards against a client
- *  inventing a plausible-looking id, since messages arrive from clients. */
+/** Is this a value we could have minted? Guards against a client inventing a
+ *  plausible-looking id, since messages arrive from clients. */
 export function isWellFormedLineage(value: unknown): value is string {
   return typeof value === 'string' && new RegExp(`^[0-9a-f]{${LINEAGE_HEX_LENGTH}}$`).test(value);
 }
