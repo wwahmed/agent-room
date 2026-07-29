@@ -330,6 +330,10 @@ export interface MessageMetadata {
     actionId: string;
     label: string;
     sourceMessageId: number;
+    /** Display name of the participant whose message offered the action, resolved
+     *  SERVER-SIDE from the real source message. Lets the receipt say who the
+     *  request was addressed to instead of "the agent". */
+    sourceSender?: string;
     viewVersion: number;
     nonce: string;
   };

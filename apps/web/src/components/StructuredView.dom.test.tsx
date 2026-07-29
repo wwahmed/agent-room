@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StructuredViewCard, StructuredViewFallback, ViewAwareBody } from './StructuredView.js';
@@ -92,7 +92,7 @@ describe('Structured view rendering', () => {
     expect(onAction).toHaveBeenCalledWith({ id: 'send-42', label: 'Send it' });
   });
 
-  it('an action fires ONCE — a second click cannot replay it', () => {
+  it('an action fires ONCE — a second click cannot replay it', async () => {
     // The verifier's point: nothing stopped repeated clicks, so one intent could
     // become several requests.
     const onAction = vi.fn();
@@ -107,8 +107,9 @@ describe('Structured view rendering', () => {
     fireEvent.click(btn);
     fireEvent.click(btn);
     expect(onAction).toHaveBeenCalledTimes(1);
-    // And it says so, rather than looking pressable while doing nothing.
-    expect(screen.getByText('Requested: Send it')).toBeTruthy();
+    // Pending immediately, so the press is visibly acknowledged.
+    expect(screen.getByText('Requesting: Send it…')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Requested: Send it')).toBeTruthy());
   });
 
   it('says the buttons only ASK — "Archive" does not archive', () => {
@@ -127,11 +128,12 @@ describe('Structured view rendering', () => {
     const { container } = render(
       <ViewAwareBody
         text="Requested action draft-reply-m1"
-        viewAction={{ actionId: 'draft-reply-m1', label: 'Draft a reply', sourceMessageId: 42, viewVersion: 1, nonce: 'n1' }}
+        viewAction={{ actionId: 'draft-reply-m1', label: 'Draft a reply', sourceMessageId: 42, sourceSender: 'MailAgent', viewVersion: 1, nonce: 'n1' }}
       />,
     );
     expect(container.querySelector('[data-gate="view-action-receipt"]')).not.toBeNull();
-    expect(container.textContent).toContain('Asked the agent to');
+    // Names the producer: with several agents in a room, "the agent" says nothing.
+    expect(container.textContent).toContain('You asked MailAgent to');
     expect(container.textContent).toContain('Draft a reply');
     // The transcript no longer shows `[action:...]` or the bare token line.
     expect(container.textContent).not.toContain('[action:');
@@ -139,6 +141,22 @@ describe('Structured view rendering', () => {
     // The binding stays available for audit without shouting it at the reader.
     expect(container.querySelector('[data-gate="view-action-receipt"]')?.getAttribute('title'))
       .toBe('action draft-reply-m1 · from message 42 · view v1');
+  });
+
+  it('a REJECTED request re-enables the button and says it failed', async () => {
+    // The earlier version latched on click and never came back, so a server refusal
+    // left a dead button and no sign anything was wrong.
+    const onAction = vi.fn().mockRejectedValue(new Error('That action has already been requested.'));
+    render(
+      <StructuredViewCard
+        view={{ v: 1, kind: 'draft', body: 'Hi', actions: [{ id: 'send-1', label: 'Send it' }] }}
+        onAction={onAction}
+      />,
+    );
+    fireEvent.click(screen.getByText('Send it'));
+    await waitFor(() => expect(screen.getByText('Failed — retry: Send it')).toBeTruthy());
+    const btn = screen.getByText('Failed — retry: Send it') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
   });
 
   it('read-only contexts DISABLE actions rather than hiding them', () => {

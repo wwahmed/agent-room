@@ -103,9 +103,18 @@ describe('View action server validation', () => {
     // make the guarantee hold against a forged or replayed request.
     expect(serverIndex).toContain('const verdict = await checkViewAction(claim,');
     expect(serverIndex).toContain("err.name = 'BadRequestError'");
-    expect(serverIndex).toContain("redis.set(viewActionKey(code, verdict.sourceMessageId, verdict.actionId), '1', 'EX', 86_400, 'NX')");
-    // The stored metadata is rebuilt from validated facts, so the receipt cannot be
-    // dictated by the requester.
+    expect(serverIndex).toContain("redis.set(reservation, '1', 'EX', 86_400, 'NX')");
+    expect(serverIndex).toContain('const reservation = viewActionKey(code, verdict.sourceMessageId, verdict.actionId);');
+    // The stored metadata is rebuilt from validated facts, so neither the receipt
+    // label nor the named producer can be dictated by the requester.
     expect(serverIndex).toContain('label: verdict.label,');
+    expect(serverIndex).toContain('sourceSender: verdict.sourceSender,');
+  });
+
+  it('a failed or no-op append RELEASES the reservation', () => {
+    // Otherwise a crash in the reservation->append window burns the intent forever:
+    // no receipt, and no way to retry. A duplicate would have been the better bug.
+    expect(serverIndex).toContain('if (viewActionReservation) await redis.del(viewActionReservation)');
+    expect(serverIndex).toContain('if (viewActionReservation && !appendResult.appended)');
   });
 });

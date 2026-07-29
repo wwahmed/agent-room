@@ -1750,7 +1750,7 @@ export function Room() {
   // token, while the label and the binding travel in metadata for a first-party
   // receipt to render. The event is bound to its source message, view version and
   // a nonce, so it is attributable and replay-detectable rather than free-floating.
-  function handleViewAction(m: Message, action: ViewAction) {
+  async function handleViewAction(m: Message, action: ViewAction): Promise<void> {
     if (!ACTION_ID_RE.test(action.id)) return;                 // defence in depth
     const key = `${m.id}:${action.id}`;
     if (firedActionsRef.current.has(key)) return;              // no replay on re-click
@@ -1773,16 +1773,24 @@ export function Room() {
           actionId: action.id,
           label: action.label,
           sourceMessageId: m.id,
+          // The server overwrites this from the real source message; sending it is
+          // only a hint, never the authority.
+          sourceSender: m.name,
           viewVersion: STRUCTURED_VIEW_VERSION,
           nonce,
         },
       },
     };
-    void sendMessage(msg).catch(() => {
+    // Awaited, so the button can show Pending and revert to a retryable Failed
+    // state when the server refuses (already requested, source gone, invalid).
+    try {
+      await sendMessage(msg);
+    } catch (e) {
       firedActionsRef.current.delete(key);                     // allow a retry
-      void import('../components/Toast.js').then(({ showToast }) =>
-        showToast('Could not send that request', 'error'));
-    });
+      const { showToast } = await import('../components/Toast.js');
+      showToast(e instanceof Error ? e.message : 'Could not send that request', 'error');
+      throw e;
+    }
   }
 
   async function send(bodyOverride?: string) {

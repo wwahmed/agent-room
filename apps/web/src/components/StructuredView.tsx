@@ -22,7 +22,7 @@ interface Props {
    *  contexts (history, exports), where actions render disabled rather than
    *  vanishing — a button that silently does nothing is worse than a visibly
    *  unavailable one. */
-  onAction?: (action: ViewAction) => void;
+  onAction?: (action: ViewAction) => void | Promise<void>;
 }
 
 const CARD = 'my-1 overflow-hidden rounded-xl border border-border bg-surface';
@@ -34,28 +34,45 @@ function Actions({ actions, onAction }: { actions?: ViewAction[]; onAction?: Pro
   // something, when in fact pressing it only ASKS the agent to. The button now says
   // what it does, and once pressed it stays pressed — an action fires once, and a
   // second click cannot replay it.
-  const [requested, setRequested] = useState<Set<string>>(new Set());
+  // Pending -> Requested / Failed. A local one-shot flag is not a loading state:
+  // the earlier version latched the button on click and never came back, so a
+  // server rejection left it permanently dead with no way to retry and no sign
+  // anything had gone wrong.
+  const [state, setState] = useState<Record<string, 'pending' | 'done' | 'failed'>>({});
   if (!actions?.length) return null;
+  const mark = (id: string, s: 'pending' | 'done' | 'failed') =>
+    setState(prev => ({ ...prev, [id]: s }));
   return (
     <div className="border-t border-border-faint px-3 py-2" data-gate="view-actions">
       <div className="flex flex-wrap gap-2">
         {actions.map(a => {
-          const done = requested.has(a.id);
+          const st = state[a.id];
+          const busyOrDone = st === 'pending' || st === 'done';
           return (
             <button
               key={a.id}
               type="button"
-              disabled={!onAction || done}
-              aria-disabled={!onAction || done}
+              disabled={!onAction || busyOrDone}
+              aria-disabled={!onAction || busyOrDone}
+              aria-busy={st === 'pending'}
               onClick={() => {
-                if (!onAction || requested.has(a.id)) return;
-                setRequested(prev => new Set(prev).add(a.id));
-                onAction(a);
+                if (!onAction || busyOrDone) return;
+                mark(a.id, 'pending');
+                // A rejected request must re-enable the button — the server can
+                // refuse (already requested, source gone, invalid action) and the
+                // user has to be able to see that and try again.
+                void Promise.resolve(onAction(a))
+                  .then(() => mark(a.id, 'done'))
+                  .catch(() => mark(a.id, 'failed'));
               }}
               title={onAction ? `Ask the agent to: ${a.label}` : 'Actions are unavailable here'}
-              className="min-h-11 rounded-lg border border-border px-3 text-[13px] font-semibold text-ink transition hover:border-accent disabled:opacity-40"
+              className={`min-h-11 rounded-lg border px-3 text-[13px] font-semibold transition disabled:opacity-40 ${
+                st === 'failed' ? 'border-red-400/60 text-red-300' : 'border-border text-ink hover:border-accent'}`}
             >
-              {done ? `Requested: ${a.label}` : a.label}
+              {st === 'pending' ? `Requesting: ${a.label}…`
+                : st === 'done' ? `Requested: ${a.label}`
+                : st === 'failed' ? `Failed — retry: ${a.label}`
+                : a.label}
             </button>
           );
         })}
@@ -239,7 +256,7 @@ export function ViewAwareBody({ text, selfName, onAction, viewAction }: {
  * available for anyone auditing what was requested against which message.
  */
 export function ViewActionReceipt({ action }: {
-  action: { actionId: string; label: string; sourceMessageId: number; viewVersion: number; nonce: string };
+  action: { actionId: string; label: string; sourceMessageId: number; sourceSender?: string; viewVersion: number; nonce: string };
 }) {
   return (
     <div
@@ -248,7 +265,10 @@ export function ViewActionReceipt({ action }: {
       title={`action ${action.actionId} · from message ${action.sourceMessageId} · view v${action.viewVersion}`}
     >
       <span aria-hidden="true">↳</span>
-      <span className="text-ink-soft">Asked the agent to</span>
+      {/* Names the producer rather than "the agent": with several agents in a room,
+          "asked the agent" does not say who owns the request. The name is resolved
+          server-side from the real source message, not from the click. */}
+      <span className="text-ink-soft">You asked{action.sourceSender ? ` ${action.sourceSender}` : ' the agent'} to</span>
       <span className="font-semibold text-ink">{action.label}</span>
     </div>
   );

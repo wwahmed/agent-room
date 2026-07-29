@@ -1232,6 +1232,7 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // rather than the request, and enforces one-fire-per-intent so double clicks,
       // retries, two tabs and replays all collapse into one.
       const claim = (stamped as Message).metadata?.viewAction;
+      let viewActionReservation: string | null = null;
       if (claim) {
         const verdict = await checkViewAction(claim, async (id) => {
           const found = await findStoredMessage(client, code, id);
@@ -1244,26 +1245,47 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         }
         // NX = first writer wins. TTL keeps the key from growing without bound; a
         // day is far longer than any card stays actionable.
-        const fresh = await redis.set(viewActionKey(code, verdict.sourceMessageId, verdict.actionId), '1', 'EX', 86_400, 'NX');
+        const reservation = viewActionKey(code, verdict.sourceMessageId, verdict.actionId);
+        const fresh = await redis.set(reservation, '1', 'EX', 86_400, 'NX');
         if (fresh === null) {
           const err = new Error('That action has already been requested.');
           err.name = 'BadRequestError';
           throw err;
         }
         // Rewrite the metadata from validated facts: the label the VIEW declared,
-        // and the lineage of the agent that offered it.
+        // and the identity of the participant whose message offered it.
         (stamped as Message).metadata = {
           ...(stamped as Message).metadata,
           viewAction: {
             actionId: verdict.actionId,
             label: verdict.label,
             sourceMessageId: verdict.sourceMessageId,
+            sourceSender: verdict.sourceSender,
             viewVersion: 1,
             nonce: String(claim.nonce ?? ''),
           },
         };
+        // The reservation and the append must not be able to disagree. If the
+        // append fails after we have claimed the intent, the intent would be burned
+        // forever with no receipt and no way to retry — a worse outcome than a
+        // duplicate. Releasing on failure makes the pair reconcilable: either a
+        // receipt exists, or the intent is free again.
+        viewActionReservation = reservation;
       }
-      const appendResult = await appendMessage(client, code, stamped);
+      let appendResult: Awaited<ReturnType<typeof appendMessage>>;
+      try {
+        appendResult = await appendMessage(client, code, stamped);
+      } catch (e) {
+        // Reservation and append must not be able to disagree. A burned intent with
+        // no receipt is worse than a duplicate: the user could never retry it.
+        if (viewActionReservation) await redis.del(viewActionReservation).catch(() => undefined);
+        throw e;
+      }
+      // `appended: false` (a no-op dedupe upstream) means no receipt exists either,
+      // so the intent must go back to being available.
+      if (viewActionReservation && !appendResult.appended) {
+        await redis.del(viewActionReservation).catch(() => undefined);
+      }
       // T-39: a person just spoke into a room where no agent can answer. Three
       // agents went silent in one day and the expensive part was never the death
       // — it was the wait: 90 minutes in the Customer Service room, 14 hours in
