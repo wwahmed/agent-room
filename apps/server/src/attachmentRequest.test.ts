@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Participant, Room } from '@agent-room/shared';
-import { handleUploadRequest, handleRawUploadRequest, handleUploadSocketRequest, MAX_IDENTITY_FIELD_BYTES, type VerifiedCaller } from './attachmentRequest.js';
+import { createLegacyLocalUploadBridge, handleUploadRequest, handleRawUploadRequest, handleUploadSocketRequest, MAX_IDENTITY_FIELD_BYTES, type VerifiedCaller } from './attachmentRequest.js';
 import { parseMultipart } from './multipart.js';
 
 const TMP_ROOT = mkdtempSync(join(tmpdir(), 'p0-req-'));
@@ -453,5 +453,160 @@ describe('the production-called socket seam gates body reads', () => {
     expect(readBody).toHaveBeenCalledTimes(1);
     expect(d.getRoom).not.toHaveBeenCalled();
     expect(d.saveBlob).not.toHaveBeenCalled();
+  });
+});
+
+describe('the bounded legacy-local transition bridge', () => {
+  const CT = 'multipart/form-data; boundary=LEGACY';
+  const START = Date.parse('2026-08-01T12:00:00Z');
+  const rawLegacy = (code = CODE, data = Buffer.from('png')) => Buffer.concat([
+    Buffer.from(`--LEGACY\r\nContent-Disposition: form-data; name="roomCode"\r\n\r\n${code}\r\n`),
+    Buffer.from('--LEGACY\r\nContent-Disposition: form-data; name="file"; filename="proof.png"\r\nContent-Type: image/png\r\n\r\n'),
+    data,
+    Buffer.from('\r\n--LEGACY--\r\n'),
+  ]);
+
+  const bridge = (over: Partial<Parameters<typeof createLegacyLocalUploadBridge>[0]> = {}) =>
+    createLegacyLocalUploadBridge({
+      enabled: true,
+      startedAtMs: START,
+      expiresAtMs: START + 6 * 60 * 60 * 1000,
+      now: () => START + 1,
+      ...over,
+    });
+
+  function socketDeps(over: { room?: Room; legacy?: ReturnType<typeof bridge> } = {}) {
+    const saveBlob = vi.fn((code: string, f: { data: Buffer; mime: string; filename: string }) => {
+      const st = blobstore.saveBlob(code, f.data, f.mime);
+      return { id: st.key, type: 'image', url: st.url, storageKey: `${code}/${st.key}`, name: f.filename, size: st.size, mime: f.mime, uploadedAt: 1 };
+    });
+    return {
+      saveBlob,
+      getRoom: vi.fn(async () => over.room ?? ({ code: CODE, status: 'active', participants: [AGENT_CC] } as unknown as Room)),
+      sha256Hex: shaAsync,
+      isAllowedMime: (m: string) => m === 'image/png',
+      maxBytes: 1024,
+      legacyLocalUploadBridge: over.legacy,
+      readBody: vi.fn(async () => rawLegacy()),
+    };
+  }
+
+  it('accepts the exact old-MCP socket shape only while explicitly enabled and marks/audits it', async () => {
+    const d = socketDeps({ legacy: bridge() });
+    const before = blobTree();
+    const out = await handleUploadSocketRequest({ kind: 'local' }, CT, d);
+    expect(out.authorized).toBe(true);
+    expect(out.status).toBe(200);
+    expect((out.body as Record<string, unknown>).legacyLocalUnbound).toBe(true);
+    expect(out.audit).toMatch(/^legacy_local_unbound accepted/);
+    expect(d.readBody).toHaveBeenCalledTimes(1);
+    expect(d.getRoom).toHaveBeenCalledTimes(1);
+    expect(d.saveBlob).toHaveBeenCalledTimes(1);
+    expect(blobTree().length).toBe(before.length + 1);
+  });
+
+  const refusedConfigs: Array<[string, ReturnType<typeof bridge>]> = [
+    ['disabled', bridge({ enabled: false })],
+    ['missing expiry', bridge({ expiresAtMs: Number.NaN })],
+    ['expired', bridge({ expiresAtMs: START, now: () => START + 1 })],
+    ['over the 24-hour hard cap', bridge({ expiresAtMs: START + 24 * 60 * 60 * 1000 + 1 })],
+  ];
+  for (const [label, legacy] of refusedConfigs) {
+    it(`keeps ${label} zero-write`, async () => {
+      const before = blobTree();
+      const d = socketDeps({ legacy });
+      const out = await handleUploadSocketRequest({ kind: 'local' }, CT, d);
+      expect(out.authorized).toBe(false);
+      expect(d.getRoom).not.toHaveBeenCalled();
+      expect(d.saveBlob).not.toHaveBeenCalled();
+      expect(blobTree()).toEqual(before);
+    });
+  }
+
+  it('denies public/user legacy bytes and every non-exact local scalar shape', async () => {
+    const before = blobTree();
+    const user = socketDeps({ legacy: bridge() });
+    expect((await handleUploadSocketRequest(USER, CT, user)).authorized).toBe(false);
+    expect(user.saveBlob).not.toHaveBeenCalled();
+
+    for (const field of ['name', 'client', 'memberKey']) {
+      const d = socketDeps({ legacy: bridge() });
+      d.readBody = vi.fn(async () => Buffer.from(
+        `--LEGACY\r\nContent-Disposition: form-data; name="roomCode"\r\n\r\n${CODE}\r\n` +
+        `--LEGACY\r\nContent-Disposition: form-data; name="${field}"\r\n\r\npartial\r\n` +
+        '--LEGACY\r\nContent-Disposition: form-data; name="file"; filename="proof.png"\r\nContent-Type: image/png\r\n\r\npng\r\n--LEGACY--\r\n'));
+      expect((await handleUploadSocketRequest({ kind: 'local' }, CT, d)).authorized).toBe(false);
+      expect(d.saveBlob).not.toHaveBeenCalled();
+    }
+    for (const field of ['width', 'unexpected']) {
+      const d = socketDeps({ legacy: bridge() });
+      d.readBody = vi.fn(async () => Buffer.from(
+        `--LEGACY\r\nContent-Disposition: form-data; name="roomCode"\r\n\r\n${CODE}\r\n` +
+        `--LEGACY\r\nContent-Disposition: form-data; name="${field}"\r\n\r\n1\r\n` +
+        '--LEGACY\r\nContent-Disposition: form-data; name="file"; filename="proof.png"\r\nContent-Type: image/png\r\n\r\npng\r\n--LEGACY--\r\n'));
+      expect((await handleUploadSocketRequest({ kind: 'local' }, CT, d)).authorized).toBe(false);
+      expect(d.saveBlob).not.toHaveBeenCalled();
+    }
+    expect(blobTree()).toEqual(before);
+  });
+
+  it('denies a duplicated legacy roomCode before lookup or save', async () => {
+    const before = blobTree();
+    const d = socketDeps({ legacy: bridge() });
+    d.readBody = vi.fn(async () => Buffer.from(
+      `--LEGACY\r\nContent-Disposition: form-data; name="roomCode"\r\n\r\n${CODE}\r\n` +
+      `--LEGACY\r\nContent-Disposition: form-data; name="roomCode"\r\n\r\n${CODE}\r\n` +
+      '--LEGACY\r\nContent-Disposition: form-data; name="file"; filename="proof.png"\r\nContent-Type: image/png\r\n\r\npng\r\n--LEGACY--\r\n'));
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, d)).authorized).toBe(false);
+    expect(d.getRoom).not.toHaveBeenCalled();
+    expect(d.saveBlob).not.toHaveBeenCalled();
+    expect(blobTree()).toEqual(before);
+  });
+
+  it('denies ended rooms before reservation/save', async () => {
+    const before = blobTree();
+    const d = socketDeps({
+      legacy: bridge(),
+      room: { code: CODE, status: 'ended', participants: [AGENT_CC] } as unknown as Room,
+    });
+    const out = await handleUploadSocketRequest({ kind: 'local' }, CT, d);
+    expect(out.status).toBe(409);
+    expect(d.saveBlob).not.toHaveBeenCalled();
+    expect(blobTree()).toEqual(before);
+  });
+
+  it('atomically enforces count and byte budgets before save', async () => {
+    const countBudget = bridge({ roomMaxFiles: 1, globalMaxFiles: 1 });
+    const first = socketDeps({ legacy: countBudget });
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, first)).authorized).toBe(true);
+    const second = socketDeps({ legacy: countBudget });
+    const denied = await handleUploadSocketRequest({ kind: 'local' }, CT, second);
+    expect(denied.status).toBe(429);
+    expect(second.saveBlob).not.toHaveBeenCalled();
+
+    const byteBudget = bridge({ roomMaxBytes: 2, globalMaxBytes: 2 });
+    const bytes = socketDeps({ legacy: byteBudget });
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, bytes)).status).toBe(429);
+    expect(bytes.saveBlob).not.toHaveBeenCalled();
+  });
+
+  it('releases a failed pre-save reservation so a retry can proceed', async () => {
+    const one = bridge({ roomMaxFiles: 1, globalMaxFiles: 1 });
+    const d = socketDeps({ legacy: one });
+    d.saveBlob.mockImplementationOnce(() => { throw new Error('disk failed'); });
+    await expect(handleUploadSocketRequest({ kind: 'local' }, CT, d)).rejects.toThrow('disk failed');
+    const retry = socketDeps({ legacy: one });
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, retry)).authorized).toBe(true);
+  });
+
+  it('documents the process-local restart reset while the absolute expiry remains', async () => {
+    const opts = { roomMaxFiles: 1, globalMaxFiles: 1 };
+    const firstProcess = bridge(opts);
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, socketDeps({ legacy: firstProcess }))).authorized).toBe(true);
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, socketDeps({ legacy: firstProcess }))).status).toBe(429);
+    // A new server process owns a new in-memory counter. The configured UTC
+    // expiry does not move, but capacity resets; this is an explicit residual.
+    const restartedProcess = bridge(opts);
+    expect((await handleUploadSocketRequest({ kind: 'local' }, CT, socketDeps({ legacy: restartedProcess }))).authorized).toBe(true);
   });
 });

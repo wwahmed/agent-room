@@ -32,8 +32,92 @@ export interface RequestDeps extends UploadDeps {
 }
 
 export type RequestOutcome =
-  | { status: 200; body: unknown; authorized: true }
+  | { status: 200; body: unknown; authorized: true; audit?: string }
   | { status: number; body: { error: string; message: string }; authorized: false; audit?: string };
+
+export const LEGACY_LOCAL_UPLOAD_MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const LEGACY_LOCAL_UPLOAD_ROOM_MAX_FILES = 6;
+export const LEGACY_LOCAL_UPLOAD_ROOM_MAX_BYTES = 6 * 1024 * 1024;
+export const LEGACY_LOCAL_UPLOAD_GLOBAL_MAX_FILES = 24;
+export const LEGACY_LOCAL_UPLOAD_GLOBAL_MAX_BYTES = 24 * 1024 * 1024;
+
+type LegacyBridgeRefusal =
+  | 'disabled' | 'missing_expiry' | 'expired' | 'window_too_long'
+  | 'room_file_quota' | 'room_byte_quota' | 'global_file_quota' | 'global_byte_quota';
+
+export interface LegacyLocalUploadBridge {
+  status(): { ok: true } | { ok: false; reason: LegacyBridgeRefusal };
+  reserve(code: string, bytes: number):
+    | { ok: true; release: () => void }
+    | { ok: false; reason: LegacyBridgeRefusal };
+}
+
+/**
+ * Process-local emergency budget for pre-identity MCP uploaders.
+ * Counters are synchronous pre-save reservations. They reset on restart; the
+ * unchanged absolute expiry is the durable backstop for that accepted risk.
+ */
+export function createLegacyLocalUploadBridge(opts: {
+  enabled: boolean;
+  expiresAtMs: number;
+  startedAtMs: number;
+  now?: () => number;
+  roomMaxFiles?: number;
+  roomMaxBytes?: number;
+  globalMaxFiles?: number;
+  globalMaxBytes?: number;
+}): LegacyLocalUploadBridge {
+  const now = opts.now ?? Date.now;
+  const limits = {
+    roomFiles: opts.roomMaxFiles ?? LEGACY_LOCAL_UPLOAD_ROOM_MAX_FILES,
+    roomBytes: opts.roomMaxBytes ?? LEGACY_LOCAL_UPLOAD_ROOM_MAX_BYTES,
+    globalFiles: opts.globalMaxFiles ?? LEGACY_LOCAL_UPLOAD_GLOBAL_MAX_FILES,
+    globalBytes: opts.globalMaxBytes ?? LEGACY_LOCAL_UPLOAD_GLOBAL_MAX_BYTES,
+  };
+  let globalFiles = 0;
+  let globalBytes = 0;
+  const rooms = new Map<string, { files: number; bytes: number }>();
+
+  const status = (): { ok: true } | { ok: false; reason: LegacyBridgeRefusal } => {
+    if (!opts.enabled) return { ok: false, reason: 'disabled' };
+    if (!Number.isFinite(opts.expiresAtMs)) return { ok: false, reason: 'missing_expiry' };
+    if (opts.expiresAtMs <= now()) return { ok: false, reason: 'expired' };
+    if (opts.expiresAtMs - opts.startedAtMs > LEGACY_LOCAL_UPLOAD_MAX_WINDOW_MS) {
+      return { ok: false, reason: 'window_too_long' };
+    }
+    return { ok: true };
+  };
+
+  return {
+    status,
+    reserve(code, bytes) {
+      const available = status();
+      if (!available.ok) return available;
+      const room = rooms.get(code) ?? { files: 0, bytes: 0 };
+      if (room.files + 1 > limits.roomFiles) return { ok: false, reason: 'room_file_quota' };
+      if (room.bytes + bytes > limits.roomBytes) return { ok: false, reason: 'room_byte_quota' };
+      if (globalFiles + 1 > limits.globalFiles) return { ok: false, reason: 'global_file_quota' };
+      if (globalBytes + bytes > limits.globalBytes) return { ok: false, reason: 'global_byte_quota' };
+      room.files += 1;
+      room.bytes += bytes;
+      rooms.set(code, room);
+      globalFiles += 1;
+      globalBytes += bytes;
+      let released = false;
+      return {
+        ok: true,
+        release: () => {
+          if (released) return;
+          released = true;
+          room.files -= 1;
+          room.bytes -= bytes;
+          globalFiles -= 1;
+          globalBytes -= bytes;
+        },
+      };
+    },
+  };
+}
 
 /** Identity fields whose duplication makes the claim ambiguous. */
 const IDENTITY_FIELDS = ['name', 'client', 'memberKey', 'roomCode'] as const;
@@ -164,6 +248,7 @@ export interface RawRequestDeps extends Omit<RequestDeps, 'saveBlob'> {
   saveBlob: (code: string, file: ValidatedFile) => StoredAttachment;
   isAllowedMime: (mime: string) => boolean;
   maxBytes: number;
+  legacyLocalUploadBridge?: LegacyLocalUploadBridge;
 }
 
 /**
@@ -267,6 +352,55 @@ export async function handleRawUploadRequest(
   const mime = (file.contentType.split(';')[0] || '').trim().toLowerCase();
   if (!deps.isAllowedMime(mime)) {
     return deny(415, 'mime_not_allowed', `Unsupported file type: ${mime || file.filename}`);
+  }
+
+  // Exact legacy MCP shape: roomCode + one validated file, and no identity
+  // fields. This can create only a quota-bounded orphan; message publication
+  // remains independently speaker/memberKey-gated by room_send.
+  const duplicateIdentity = parsed.duplicateFields.filter(
+    field => (IDENTITY_FIELDS as readonly string[]).includes(field),
+  );
+  if (duplicateIdentity.length > 0) {
+    return deny(400, 'bad_request', 'duplicate identity fields in upload',
+      `upload refused on ${code}: duplicate identity field(s) ${duplicateIdentity.join(',')}`);
+  }
+  const scalarFields = Object.keys(parsed.fields);
+  const hasExactLegacyFields = scalarFields.length === 1 && scalarFields[0] === 'roomCode';
+  if (caller.kind === 'local' && hasExactLegacyFields) {
+    const bridge = deps.legacyLocalUploadBridge;
+    const bridgeStatus = bridge?.status() ?? { ok: false as const, reason: 'disabled' as const };
+    if (!bridgeStatus.ok) {
+      return deny(403, 'legacy_upload_disabled', 'Legacy local uploads are disabled.',
+        `legacy_local_unbound refused on ${code}: ${bridgeStatus.reason}`);
+    }
+    let room;
+    try {
+      room = await deps.getRoom(code);
+    } catch {
+      return deny(404, 'room_not_found', 'That room does not exist.',
+        `legacy_local_unbound refused on ${code}: room_not_found`);
+    }
+    if (room.status !== 'active') {
+      return deny(409, 'room_ended', 'This room has ended. Attachments can only be added to an active room.',
+        `legacy_local_unbound refused on ${code}: room_ended`);
+    }
+    const reservation = bridge!.reserve(code, file.data.length);
+    if (!reservation.ok) {
+      return deny(429, 'legacy_upload_quota_exceeded', 'Temporary legacy upload quota exceeded.',
+        `legacy_local_unbound refused on ${code}: ${reservation.reason}`);
+    }
+    try {
+      const stored = deps.saveBlob(code, { data: file.data, mime, filename: file.filename, width, height });
+      return {
+        status: 200,
+        body: { ...stored, legacyLocalUnbound: true },
+        authorized: true,
+        audit: `legacy_local_unbound accepted on ${code}: bytes=${file.data.length}`,
+      };
+    } catch (error) {
+      reservation.release();
+      throw error;
+    }
   }
 
   return handleUploadRequest(

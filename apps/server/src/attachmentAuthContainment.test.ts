@@ -64,6 +64,31 @@ describe('the destructive helper is unreachable from the server route module', (
   });
 });
 
+describe('the bounded legacy-local bridge is wired into the production upload route', () => {
+  it('constructs one env-backed singleton with the exact release controls', () => {
+    const constructionAt = serverIndex.indexOf(
+      'const LEGACY_LOCAL_UPLOAD_BRIDGE = createLegacyLocalUploadBridge({',
+    );
+    expect(constructionAt).toBeGreaterThan(-1);
+    const construction = serverIndex.slice(constructionAt, constructionAt + 500);
+    expect(construction).toContain(
+      "enabled: process.env.WAKICHAT_LEGACY_LOCAL_UPLOAD_ENABLED === '1'",
+    );
+    expect(construction).toContain(
+      "expiresAtMs: Date.parse(process.env.WAKICHAT_LEGACY_LOCAL_UPLOAD_EXPIRES_AT ?? '')",
+    );
+    expect(construction).toContain('startedAtMs: LEGACY_LOCAL_UPLOAD_STARTED_AT');
+  });
+
+  it('injects that exact singleton into the live /api/upload socket seam', () => {
+    const routeAt = serverIndex.indexOf("if (path === '/api/upload' && req.method === 'POST')");
+    expect(routeAt).toBeGreaterThan(-1);
+    const route = serverIndex.slice(routeAt, routeAt + 2600);
+    expect(route).toContain('handleUploadSocketRequest(');
+    expect(route).toContain('legacyLocalUploadBridge: LEGACY_LOCAL_UPLOAD_BRIDGE');
+  });
+});
+
 describe('no production client can reach the purge route', () => {
   it('the web upload lib no longer exports a deleteRoomBlobs helper', () => {
     expect(webUpload).not.toContain('export async function deleteRoomBlobs');

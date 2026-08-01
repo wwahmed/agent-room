@@ -2,6 +2,8 @@
 // F7/F8 from the T-26 review). Each "attack" case must be denied.
 import { describe, expect, it } from 'vitest';
 import { decideSenderAuth } from './roomauth.js';
+import { findSpeaker } from '@agent-room/upstash-client';
+import type { Room } from '@agent-room/shared';
 
 const KEYED = { memberKeyHash: 'aaa' };
 const KEYED2 = { memberKeyHash: 'bbb' };
@@ -46,6 +48,31 @@ describe('decideSenderAuth — credentialed row (F2/F3)', () => {
   });
   it('matches against any keyed row sharing the tuple', () => {
     expect(decideSenderAuth([KEYED, KEYED2], 'bbb', false)).toEqual({ ok: true, via: 'member-key' });
+  });
+});
+
+describe('legacy-unbound upload grants no message-publish authority', () => {
+  const attachment = { id: 'legacy-file', legacyLocalUnbound: true };
+  const room = {
+    status: 'active',
+    participants: [
+      { name: 'Agent A', client: 'cc', memberKeyHash: 'aaa', canSpeak: true },
+      { name: 'Agent B', client: 'cc', memberKeyHash: 'bbb', canSpeak: true },
+      { name: 'Muted', client: 'cc', memberKeyHash: 'ccc', canSpeak: false },
+    ],
+  } as unknown as Room;
+
+  it('still requires A\'s key and A\'s speakable row for the later append', () => {
+    expect(attachment.legacyLocalUnbound).toBe(true); // descriptor itself conveys no authority
+    expect(decideSenderAuth([room.participants[0]!], undefined, false)).toEqual({ ok: false, reason: 'need-key' });
+    expect(decideSenderAuth([room.participants[0]!], 'aaa', false)).toEqual({ ok: true, via: 'member-key' });
+    expect(findSpeaker(room, 'Agent A', 'cc')?.name).toBe('Agent A');
+  });
+
+  it('a mismatched speaker key and a muted speaker both remain denied', () => {
+    expect(decideSenderAuth([room.participants[1]!], 'aaa', false)).toEqual({ ok: false, reason: 'bad-key' });
+    expect(decideSenderAuth([room.participants[2]!], 'ccc', false)).toEqual({ ok: true, via: 'member-key' });
+    expect(findSpeaker(room, 'Muted', 'cc')).toBeNull();
   });
 });
 

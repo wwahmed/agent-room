@@ -27,6 +27,8 @@
 //   ALLOW_LEGACY_NAME_AUTH  T-30 migration bridge  (default off = fully closed)
 //                   When on, keyless MCP 0.25.x rows may host/send by name
 //                   ONLY when unambiguous; every use logs a [security] event.
+//   WAKICHAT_LEGACY_LOCAL_UPLOAD_ENABLED  emergency old-MCP upload bridge (default off)
+//   WAKICHAT_LEGACY_LOCAL_UPLOAD_EXPIRES_AT required absolute UTC expiry; max 24h from start
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
@@ -53,7 +55,7 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from './blobstore.js';
 import { authorizePurge } from './attachmentAuth.js';
-import { handleUploadSocketRequest } from './attachmentRequest.js';
+import { createLegacyLocalUploadBridge, handleUploadSocketRequest } from './attachmentRequest.js';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, loadRoomLedger, projectForRoot, readDoc, syncRoomLedger, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
@@ -73,6 +75,12 @@ import { rowLineage } from './lineage.js';
 // REAL activity. A run of heartbeats can easily be a few dozen entries; this is
 // deep enough to see past one, and bounded so a rebuild stays cheap.
 const ACTIVITY_BACKFILL_TAIL = 40;
+const LEGACY_LOCAL_UPLOAD_STARTED_AT = Date.now();
+const LEGACY_LOCAL_UPLOAD_BRIDGE = createLegacyLocalUploadBridge({
+  enabled: process.env.WAKICHAT_LEGACY_LOCAL_UPLOAD_ENABLED === '1',
+  expiresAtMs: Date.parse(process.env.WAKICHAT_LEGACY_LOCAL_UPLOAD_EXPIRES_AT ?? ''),
+  startedAtMs: LEGACY_LOCAL_UPLOAD_STARTED_AT,
+});
 import {
   isQaRoom,
   listIndexedRoomPage,
@@ -2628,6 +2636,7 @@ const server = createServer(async (req, res) => {
           getRoom: (c) => getRoom(client, c),
           isAllowedMime,
           maxBytes: MAX_ATTACHMENT_BYTES,
+          legacyLocalUploadBridge: LEGACY_LOCAL_UPLOAD_BRIDGE,
           saveBlob: (roomCode, f) => {
             const st = saveBlob(roomCode, f.data, f.mime);
             // The COMPLETE descriptor both web and MCP read. Returning only the
@@ -2647,8 +2656,8 @@ const server = createServer(async (req, res) => {
           },
         },
       );
+      if (uploadOutcome.audit) securityEvent(`${uploadOutcome.audit}; caller=${caller.kind}`);
       if (!uploadOutcome.authorized) {
-        if (uploadOutcome.audit) securityEvent(`${uploadOutcome.audit}; caller=${caller.kind}`);
         return sendJson(res, uploadOutcome.status, uploadOutcome.body);
       }
       return sendJson(res, 200, uploadOutcome.body);
