@@ -151,6 +151,10 @@ function estimatedBase64Bytes(value: string): number {
 export async function uploadAgentAttachment(
   input: AgentAttachmentInput,
   roomCode: string,
+  /** This agent's stored room identity. The server binds the upload to an exact
+   *  participant row before writing to disk, so a member credential is required
+   *  — a display name alone can no longer write into a room's blob namespace. */
+  sender: { name: string; memberKey?: string },
   deps: {
     fetch?: typeof fetch;
     FormData?: typeof FormData;
@@ -170,8 +174,14 @@ export async function uploadAgentAttachment(
   const FormDataCtor = deps.FormData ?? FormData;
   const BlobCtor = deps.Blob ?? Blob;
 
+  if (!sender.name.trim()) {
+    throw new AttachmentUploadError('bad_sender', 'Upload requires this agent\'s stored room name.');
+  }
   const fd = new FormDataCtor();
   fd.append('roomCode', canonicalRoomCode);
+  fd.append('name', sender.name);
+  fd.append('client', 'cc');
+  if (sender.memberKey) fd.append('memberKey', sender.memberKey);
   // Copy into a fresh Uint8Array so TS sees it as backed by a plain
   // ArrayBuffer (Buffer.from(base64) is typed as ArrayBufferLike, which
   // includes SharedArrayBuffer and trips Blob's BlobPart constraint).
@@ -216,7 +226,8 @@ export async function uploadAgentAttachment(
 export async function uploadAgentAttachments(
   inputs: AgentAttachmentInput[],
   roomCode: string,
-  deps: Parameters<typeof uploadAgentAttachment>[2] = {},
+  sender: { name: string; memberKey?: string },
+  deps: Parameters<typeof uploadAgentAttachment>[3] = {},
 ): Promise<MessageAttachment[]> {
   if (inputs.length > MAX_ATTACHMENTS_PER_MESSAGE) {
     throw new AttachmentUploadError(
@@ -226,7 +237,7 @@ export async function uploadAgentAttachments(
   }
   const out: MessageAttachment[] = [];
   for (const input of inputs) {
-    out.push(await uploadAgentAttachment(input, roomCode, deps));
+    out.push(await uploadAgentAttachment(input, roomCode, sender, deps));
   }
   return out;
 }

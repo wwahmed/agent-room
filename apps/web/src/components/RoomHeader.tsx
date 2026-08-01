@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Room } from '@agent-room/shared';
 import type { AgentFace } from '../lib/facepile.js';
+import type { EndRoomState } from './EndRoomControl.js';
 import { AgentFacepile } from './AgentFacepile.js';
 import { AccountMenu } from './AccountMenu.js';
 
@@ -24,8 +25,10 @@ interface Props {
   onToggleInspector: () => void;
   onSearch: () => void;
   onOpenRoom: () => void;
-  onEndRoom: () => void;
-  canEndRoom: boolean;
+  /** Shared End state. The header used to take a bare callback + boolean, so
+   *  it could not disable while a request was in flight and a header-invoked
+   *  failure was invisible once the menu closed. */
+  endRoom: EndRoomState;
   /** T-26/T-27: the signed-in person, for the account menu avatar. */
   selfName: string;
   agents: AgentFace[];
@@ -52,8 +55,7 @@ export function RoomHeader({
   onToggleInspector,
   onSearch,
   onOpenRoom,
-  onEndRoom,
-  canEndRoom,
+  endRoom,
   selfName,
   agents,
   agentStaleCount,
@@ -63,7 +65,9 @@ export function RoomHeader({
   backOverride,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [restoreEndFocus, setRestoreEndFocus] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const endItemRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const agentCount = agents.length;
   const activeAgentCount = Math.max(0, agentCount - agentStaleCount);
@@ -86,6 +90,12 @@ export function RoomHeader({
       document.removeEventListener('keydown', escape);
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!restoreEndFocus || !menuOpen || endRoom.busy) return;
+    endItemRef.current?.focus();
+    setRestoreEndFocus(false);
+  }, [endRoom.busy, menuOpen, restoreEndFocus]);
 
   return (
     <header className={`app-command-bar fixed inset-x-0 top-0 z-40 flex flex-col ${workspaceNav ? (mobileNavHidden ? 'h-[52px] lg:h-14' : 'h-[96px] lg:h-14') : 'h-[52px] items-center sm:h-14'}`}>
@@ -307,10 +317,27 @@ export function RoomHeader({
                   <span className="flex w-5 justify-center" aria-hidden="true">←</span>
                   Back to rooms
                 </Link>
-                {canEndRoom && (
-                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEndRoom(); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-red-400 transition hover:bg-red-500/10">
+                {endRoom.canEnd && (
+                  <button
+                    ref={endItemRef}
+                    type="button"
+                    role="menuitem"
+                    disabled={endRoom.busy}
+                    aria-busy={endRoom.busy}
+                    onClick={() => {
+                      // Keep the menu open while the request is in flight so the
+                      // pending state is visible and focus stays on the control
+                      // the user activated. A failure restores focus to this
+                      // real retry action; only authoritative success closes it.
+                      void endRoom.endRoom().then(outcome => {
+                        if (outcome === 'ended') setMenuOpen(false);
+                        else if (outcome === 'failed') setRestoreEndFocus(true);
+                      });
+                    }}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
+                  >
                     <span className="flex w-5 justify-center" aria-hidden="true">×</span>
-                    End room
+                    {endRoom.busy ? 'Ending…' : 'End room'}
                   </button>
                 )}
               </div>

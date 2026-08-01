@@ -41,11 +41,15 @@ export class UploadError extends Error {
 // to a Message's `attachments` array. Validation runs on both sides — the
 // client side guards mostly to give a nice toast before the round trip.
 //
-// `roomCode` is required: the server uses it as the blob path prefix so we
-// can batch-delete all of a room's attachments when the meeting ends.
+// `roomCode` is required: the server uses it as the blob path prefix, and
+// binds the write to a participant row in that room before saving. It is NOT
+// a deletion handle — ending a meeting does not remove attachments, and there
+// is no client path to purge. (The prefix being code-only is exactly why a
+// safe purge needs incarnation-scoped storage first.)
 export async function uploadAttachment(
   file: File,
   roomCode: string,
+  selfName: string,
 ): Promise<MessageAttachment> {
   if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
     throw new UploadError('mime_not_allowed', 415, `Unsupported file type: ${file.type || file.name}`);
@@ -64,6 +68,11 @@ export async function uploadAttachment(
   const fd = new FormData();
   fd.append('file', file);
   fd.append('roomCode', roomCode);
+  // The server binds this upload to an exact participant row before writing to
+  // disk. The Access cookie rides along automatically and carries the durable
+  // identity; the name selects which row in this room that identity must own.
+  fd.append('name', selfName);
+  fd.append('client', 'web');
 
   // Pre-read image dimensions so the bubble can reserve space and avoid a
   // layout flash when the <img> finally loads. SVG / unmeasurable images
@@ -91,23 +100,13 @@ export async function uploadAttachment(
   return (await resp.json()) as MessageAttachment;
 }
 
-// Best-effort cleanup hook called from the host's End-meeting handler.
-// Returns the count of blobs deleted (or 0 on any failure — endRoom should
-// not be blocked by Blob hiccups). Per Robin's "结束会议时清掉附件".
-export async function deleteRoomBlobs(roomCode: string): Promise<{ deleted: number }> {
-  try {
-    const resp = await fetch('/api/delete-room-blobs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode }),
-    });
-    if (!resp.ok) return { deleted: 0 };
-    const body = (await resp.json()) as { deleted?: number };
-    return { deleted: body.deleted ?? 0 };
-  } catch {
-    return { deleted: 0 };
-  }
-}
+// The End-meeting blob purge lived here. It has been removed, not merely
+// disabled: the endpoint deleted every attachment under a room code with no
+// room, host, or member check, and it swallowed every failure into
+// `{deleted: 0}` so an unauthorized or failed purge was indistinguishable from
+// a clean one. Ending a room is not deleting its data. A real purge needs
+// incarnation-scoped storage and explicit owner confirmation; until that
+// exists there is deliberately no client path to attachment deletion.
 
 function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {

@@ -11,6 +11,24 @@ import {
 
 const ROOM = 'ABC-DEF-GHJ';
 const WORD_ROOM = 'rose-elk-wood';
+// P0 containment: the server now binds every upload to a participant row, so
+// the agent must present its stored room identity. A display name alone no
+// longer authorizes a write into a room's blob namespace.
+const SENDER = { name: 'TestAgent', memberKey: 'mk-test' };
+
+// An upload test must never leave the machine. A misplaced argument once let
+// the real global fetch run and reach a live deployment; pinning the endpoint
+// is not proof on its own, so this asserts the global was never invoked.
+let globalFetchSpy: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  globalFetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    throw new Error('OUTBOUND NETWORK BLOCKED: a test reached the real fetch');
+  });
+});
+afterEach(() => {
+  expect(globalFetchSpy, 'a test invoked the real global fetch').not.toHaveBeenCalled();
+  globalFetchSpy.mockRestore();
+});
 
 function makeOkFetch(returned: Record<string, unknown>) {
   return vi.fn(async (_url: string, init?: RequestInit) => ({
@@ -41,6 +59,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'evil.exe', mime: 'application/x-msdownload', content_base64: 'AAA=' },
         ROOM,
+        SENDER,
         { fetch: fetchMock as unknown as typeof fetch },
       ),
     ).rejects.toMatchObject({ code: 'mime_not_allowed' });
@@ -52,6 +71,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'x.pdf', mime: 'application/pdf', content_base64: '' },
         ROOM,
+        SENDER,
       ),
     ).rejects.toMatchObject({ code: 'empty_content' });
   });
@@ -62,6 +82,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'x.pdf', mime: 'application/pdf', content_base64: 'not actually base64!' },
         ROOM,
+        SENDER,
         { fetch: fetchMock as unknown as typeof fetch },
       ),
     ).rejects.toMatchObject({ code: 'bad_base64' });
@@ -75,6 +96,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'big.pdf', mime: 'application/pdf', content_base64: oneByteOver },
         ROOM,
+        SENDER,
       ),
     ).rejects.toMatchObject({ code: 'file_too_large' });
   });
@@ -84,6 +106,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'x.pdf', mime: 'application/pdf', content_base64: 'AAA=' },
         'not-a-code',
+        SENDER,
       ),
     ).rejects.toMatchObject({ code: 'bad_room_code' });
   });
@@ -103,6 +126,7 @@ describe('uploadAgentAttachment', () => {
     await expect(uploadAgentAttachment(
       { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('test').toString('base64') },
       WORD_ROOM,
+      SENDER,
       { fetch: fetchMock },
     )).resolves.toEqual(sample);
 
@@ -115,6 +139,7 @@ describe('uploadAgentAttachment', () => {
     await uploadAgentAttachment(
       { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('test').toString('base64') },
       'ROSE-ELK-WOOD',
+      SENDER,
       { fetch: fetchMock },
     );
     const init = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
@@ -131,6 +156,7 @@ describe('uploadAgentAttachment', () => {
         content_base64: 'data:application/pdf;base64,JVBERg==',
       },
       ROOM,
+      SENDER,
       { fetch: fetchMock },
     );
     expect(att.url).toBe('https://r2/x');
@@ -157,6 +183,7 @@ describe('uploadAgentAttachment', () => {
         content_base64: Buffer.from('a,b,\n1,2').toString('base64'),
       },
       ROOM,
+      SENDER,
       { fetch: fetchMock },
     );
     expect(att).toEqual(sample);
@@ -178,6 +205,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'x.pdf', mime: 'application/pdf', content_base64: 'JVBERg==' },
         ROOM,
+        SENDER,
         { fetch: fetchMock },
       ),
     ).rejects.toMatchObject({ code: 'upload_failed' });
@@ -189,6 +217,7 @@ describe('uploadAgentAttachment', () => {
       uploadAgentAttachment(
         { name: 'x.pdf', mime: 'application/pdf', content_base64: 'JVBERg==' },
         ROOM,
+        SENDER,
         { fetch: fetchMock },
       ),
     ).rejects.toMatchObject({ code: 'network_error' });
@@ -203,7 +232,7 @@ describe('uploadAgentAttachments (batch)', () => {
       content_base64: 'JVBERg==',
     }));
     await expect(
-      uploadAgentAttachments(tooMany, ROOM),
+      uploadAgentAttachments(tooMany, ROOM, SENDER),
     ).rejects.toMatchObject({ code: 'too_many' });
   });
 
@@ -214,7 +243,7 @@ describe('uploadAgentAttachments (batch)', () => {
       { name: 'data.json', mime: 'application/json', content_base64: Buffer.from('{"ok":true}').toString('base64') },
     ];
 
-    const uploaded = await uploadAgentAttachments(attachments, WORD_ROOM, { fetch: fetchMock });
+    const uploaded = await uploadAgentAttachments(attachments, WORD_ROOM, SENDER, { fetch: fetchMock });
 
     expect(uploaded).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -231,5 +260,62 @@ describe('uploadAgentAttachments (batch)', () => {
     expect(ALLOWED_ATTACHMENT_MIMES.has('application/vnd.ms-excel')).toBe(true);
     expect(ALLOWED_ATTACHMENT_MIMES.has('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')).toBe(true);
     expect(ALLOWED_ATTACHMENT_MIMES.has('text/csv')).toBe(true);
+  });
+
+  // P0 attachment authorization containment.
+  describe('sender identity is transmitted so the server can bind the write', () => {
+    // This block sits outside the outer suite's env stub. Point the endpoint at
+    // an unroutable host so a dropped fetch mock fails loudly here instead of
+    // reaching a real deployment — an upload test must never leave the machine.
+    let priorBase: string | undefined;
+    beforeEach(() => {
+      priorBase = process.env.AGENT_ROOM_BASE_URL;
+      process.env.AGENT_ROOM_BASE_URL = 'http://127.0.0.1:1';
+    });
+    afterEach(() => {
+      if (priorBase === undefined) delete process.env.AGENT_ROOM_BASE_URL;
+      else process.env.AGENT_ROOM_BASE_URL = priorBase;
+    });
+
+    it('sends the stored name, agent client kind, and member key', async () => {
+      const fetchMock = makeOkFetch({ id: 'att-1', url: '/blobs/rose-elk-wood/att-1.md' });
+      await uploadAgentAttachment(
+        { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('x').toString('base64') },
+        WORD_ROOM,
+        SENDER,
+        { fetch: fetchMock },
+      );
+      const init = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
+      const body = init.body as FormData;
+      expect(body.get('name')).toBe('TestAgent');
+      expect(body.get('client')).toBe('cc');
+      expect(body.get('memberKey')).toBe('mk-test');
+    });
+
+    it('omits memberKey rather than sending an empty one when none is stored', async () => {
+      const fetchMock = makeOkFetch({ id: 'att-1', url: '/blobs/rose-elk-wood/att-1.md' });
+      await uploadAgentAttachment(
+        { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('x').toString('base64') },
+        WORD_ROOM,
+        { name: 'KeylessAgent' },
+        { fetch: fetchMock },
+      );
+      const init = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
+      // An empty-string key would present as a credential and fail 'bad-key';
+      // absent lets the server return the accurate 'need-key' refusal.
+      expect((init.body as FormData).get('memberKey')).toBeNull();
+    });
+
+    it('refuses before any network call when no stored name exists', async () => {
+      const fetchMock = makeOkFetch({ id: 'att-1', url: '/x' });
+      await expect(uploadAgentAttachment(
+        { name: 'test.md', mime: 'text/markdown', content_base64: Buffer.from('x').toString('base64') },
+        WORD_ROOM,
+        { name: '   ' },
+        SENDER,
+        { fetch: fetchMock },
+      )).rejects.toMatchObject({ code: 'bad_sender' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

@@ -39,7 +39,9 @@ import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBo
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
-import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, deleteRoomBlobs, formatBytes, uploadAttachment } from '../lib/upload.js';
+import { idlePromptCopy } from '../lib/endRoomOutcome.js';
+import { EndRoomAlert, EndRoomControl, useEndRoom } from '../components/EndRoomControl.js';
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_MESSAGE, formatBytes, uploadAttachment } from '../lib/upload.js';
 import { fetchIdentity, lastRole, rememberRole } from '../lib/identity.js';
 import {
   effectiveReadCount,
@@ -825,6 +827,8 @@ export function Room() {
 
   // --- End meeting ---
   const [ended, setEnded] = useState(false);
+  // Surfaced when ending is refused or fails. The room stays active; silence
+  // here is what let a rejected end masquerade as a completed one.
   const [showIdlePrompt, setShowIdlePrompt] = useState(false);
   const [countdown, setCountdown] = useState(AUTO_CLOSE_COUNTDOWN);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1088,22 +1092,6 @@ export function Room() {
     }
   }
 
-  async function handleEndMeeting() {
-    try {
-      const client = createClient();
-      await endRoomApi(client, code, { requesterName: self?.name });
-      setEnded(true);
-      setShowIdlePrompt(false);
-      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-      // Per Robin: attachments shouldn't outlive the meeting. Fire-and-
-      // forget so a Blob hiccup doesn't keep the user staring at a spinner.
-      // Best-effort only — TTL expiry is handled by a cron sweep later.
-      void deleteRoomBlobs(code);
-    } catch {
-      // ignore — room may already be ended
-      setEnded(true);
-    }
-  }
 
   const [reportBusy, setReportBusy] = useState(false);
   const artifacts = serverArtifacts ?? [];
@@ -1470,6 +1458,23 @@ export function Room() {
   // blips set `degraded` instead), so this branch is the bootstrap-failure
   // state: actionable copy + retry, not a raw exception filling the screen.
   // Polling keeps running underneath, so it also self-heals without a tap.
+  // P0: one shared implementation for all three End surfaces. The rule that
+  // only an authoritative success may transition lives in useEndRoom, so there
+  // is no per-surface copy to drift back into "catch { setEnded(true) }".
+  const endRoomState = useEndRoom({
+    isHost: Boolean(room && self && room.createdBy === self.name),
+    onEnd: async () => {
+      await endRoomApi(createClient(), code, { requesterName: self?.name });
+    },
+    onEnded: () => {
+      setEnded(true);
+      setShowIdlePrompt(false);
+      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+      // Ending a room does not delete its attachments. The purge call that
+      // lived here was unauthorized and its failures were silent.
+    },
+  });
+
   if (error) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
@@ -1485,6 +1490,7 @@ export function Room() {
       </div>
     );
   }
+
   if (!self) return <div className="p-10 text-ink-soft">Redirecting to join…</div>;
   if (!room) {
     return (
@@ -1506,6 +1512,7 @@ export function Room() {
   // (legacy rooms before this field existed) is treated as approved so
   // already-running meetings don't break.
   const isHost = room.createdBy === me.name;
+
   const myParticipant = room.participants.find(p => p.name === me.name && p.client === 'web');
   const myCanSpeak = isHost || myParticipant?.canSpeak !== false;
 
@@ -1952,7 +1959,7 @@ export function Room() {
       setAttachmentJobs(prev => [...prev, ...jobs]);
       for (const job of jobs) {
         try {
-          const uploaded = await uploadAttachment(job.file, code);
+          const uploaded = await uploadAttachment(job.file, code, self?.name ?? '');
           setAttachments(prev => [...prev, uploaded].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
           setAttachmentJobs(prev => prev.filter(item => item.id !== job.id));
         } catch (e) {
@@ -1971,7 +1978,7 @@ export function Room() {
     setAttachBusy(true);
     setAttachmentJobs(prev => prev.map(item => item.id === job.id ? { ...item, state: 'uploading', error: undefined } : item));
     try {
-      const uploaded = await uploadAttachment(job.file, code);
+      const uploaded = await uploadAttachment(job.file, code, self?.name ?? '');
       setAttachments(prev => [...prev, uploaded].slice(0, MAX_ATTACHMENTS_PER_MESSAGE));
       setAttachmentJobs(prev => prev.filter(item => item.id !== job.id));
     } catch (e) {
@@ -2268,13 +2275,12 @@ export function Room() {
           <p className="mb-3 text-[15px] leading-relaxed text-ink-soft sm:text-[14px]">
             Ending the room stops the meeting for everyone. Agents are disconnected and the room moves to Ended.
           </p>
-          <button
-            type="button"
-            onClick={handleEndMeeting}
-            className="flex min-h-11 items-center justify-center rounded-lg border border-red-400/40 px-4 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
-          >
-            End room
-          </button>
+          <EndRoomControl
+            state={endRoomState}
+            hideError
+            label="End room"
+            className="flex min-h-11 items-center justify-center rounded-lg border border-red-400/40 px-4 text-sm font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
+          />
         </section>
       )}
       {/* Subdued page footer: navigation is not lifecycle management. */}
@@ -2909,8 +2915,7 @@ export function Room() {
           onToggleInspector={() => setInspectorOpen(v => !v)}
           onSearch={() => setSearchOpen(true)}
           onOpenRoom={() => selectTab('room')}
-          onEndRoom={handleEndMeeting}
-          canEndRoom={!ended && activeRoom.createdBy === self.name}
+          endRoom={{ ...endRoomState, canEnd: endRoomState.canEnd && !ended }}
           selfName={self.name}
           agents={headerAgents}
           agentStaleCount={headerAgentStaleCount}
@@ -2982,6 +2987,11 @@ export function Room() {
             Connection hiccup — reconnecting…
           </div>
         )}
+
+        {/* One persistent End announcement for every surface. This is a direct
+            child of the non-scrolling room chrome, before both tab branches,
+            so Settings and header failures cannot land in a hidden Chat pane. */}
+        <EndRoomAlert state={endRoomState} mobileHeaderOffset={mainTab === 'chat' && !chromeHidden} />
 
         {/* T-30: a non-chat tab owns the pane at EVERY width now, not just lg. */}
         {mainTab !== 'chat' && (
@@ -3194,14 +3204,21 @@ export function Room() {
               {showIdlePrompt && !ended && (
                 <div className="sticky bottom-0 mx-auto bg-surface border border-border rounded-xl shadow-lg p-4 text-center max-w-sm">
                   <p className="text-sm font-semibold text-ink mb-1">Quiet for a while</p>
-                  <p className="text-xs text-ink-soft mb-3">This room stays open and your agents keep running until you end it.</p>
+                  <p className="text-xs text-ink-soft mb-3">
+                    {idlePromptCopy(isHost)}
+                  </p>
                   <div className="flex gap-2 justify-center">
                     <button onClick={dismissIdlePrompt} className="px-4 py-1.5 bg-accent text-white text-xs font-semibold rounded-lg">
                       Keep it going
                     </button>
-                    <button onClick={handleEndMeeting} className="px-4 py-1.5 bg-red-500/10 text-red-300 text-xs font-semibold rounded-lg border border-red-400/30">
-                      End meeting
-                    </button>
+                    {/* Only the host can end a room. Showing this to everyone
+                        offered an action the server always rejects, and the
+                        rejection then read as success. */}
+                    <EndRoomControl
+                      state={endRoomState}
+                      hideError
+                      className="px-4 py-1.5 disabled:opacity-50 bg-red-500/10 text-red-300 text-xs font-semibold rounded-lg border border-red-400/30"
+                    />
                   </div>
                 </div>
               )}

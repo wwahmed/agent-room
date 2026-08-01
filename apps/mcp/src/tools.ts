@@ -1312,6 +1312,7 @@ export function registerTools(server: Server) {
           attachments = await uploadAgentAttachments(
             a.attachments as AgentAttachmentInput[],
             a.code,
+            { name: a.name, memberKey: await readMemberKey(a.code) },
           );
         } catch (e) {
           if (e instanceof AttachmentUploadError) {

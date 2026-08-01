@@ -15,6 +15,10 @@ export interface MultipartFile {
 export interface MultipartResult {
   fields: Record<string, string>;
   files: MultipartFile[];
+  /** Field names that appeared more than once. `fields` keeps the LAST value,
+   *  so a duplicated identity field would otherwise silently pick one of two
+   *  competing claims. Callers that authorize on a field must reject these. */
+  duplicateFields: string[];
 }
 
 const DASH = 0x2d; // '-'
@@ -79,6 +83,7 @@ export function parseMultipart(body: Buffer, contentType: string): MultipartResu
   const segments = splitBuffer(body, delim);
   const fields: Record<string, string> = {};
   const files: MultipartFile[] = [];
+  const duplicates = new Set<string>();
 
   // segments[0] is the preamble (usually empty). A real part segment begins
   // with CRLF (the line break after the delimiter) and ends with a trailing
@@ -104,9 +109,10 @@ export function parseMultipart(body: Buffer, contentType: string): MultipartResu
     if (filename !== null) {
       files.push({ field: name, filename, contentType: partType, data });
     } else {
+      if (Object.prototype.hasOwnProperty.call(fields, name)) duplicates.add(name);
       fields[name] = data.toString('utf8');
     }
   }
 
-  return { fields, files };
+  return { fields, files, duplicateFields: [...duplicates] };
 }

@@ -43,12 +43,17 @@ import { parseMultipart } from './multipart.js';
 import {
   saveBlob,
   readBlob,
-  deleteRoomBlobs,
+  // P0: `deleteRoomBlobs` is deliberately NOT imported. The purge route is
+  // denied to every caller until incarnation-scoped storage exists, and leaving
+  // the destructive helper out of this module's scope means no future edit here
+  // can reach it by accident.
   isAllowedMime,
   attachmentKind,
   mimeForExt,
   MAX_ATTACHMENT_BYTES,
 } from './blobstore.js';
+import { authorizePurge } from './attachmentAuth.js';
+import { handleUploadSocketRequest } from './attachmentRequest.js';
 import { verifyAccessJwt, allowedEmails } from './access.js';
 import { createProjectFromCandidate, getProject, listProjectCandidates, listProjects, loadLedgerBoard, loadRoomLedger, projectForRoot, readDoc, syncRoomLedger, syncTaskLedger, validateRegistryAtStartup, type SyncResult } from './projects.js';
 import { decideSenderAuth } from './roomauth.js';
@@ -744,6 +749,11 @@ async function authenticateSender(
   clientKind: 'web' | 'cc',
   memberKey: string | undefined,
   caller: Caller,
+  /** P0: when true, the legacy name-only path is refused REGARDLESS of
+   *  ALLOW_LEGACY_NAME_AUTH. A containment boundary must not depend on the
+   *  current value of a compatibility env var — attachment upload passes this
+   *  so enabling the migration flag can never re-open arbitrary blob writes. */
+  forceStrict = false,
 ): Promise<Participant | null> {
   // T-49: returns the row it actually verified, so the send path can derive that
   // session's lineage from the authenticated identity rather than from the claim.
@@ -756,7 +766,7 @@ async function authenticateSender(
   const presentedHash = memberKey ? await sha256Hex(memberKey) : undefined;
   const verifiedAuthIdHash =
     caller.kind === 'user' && clientKind === 'web' ? await sha256Hex(caller.email) : undefined;
-  const decision = decideSenderAuth(rows, presentedHash, ALLOW_LEGACY_NAME_AUTH, verifiedAuthIdHash);
+  const decision = decideSenderAuth(rows, presentedHash, forceStrict ? false : ALLOW_LEGACY_NAME_AUTH, verifiedAuthIdHash);
   if (decision.ok) {
     if (decision.via === 'legacy-name') {
       securityEvent(`send/presence as "${name}" (${clientKind}) on ${code} via legacy name path (ALLOW_LEGACY_NAME_AUTH); caller=${caller.kind}`);
@@ -2605,44 +2615,43 @@ const server = createServer(async (req, res) => {
     // local disk (self-host has no Vercel Blob). Access-gated.
     if (path === '/api/upload' && req.method === 'POST') {
       const caller = await resolveCaller(req);
-      if (caller.kind === 'anonymous') return sendJson(res, 401, { error: 'Unauthorized', message: 'Sign in required.' });
-      const ct = String(req.headers['content-type'] || '');
-      if (!/multipart\/form-data/i.test(ct)) return sendJson(res, 400, { error: 'bad_request', message: 'expected multipart/form-data' });
-      let raw: Buffer;
-      try {
-        raw = await readRawBody(req);
-      } catch {
-        return sendJson(res, 413, { error: 'file_too_large', message: 'Upload exceeds the size limit.' });
+      // P0 CONTAINMENT: the production-called seam owns the anonymous gate AND
+      // the socket read. Its executable test injects a reader spy and proves a
+      // 401 performs zero reads; parsing, identity binding and the write remain
+      // behind that same seam. The route only injects effects and serialises.
+      const uploadOutcome = await handleUploadSocketRequest(
+        caller.kind === 'user' ? { kind: 'user', email: caller.email } : { kind: caller.kind },
+        String(req.headers['content-type'] || ''),
+        {
+          readBody: () => readRawBody(req),
+          sha256Hex,
+          getRoom: (c) => getRoom(client, c),
+          isAllowedMime,
+          maxBytes: MAX_ATTACHMENT_BYTES,
+          saveBlob: (roomCode, f) => {
+            const st = saveBlob(roomCode, f.data, f.mime);
+            // The COMPLETE descriptor both web and MCP read. Returning only the
+            // stored blob silently breaks every client that expects id/type/
+            // name/mime/storageKey/uploadedAt.
+            return {
+              id: st.key,
+              type: attachmentKind(f.mime),
+              url: st.url,
+              storageKey: `${roomCode}/${st.key}`,
+              name: f.filename || st.key,
+              size: st.size,
+              mime: f.mime,
+              uploadedAt: Date.now(),
+              ...(f.width && f.height ? { width: f.width, height: f.height } : {}),
+            };
+          },
+        },
+      );
+      if (!uploadOutcome.authorized) {
+        if (uploadOutcome.audit) securityEvent(`${uploadOutcome.audit}; caller=${caller.kind}`);
+        return sendJson(res, uploadOutcome.status, uploadOutcome.body);
       }
-      let parsed;
-      try {
-        parsed = parseMultipart(raw, ct);
-      } catch {
-        return sendJson(res, 400, { error: 'bad_request', message: 'malformed multipart body' });
-      }
-      const code = canonicalizeCode(String(parsed.fields.roomCode || ''));
-      if (!code) return sendJson(res, 400, { error: 'bad_request', message: 'missing or invalid roomCode' });
-      const file = parsed.files.find((f) => f.field === 'file') ?? parsed.files[0];
-      if (!file) return sendJson(res, 400, { error: 'no_file', message: 'no file part in upload' });
-      if (file.data.length === 0) return sendJson(res, 400, { error: 'empty_file', message: 'the file is empty' });
-      if (file.data.length > MAX_ATTACHMENT_BYTES) return sendJson(res, 413, { error: 'file_too_large', message: 'Attachment exceeds the 10 MB limit.' });
-      const mime = (file.contentType.split(';')[0] || '').trim().toLowerCase();
-      if (!isAllowedMime(mime)) return sendJson(res, 415, { error: 'mime_not_allowed', message: `Unsupported file type: ${mime || file.filename}` });
-      const stored = saveBlob(code, file.data, mime);
-      const width = Number(parsed.fields.width);
-      const height = Number(parsed.fields.height);
-      const attachment: MessageAttachment = {
-        id: stored.key,
-        type: attachmentKind(mime),
-        url: stored.url,
-        storageKey: `${code}/${stored.key}`,
-        name: file.filename || stored.key,
-        size: stored.size,
-        mime,
-        uploadedAt: Date.now(),
-        ...(Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : {}),
-      };
-      return sendJson(res, 200, attachment);
+      return sendJson(res, 200, uploadOutcome.body);
     }
 
     // T-131: local speech-to-text for silent, continuous dictation. The client
@@ -2770,7 +2779,15 @@ const server = createServer(async (req, res) => {
       }
       const code = canonicalizeCode(String(payload.roomCode || ''));
       if (!code) return sendJson(res, 400, { error: 'bad_request', message: 'invalid roomCode' });
-      return sendJson(res, 200, { deleted: deleteRoomBlobs(code) });
+      // P0 CONTAINMENT: denied for every caller. See attachmentAuth.ts for why a
+      // host gate cannot repair this, and for the executable decision itself.
+      // There is no reachable branch here that calls deleteRoomBlobs.
+      const purgeVerdict = authorizePurge({ code, callerKind: caller.kind });
+      securityEvent(purgeVerdict.audit);
+      return sendJson(res, purgeVerdict.status, {
+        error: purgeVerdict.error,
+        message: purgeVerdict.message,
+      });
     }
 
     // T-123: one-time signed download URL for the large-file path. Self-
