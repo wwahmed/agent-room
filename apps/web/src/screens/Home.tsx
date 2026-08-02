@@ -332,6 +332,7 @@ export function Home() {
                   <RoomIdentitySlot
                     code={r.code}
                     agentCount={agentCount}
+                    agentListeningCount={r.agentListeningCount ?? r.agents?.filter(agent => agent.state === 'listening').length ?? 0}
                     agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? agentCount : 0)}
                     agents={r.agents ?? []}
                   />

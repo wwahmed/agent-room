@@ -25,9 +25,12 @@ export interface RoomSummary {
   lastActivityAt: number;
   messageCount: number;
   /** T-25: agent (cc) participants attached to the room, and whether every one
-   *  of them is currently listening/online per the server health verdicts. */
+   *  of them is currently healthy per the server presence verdicts. */
   agentCount: number;
   agentsAllHealthy: boolean;
+  /** Agents with an active listen lease right now. Health and listening are
+   *  deliberately separate: online/working agents cannot receive a message. */
+  agentListeningCount: number;
   /** T-34 (UX spec v2): per-agent identity + health for the facepile, capped,
    *  plus the stale count so severity can be worded ("1 of 2 needs attention"). */
   agentStaleCount: number;
@@ -103,6 +106,7 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
     // T-04: `working` is a healthy state — a declared-busy agent must not
     // trip the room card's "needs attention" badge.
     const agentsAllHealthy = agentStates.every(state => state === 'listening' || state === 'online' || state === 'working');
+    const agentListeningCount = agentStates.filter(state => state === 'listening').length;
     const agentStaleCount = agentStates.filter(state => state !== 'listening' && state !== 'online' && state !== 'working').length;
     // T-34: healthy faces first so a lone stale agent never hides behind the
     // "+N" overflow chip while the badge says something needs attention.
@@ -130,6 +134,7 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
       messageCount: Number.isFinite(count) && count >= 0 ? count : 0,
       agentCount: agents.length,
       agentsAllHealthy,
+      agentListeningCount,
       agentStaleCount,
       agents: facepile,
     };

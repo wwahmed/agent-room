@@ -1,7 +1,7 @@
 // T-34 (T-31 spec v2): pure logic for the room-card agent facepile.
-// The server sends up to 4 agent faces (healthy-first) plus agentCount and
-// agentStaleCount; this module turns that into what the cluster renders and
-// says. Kept out of the component so the wording and windowing are unit-tested.
+// The server sends up to 4 agent faces (healthy-first), total/listening counts,
+// and a stale count. Listening is the delivery truth; stale remains a separate
+// stronger failure signal. This module keeps wording/windowing unit-testable.
 
 export type AgentPresence = 'listening' | 'online' | 'working' | 'stale' | 'disconnected';
 
@@ -26,9 +26,11 @@ export function isStaleState(state: AgentPresence): boolean {
   return state === 'stale' || state === 'disconnected';
 }
 
-export function facepileSeverity(agentCount: number, staleCount: number): FacepileSeverity {
-  if (staleCount <= 0) return 'healthy';
-  return staleCount >= agentCount ? 'down' : 'degraded';
+export function facepileSeverity(agentCount: number, staleCount: number, listeningCount: number): FacepileSeverity {
+  if (agentCount <= 0) return 'healthy';
+  if (staleCount >= agentCount) return 'down';
+  if (listeningCount >= agentCount) return 'healthy';
+  return 'degraded';
 }
 
 /** Faces shown as avatars, and how many fold into the "+N" overflow chip.
@@ -41,20 +43,20 @@ export function facepileWindow(faces: AgentFace[], agentCount: number): { visibl
   return { visible, overflow: Math.max(0, agentCount - visible.length) };
 }
 
-/** The cluster's accessible name. Severity is worded, never color-only:
- *  "2 agents, 1 needs attention. Open People panel." */
-export function facepileLabel(agentCount: number, staleCount: number): string {
+/** The cluster's accessible name states the exact active-listener count rather
+ * than the ambiguous former claim that connected agents were "responding." */
+export function facepileLabel(agentCount: number, staleCount: number, listeningCount: number): string {
   const agents = `${agentCount} agent${agentCount === 1 ? '' : 's'}`;
-  const severity = facepileSeverity(agentCount, staleCount);
-  if (severity === 'healthy') return `${agents}, all responding. Open People panel.`;
-  if (severity === 'down') return `${agents}, none responding. Open People panel.`;
-  return `${agents}, ${staleCount} need${staleCount === 1 ? 's' : ''} attention. Open People panel.`;
+  const listening = `${listeningCount} listening`;
+  const stale = staleCount > 0
+    ? `, ${staleCount} stale or disconnected`
+    : '';
+  return `${agents}, ${listening}${stale}. Open People panel.`;
 }
 
 /** Short tooltip line (S7: a real hover/focus tooltip, never a bare title). */
-export function facepileTooltip(agentCount: number, staleCount: number): string {
-  const severity = facepileSeverity(agentCount, staleCount);
-  if (severity === 'healthy') return `${agentCount} agent${agentCount === 1 ? '' : 's'} · all responding`;
-  if (severity === 'down') return `${agentCount} agent${agentCount === 1 ? '' : 's'} · none responding`;
-  return `${staleCount} of ${agentCount} agents need attention`;
+export function facepileTooltip(agentCount: number, staleCount: number, listeningCount: number): string {
+  const agents = `${agentCount} agent${agentCount === 1 ? '' : 's'}`;
+  const stale = staleCount > 0 ? ` · ${staleCount} stale` : '';
+  return `${agents} · ${listeningCount} listening${stale}`;
 }

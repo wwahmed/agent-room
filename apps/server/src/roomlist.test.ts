@@ -137,6 +137,7 @@ describe('room list agent facepile (T-34)', () => {
     const page = await listIndexedRoomPage(store, 0, 10);
     const room = page.rooms[0]!;
     expect(room.agentCount).toBe(2);
+    expect(room.agentListeningCount).toBe(1);
     expect(room.agentStaleCount).toBe(1);
     expect(room.agentsAllHealthy).toBe(false);
     // Healthy faces sort first so a stale agent never hides in the overflow.
@@ -157,6 +158,7 @@ describe('room list agent facepile (T-34)', () => {
     const page = await listIndexedRoomPage(store, 0, 10);
     const room = page.rooms[0]!;
     expect(room.agentCount).toBe(6);
+    expect(room.agentListeningCount).toBe(4);
     expect(room.agentStaleCount).toBe(2);
     expect(room.agents).toHaveLength(4);
     // The cap keeps healthy-first ordering: all four visible payload faces are
@@ -174,6 +176,7 @@ describe('room list agent facepile (T-34)', () => {
     const page = await listIndexedRoomPage(store, 0, 10);
     const room = page.rooms[0]!;
     expect(room.agentCount).toBe(2);
+    expect(room.agentListeningCount).toBe(1);
     expect(room.agentStaleCount).toBe(0);
     expect(room.agentsAllHealthy).toBe(true);
     expect(room.agents.find(a => a.name === 'Busy')!.state).toBe('working');
@@ -189,6 +192,7 @@ describe('room list agent facepile (T-34)', () => {
     const page = await listIndexedRoomPage(store, 0, 10);
     const room = page.rooms[0]!;
     expect(room.agentCount).toBe(1);
+    expect(room.agentListeningCount).toBe(1);
     expect(room.agentStaleCount).toBe(0);
     expect(room.agentsAllHealthy).toBe(true);
     expect(room.agents.map(a => a.name)).toEqual(['Live']);
@@ -198,6 +202,7 @@ describe('room list agent facepile (T-34)', () => {
     const store = facepileStore([{ name: 'Waqas', client: 'web', lastSeenAt: Date.now() }]);
     const page = await listIndexedRoomPage(store, 0, 10);
     expect(page.rooms[0]!.agentCount).toBe(0);
+    expect(page.rooms[0]!.agentListeningCount).toBe(0);
     expect(page.rooms[0]!.agentStaleCount).toBe(0);
     expect(page.rooms[0]!.agents).toEqual([]);
   });

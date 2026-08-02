@@ -31,6 +31,8 @@ interface RoomSummary {
   // T-25: agent attachment + server health verdict for the card pill.
   agentCount?: number;
   agentsAllHealthy?: boolean;
+  /** Active listen leases. Online/working alone cannot receive a message. */
+  agentListeningCount?: number;
   // T-34: per-agent faces + stale count for the compact facepile.
   agentStaleCount?: number;
   agents?: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'working' | 'stale' | 'disconnected' }>;
@@ -153,6 +155,9 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
               <RoomIdentitySlot
                 code={r.code}
                 agentCount={r.status !== 'ended' ? (r.agentCount ?? 0) : 0}
+                agentListeningCount={r.status !== 'ended'
+                  ? (r.agentListeningCount ?? r.agents?.filter(agent => agent.state === 'listening').length ?? 0)
+                  : 0}
                 agentStaleCount={r.agentStaleCount ?? (r.agentsAllHealthy === false ? (r.agentCount ?? 0) : 0)}
                 agents={r.agents ?? []}
                 compact

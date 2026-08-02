@@ -19,7 +19,7 @@ import {
 // corner with one anatomy for every composition (R2): quiet green dot when all
 // agents respond, amber !-triangle plus dimmed stale avatars when some do, red
 // triangle when none do. Severity is carried by color AND shape AND dimming
-// AND the worded label, never color alone. The cluster is a deliberate
+// AND the exact listener-count label, never color alone. The cluster is a deliberate
 // 44px-target button opening the room's People panel; the surrounding card is
 // a stretched link to the chat, so no interactive element nests in another.
 // The tooltip renders in a body-level portal with collision-aware flip (R3):
@@ -28,6 +28,7 @@ import {
 interface Props {
   code: string;
   agentCount: number;
+  agentListeningCount: number;
   agentStaleCount: number;
   agents: AgentFace[];
   /** Dense desktop pane sizing (smaller avatars, corner-tucked). */
@@ -59,9 +60,9 @@ function badge(severity: 'healthy' | 'degraded' | 'down', animate: boolean) {
   );
 }
 
-export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compact = false }: Props) {
+export function AgentFacepile({ code, agentCount, agentListeningCount, agentStaleCount, agents, compact = false }: Props) {
   const navigate = useNavigate();
-  const severity = facepileSeverity(agentCount, agentStaleCount);
+  const severity = facepileSeverity(agentCount, agentStaleCount, agentListeningCount);
   const { visible, overflow } = facepileWindow(agents, agentCount);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -78,16 +79,17 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
 
   // S6: a single 300ms scale-in when the cluster DEGRADES — never on mount,
   // never looping. motion-reduce is handled by the keyframe's CSS guard.
-  const prevStale = useRef(agentStaleCount);
+  const prevPresence = useRef({ stale: agentStaleCount, listening: agentListeningCount });
   const [animate, setAnimate] = useState(false);
   useEffect(() => {
-    const degraded = agentStaleCount > prevStale.current;
-    prevStale.current = agentStaleCount;
+    const degraded = agentStaleCount > prevPresence.current.stale
+      || agentListeningCount < prevPresence.current.listening;
+    prevPresence.current = { stale: agentStaleCount, listening: agentListeningCount };
     if (!degraded) return;
     setAnimate(true);
     const timer = window.setTimeout(() => setAnimate(false), 350);
     return () => window.clearTimeout(timer);
-  }, [agentStaleCount]);
+  }, [agentListeningCount, agentStaleCount]);
 
   // Delight kit item 4 (light follows attention): a newly ARRIVED agent's
   // face scales 0.8 -> 1 with one 400ms green ring ripple. Never on mount
@@ -117,7 +119,7 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
   // visible; 8px is a 29% overlap. Compact 20px faces retain their existing
   // 8px overlap because that variant is intentionally monogram-only.
   const overlap = '-ml-2';
-  const label = facepileLabel(agentCount, agentStaleCount);
+  const label = facepileLabel(agentCount, agentStaleCount, agentListeningCount);
 
   return (
     <span className={compact ? 'relative' : 'relative flex-shrink-0'}>
@@ -186,7 +188,7 @@ export function AgentFacepile({ code, agentCount, agentStaleCount, agents, compa
             transform: `translateX(-50%) ${tip.below ? '' : 'translateY(-100%)'}`,
           }}
         >
-          {facepileTooltip(agentCount, agentStaleCount)}
+          {facepileTooltip(agentCount, agentStaleCount, agentListeningCount)}
         </span>,
         document.body,
       )}

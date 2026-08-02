@@ -3,6 +3,7 @@ import { AgentFacepile } from './AgentFacepile.js';
 interface Props {
   code: string;
   agentCount: number;
+  agentListeningCount: number;
   agentStaleCount: number;
   agents: Array<{
     name: string;
@@ -22,6 +23,7 @@ interface Props {
 export function RoomIdentitySlot({
   code,
   agentCount,
+  agentListeningCount,
   agentStaleCount,
   agents,
   compact = false,
@@ -36,6 +38,7 @@ export function RoomIdentitySlot({
         <AgentFacepile
           code={code}
           agentCount={agentCount}
+          agentListeningCount={agentListeningCount}
           agentStaleCount={agentStaleCount}
           agents={agents}
           compact={compact}

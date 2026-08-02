@@ -234,7 +234,13 @@ export function RoomHeader({
                 className={`header-team-pill hidden min-h-11 items-center rounded-xl pr-1 sm:flex sm:pr-2 lg:hidden ${agentStaleCount > 0 || nobodyListening ? 'header-team-pill-warn' : ''}`}
                 aria-label={`${agentCount} agents connected, ${agentStatus}`}
               >
-                <AgentFacepile code={room.code} agentCount={agentCount} agentStaleCount={agentStaleCount} agents={agents} />
+                <AgentFacepile
+                  code={room.code}
+                  agentCount={agentCount}
+                  agentListeningCount={listeningCount}
+                  agentStaleCount={agentStaleCount}
+                  agents={agents}
+                />
                 {/* T-71 pixel review 5: facepile + ONE human-readable status —
                     details live in People, not a congested pill. */}
                 <span className={`hidden items-center gap-1.5 pr-1 text-[13px] font-semibold xl:flex ${agentStaleCount > 0 || nobodyListening ? 'text-amber-400' : 'text-emerald-400'}`}>

@@ -25,6 +25,8 @@ export interface RoomSummary {
   /** T-25: agent (cc) participants and the server's health verdict over them. */
   agentCount?: number;
   agentsAllHealthy?: boolean;
+  /** Active room-listen leases, not merely connected/working agents. */
+  agentListeningCount?: number;
   /** T-34: per-agent faces (healthy-first, capped server-side) + stale count
    *  so the facepile can word severity, not just color it. */
   agentStaleCount?: number;

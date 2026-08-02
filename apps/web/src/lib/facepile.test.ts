@@ -16,11 +16,13 @@ const face = (name: string, state: AgentFace['state']): AgentFace => ({
 });
 
 describe('facepileSeverity', () => {
-  it('is healthy only with zero stale agents', () => {
-    expect(facepileSeverity(3, 0)).toBe('healthy');
-    expect(facepileSeverity(3, 1)).toBe('degraded');
-    expect(facepileSeverity(3, 3)).toBe('down');
-    expect(facepileSeverity(1, 1)).toBe('down');
+  it('is healthy only when every agent is actively listening', () => {
+    expect(facepileSeverity(0, 0, 0)).toBe('healthy');
+    expect(facepileSeverity(3, 0, 3)).toBe('healthy');
+    expect(facepileSeverity(3, 0, 0)).toBe('degraded');
+    expect(facepileSeverity(3, 1, 2)).toBe('degraded');
+    expect(facepileSeverity(3, 3, 0)).toBe('down');
+    expect(facepileSeverity(1, 1, 0)).toBe('down');
   });
 });
 
@@ -48,16 +50,16 @@ describe('facepileWindow', () => {
 
 describe('wording', () => {
   it('words severity instead of relying on color', () => {
-    expect(facepileLabel(2, 0)).toBe('2 agents, all responding. Open People panel.');
-    expect(facepileLabel(2, 1)).toBe('2 agents, 1 needs attention. Open People panel.');
-    expect(facepileLabel(2, 2)).toBe('2 agents, none responding. Open People panel.');
-    expect(facepileLabel(1, 0)).toBe('1 agent, all responding. Open People panel.');
+    expect(facepileLabel(2, 0, 2)).toBe('2 agents, 2 listening. Open People panel.');
+    expect(facepileLabel(2, 1, 1)).toBe('2 agents, 1 listening, 1 stale or disconnected. Open People panel.');
+    expect(facepileLabel(2, 0, 0)).toBe('2 agents, 0 listening. Open People panel.');
+    expect(facepileLabel(1, 0, 1)).toBe('1 agent, 1 listening. Open People panel.');
   });
 
   it('tooltip mirrors the same verdicts in short form', () => {
-    expect(facepileTooltip(3, 0)).toBe('3 agents · all responding');
-    expect(facepileTooltip(3, 2)).toBe('2 of 3 agents need attention');
-    expect(facepileTooltip(3, 3)).toBe('3 agents · none responding');
+    expect(facepileTooltip(3, 0, 3)).toBe('3 agents · 3 listening');
+    expect(facepileTooltip(3, 2, 1)).toBe('3 agents · 1 listening · 2 stale');
+    expect(facepileTooltip(3, 0, 0)).toBe('3 agents · 0 listening');
   });
 });
 
