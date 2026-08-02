@@ -13,6 +13,7 @@ import { useLiveRooms } from '../hooks/useLiveRooms.js';
 import { createClient, unarchiveRoomAction } from '../lib/api.js';
 import { RoomContextMenu, useRoomCardMenu } from '../components/RoomContextMenu.js';
 import { syncReadMarkers } from '../lib/readSync.js';
+import { clearHomeCache, matchesIdentity, readHomeCache, writeHomeCache } from '../lib/homeCache.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -36,14 +37,21 @@ export function Home() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
-  const [identity, setIdentity] = useState<WhoAmI | null>(null);
-  const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [roomsLoading, setRoomsLoading] = useState(true);
-  const [nextRoomCursor, setNextRoomCursor] = useState<string | null>(null);
+  // Warm start: the last known-good snapshot is read synchronously so the very
+  // first paint already carries the account and its rooms. Cold start is
+  // unchanged (null/[]), and the live fetch below overwrites either way.
+  const cached = useRef(readHomeCache()).current;
+  const [identity, setIdentity] = useState<WhoAmI | null>(cached?.identity ?? null);
+  const [rooms, setRooms] = useState<RoomSummary[]>(cached?.rooms ?? []);
+  const [roomsLoading, setRoomsLoading] = useState(cached == null);
+  const [nextRoomCursor, setNextRoomCursor] = useState<string | null>(cached?.nextCursor ?? null);
   const [loadingMoreRooms, setLoadingMoreRooms] = useState(false);
   const loadingMoreRef = useRef(false);
   const roomListEndRef = useRef<HTMLDivElement>(null);
-  const [checked, setChecked] = useState(false);
+  // `checked` means "the account answer is in". A snapshot is a cached answer,
+  // not a verified one — but it is the answer we are already painting, so the
+  // sign-in card must not flash over it while /api/me is in flight.
+  const [checked, setChecked] = useState(cached != null);
   // T-40: Active is the default view; Ended renders only when selected.
   const [view, setView] = useState<'active' | 'ended' | 'archived'>('active');
   const homeClient = useRef(createClient()).current;
@@ -73,27 +81,57 @@ export function Home() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const me = await fetchIdentity();
-      if (cancelled) return;
-      setIdentity(me);
-      setChecked(true);
-      if (!me) { setRoomsLoading(false); return; }
+      // Identity and rooms are fetched CONCURRENTLY. They were serial, which
+      // made the cold screen cost two round trips back to back — the second
+      // one could not even begin until the first had landed. /api/rooms
+      // answers 401 for an anonymous caller and fetchRooms turns that into an
+      // empty page, so speculating on the room read is safe: the worst case
+      // for a signed-out visitor is one discarded request, and the common case
+      // (signed in, which is every real user of this app) halves the wait.
+      const identityRead = fetchIdentity();
+      const roomsRead = fetchRooms();
       // Home owns the account-wide pull because it is the one surface that
       // renders every room badge. Individual Room routes sync only their own
       // code so opening A never mutates B/C unread state. Do not make room
       // discovery wait on this convergence layer: render the list as soon as
       // fetchRooms resolves, then repaint only if account markers advanced.
       const markerSync = syncReadMarkers();
-      const page = await fetchRooms();
+
+      const me = await identityRead;
+      if (cancelled) return;
+      setIdentity(me);
+      setChecked(true);
+      if (!me) {
+        // Signed out: hold no room titles on the device, and drop whatever the
+        // snapshot was painting.
+        clearHomeCache();
+        setRooms([]);
+        setNextRoomCursor(null);
+        setRoomsLoading(false);
+        return;
+      }
+      // A different account than the snapshot was captured under: its rows are
+      // not this user's and must go before the new page lands, not after.
+      if (cached && !matchesIdentity(cached, me)) {
+        setRooms([]);
+        setNextRoomCursor(null);
+        setRoomsLoading(true);
+      }
+
+      const page = await roomsRead;
       if (!cancelled) {
         setRooms(page.rooms);
         setNextRoomCursor(page.nextCursor);
         setRoomsLoading(false);
+        writeHomeCache(me, page.rooms, page.nextCursor);
       }
       const advanced = await markerSync;
       if (!cancelled && advanced.length > 0) setRooms(current => [...current]);
     })();
     return () => { cancelled = true; };
+    // `cached` is a ref-held snapshot captured once at mount — stable by
+    // construction, so this stays a mount-only effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // T-75: Home is a LIVE surface — rooms created on another device appear,
@@ -102,8 +140,15 @@ export function Home() {
   // (deeper pages survive the merge by construction), holds re-sorts while a
   // pointer is down, and pauses entirely while the tab is hidden.
   useLiveRooms(identity != null, useCallback((incoming: RoomSummary[]) => {
-    setRooms(current => mergeRoomPages(current, incoming));
-  }, []));
+    setRooms(current => {
+      const merged = mergeRoomPages(current, incoming);
+      // Keep the warm-start snapshot current with what is actually on screen,
+      // so a back-navigation five minutes into a room repaints today's list and
+      // not the one captured at launch.
+      if (identity) writeHomeCache(identity, merged, nextRoomCursor);
+      return merged;
+    });
+  }, [identity, nextRoomCursor]));
 
   const loadMoreRooms = useCallback(async () => {
     if (!nextRoomCursor || loadingMoreRef.current) return;
@@ -207,6 +252,32 @@ export function Home() {
             </a>
           </div>
         ) : null}
+
+        {/* The account answer is not in yet and there is no snapshot to paint.
+            This frame used to render NOTHING — every block below is gated on
+            `identity` or `checked` — so a cold launch and every back-navigation
+            from a room showed an empty page under the header. That reads as a
+            broken app, not a loading one. Cards, not a spinner: they occupy the
+            shape the real rows will take, so the list does not jump when it
+            lands. */}
+        {!checked && !identity && (
+          <div role="status" aria-live="polite" className="mt-5 space-y-3">
+            <span className="sr-only">Loading your rooms…</span>
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                aria-hidden="true"
+                className="flex min-h-24 items-center gap-4 rounded-2xl border border-border-subtle bg-surface px-5 py-4 shadow-card"
+              >
+                <span className="h-11 w-11 flex-shrink-0 animate-pulse rounded-full bg-surface-softer motion-reduce:animate-none" />
+                <span className="min-w-0 flex-1 space-y-2">
+                  <span className="block h-4 w-1/2 animate-pulse rounded bg-surface-softer motion-reduce:animate-none" />
+                  <span className="block h-3 w-1/3 animate-pulse rounded bg-surface-softer motion-reduce:animate-none" />
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {identity && roomsLoading && (
           <div
