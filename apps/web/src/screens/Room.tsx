@@ -3179,7 +3179,7 @@ export function Room() {
               </div>
             )}
 
-            <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="relative flex-1 overflow-y-auto max-sm:py-0 sm:py-4">
+            <div ref={feedRef} onScroll={onFeedScroll} data-gate="feed" className="relative min-h-0 flex-1 overflow-y-auto max-sm:py-0 sm:py-4">
               {/* T-48: center a generous conversation rail on wide desktops.
                   MessageRow caps prose at 80ch while images/artifacts can use
                   the extra canvas without creating edge-to-edge text.

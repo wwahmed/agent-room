@@ -10,6 +10,7 @@ describe('phone chat overlays do not obscure conversation content', () => {
     expect(room).toContain('data-gate="pinned-strip"');
     expect(room).toContain('flex flex-shrink-0 justify-center');
     expect(room).toContain('paddingTop: 0');
+    expect(room).toContain('data-gate="feed" className="relative min-h-0 flex-1 overflow-y-auto');
     expect(room).toContain('className="mx-auto flex min-h-11 items-center');
   });
 
