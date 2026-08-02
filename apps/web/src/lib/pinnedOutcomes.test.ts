@@ -21,7 +21,9 @@ describe('Pinned outcomes — pin any message, strip with jump-to-message', () =
     expect(menu).toContain("pinned ? 'Unpin message' : 'Pin message'");
     // MessageRow threads the pin affordance into all its menu call sites
     // AND both hover treatments (the SHIPPED desktop tray + the rail).
-    expect(row.match(/onPin=\{onPin\} pinned=\{pinned\}/g)?.length).toBe(5);
+    // Six call sites: self + grouped, split phone/desktop controls for the
+    // ungrouped header, and the two hover treatments.
+    expect(row.match(/onPin=\{onPin\} pinned=\{pinned\}/g)?.length).toBe(6);
     const tray = readFileSync(new URL('../components/MessageActionTray.tsx', import.meta.url), 'utf8');
     expect(tray).toContain("pinned ? 'Unpin message' : 'Pin message'");
     expect(tray.match(/onPin=\{onPin\} pinned=\{pinned\}/g)?.length).toBe(2);

@@ -403,20 +403,27 @@ export function MessageRow({ message, self, grouped, ambiguousNames, now, onRepl
         <div className={`absolute -top-1 -left-2 z-20 ring-2 ring-surface-sunken ${agentSender ? 'rounded-lg' : 'rounded-full'}`}>
           <SenderAvatar message={message} brand={senderBrand} sizeClass="h-8 w-8 sm:h-7 sm:w-7" textClass="text-[13px] sm:text-[12px]" />
         </div>
-        <div className="flex items-start gap-x-2 pl-10 pr-3 pt-2">
+        <div className="flex min-w-0 items-start gap-x-2 pl-10 pr-12 pt-2 sm:pr-3">
           {/* T-110: the NAME never letter-stacks. It keeps its content width
               (capped at 60% of the row, then ellipsis); the ROLE is the
               flexible element - min-w-0 lets it actually shrink instead of
               demanding its full text width, which crushed a long name to 1ch
               and break-words then stacked it vertically (host screenshot). */}
-          <span className="msg-author max-w-[60%] shrink-0 truncate">{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
+          <span className="msg-author max-w-[42%] shrink-0 truncate sm:max-w-[60%]">{message.name}{senderBrand && <span className="sr-only">, {senderBrand.label}</span>}</span>
           {message.metadata?.dictated && <DictatedChip />}
           {ambiguous && <span className="msg-meta shrink-0">{message.client}</span>}
           {message.role && <span className="msg-meta hidden min-w-0 flex-1 truncate sm:block">{message.role}</span>}
           {!message.role && <span className="hidden flex-1 sm:block" aria-hidden="true" />}
           <span className="flex-1 sm:hidden" aria-hidden="true" />
           <span className="msg-meta shrink-0 whitespace-nowrap" title={exactTime(message.time)}>{messageTime(message.time, now)}</span>
-          <span className={legacyMenuClass}><MessageMenu message={message} onReply={onReply} onReact={onReact} onPin={onPin} pinned={pinned} selfName={selfName} /></span>
+          {/* The phone action owns a fixed corner slot instead of participating
+              in the author/time flex row. At 390px the old inline 44px button
+              made the bubble's scrollWidth exceed its width and widened the
+              entire feed. Desktop legacy mode keeps the inline affordance. */}
+          <span className="absolute right-0 top-0 sm:hidden"><MessageMenu message={message} onReply={onReply} onReact={onReact} onPin={onPin} pinned={pinned} selfName={selfName} /></span>
+          {treatment === 'legacy' && (
+            <span className="hidden sm:block"><MessageMenu message={message} onReply={onReply} onReact={onReact} onPin={onPin} pinned={pinned} selfName={selfName} /></span>
+          )}
         </div>
         <div className={`px-4 pb-3 pt-1 ${bodyText}`}>
           {message.replyTo && <ReplyQuote reply={message.replyTo} onJump={onJumpToQuote} />}
