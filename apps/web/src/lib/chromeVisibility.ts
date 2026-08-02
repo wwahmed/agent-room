@@ -28,6 +28,13 @@ export function initialChromeVis(top = 0): ChromeVis {
   return { hidden: false, accum: 0, lastTop: top };
 }
 
+/** Preserve the reader's distance from the tail when mobile chrome changes the
+ * feed viewport height. Without this compensation the browser clamp itself is
+ * misread as a new gesture, creating an infinite hide/show loop at the tail. */
+export function anchoredScrollTop(scrollHeight: number, clientHeight: number, distanceFromBottom: number): number {
+  return Math.max(0, scrollHeight - clientHeight - Math.max(0, distanceFromBottom));
+}
+
 /**
  * One scroll sample. `pinned` is the union of every state that must never
  * lose chrome: nonempty draft, composer focus/keyboard, reply, uploads,

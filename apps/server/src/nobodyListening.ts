@@ -19,13 +19,17 @@ import type { Participant } from '@agent-room/shared';
 
 import { presenceState } from './health.js';
 
-/** States in which an agent can still receive and act on a message. `stale` counts
- *  as present on purpose: 60 seconds of quiet is a normal model turn, and warning
- *  there would cry wolf at every busy room. Only the 5-minute `disconnected`
- *  verdict — the same line the ghost sweep uses — counts as absent. */
+/** Whether this exact row has a live delivery path right now.
+ *
+ * Process life and message delivery are deliberately different facts:
+ * `online`, `working`, and `stale` can all describe an agent whose model or
+ * terminal is alive while no room_listen request is parked. Calling any of
+ * those states "able to answer" suppressed the one warning this module exists
+ * to provide. Only the server-owned listen lease proves that a message can be
+ * delivered now. */
 export function canStillAnswer(p: Participant, now: number): boolean {
   if (p.client !== 'cc' || p.viewer === true) return false;
-  return presenceState(p, now) !== 'disconnected';
+  return presenceState(p, now) === 'listening';
 }
 
 /**
@@ -59,7 +63,7 @@ export function shouldWarnNobodyListening(args: {
 
 /** Marker used both to render the notice and to detect that the previous message
  *  already was one. Kept as a distinct constant so the two can never drift. */
-export const NOBODY_LISTENING_MARKER = 'No agent is listening in this room right now';
+export const NOBODY_LISTENING_MARKER = 'No agent was listening when this message was sent';
 
 export function nobodyListeningText(participants: readonly Participant[], now: number): string {
   const agentRows = participants.filter(p => p.client === 'cc' && p.viewer !== true);
@@ -67,12 +71,18 @@ export function nobodyListeningText(participants: readonly Participant[], now: n
   const who = names.length === 0
     ? 'There are no agents in this room.'
     : names.length === 1
-      ? `${names[0]} is disconnected.`
-      : `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} are disconnected.`;
-  // States the consequence rather than the status, because the status is what the
-  // host already thought was fine. No advice about how to fix it — that depends on
-  // how the agent was started, and a wrong instruction is worse than none.
-  return `⚠ ${NOBODY_LISTENING_MARKER} — ${who} Your message has been saved, but nobody will read it until an agent rejoins.`;
+      ? (() => {
+          const state = presenceState(agentRows[0]!, now);
+          if (state === 'working') return `${names[0]} was working, but not listening.`;
+          if (state === 'online') return `${names[0]} was online, but not listening.`;
+          if (state === 'stale') return `${names[0]} was stale and not listening.`;
+          return `${names[0]} was disconnected.`;
+        })()
+      : `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} were not listening.`;
+  // This is an event receipt, not a sticky current-state banner: past tense
+  // keeps it truthful after an agent returns. "Starts listening" is also the
+  // exact recovery boundary — a working process need not rejoin.
+  return `⚠ ${NOBODY_LISTENING_MARKER} — ${who} Your message is saved and will be delivered when an agent starts listening.`;
 }
 
 /**
@@ -104,6 +114,6 @@ export function lastAgentLeftText(name: string, remaining: readonly Participant[
   const others = remaining.filter(p => p.client === 'cc' && p.viewer !== true).length;
   const tail = others === 0
     ? 'No agents are left in this room.'
-    : `The ${others === 1 ? 'other agent' : `other ${others} agents`} here ${others === 1 ? 'is' : 'are'} disconnected.`;
-  return `👋 ${name} left the room — ${tail} Messages will wait here until an agent rejoins.`;
+    : `The ${others === 1 ? 'other agent' : `other ${others} agents`} here ${others === 1 ? 'is' : 'are'} not listening.`;
+  return `👋 ${name} left the room — ${tail} Messages will wait here until an agent starts listening.`;
 }

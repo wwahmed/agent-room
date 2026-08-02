@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHROME_HYSTERESIS, chromeStep, initialChromeVis } from './chromeVisibility.js';
+import { CHROME_HYSTERESIS, anchoredScrollTop, chromeStep, initialChromeVis } from './chromeVisibility.js';
 
 // T-82: the chrome state machine. Direction + hysteresis, pinning, top and
 // bottom reveals — every transition the phone gesture contract depends on.
@@ -77,5 +77,14 @@ describe('chromeStep', () => {
     expect(v.hidden).toBe(false);
     v = step(v, CHROME_HYSTERESIS * 2 + 1);
     expect(v.hidden).toBe(true);
+  });
+
+  it('preserves distance from the tail when chrome changes the viewport height', () => {
+    // Live P0 trace: clearances changed clientHeight by 182px and oscillated
+    // forever. The anchored top absorbs that exact geometry change.
+    expect(anchoredScrollTop(28_799, 732, 140)).toBe(27_927);
+    expect(28_799 - anchoredScrollTop(28_799, 732, 140) - 732).toBe(140);
+    expect(anchoredScrollTop(28_799, 550, 0)).toBe(28_249);
+    expect(28_799 - anchoredScrollTop(28_799, 550, 0) - 550).toBe(0);
   });
 });

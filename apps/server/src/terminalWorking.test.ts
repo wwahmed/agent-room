@@ -80,7 +80,7 @@ describe('Terminal-vouched work window', () => {
   });
 
   it('the copy says a terminal vouched, never that the agent declared it', () => {
-    expect(presenceLib).toContain("'terminal shows a live turn'");
-    expect(presenceLib).toContain("'heads-down in a declared work window'");
+    expect(presenceLib).toContain("'not listening · terminal shows a live turn'");
+    expect(presenceLib).toContain("'not listening · heads-down in a declared work window'");
   });
 });

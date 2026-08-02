@@ -159,6 +159,8 @@ export type SystemEventType =
   | 'host_invoked'
   | 'moderator_dispatched'
   | 'question_created'
+  | 'nobody_listening'
+  | 'identity_reclaimed'
   | 'reaction'
   | 'pin'
   | 'template_changed';

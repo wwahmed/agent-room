@@ -5,7 +5,7 @@ import { MessageRow, isSameGroup, hasRenderableContent } from '../components/Mes
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
-import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
+import { anchoredScrollTop, chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { SummonAgentSheet } from '../components/SummonAgentSheet.js';
@@ -666,6 +666,8 @@ export function Room() {
   const [chromeHidden, setChromeHidden] = useState(false);
   const chromeVisRef = useRef(initialChromeVis());
   const chromeRafRef = useRef(0);
+  const chromeDistanceAnchorRef = useRef<number | null>(null);
+  const chromeProgrammaticTopRef = useRef<number | null>(null);
   const chromePinnedRef = useRef(false);
   const [composerFocused, setComposerFocused] = useState(false);
   // Measured bottom-chrome height feeds the floating Latest pill offset and
@@ -694,6 +696,25 @@ export function Room() {
     return () => ro.disconnect();
     // The wrapper element persists across ended/muted/composer swaps.
   }, [mainTab, roomReady]);
+  // Mobile chrome visibility changes the feed's clientHeight by the exact
+  // header/composer clearance rows. Preserve the reader's tail distance
+  // across that layout transition and reset gesture hysteresis at the new
+  // scrollTop, so geometry can never masquerade as another finger gesture.
+  useLayoutEffect(() => {
+    if (!isPhone || chromeDistanceAnchorRef.current === null) return;
+    const el = feedRef.current;
+    if (!el) return;
+    const distance = chromeDistanceAnchorRef.current;
+    chromeDistanceAnchorRef.current = null;
+    const targetTop = anchoredScrollTop(el.scrollHeight, el.clientHeight, distance);
+    chromeProgrammaticTopRef.current = targetTop;
+    el.scrollTop = targetTop;
+    const actualDistance = Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
+    const bottom = actualDistance < 80;
+    atBottomRef.current = bottom;
+    setAtBottom(bottom);
+    chromeVisRef.current = { hidden: chromeHidden, accum: 0, lastTop: el.scrollTop };
+  }, [chromeHidden, isPhone]);
   // T-84: when the bottom stack GROWS while the reader sits at the newest
   // message (reply chip added, attachment chip lands, voice draft expands),
   // re-anchor so the final line moves fully above the stack instead of
@@ -1218,9 +1239,21 @@ export function Room() {
         chromeRafRef.current = 0;
         const feed = feedRef.current;
         if (!feed) return;
+        const programmaticTop = chromeProgrammaticTopRef.current;
+        if (programmaticTop !== null) {
+          chromeProgrammaticTopRef.current = null;
+          if (Math.abs(feed.scrollTop - programmaticTop) < 1) {
+            chromeVisRef.current = { hidden: chromeVisRef.current.hidden, accum: 0, lastTop: feed.scrollTop };
+            return;
+          }
+        }
         const next = chromeStep(chromeVisRef.current, feed.scrollTop, chromePinnedRef.current, atBottomRef.current);
         chromeVisRef.current = next;
-        setChromeHidden(prev => (prev === next.hidden ? prev : next.hidden));
+        setChromeHidden(prev => {
+          if (prev === next.hidden) return prev;
+          chromeDistanceAnchorRef.current = Math.max(0, feed.scrollHeight - feed.scrollTop - feed.clientHeight);
+          return next.hidden;
+        });
       });
     }
     // T-04: nearing the top pulls the previous history page. Anchor the current
@@ -2162,7 +2195,14 @@ export function Room() {
     await addFiles(files);
   }
 
-  const listeningCount = activeRoom.participants.filter(p => (p.listenUntil ?? 0) > now).length;
+  // A connected/working process is not a delivery path. Prefer the server's
+  // authoritative health verdict; only fall back to the participant lease
+  // while the first health poll is still in flight.
+  const listeningCount = activeRoom.participants.filter(p => {
+    if (p.client !== 'cc' || p.viewer === true) return false;
+    const h = health.find(x => x.name === p.name && x.client === p.client);
+    return h ? h.state === 'listening' : (p.listenUntil ?? 0) > now;
+  }).length;
   // T-34b: who is actually HERE. Uses the server's own verdict (never a second
   // classification computed in the client) and excludes exactly the rows the
   // host's ghost sweep would remove, so the count and the sweep always agree.
@@ -2291,7 +2331,7 @@ export function Room() {
           const lifecycle = ended
             ? { label: 'Room ended', tone: 'text-red-400', dot: 'bg-red-400', consequence: 'The meeting is over. Messages are preserved; the room can be reactivated from Home.' }
             : listeningCount === 0
-              ? { label: 'Custodian absent', tone: 'text-amber-400', dot: 'bg-amber-400', consequence: 'No agent is listening right now. Messages will wait until one returns or is recovered below.' }
+              ? { label: 'No live listener', tone: 'text-amber-400', dot: 'bg-amber-400', consequence: 'Agents may still be working, but messages wait here until one starts listening.' }
               : { label: 'Room active', tone: 'text-emerald-400', dot: 'bg-emerald-400', consequence: `${listeningCount} agent${listeningCount === 1 ? ' is' : 's are'} listening; messages are delivered live.` };
           return (
             <>
@@ -2393,7 +2433,7 @@ export function Room() {
   // temporal dead zone and crashed rooms with participants in production.
   const healthById = indexHealth(health);
 
-  // T-71: People rows grouped by liveness — Active first, Needs attention
+  // T-71: People rows grouped by liveness — Connected first, Needs attention
   // (stale) next, Offline (disconnected) collapsed behind a disclosure.
   const renderPersonRow = (p: (typeof room.participants)[number]) => {
                   const isMeHost = room.createdBy === self.name;
@@ -2663,8 +2703,8 @@ export function Room() {
         </button>
       )}
       {peopleGroups.active.length > 0 && (
-        <section aria-label="Active participants" className="mb-5">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Active · {peopleGroups.active.length}</h3>
+        <section aria-label="Connected participants" className="mb-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Connected · {peopleGroups.active.length}</h3>
           <div className="space-y-2">{peopleGroups.active.map(renderPersonRow)}</div>
         </section>
       )}
@@ -2707,7 +2747,8 @@ export function Room() {
         title="People"
         purpose="Everyone in the room and how alive their connection is."
         summary={<>
-          <SummaryChip tone="ok">{peopleGroups.active.length} active</SummaryChip>
+          <SummaryChip tone={listeningCount > 0 ? 'ok' : 'warn'}>{listeningCount} listening</SummaryChip>
+          <SummaryChip tone="quiet">{peopleGroups.active.length} connected</SummaryChip>
           {peopleGroups.attention.length > 0 && <SummaryChip tone="warn">{peopleGroups.attention.length} need attention</SummaryChip>}
           {peopleGroups.offline.length > 0 && <SummaryChip tone="quiet">{peopleGroups.offline.length} offline</SummaryChip>}
         </>}
@@ -2872,7 +2913,7 @@ export function Room() {
             onDoubleClick={() => { setRightPaneWidth(300); try { localStorage.setItem('roomctx:width', '300'); } catch { /* ignore */ } }}
             className="pane-resize-handle absolute -left-1 top-0 z-20 h-full w-2"
           />
-          <section aria-label="Active agents">
+          <section aria-label="Agents">
             <h3 className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70" aria-hidden="true" />Agents
             </h3>
@@ -2893,7 +2934,7 @@ export function Room() {
                       or icon comprehension (red-team finding). */}
                   <span className={`flex flex-shrink-0 items-center gap-1 text-[14px] font-medium ${STATE_TONE_PRESENCE[a.state].text}`}>
                     {presenceGlyph(STATE_TONE_PRESENCE[a.state].glyph)}
-                    {a.state === 'listening' || a.state === 'online' ? 'Active' : a.state === 'working' ? 'Working' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
+                    {a.state === 'listening' ? 'Listening' : a.state === 'online' ? 'Online · not listening' : a.state === 'working' ? 'Working · not listening' : a.state === 'stale' ? 'Needs attention' : 'Offline'}
                   </span>
                 </button>
               ))}
@@ -3195,10 +3236,11 @@ export function Room() {
                   paddingTop: 0,
                   paddingBottom: 16,
                 } : {
-                  // When the navigation lane exists, its external composer
-                  // clearance already shrinks the feed. Without it, retain
-                  // internal clearance for the floating composer.
-                  paddingBottom: (unseenCount > 0 || !atBottom || selfMentionIds.length > 0) ? 16 : composerH + 16,
+                  // The composer and Latest control own permanent layout rows
+                  // below this scrollport. Never change feed geometry from
+                  // `atBottom`: doing so made the Latest row appear, shrink the
+                  // content, disappear, and grow it again in an endless loop.
+                  paddingBottom: 16,
                 }}
               >
               {/* T-04: history is windowed; this strip marks the top of the
@@ -3245,7 +3287,13 @@ export function Room() {
                       <div className="h-px flex-1 bg-accent/40" />
                     </div>
                   )}
-                  {m.metadata?.brief ? (
+                  {m.metadata?.eventType === 'nobody_listening' ? (
+                    <ActivityNote
+                      message={m}
+                      now={now}
+                      resolved={listeningCount > 0}
+                    />
+                  ) : m.metadata?.brief ? (
                     <BriefCard
                       text={m.text ?? ''}
                       speech={m.metadata.briefSpeech}
@@ -3346,7 +3394,6 @@ export function Room() {
                 <div
                   data-gate="floating"
                   className="room-latest-lane z-[25] flex w-full flex-shrink-0 items-center justify-end gap-2 px-3 py-1.5 sm:justify-center sm:px-4"
-                  style={!isPhone ? { marginBottom: composerH } : undefined}
                 >
                   {(unseenCount > 0 || !atBottom) && (
                     <button
@@ -3396,6 +3443,15 @@ export function Room() {
                   )}
                 </div>
               )}
+
+            {!isPhone && (
+              <div
+                data-gate="desktop-composer-clearance"
+                className="flex-shrink-0"
+                style={{ height: composerH }}
+                aria-hidden="true"
+              />
+            )}
 
             {isPhone && !chromeHidden && (
               <div

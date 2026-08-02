@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { Participant } from '@agent-room/shared';
 import { describe, expect, it } from 'vitest';
 
-import { PRESENCE_DISCONNECTED_MS } from './health.js';
+import { PRESENCE_DISCONNECTED_MS, WORKING_WINDOW_MS } from './health.js';
 import {
   NOBODY_LISTENING_MARKER,
   canStillAnswer,
@@ -35,15 +35,28 @@ describe('Nobody is listening', () => {
     })).toBe(true);
   });
 
-  it('stays silent while any agent can still answer — including a merely stale one', () => {
-    // 60 seconds of quiet is a normal model turn. Warning there would fire in
-    // every busy room and be learned as noise within a day.
-    const stale = p('OpusCoder', { lastSeenAt: NOW - 90_000 });
-    expect(canStillAnswer(stale, NOW)).toBe(true);
-    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [stale], now: NOW })).toBe(false);
-    // A live one alongside dead ones is enough.
+  it('warns unless an actual room_listen lease is armed', () => {
+    const listening = p('Listener', { listenUntil: NOW + 45_000 });
+    expect(canStillAnswer(listening, NOW)).toBe(true);
     expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants: [dead('A'), dead('B'), p('C')], now: NOW,
+      senderClient: 'web', participants: [listening], now: NOW,
+    })).toBe(false);
+
+    // Process life is not delivery. These rows may answer later, but none can
+    // receive the message until it starts listening again.
+    const online = p('Online', { lastSeenAt: NOW - 1_000 });
+    const working = p('Working', { workingUntil: NOW + WORKING_WINDOW_MS });
+    const stale = p('OpusCoder', { lastSeenAt: NOW - 90_000 });
+    expect(canStillAnswer(online, NOW)).toBe(false);
+    expect(canStillAnswer(working, NOW)).toBe(false);
+    expect(canStillAnswer(stale, NOW)).toBe(false);
+    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [online], now: NOW })).toBe(true);
+    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [working], now: NOW })).toBe(true);
+    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [stale], now: NOW })).toBe(true);
+
+    // A live listener alongside non-listeners is enough.
+    expect(shouldWarnNobodyListening({
+      senderClient: 'web', participants: [dead('A'), working, listening], now: NOW,
     })).toBe(false);
   });
 
@@ -78,11 +91,13 @@ describe('Nobody is listening', () => {
   });
 
   it('names who is missing and states the consequence, without guessing the cure', () => {
-    expect(nobodyListeningText([dead('CustService')], NOW)).toContain('CustService is disconnected');
-    expect(nobodyListeningText([dead('A'), dead('B')], NOW)).toContain('A, B are disconnected');
+    expect(nobodyListeningText([dead('CustService')], NOW)).toContain('CustService was disconnected');
+    expect(nobodyListeningText([dead('A'), dead('B')], NOW)).toContain('A, B were not listening');
+    expect(nobodyListeningText([p('Worker', { workingUntil: NOW + WORKING_WINDOW_MS })], NOW))
+      .toContain('Worker was working, but not listening');
     const text = nobodyListeningText([dead('A')], NOW);
     // The consequence is the part the host did not know.
-    expect(text).toContain('nobody will read it until an agent rejoins');
+    expect(text).toContain('will be delivered when an agent starts listening');
     // No instructions: the fix depends on how that agent was started, and a wrong
     // instruction is worse than none.
     expect(text).not.toMatch(/restart|rejoin the room|run |tmux/i);
@@ -95,8 +110,12 @@ describe('Nobody is listening', () => {
   it('announces a departure that empties the room, and stays quiet otherwise', () => {
     // The last agent leaving is the case that must speak up.
     expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [p('Waqas', { client: 'web' })], now: NOW })).toBe(true);
-    // Another live agent remains: T-32's quiet-leave reasoning still holds.
-    expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [p('OpusCoder')], now: NOW })).toBe(false);
+    // Another actual listener remains: T-32's quiet-leave reasoning still holds.
+    expect(departureEmptiedRoom({
+      departedClient: 'cc',
+      remaining: [p('OpusCoder', { listenUntil: NOW + 45_000 })],
+      now: NOW,
+    })).toBe(false);
     // Only DEAD agents remain — still an empty room in practice.
     expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [dead('X')], now: NOW })).toBe(true);
     // A human closing a tab is not an agent outage.

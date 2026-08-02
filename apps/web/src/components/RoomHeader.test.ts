@@ -21,6 +21,9 @@ describe('room command bar composition', () => {
     expect(header).toContain('{agentStatus}');
     expect(header).not.toContain("agentCount === 1 ? 'agent' : 'agents'");
     expect(header).toContain('header-room-presence');
+    expect(header).toContain('0 listening');
+    expect(header).toContain('nobodyListening ?');
+    expect(header).not.toContain('listeningCount > 0 &&');
     expect(header).toContain('header-search-field');
     expect(header).toContain('header-glass-control');
     expect(header).not.toContain('title="Copy invite link"');
@@ -32,7 +35,7 @@ describe('room command bar composition', () => {
     // full-screen mobile Settings page returns chrome to 52px.
     // T-82: the phone CHAT tab is full-bleed (pt-0) — chrome overlays the
     // feed and slides away in immersive reading; other tabs keep the shell.
-    expect(room).toContain("mainTab === 'room' ? 'pt-[52px]' : mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'");
+    expect(room).toContain("mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'");
     expect(header).toContain('workspaceNav');
     expect(header).toContain('mobileNavHidden');
   });

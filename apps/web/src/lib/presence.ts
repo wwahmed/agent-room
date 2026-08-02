@@ -100,8 +100,8 @@ export function presenceView(h: ParticipantHealth): PresenceView {
       // imply it declared anything.
       : h.state === 'working' && agent
         ? (h.workingBy === 'terminal'
-            ? 'terminal shows a live turn'
-            : 'heads-down in a declared work window')
+            ? 'not listening · terminal shows a live turn'
+            : 'not listening · heads-down in a declared work window')
       : h.state === 'stale' && agent ? 'no heartbeat — loop may be dead'
       : h.state === 'disconnected' && agent ? 'host can remove'
       : '';

@@ -90,18 +90,33 @@ interface Props {
   /** Full run oldest-first when >= 2 consecutive same-agent pings collapsed. */
   run?: Message[];
   now?: number;
+  /** A historical delivery warning can remain in the transcript after a
+   * listener returns. Marking it resolved prevents past truth from reading as
+   * a contradictory current alarm. */
+  resolved?: boolean;
 }
 
-export function ActivityNote({ message, run, now }: Props) {
+export function ActivityNote({ message, run, now, resolved = false }: Props) {
   const [showEarlier, setShowEarlier] = useState(false);
   const earlier = run && run.length > 1 ? run.slice(0, -1) : [];
+  const isDeliveryWarning = message.metadata?.eventType === 'nobody_listening';
+  const chip = isDeliveryWarning ? (resolved ? 'Resolved' : 'Waiting') : 'Status';
 
   return (
     <div id={`msg-${message.id}`} className="px-3 py-1 sm:px-4">
       <div data-gate="status-note" className="mx-auto w-full max-w-[68ch] rounded-lg border border-border-faint bg-surface-softer px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 whitespace-nowrap rounded border border-border-faint bg-surface px-1.5 py-0.5 text-[12px] font-semibold text-ink-soft" aria-label="Status update">
-            Status
+          <span
+            className={`shrink-0 whitespace-nowrap rounded border px-1.5 py-0.5 text-[12px] font-semibold ${
+              isDeliveryWarning
+                ? resolved
+                  ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400'
+                  : 'border-amber-400/30 bg-amber-400/10 text-amber-400'
+                : 'border-border-faint bg-surface text-ink-soft'
+            }`}
+            aria-label={isDeliveryWarning ? `Delivery status: ${chip}` : 'Status update'}
+          >
+            {chip}
           </span>
           {/* Readable neutral name: identity color stays on avatars per the
               design lead's ruling; a status header never carries tinted ink. */}

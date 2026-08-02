@@ -26,7 +26,7 @@ describe('listen-loop health (T-68: server is the source of truth)', () => {
   // recoverable (that's the scare path) and its detail says what it means.
   it('working reads as heads-down, not as something to recover', () => {
     const v = presenceView(h({ state: 'working', lastSeenAgoMs: 120_000 }));
-    expect(v.detail).toBe('heads-down in a declared work window');
+    expect(v.detail).toBe('not listening · heads-down in a declared work window');
     expect(canRecover(h({ state: 'working' }), false)).toBe(false);
   });
 

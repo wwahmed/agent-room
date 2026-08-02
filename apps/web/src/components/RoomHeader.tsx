@@ -70,10 +70,12 @@ export function RoomHeader({
   const endItemRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const agentCount = agents.length;
-  const activeAgentCount = Math.max(0, agentCount - agentStaleCount);
-  const agentStatus = agentStaleCount > 0
-    ? `${agentStaleCount} need attention`
-    : `${activeAgentCount} active`;
+  const nobodyListening = !ended && listeningCount === 0;
+  const agentStatus = ended
+    ? 'room ended'
+    : nobodyListening
+      ? '0 listening'
+      : `${listeningCount} listening`;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -147,11 +149,11 @@ export function RoomHeader({
             <span className="block max-w-[56vw] truncate text-[15px] font-semibold leading-tight tracking-[-0.01em] text-ink sm:max-w-[220px] lg:max-w-[240px] xl:max-w-[300px]">
               {room.topic}
             </span>
-            <span className={`header-room-presence mt-0 flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-1.5 py-0.5 text-[12px] font-medium leading-none ${ended ? 'text-red-400' : 'text-ink-soft'}`}>
-              {!ended && <span className="header-live-dot inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />}
+            <span className={`header-room-presence mt-0 flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-1.5 py-0.5 text-[12px] font-medium leading-none ${ended ? 'text-red-400' : nobodyListening ? 'text-amber-400' : 'text-ink-soft'}`}>
+              {!ended && <span className={`header-live-dot inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${nobodyListening ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-hidden="true" />}
               <span className="truncate">
                 {ended ? 'Meeting ended' : `${presentCount} here`}
-                {!ended && listeningCount > 0 && <span className="text-ink-faint"> · {listeningCount} listening</span>}
+                {!ended && <span className={nobodyListening ? 'text-amber-400' : 'text-ink-faint'}> · {listeningCount} listening</span>}
                 {room.workspace && <span className="text-ink-faint"> · <span aria-hidden="true">📁 </span>{room.workspace.split('/').pop()}</span>}
               </span>
             </span>
@@ -212,10 +214,10 @@ export function RoomHeader({
               <button
                 type="button"
                 onClick={() => navigate(`/r/${room.code}?panel=people`)}
-                aria-label={`${agentCount} agents, ${agentStatus}. Open People.`}
-                className={`header-team-pill flex h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-1.5 sm:hidden ${agentStaleCount > 0 ? 'header-team-pill-warn' : ''}`}
+                aria-label={`${agentCount} agents connected, ${agentStatus}. Open People.`}
+                className={`header-team-pill flex h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-1.5 sm:hidden ${agentStaleCount > 0 || nobodyListening ? 'header-team-pill-warn' : ''}`}
               >
-                {agentStaleCount > 0 ? (
+                {agentStaleCount > 0 || nobodyListening ? (
                   <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" className="flex-shrink-0 text-amber-400" aria-hidden="true">
                     <path d="M8 1.8 15.2 14H.8L8 1.8Z" />
                     <path d="M8 6v3.4M8 11.6v.1" stroke="rgb(var(--surface))" strokeWidth="1.6" strokeLinecap="round" fill="none" />
@@ -223,20 +225,20 @@ export function RoomHeader({
                 ) : (
                   <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
                 )}
-                <span className={`text-[13px] font-semibold ${agentStaleCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{agentCount}</span>
+                <span className={`text-[13px] font-semibold ${agentStaleCount > 0 || nobodyListening ? 'text-amber-400' : 'text-emerald-400'}`}>{agentCount}</span>
               </button>
               <div
                 /* Waqas IA: on desktop the agents/attention cluster lives in
                    the People tab, not the header right — hide it at lg+. It
                    stays on tablet/mobile where People is one tap deeper. */
-                className={`header-team-pill hidden min-h-11 items-center rounded-xl pr-1 sm:flex sm:pr-2 lg:hidden ${agentStaleCount > 0 ? 'header-team-pill-warn' : ''}`}
-                aria-label={`${agentCount} agents, ${agentStatus}`}
+                className={`header-team-pill hidden min-h-11 items-center rounded-xl pr-1 sm:flex sm:pr-2 lg:hidden ${agentStaleCount > 0 || nobodyListening ? 'header-team-pill-warn' : ''}`}
+                aria-label={`${agentCount} agents connected, ${agentStatus}`}
               >
                 <AgentFacepile code={room.code} agentCount={agentCount} agentStaleCount={agentStaleCount} agents={agents} />
                 {/* T-71 pixel review 5: facepile + ONE human-readable status —
                     details live in People, not a congested pill. */}
-                <span className={`hidden items-center gap-1.5 pr-1 text-[13px] font-semibold xl:flex ${agentStaleCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${agentStaleCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-hidden="true" />
+                <span className={`hidden items-center gap-1.5 pr-1 text-[13px] font-semibold xl:flex ${agentStaleCount > 0 || nobodyListening ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${agentStaleCount > 0 || nobodyListening ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-hidden="true" />
                   {agentStatus}
                 </span>
               </div>

@@ -20,8 +20,9 @@ describe('phone chat overlays do not obscure conversation content', () => {
 
   it('places Latest in a real layout lane at every breakpoint', () => {
     expect(room).toContain('room-latest-lane z-[25] flex w-full flex-shrink-0');
-    expect(room).toContain('style={!isPhone ? { marginBottom: composerH } : undefined}');
+    expect(room).toContain('data-gate="desktop-composer-clearance"');
     expect(room).not.toContain('sm:absolute sm:inset-x-0 sm:z-[25]');
+    expect(room).not.toContain('style={!isPhone ? { marginBottom: composerH }');
     expect(room).toContain('max-sm:w-11 max-sm:px-0');
     expect(room).toContain('className="hidden sm:inline"');
     expect(room).toContain('className="tabular-nums sm:hidden"');
@@ -30,5 +31,10 @@ describe('phone chat overlays do not obscure conversation content', () => {
   it('reserves the measured phone composer height outside the message scrollport', () => {
     expect(room).toContain('data-gate="mobile-composer-clearance"');
     expect(room).toContain('style={{ height: composerH }}');
+  });
+
+  it('never changes feed geometry from the at-bottom state', () => {
+    expect(room).toContain('paddingBottom: 16');
+    expect(room).not.toContain('paddingBottom: (unseenCount > 0 || !atBottom');
   });
 });

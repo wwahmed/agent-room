@@ -10,6 +10,7 @@ const MCP_ENTRY = {
 };
 
 const HOOK_COMMAND = 'npx -y agent-room-mcp hook';
+const CODEX_HOOK_COMMAND = `AGENT_ROOM_HARNESS=codex ${HOOK_COMMAND}`;
 const HOOK_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart'] as const;
 
 // Markers used to make the rules-injection idempotent. We only rewrite the
@@ -449,6 +450,82 @@ function ensureTrailingBlankLine(s: string): string {
   return out;
 }
 
+/** Repair Codex wiring without replacing the user's MCP command, args, or
+ * unrelated hooks. Codex often starts MCP and hooks under different PPIDs, so
+ * both processes must identify as `codex` to share the stable harness state. */
+export function ensureCodexHarnessConfig(
+  input: string,
+  opts: { hooks: boolean },
+): { content: string; changed: boolean } {
+  let content = input;
+
+  const envHeader = '[mcp_servers.agent-room.env]';
+  const envStart = content.indexOf(envHeader);
+  if (envStart >= 0) {
+    const afterHeader = envStart + envHeader.length;
+    const nextHeaderOffset = content.slice(afterHeader).search(/\n\[/);
+    const envEnd = nextHeaderOffset >= 0 ? afterHeader + nextHeaderOffset : content.length;
+    const block = content.slice(envStart, envEnd);
+    const nextBlock = /^AGENT_ROOM_HARNESS\s*=.*$/m.test(block)
+      ? block.replace(/^AGENT_ROOM_HARNESS\s*=.*$/m, 'AGENT_ROOM_HARNESS = "codex"')
+      : `${block.trimEnd()}\nAGENT_ROOM_HARNESS = "codex"\n`;
+    content = content.slice(0, envStart) + nextBlock + content.slice(envEnd);
+  } else {
+    content = ensureTrailingBlankLine(content);
+    content += `${envHeader}\nAGENT_ROOM_HARNESS = "codex"\n`;
+  }
+
+  if (opts.hooks) {
+    const lines = content.split('\n');
+    const rebuilt: string[] = [];
+    const seenManaged = new Set<string>();
+    const eventHeader = /^\[\[hooks\.(Stop|UserPromptSubmit|SessionStart)\]\]$/;
+    const anyTopHeader = /^\[(?!\[)/;
+
+    for (let i = 0; i < lines.length;) {
+      const match = lines[i]!.match(eventHeader);
+      if (!match) {
+        rebuilt.push(lines[i]!);
+        i += 1;
+        continue;
+      }
+
+      const event = match[1]!;
+      let end = i + 1;
+      while (end < lines.length && !eventHeader.test(lines[end]!) && !anyTopHeader.test(lines[end]!)) end += 1;
+      const block = lines.slice(i, end);
+      const managed = block.some(line =>
+        /^command\s*=/.test(line) &&
+        (line.includes('agent-room-mcp hook') || line.includes('agent-room-mcp-launch.sh hook'))
+      );
+
+      if (!managed || !seenManaged.has(event)) {
+        rebuilt.push(...(managed
+          ? block.map(line => {
+              if (!/^command\s*=/.test(line) || line.includes('AGENT_ROOM_HARNESS=codex')) return line;
+              const quote = line.indexOf('"');
+              return quote >= 0
+                ? `${line.slice(0, quote + 1)}AGENT_ROOM_HARNESS=codex ${line.slice(quote + 1)}`
+                : line;
+            })
+          : block));
+        if (managed) seenManaged.add(event);
+      }
+      i = end;
+    }
+
+    content = rebuilt.join('\n');
+    for (const event of HOOK_EVENTS) {
+      if (seenManaged.has(event)) continue;
+      content = ensureTrailingBlankLine(content);
+      content += `[[hooks.${event}]]\nmatcher = ""\n`;
+      content += `[[hooks.${event}.hooks]]\ntype = "command"\ncommand = "${CODEX_HOOK_COMMAND}"\n`;
+    }
+  }
+
+  return { content, changed: content !== input };
+}
+
 async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
   const result: InstallResult = { changes: [], unchanged: [] };
   const codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex');
@@ -464,24 +541,19 @@ async function installCodex(opts: { hooks: boolean }): Promise<InstallResult> {
   let modified = content;
 
   if (/^\[mcp_servers\.agent-room\]/m.test(modified)) {
-    result.unchanged.push(`${path} (mcp_servers.agent-room already present)`);
+    result.unchanged.push(`${path} (mcp_servers.agent-room command preserved)`);
   } else {
     modified = ensureTrailingBlankLine(modified);
     modified += '[mcp_servers.agent-room]\ncommand = "npx"\nargs = ["-y", "agent-room-mcp"]\n';
     result.changes.push(`installed [mcp_servers.agent-room] in ${path}`);
   }
 
-  if (opts.hooks) {
-    if (modified.includes(`command = "${HOOK_COMMAND}"`)) {
-      result.unchanged.push(`${path} (hooks already installed)`);
-    } else {
-      for (const event of HOOK_EVENTS) {
-        modified = ensureTrailingBlankLine(modified);
-        modified += `[[hooks.${event}]]\nmatcher = ""\n`;
-        modified += `[[hooks.${event}.hooks]]\ntype = "command"\ncommand = "${HOOK_COMMAND}"\n`;
-      }
-      result.changes.push(`installed Stop / UserPromptSubmit / SessionStart hooks in ${path}`);
-    }
+  const repaired = ensureCodexHarnessConfig(modified, opts);
+  modified = repaired.content;
+  if (repaired.changed) {
+    result.changes.push(`repaired Codex harness identity and hooks in ${path}`);
+  } else if (opts.hooks) {
+    result.unchanged.push(`${path} (Codex harness identity and hooks already configured)`);
   }
 
   if (result.changes.length > 0) {
