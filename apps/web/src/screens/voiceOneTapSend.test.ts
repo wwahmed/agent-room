@@ -21,6 +21,15 @@ describe('recorder finishes with a one-tap Send', () => {
     expect(voice).toContain('sendOnStopRef.current = false; // a new session never inherits a Send intent');
   });
 
+  it('stops the listening UI synchronously before final transcription settles', () => {
+    const click = voice.slice(voice.indexOf('data-gate="voice-send"'));
+    expect(click.indexOf('onStopListening?.()')).toBeGreaterThan(-1);
+    expect(click.indexOf('onStopListening?.()')).toBeLessThan(click.indexOf('ctrlRef.current?.stop()'));
+    expect(room).toContain('onStopListening={() => {');
+    expect(room).toContain('setDictating(false);');
+    expect(voice).toContain("aria-label={processing ? 'Voice transcription processing' : 'Voice recording'}");
+  });
+
   it('the room dispatches with an explicit body, never the not-yet-rendered DOM', () => {
     expect(room).toContain('async function send(bodyOverride?: string)');
     expect(room).toContain('const body = (bodyOverride ?? textareaRef.current?.value ?? text).trim();');
@@ -31,6 +40,11 @@ describe('recorder finishes with a one-tap Send', () => {
   it('the send chime stays single: the recorder tap defers to the send path', () => {
     // In send mode the overlay button must NOT play its own cue — send() plays
     // the dictation chime once the message actually dispatches.
-    expect(voice).toContain('sendOnStopRef.current = true;\n                  ctrlRef.current?.stop();\n                  return;');
+    const click = voice.slice(voice.indexOf('data-gate="voice-send"'));
+    const sendIntent = click.indexOf('sendOnStopRef.current = true;');
+    const stop = click.indexOf('ctrlRef.current?.stop();', sendIntent);
+    expect(sendIntent).toBeGreaterThan(-1);
+    expect(stop).toBeGreaterThan(sendIntent);
+    expect(click.slice(sendIntent, stop)).not.toContain('playSendCue');
   });
 });

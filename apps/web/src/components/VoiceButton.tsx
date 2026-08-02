@@ -96,6 +96,9 @@ interface Props {
   onLiveTranscript?: (text: string) => void;
   /** Fired when recording begins, so the composer can snapshot its base draft. */
   onStart?: () => void;
+  /** Fired synchronously when the user ends listening, before final
+   * transcription/upload work settles. */
+  onStopListening?: () => void;
   /** Fired when the user discards (🗑), so the composer can revert to the base. */
   onCancel?: () => void;
   disabled?: boolean;
@@ -150,7 +153,7 @@ function noSignalMessage(s: DictationSnapshot): string {
 }
 
 export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceButton(
-  { onTranscript, onSendTranscript, onLiveTranscript, onStart, onCancel, disabled, hideTriggerWhileActive, resumeMode }: Props,
+  { onTranscript, onSendTranscript, onLiveTranscript, onStart, onStopListening, onCancel, disabled, hideTriggerWhileActive, resumeMode }: Props,
   ref,
 ) {
   const [snap, setSnap] = useState<DictationSnapshot>(IDLE);
@@ -199,10 +202,12 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   // T-25 (host): a Send tapped mid-catch-up must ACKNOWLEDGE instantly — the
   // stop→drain→finalize pipeline can take seconds, and a button that sits
   // inert reads as broken. The tap flips this synchronously; the button shows
-  // a spinner until the session finalizes and the composer's send fires.
+  // a truthful finishing state until the session finalizes and the composer's
+  // send fires.
   const [sendPending, setSendPending] = useState(false);
 
   const recording = snap.state === 'recording';
+  const processing = snap.state === 'processing';
   const active = snap.state !== 'idle';
 
   // Keep the display awake only for the lifetime of the voice-recording mode.
@@ -218,8 +223,8 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
   }, []);
 
   useEffect(() => {
-    wakeLockRef.current?.setActive(active);
-  }, [active]);
+    wakeLockRef.current?.setActive(recording);
+  }, [recording]);
 
   // T-57: drive a continuous clock while recording — the controller only emits on
   // speech events, so without this the timer sits at 0:00 during silence and the
@@ -333,9 +338,9 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
     <div className="flex-shrink-0">
       <button
         type="button"
-        disabled={disabled}
+        disabled={disabled || processing}
         onClick={() => {
-          if (active) { playSendCue(); ctrlRef.current?.stop(); return; }
+          if (active) { onStopListening?.(); playSendCue(); ctrlRef.current?.stop(); return; }
           sendOnStopRef.current = false; // a new session never inherits a Send intent
           onStart?.(); // snapshot the composer's base draft before words stream in
           const c = buildController();
@@ -347,9 +352,9 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
           playWarmingCue();
           void Promise.resolve(c.start()).then(() => playReadyCue()).catch(() => {});
         }}
-        aria-label={active ? 'Stop dictation and insert text' : resumeMode ? 'Resume dictation' : 'Start voice dictation'}
-        title={active ? 'Stop dictation' : resumeMode ? 'Resume dictation (paused)' : 'Start voice dictation'}
-        aria-pressed={active}
+        aria-label={processing ? 'Finishing transcription' : active ? 'Stop dictation and insert text' : resumeMode ? 'Resume dictation' : 'Start voice dictation'}
+        title={processing ? 'Finishing transcription' : active ? 'Stop dictation' : resumeMode ? 'Resume dictation (paused)' : 'Start voice dictation'}
+        aria-pressed={recording}
         data-gate={resumeMode && !active ? 'dictation-paused' : undefined}
         className={`text-base leading-none w-11 h-11 items-center justify-center rounded-lg transition ${active && hideTriggerWhileActive ? 'hidden' : 'flex'} ${
           recording
@@ -370,26 +375,36 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
         // insert, driven by the tick above.
         <div
           role="group"
-          aria-label="Voice recording"
+          aria-label={processing ? 'Voice transcription processing' : 'Voice recording'}
           className="visible absolute inset-x-0 bottom-0 z-10 rounded-b-2xl border-t border-border bg-surface px-2 py-1"
         >
           <div className="flex w-full items-center gap-3">
             <button
               type="button"
               onClick={() => { sendOnStopRef.current = false; ctrlRef.current?.cancel(); onCancel?.(); }}
+              disabled={sendPending}
               aria-label="Discard recording"
               title="Discard"
-              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300"
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 4.5h10M6.4 4.5V3.6a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v.9M4.8 4.5l.4 8a1 1 0 0 0 1 .95h3.6a1 1 0 0 0 1-.95l.4-8" />
               </svg>
             </button>
 
-            <span className="flex flex-shrink-0 items-center gap-2" aria-live="polite">
-              <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
-              <span className="font-mono text-[16px] tabular-nums text-ink" aria-label={`Recording ${mmss(snap.elapsedMs)}`}>{mmss(snap.elapsedMs)}</span>
-            </span>
+            {processing ? (
+              <span className="flex flex-shrink-0 items-center gap-1.5 text-sm font-semibold text-emerald-300" aria-live="polite">
+                <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m3 8.5 3.1 3.1L13 4.7" />
+                </svg>
+                Mic off
+              </span>
+            ) : (
+              <span className="flex flex-shrink-0 items-center gap-2" aria-live="polite">
+                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+                <span className="font-mono text-[16px] tabular-nums text-ink" aria-label={`Recording ${mmss(snap.elapsedMs)}`}>{mmss(snap.elapsedMs)}</span>
+              </span>
+            )}
 
             {/* Activity animation only. Do NOT open a second getUserMedia stream
                 here: Web Speech owns the microphone for this session. The old
@@ -400,7 +415,25 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                 a mute recognizer for a full session with zero feedback. The
                 hint reuses the waveform's flexible slot so the controls never
                 move. */}
-            {snap.offline && (snap.pendingUploads ?? 0) > 0 ? (
+            {processing && snap.offline && (snap.pendingUploads ?? 0) > 0 ? (
+              <span
+                role="status"
+                aria-live="polite"
+                className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-amber-300"
+                title="Audio is saved locally and will finish when reconnected"
+              >
+                Saved locally · waiting to reconnect
+              </span>
+            ) : processing ? (
+              <span
+                role="status"
+                aria-live="polite"
+                className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-ink-soft"
+                title="The microphone is off. Finishing transcription before sending."
+              >
+                Finishing transcription…
+              </span>
+            ) : snap.offline && (snap.pendingUploads ?? 0) > 0 ? (
               // T-131: the server/network dropped, but audio is safe in the
               // local buffer and will transcribe on reconnect. Say so, so the
               // user trusts nothing was lost.
@@ -482,6 +515,7 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                 // happens before the stop/drain pipeline starts, so a Send
                 // during catch-up never reads as a dead button.
                 setSendPending(true);
+                onStopListening?.();
                 if (onSendTranscript) {
                   // No cue here: the composer's send path plays the send
                   // chime once the message actually dispatches — one tap,
@@ -513,14 +547,14 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
                   <path d="m3 8.5 3.1 3.1L13 4.7" />
                 </svg>
               )}
-              <span className="text-sm font-semibold">{sendPending ? 'Sending…' : onSendTranscript ? 'Send' : 'Use draft'}</span>
+              <span className="text-sm font-semibold">{sendPending ? 'Finishing…' : onSendTranscript ? 'Send' : 'Use draft'}</span>
             </button>
           </div>
           {/* T-25 (host): an EXPLICIT progress track under the audio indicator
               — the waveform's color sweep reads as ambience; this bar answers
               "how much of what I said is in the transcript yet" at a glance.
               Endpoints stay honest: 100% only via the real caughtUp signal. */}
-          <div
+          {!processing && <div
             data-gate="catchup-progress"
             role="progressbar"
             aria-valuemin={0}
@@ -534,7 +568,7 @@ export const VoiceButton = forwardRef<VoiceButtonHandle, Props>(function VoiceBu
               className={`h-full rounded-full transition-[width] duration-200 ${caughtUpShown ? 'bg-emerald-400' : 'bg-amber-400'}`}
               style={{ width: `${Math.max(3, Math.round(catchup * 100))}%` }}
             />
-          </div>
+          </div>}
           {/* No transcript preview here anymore: the live text streams into the
               textarea directly above (T-01), which stays visible now that this
               strip no longer covers the whole composer. */}

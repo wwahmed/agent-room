@@ -3813,6 +3813,12 @@ export function Room() {
                       setDictating(true);
                       setDictationPaused(false);
                     }}
+                    onStopListening={() => {
+                      // Send/Stop is the listening boundary. The final clip can
+                      // continue transcribing, but the composer must leave its
+                      // recording treatment immediately.
+                      setDictating(false);
+                    }}
                     onLiveTranscript={(live) => {
                       const base = (dictationBaseRef.current ?? '').trim();
                       setText(base && live ? `${base} ${live}` : live || dictationBaseRef.current || '');

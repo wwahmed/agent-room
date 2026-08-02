@@ -127,6 +127,8 @@ describe('VoiceCaptureController (durable)', () => {
     h.tick(); await flush();     // seg0 buffered, server down
     h.ctrl.stop();               // cuts final segment; both are buffered
     await flush();
+    expect(h.ctrl.snapshot().state).toBe('processing');
+    expect(h.streamStopped()).toBe(true); // mic is off; only transcription remains
     expect(h.finals.length).toBe(0); // cannot finalize while segments are buffered
     h.setServerUp(true);
     h.fireRetry(); await flush();

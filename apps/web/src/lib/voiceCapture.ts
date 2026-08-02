@@ -64,6 +64,9 @@ export class VoiceCaptureController {
   private settled = false;
   private segTimer: unknown = null;
   private retryTimer: unknown = null;
+  // A recorder's final onstop handler persists its blob asynchronously. Keep
+  // finalization behind that write even when no older uploads are in flight.
+  private segmentStopsInFlight = 0;
 
   private enqueueSeq = 0;      // next segment index to assign
   private pendingCount = 0;    // segments buffered locally, not yet transcribed
@@ -172,22 +175,31 @@ export class VoiceCaptureController {
   }
 
   private async onSegmentStopped(): Promise<void> {
-    const parts = this.chunks;
-    this.chunks = [];
-    // T-138: a pause/cancel (settled) drops this tail segment — the user took
-    // over with the keyboard and everything already streamed is in the draft.
-    if (this.settled) return;
-    // Keep capturing immediately so a pause in speech never drops audio.
-    if (!this.stopping && this.state === 'recording') this.beginSegment();
-    const blob = parts.length ? new Blob(parts) : null;
-    if (blob && blob.size > 0) {
-      const seq = this.enqueueSeq++;
-      await this.o.store.put({ seq, blob }); // DURABLE: land locally before any upload
-      this.pendingCount++;
-      this.emit();
-      void this.pump();
+    this.segmentStopsInFlight++;
+    try {
+      const parts = this.chunks;
+      this.chunks = [];
+      // T-138: a pause/cancel (settled) drops this tail segment — the user took
+      // over with the keyboard and everything already streamed is in the draft.
+      if (this.settled) return;
+      // Once the recorder has delivered its final blob, the microphone is no
+      // longer needed. Release it before any IndexedDB write or transcription
+      // wait so the browser/OS listening indicator turns off immediately.
+      if (this.stopping) this.stopReleaseStream();
+      // Keep capturing immediately so a pause in speech never drops audio.
+      if (!this.stopping && this.state === 'recording') this.beginSegment();
+      const blob = parts.length ? new Blob(parts) : null;
+      if (blob && blob.size > 0) {
+        const seq = this.enqueueSeq++;
+        await this.o.store.put({ seq, blob }); // DURABLE: land locally before any upload
+        this.pendingCount++;
+        this.emit();
+        void this.pump();
+      }
+    } finally {
+      this.segmentStopsInFlight = Math.max(0, this.segmentStopsInFlight - 1);
+      if (this.stopping) this.maybeSettle();
     }
-    if (this.stopping) this.maybeSettle();
   }
 
   private cutSegment(): void {
@@ -255,11 +267,21 @@ export class VoiceCaptureController {
   stop(): void {
     if (this.state !== 'recording') return;
     this.stopping = true;
+    // Send is a decisive listening boundary. The final audio blob still has to
+    // land locally and transcribe, but that is processing — never recording.
+    this.state = 'processing';
+    this.emit();
     if (this.segTimer) { this.o.clearTimer(this.segTimer); this.segTimer = null; }
     const rec = this.rec;
     this.rec = null;
-    if (rec) { try { rec.stop(); } catch { /* noop */ } }
-    else this.maybeSettle();
+    if (rec) {
+      try {
+        rec.stop();
+        return;
+      } catch { /* recorder already stopped; release below */ }
+    }
+    this.stopReleaseStream();
+    this.maybeSettle();
   }
 
   // Finalize only once every segment has been transcribed AND removed from the
@@ -267,7 +289,7 @@ export class VoiceCaptureController {
   // and finalizes when the pump drains it after reconnection (nothing lost).
   private maybeSettle(): void {
     if (!this.stopping || this.settled) return;
-    if (this.pendingCount > 0 || this.pumpRunning) return;
+    if (this.segmentStopsInFlight > 0 || this.pendingCount > 0 || this.pumpRunning) return;
     this.settled = true;
     this.stopReleaseStream();
     this.state = 'idle';

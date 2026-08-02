@@ -20,8 +20,10 @@ describe('Dictation catch-up progress + responsive Send', () => {
     const click = voice.slice(voice.indexOf('data-gate="voice-send"'));
     expect(click.indexOf('setSendPending(true)')).toBeGreaterThan(-1);
     expect(click.indexOf('setSendPending(true)')).toBeLessThan(click.indexOf('ctrlRef.current?.stop()'));
-    expect(voice).toContain("sendPending ? 'Sending…'");
+    expect(voice).toContain("sendPending ? 'Finishing…'");
     expect(voice).toContain('disabled={sendPending}');
+    expect(voice).toContain('Mic off');
+    expect(voice).toContain('Finishing transcription…');
   });
 
   it('the pending state resets when the session ends (send resolved or died)', () => {

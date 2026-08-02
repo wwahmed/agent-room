@@ -7,7 +7,7 @@
 // an `onend` while still recording is a pause to auto-recover from (restart),
 // NOT the end — only an explicit Stop (or a pause-aware hard deadline) finalizes.
 
-export type DictationState = 'idle' | 'recording' | 'paused';
+export type DictationState = 'idle' | 'recording' | 'paused' | 'processing';
 
 export interface DictationSnapshot {
   state: DictationState;
@@ -366,6 +366,11 @@ export class DictationController {
       return;
     }
     this.stopping = true;
+    // The user's Send/Stop tap is the listening boundary. SpeechRecognition
+    // can still emit its last result asynchronously, but the UI must stop
+    // claiming that the microphone is recording while that result settles.
+    this.state = 'processing';
+    this.emit();
     // SpeechRecognition may emit a last cumulative final result *after* stop().
     // Let onresult replace liveFinal and let onend commit it exactly once. The
     // old eager commit duplicated the pre-stop text when that final arrived.
