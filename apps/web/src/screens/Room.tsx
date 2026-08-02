@@ -3102,15 +3102,22 @@ export function Room() {
           className="relative flex min-h-0 min-w-0 flex-1 flex-col"
           style={{ '--composer-h': `${composerH}px` } as React.CSSProperties}
         >
-            {/* T-14: pinned outcomes — a compact floating strip below the
-                header. Collapsed it is one quiet pill; expanded it lists every
+            {/* T-14: pinned outcomes — a compact strip below the header.
+                Collapsed it is one quiet pill; expanded it lists every
                 pin (sender + snippet, tap to jump, ✕ to unpin). Entries are
                 the room record's DENORMALIZED pins, so they render even after
-                the original message paged out or was trimmed. On phones the
-                chat pane is full-bleed under the fixed bar, hence the top
-                offset; sm+ panes already start below the header. */}
+                the original message paged out or was trimmed. Phone chrome gets
+                real layout clearance: neither the fixed command bar nor this
+                strip may paint over message text. Desktop keeps the compact
+                floating treatment. */}
+            {isPhone && !chromeHidden && (
+              <div data-gate="mobile-header-clearance" className="h-[104px] flex-shrink-0" aria-hidden="true" />
+            )}
             {pinnedList.length > 0 && !ended && (
-              <div data-gate="pinned-strip" className={`pointer-events-none absolute inset-x-0 z-30 flex justify-center px-3 sm:top-2 ${chromeHidden ? 'top-2' : 'top-[108px]'}`}>
+              <div
+                data-gate="pinned-strip"
+                className="pointer-events-none z-30 flex flex-shrink-0 justify-center px-3 py-1.5 sm:absolute sm:inset-x-0 sm:top-2 sm:py-0"
+              >
                 <div className="pointer-events-auto w-full max-w-[620px]">
                   <button
                     type="button"
@@ -3182,10 +3189,11 @@ export function Room() {
               <div
                 className="mx-auto w-full max-w-[1280px]"
                 style={isPhone ? {
-                  // The collapsed pin pill sits below the visible phone header.
-                  // Reserve its own row so it never paints over the first message.
-                  paddingTop: 104 + (pinnedList.length > 0 && !ended && !chromeHidden ? 52 : 0),
-                  paddingBottom: composerH + 16 + (unseenCount > 0 || !atBottom || unseenMentions > 0 || mentionSeeking ? 56 : 0),
+                  // Phone command, pin, latest, and composer chrome each own
+                  // layout rows outside the scrollport. Message pixels never
+                  // need heuristic padding to dodge floating controls.
+                  paddingTop: 0,
+                  paddingBottom: 16,
                 } : { paddingBottom: composerH + 16 }}
               >
               {/* T-04: history is windowed; this strip marks the top of the
@@ -3325,13 +3333,9 @@ export function Room() {
 
               {/* T-48/T-65: jump-to-latest, one tap back to live whenever he's
                   scrolled up, with the count when there's something new. */}
-              {/* T-72 ruling (>=sm): a dedicated layout LANE between feed and
-                  composer — a message structurally cannot sit behind these
-                  controls. T-82 (phone): the lane leaves the layout and the
-                  pill floats bottom-right above the measured composer, with
-                  the feed reserving collision padding only while it exists;
-                  it stays visible as the way back to now even with chrome
-                  hidden (it drops to the safe-area edge). */}
+              {/* T-72: on phones this is a dedicated layout lane between feed
+                  and composer — a message structurally cannot sit behind it.
+                  Desktop retains the compact floating treatment. */}
               {/* T-45 (owner ruling): on >=sm the lane no longer reserves a
                   band — it OVERLAYS the canvas just above the floating
                   composer, so its appearance reflows nothing. The wrapper is
@@ -3339,7 +3343,7 @@ export function Room() {
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
                 <div
                   data-gate="floating"
-                  className="room-latest-lane flex w-full items-center justify-center gap-2 px-4 py-1.5 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:z-[25] sm:py-0"
+                  className="room-latest-lane z-[25] flex w-full flex-shrink-0 items-center justify-end gap-2 px-3 py-1.5 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:justify-center sm:px-4 sm:py-0"
                   style={!isPhone ? { bottom: composerH + 12 } : undefined}
                 >
                   {(unseenCount > 0 || !atBottom) && (
@@ -3391,9 +3395,18 @@ export function Room() {
                 </div>
               )}
 
-            {/* T-82: the whole bottom block overlays the feed on phones and
-                slides below the viewport in immersive reading (pinned states
-                keep it up); >=sm it stays in flow exactly as before. */}
+            {isPhone && !chromeHidden && (
+              <div
+                data-gate="mobile-composer-clearance"
+                className="flex-shrink-0"
+                style={{ height: composerH }}
+                aria-hidden="true"
+              />
+            )}
+
+            {/* T-82: the bottom block is visually fixed on phones, while the
+                measured clearance above keeps it out of the message viewport.
+                It slides away in immersive reading; >=sm is unchanged. */}
             <div ref={composerWrapRef} className="room-bottom-chrome sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
             {ended ? (
               // A1: ended-room CTA pivots from "Reactivate-only" to a primary

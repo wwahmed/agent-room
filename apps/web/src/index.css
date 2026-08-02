@@ -222,14 +222,12 @@ body {
 
   /* T-82: contextual phone chrome. The command bar slides above the
      viewport and the bottom chrome (composer/CTA) below it while reading
-     deeper; a deliberate reverse gesture restores both. The floating
-     Latest pill rides above the measured composer (--composer-h on the
-     chat column) and drops to the safe-area edge when chrome hides. */
+     deeper; a deliberate reverse gesture restores both. Latest stays in a
+     real layout lane so controls never cover message text. */
   @media (max-width: 639px) {
     .app-command-bar,
-    .room-bottom-chrome,
-    .room-latest-lane {
-      transition: transform 160ms ease-out, bottom 160ms ease-out;
+    .room-bottom-chrome {
+      transition: transform 160ms ease-out;
     }
     .room-bottom-chrome {
       position: absolute;
@@ -244,23 +242,10 @@ body {
     .chrome-hidden .room-bottom-chrome {
       transform: translateY(102%);
     }
-    .room-latest-lane {
-      position: absolute;
-      left: auto;
-      right: 12px;
-      bottom: calc(var(--composer-h, 0px) + 12px);
-      width: auto;
-      z-index: 25;
-      padding: 0;
-    }
-    .chrome-hidden .room-latest-lane {
-      bottom: calc(12px + env(safe-area-inset-bottom));
-    }
   }
   @media (prefers-reduced-motion: reduce) {
     .app-command-bar,
-    .room-bottom-chrome,
-    .room-latest-lane {
+    .room-bottom-chrome {
       transition: none;
     }
   }

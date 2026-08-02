@@ -4,8 +4,12 @@ import { describe, expect, it } from 'vitest';
 const room = readFileSync(new URL('./Room.tsx', import.meta.url), 'utf8');
 
 describe('phone chat overlays do not obscure conversation content', () => {
-  it('reserves a real top row for the visible pinned control', () => {
-    expect(room).toContain('paddingTop: 104 + (pinnedList.length > 0 && !ended && !chromeHidden ? 52 : 0)');
+  it('gives the phone header and pinned control real non-scrolling layout rows', () => {
+    expect(room).toContain('data-gate="mobile-header-clearance"');
+    expect(room).toContain('h-[104px] flex-shrink-0');
+    expect(room).toContain('data-gate="pinned-strip"');
+    expect(room).toContain('flex flex-shrink-0 justify-center');
+    expect(room).toContain('paddingTop: 0');
     expect(room).toContain('className="mx-auto flex min-h-11 items-center');
   });
 
@@ -13,9 +17,15 @@ describe('phone chat overlays do not obscure conversation content', () => {
     expect(room.match(/className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('collapses Latest to a 44px circle on phones instead of covering prose', () => {
+  it('places the 44px phone Latest control in a real layout lane', () => {
+    expect(room).toContain('room-latest-lane z-[25] flex w-full flex-shrink-0');
     expect(room).toContain('max-sm:w-11 max-sm:px-0');
     expect(room).toContain('className="hidden sm:inline"');
     expect(room).toContain('className="tabular-nums sm:hidden"');
+  });
+
+  it('reserves the measured phone composer height outside the message scrollport', () => {
+    expect(room).toContain('data-gate="mobile-composer-clearance"');
+    expect(room).toContain('style={{ height: composerH }}');
   });
 });
