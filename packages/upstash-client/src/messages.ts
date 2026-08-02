@@ -654,45 +654,128 @@ export async function appendSystemMessage(
 // `fromIndex`. Omitted = to the end of the list (the polling path). A bounded
 // LRANGE is what lets the web load "the previous page" during upward scroll
 // without pulling everything from that point forward.
-export async function listMessages(
+/**
+ * How a requested cursor related to what the room can actually serve.
+ *
+ * - `exact`   — the cursor was inside the retained window; nothing was skipped.
+ * - `trimmed` — the cursor pointed at messages LTRIM has already destroyed. The
+ *               surviving prefix is returned and `nextCursor` jumps forward to
+ *               the true absolute position. Those older messages are gone.
+ * - `ahead`   — the cursor is BEYOND the newest message. Nothing can satisfy it
+ *               and nothing ever will: this is a caller that has desynced from
+ *               the absolute counter, and it must be told rather than left to
+ *               poll an empty result forever.
+ */
+export type CursorFit = 'exact' | 'trimmed' | 'ahead';
+
+export interface MessagePage {
+  messages: Message[];
+  /** ABSOLUTE cursor to pass on the next call. Server-computed on purpose —
+   *  a caller that derives it as `since + messages.length` gets it wrong the
+   *  moment the server clamps `start`, and then re-reads the same window on
+   *  every poll while its cursor crawls toward the trim point. */
+  nextCursor: number;
+  /** Absolute number of messages the room has ever held, or null on a legacy
+   *  room that predates the counter. */
+  totalCount: number | null;
+  fit: CursorFit;
+}
+
+/**
+ * The cursor-authoritative read. `listMessages` is the thin
+ * messages-only wrapper over this.
+ *
+ * Why this exists (T-52): callers used to advance their own cursor by adding
+ * the returned batch length to what they sent. That is only correct when the
+ * server served exactly the range asked for. On a long-lived room past the
+ * LTRIM cap it does not: a cursor below the trim point gets `start` clamped to
+ * 0, so the caller receives the WHOLE retained window, advances by its length,
+ * and asks again from a cursor that is still below the trim point. The room
+ * replays its entire retained window on every poll — hundreds of messages per
+ * call — until the cursor finally crawls past the trim point.
+ *
+ * The other end of the same defect is worse: a cursor past the newest message
+ * returns an empty list indistinguishable from "nobody has spoken", so a
+ * listener sits in a healthy-looking loop and never receives anything again.
+ */
+export async function listMessagesPage(
   client: UpstashClient,
   code: string,
   fromIndex: number,
   limit?: number
-): Promise<Message[]> {
-  // One pipeline: ask for both the absolute count and the current list length.
-  // count===null means this is a legacy room created before the counter was
-  // introduced — fall back to treating fromIndex as a list-index (matches
-  // pre-fix behavior; still buggy past 500 messages but no worse than before
-  // and avoids breaking in-flight conversations during the rollout).
+): Promise<MessagePage> {
   const meta = await client.pipeline<unknown>([
     ['GET', msgCountKey(code)],
     ['LLEN', msgsKey(code)],
   ]);
   const countRaw = meta[0] as string | number | null;
   const listLen = Number(meta[1] ?? 0);
-  if (listLen === 0) return [];
+  const totalCount =
+    countRaw === null || countRaw === undefined
+      ? null
+      : typeof countRaw === 'number' ? countRaw : parseInt(countRaw, 10);
 
-  let start: number;
-  if (countRaw === null || countRaw === undefined) {
-    start = fromIndex;
-  } else {
-    const totalCount = typeof countRaw === 'number' ? countRaw : parseInt(countRaw, 10);
-    // `trimmed` is the number of head entries LTRIM has dropped over this
-    // room's lifetime. Subtracting it from the agent's absolute cursor
-    // gives the right list-index for the next unread message.
-    const trimmed = totalCount - listLen;
-    start = fromIndex - trimmed;
-    // If the agent's cursor lags so far that messages it never saw have
-    // already been LTRIMmed away, the best we can do is hand back the
-    // surviving prefix from index 0 — those older messages are gone for
-    // good (LTRIM is destructive; the report/minutes export is the only
-    // way to recover full transcripts past the cap).
-    if (start < 0) start = 0;
+  // Cursor sanitation. Three distinct kinds of nonsense arrive here and they
+  // do NOT collapse into one answer:
+  //   - negative / NaN / -Infinity: no position at all. Start from the
+  //     beginning rather than letting a negative index run backwards.
+  //   - +Infinity: unambiguously past the newest message. Collapsing it to 0
+  //     would replay the entire room to a caller whose cursor is broken in the
+  //     "too far ahead" direction — the opposite of what it needs.
+  //   - fractional: floor it; a position is a whole number of messages.
+  const requested =
+    fromIndex === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY
+      : Number.isFinite(fromIndex) && fromIndex > 0 ? Math.floor(fromIndex)
+        : 0;
+
+  if (listLen === 0) {
+    // An empty room still has an authoritative position: whatever the counter
+    // says, or 0. Never echo a cursor we cannot honor.
+    const end = totalCount ?? 0;
+    return { messages: [], nextCursor: end, totalCount, fit: requested > end ? 'ahead' : 'exact' };
   }
 
-  if (start >= listLen) return [];
+  // Legacy rooms (no counter) have no absolute frame of reference — the list
+  // index IS the cursor, exactly as before.
+  if (totalCount === null) {
+    if (requested >= listLen) return { messages: [], nextCursor: listLen, totalCount: null, fit: requested > listLen ? 'ahead' : 'exact' };
+    const end = limit !== undefined && limit > 0 ? Math.min(requested + limit - 1, listLen - 1) : -1;
+    const raw = await client.command<string[]>(['LRANGE', msgsKey(code), requested, end]);
+    const messages = raw.map(line => JSON.parse(line) as Message);
+    return { messages, nextCursor: requested + messages.length, totalCount: null, fit: 'exact' };
+  }
+
+  // `trimmed` is how many head entries LTRIM has dropped over this room's
+  // lifetime — the absolute index of the OLDEST message still on disk.
+  const trimmed = totalCount - listLen;
+
+  if (requested > totalCount) {
+    // Past the newest message. Re-anchor to the true end and say so; the
+    // caller cannot recover from this by polling, only by being told.
+    return { messages: [], nextCursor: totalCount, totalCount, fit: 'ahead' };
+  }
+
+  // Below the trim point: serve the surviving prefix, and report the cursor
+  // for where that prefix ACTUALLY starts. This is the line that stops the
+  // replay — the caller lands past the trim point in one step instead of
+  // crawling there one window at a time.
+  const fit: CursorFit = requested < trimmed ? 'trimmed' : 'exact';
+  const effective = Math.max(requested, trimmed);
+  const start = effective - trimmed;
+  if (start >= listLen) return { messages: [], nextCursor: totalCount, totalCount, fit };
+
   const end = limit !== undefined && limit > 0 ? Math.min(start + limit - 1, listLen - 1) : -1;
   const raw = await client.command<string[]>(['LRANGE', msgsKey(code), start, end]);
-  return raw.map(line => JSON.parse(line) as Message);
+  const messages = raw.map(line => JSON.parse(line) as Message);
+  return { messages, nextCursor: effective + messages.length, totalCount, fit };
+}
+
+export async function listMessages(
+  client: UpstashClient,
+  code: string,
+  fromIndex: number,
+  limit?: number
+): Promise<Message[]> {
+  const page = await listMessagesPage(client, code, fromIndex, limit);
+  return page.messages;
 }

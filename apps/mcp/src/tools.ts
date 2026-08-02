@@ -13,6 +13,7 @@ import {
   appendMessage,
   appendSystemMessage,
   listMessages,
+  listMessagePage,
   getTaskBoard,
   createTask,
   claimTask,
@@ -324,10 +325,30 @@ async function runRoomListenPoll(
     } catch { /* presence is non-essential */ }
   }
   let pollCount = 0;
+  // T-52: the cursor this loop polls with is re-anchored from the server's
+  // answer, never derived by adding batch lengths to what we sent. Two failures
+  // came out of that arithmetic, and both are silent:
+  //   - a cursor BELOW the trim point made the server clamp `start` to 0, so
+  //     every poll returned the room's entire retained window while the cursor
+  //     crawled forward one window at a time;
+  //   - a cursor ABOVE the newest message returned an empty batch forever,
+  //     which is indistinguishable from a quiet room. The agent's presence row
+  //     stays healthy and it never receives another message.
+  let cursor = since;
+  let reanchorNotice = '';
   while (Date.now() - start < cappedMs) {
-    const msgs = await listMessages(client, code, since);
+    const page = await listMessagePage(client, code, cursor);
+    const msgs = page.messages;
+    if (page.fit !== 'exact' && page.nextCursor !== cursor) {
+      // Re-anchor and keep going in the SAME window — the caller should not
+      // have to burn a round trip to recover from a cursor it was handed.
+      reanchorNotice = page.fit === 'ahead'
+        ? `⚠ CURSOR RE-ANCHORED: since=${cursor} was past the newest message (room has ${page.totalCount}). Listening from ${page.nextCursor}. Use the cursor this tool returns — a cursor past the end receives nothing, silently. `
+        : `⚠ CURSOR RE-ANCHORED: since=${cursor} pointed at messages already dropped by retention. Resumed at ${page.nextCursor}; the messages before it are gone from the room (use the report/minutes export for full history). `;
+      cursor = page.nextCursor;
+    }
     if (msgs.length > 0) {
-      const cursor = since + msgs.length;
+      cursor = page.nextCursor;
       // T-48: room_send returns the LAST CONSUMED cursor rather than the room's
       // post-send length. This batch can therefore include our own just-appended
       // row plus messages another participant posted while we were composing.
@@ -369,7 +390,7 @@ async function runRoomListenPoll(
         messages: visibleMsgs,
         cursor,
         ...(self ? { self } : {}),
-        hint: mentionHint + actionHint + baseHint + attachmentHint,
+        hint: reanchorNotice + mentionHint + actionHint + baseHint + attachmentHint,
       };
     }
     if (pollCount > 0 && pollCount % 10 === 0) {
@@ -383,7 +404,7 @@ async function runRoomListenPoll(
           try { await removeRoom(code); } catch { /* non-essential */ }
           return {
             messages: [],
-            cursor: since,
+            cursor,
             terminated: 'room_ended',
             hint: 'TERMINATION SIGNAL: the room has ended. Stop calling room_listen — the meeting is over.',
           };
@@ -392,7 +413,7 @@ async function runRoomListenPoll(
           try { await removeRoom(code); } catch { /* non-essential */ }
           return {
             messages: [],
-            cursor: since,
+            cursor,
             terminated: 'kicked',
             hint: `TERMINATION SIGNAL: you were removed from the participants list (likely by the host "${room.createdBy}"). Stop calling room_listen — you are no longer in this meeting. Inform the user.`,
           };
@@ -404,11 +425,15 @@ async function runRoomListenPoll(
   }
   return {
     messages: [],
-    cursor: since,
+    // The re-anchored cursor, not the one we were handed: a quiet window that
+    // corrected a bad cursor must return the corrected one, or the caller loops
+    // straight back into the same silence.
+    cursor,
     ...(self ? { self } : {}),
     hint:
+      reanchorNotice +
       `Listened for ${cappedMs}ms — quiet so far. This is normal. ` +
-      `${nextListenContract(code, since)} ` +
+      `${nextListenContract(code, cursor)} ` +
       `Quiet ≠ done. The room is alive until the user explicitly tells you to ` +
       `stop ("leave the room" / "stop listening" / similar) OR the response ` +
       `includes terminated=room_ended/kicked. Do not interpret silence as a ` +
@@ -488,9 +513,14 @@ export function registerTools(server: Server) {
           if (selfName) {
             await setListenUntil(client, code, selfName, Date.now() + 5000, await readMemberKey(code));
           }
-          const msgs = await listMessages(client, code, cursor);
+          // T-52: same rule as the foreground loop — take the server's cursor.
+          // `cursor += msgs.length` re-reads the retained window forever once
+          // the room passes the retention cap.
+          const page = await listMessagePage(client, code, cursor);
+          const msgs = page.messages;
+          if (page.fit !== 'exact') cursor = page.nextCursor;
           if (msgs.length > 0) {
-            cursor += msgs.length;
+            cursor = page.nextCursor;
             const others = msgs.filter((m: Message) => !(m.client === 'cc' && m.name === selfName));
             if (others.length > 0) {
               const summary = others.map((m: Message) => `${m.name}: ${m.text}`).join('\n');
@@ -1039,20 +1069,26 @@ export function registerTools(server: Server) {
         priorIdentity: { name: a.name, client: 'cc' },
         wantMemberKey: true,
       });
-      const msgs = await listMessages(client, code, 0);
+      // T-52: seed from the server's ABSOLUTE position. `msgs.length` is the
+      // size of the retained window, which on a long-lived room is far below
+      // the true message count — a cursor seeded from it sits below the trim
+      // point and makes every subsequent listen replay the whole window.
+      const joinPage = await listMessagePage(client, code, 0);
+      const msgs = joinPage.messages;
+      const startCursor = joinPage.nextCursor;
       // Save hostKey + memberKey alongside cursor so a future room_join from
       // this same PPID can re-claim the host slot, and every send/presence this
       // session makes authenticates. State is PPID-scoped so two parallel
       // sessions don't share keys.
       await setRoom(code, {
-        name: a.name, cursor: msgs.length, joinedAt: Date.now(),
+        name: a.name, cursor: startCursor, joinedAt: Date.now(),
         hostKey: created.hostKey, memberKey: createdJoin.memberKey,
       });
 
       const listenAfterJoin = defaultListenAfterJoin(harness, a.listenAfterJoin);
       const listenMs = resolvedListenTimeoutMs(a.listenTimeoutMs, harness.maxListenMs);
       if (listenAfterJoin) {
-        const first = await runRoomListenPoll(client, code, msgs.length, listenMs, a.name);
+        const first = await runRoomListenPoll(client, code, startCursor, listenMs, a.name);
         await updateCursor(code, first.cursor);
         if (!first.terminated && shouldAutoWatch) {
           startRoomWatcher(code, a.name, first.cursor);
@@ -1082,7 +1118,7 @@ export function registerTools(server: Server) {
       return ok({
         code,
         topic: created.topic,
-        cursor: msgs.length,
+        cursor: startCursor,
         joinUrl: `https://www.agent-room.com/j/${code}`,
         roleBrief: roleBriefFor(a.role ?? ''),
         roomTemplate: templateInfo(createdJoin.templateId),
@@ -1177,12 +1213,14 @@ export function registerTools(server: Server) {
           await appendMessage(client, a.code, greeting, undefined, 'message', updated.memberKey);
         } catch { /* greeting is nice-to-have; join/listen must still proceed */ }
       }
-      const msgs = await listMessages(client, a.code, 0);
+      const joinPage = await listMessagePage(client, a.code, 0);
+      const msgs = joinPage.messages;
+      const startCursor = joinPage.nextCursor;
       // Persist the member credential so every later room_send/presence from
       // this session (across turns) authenticates. Keep any prior key if the
       // server didn't reissue one.
       await setRoom(a.code, {
-        name: finalName, cursor: msgs.length, joinedAt: Date.now(),
+        name: finalName, cursor: startCursor, joinedAt: Date.now(),
         memberKey: updated.memberKey ?? storedStateRoom?.memberKey,
         ...(storedStateRoom?.pendingSend ? { pendingSend: storedStateRoom.pendingSend } : {}),
       });
@@ -1216,7 +1254,7 @@ export function registerTools(server: Server) {
         : {};
 
       if (listenAfterJoin) {
-        const first = await runRoomListenPoll(client, a.code, msgs.length, listenMs, finalName);
+        const first = await runRoomListenPoll(client, a.code, startCursor, listenMs, finalName);
         await updateCursor(a.code, first.cursor);
         if (!first.terminated && shouldAutoWatch) {
           startRoomWatcher(a.code, finalName, first.cursor);
@@ -1279,7 +1317,7 @@ export function registerTools(server: Server) {
           workingUntil: p.workingUntil,
           canSpeak: p.canSpeak !== false,
         })),
-        cursor: msgs.length,
+        cursor: startCursor,
         ...notice,
         recentMessages,
         roleBrief: roleBriefFor(a.role ?? ''),

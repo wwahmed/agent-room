@@ -190,6 +190,38 @@ export async function verifyTask(client: RoomApiClient, code: string, id: string
   return client.post({ action: 'taskVerify', code, id, name, verdict, ...(note ? { note } : {}) });
 }
 
+export type CursorFit = 'exact' | 'trimmed' | 'ahead';
+
+export interface MessagePage {
+  messages: Message[];
+  /** Server-computed absolute cursor for the next call. */
+  nextCursor: number;
+  totalCount: number | null;
+  fit: CursorFit;
+}
+
+/**
+ * T-52: read a page AND the authoritative cursor for it. Deriving the next
+ * cursor locally (`since + messages.length`) is only correct while the room is
+ * under the retention cap; past it the server clamps the start index and the
+ * local arithmetic silently desyncs.
+ */
+export async function listMessagePage(client: RoomApiClient, code: string, since: number): Promise<MessagePage> {
+  const body = await client.post<{ messages: Message[]; nextCursor?: number; totalCount?: number | null; cursorFit?: CursorFit }>(
+    { action: 'messages', code, cursor: since },
+  );
+  const messages = body.messages ?? [];
+  // A server that predates this field would leave the loop guessing; fall back
+  // to the old arithmetic rather than handing back a cursor of 0.
+  const nextCursor = typeof body.nextCursor === 'number' ? body.nextCursor : since + messages.length;
+  return {
+    messages,
+    nextCursor,
+    totalCount: typeof body.totalCount === 'number' ? body.totalCount : null,
+    fit: body.cursorFit ?? 'exact',
+  };
+}
+
 export async function listMessages(client: RoomApiClient, code: string, since: number): Promise<Message[]> {
   const body = await client.post<{ messages: Message[] }>({ action: 'messages', code, cursor: since });
   return body.messages;

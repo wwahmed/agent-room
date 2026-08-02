@@ -143,6 +143,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   hostSkipCurrent,
   joinRoom,
   listMessages,
+  listMessagesPage,
   reactivateRoom,
   archiveRoom,
   unarchiveRoom,
@@ -1090,7 +1091,18 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       // T-04: optional `limit` bounds the page; omitted keeps cursor-to-end.
       const rawLimit = Number(payload.limit);
       const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : undefined;
-      return { messages: await listMessages(client, code, Number(payload.cursor || 0), limit) };
+      // T-52: the CURSOR is served, not inferred. A caller that advances by
+      // `sent + received.length` re-reads the whole retained window on every
+      // poll once the room passes the LTRIM cap, and goes permanently silent
+      // if its cursor ever lands past the newest message. `nextCursor` and
+      // `fit` make both cases recoverable in one round trip.
+      const page = await listMessagesPage(client, code, Number(payload.cursor || 0), limit);
+      return {
+        messages: page.messages,
+        nextCursor: page.nextCursor,
+        totalCount: page.totalCount,
+        cursorFit: page.fit,
+      };
     }
     // T-66: per-participant listen-loop health, so the app can show who is
     // ACTUALLY listening rather than leaving the host to guess whether an agent
