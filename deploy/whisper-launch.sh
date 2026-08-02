@@ -6,6 +6,11 @@ set -eu
 MODEL_DIR="$HOME/.cache/whisper"
 CFG="$HOME/.agent-room/whisper-model"
 DEFAULT="ggml-medium.en.bin"
+# Live dictation is latency-sensitive and this host has 16 logical cores.
+# whisper-server defaults to four compute threads; eight materially reduces
+# short-segment tail latency while leaving half the machine for the chat and
+# other workloads. Keep it overrideable for smaller hosts.
+THREADS="${AGENT_ROOM_WHISPER_THREADS:-8}"
 
 MODEL_FILE="$DEFAULT"
 if [ -f "$CFG" ]; then
@@ -21,4 +26,5 @@ fi
 
 exec /opt/homebrew/bin/whisper-server \
   -m "$MODEL_DIR/$MODEL_FILE" \
+  --threads "$THREADS" \
   --host 127.0.0.1 --port 8110
