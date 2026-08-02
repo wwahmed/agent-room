@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { detectHarness } from './harness.js';
+import type { Message } from '@agent-room/shared';
 
 const STATE_DIR = process.env.AGENT_ROOM_STATE_DIR || join(homedir(), '.agent-room');
 
@@ -46,6 +47,15 @@ export interface RoomState {
   // rejoin to reclaim the same row. Plain text on disk under ~/.agent-room/,
   // same trust level as the rest of the MCP state.
   memberKey?: string;
+  // One unresolved room_send intent. The exact message (including its stable
+  // clientSendId and uploaded attachment references) survives transport loss
+  // and MCP restarts, so a retry replays the same operation instead of minting
+  // a duplicate. Cleared only after an acknowledged or authoritative failure.
+  pendingSend?: {
+    intentHash: string;
+    message: Message;
+    preparedAt: number;
+  };
 }
 
 export interface AgentRoomState {
@@ -102,6 +112,9 @@ export function mergeStates(states: AgentRoomState[]): AgentRoomState {
       ])).slice(-50);
       const hostKey = newest.hostKey ?? room.hostKey ?? existing.hostKey;
       const memberKey = newest.memberKey ?? room.memberKey ?? existing.memberKey;
+      const pendingSend = [existing.pendingSend, room.pendingSend]
+        .filter((row): row is NonNullable<RoomState['pendingSend']> => Boolean(row))
+        .sort((a, b) => b.preparedAt - a.preparedAt)[0];
       merged.rooms[code] = {
         ...newest,
         cursor: Math.max(existing.cursor, room.cursor),
@@ -116,6 +129,7 @@ export function mergeStates(states: AgentRoomState[]): AgentRoomState {
         // T-11: the key was on disk, and the merge threw it away.
         ...(hostKey ? { hostKey } : {}),
         ...(memberKey ? { memberKey } : {}),
+        ...(pendingSend ? { pendingSend } : {}),
       };
       if (!merged.rooms[code]!.lastSentAt) delete merged.rooms[code]!.lastSentAt;
     }
@@ -279,6 +293,30 @@ export async function finishPreparedSend(
     } else {
       room.pendingOwnMessageIds = (room.pendingOwnMessageIds ?? []).filter(id => id !== messageId);
     }
+  });
+}
+
+export async function readPendingSend(code: string): Promise<RoomState['pendingSend'] | undefined> {
+  return (await readState()).rooms[code]?.pendingSend;
+}
+
+export async function prepareDurableSend(
+  code: string,
+  intentHash: string,
+  message: Message,
+): Promise<void> {
+  await mutateSendListenState((state) => {
+    const room = state.rooms[code];
+    if (!room) return;
+    room.pendingSend = { intentHash, message, preparedAt: Date.now() };
+  });
+}
+
+export async function clearDurableSend(code: string, clientSendId: string): Promise<void> {
+  await mutateSendListenState((state) => {
+    const room = state.rooms[code];
+    if (room?.pendingSend?.message.metadata?.clientSendId !== clientSendId) return;
+    delete room.pendingSend;
   });
 }
 

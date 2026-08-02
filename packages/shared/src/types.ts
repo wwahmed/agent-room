@@ -338,6 +338,11 @@ export type MessageKind = 'msg' | 'sys';
 // for prompt construction (a Sequential supplement agent needs to see prior
 // turn messages to know what was already said).
 export interface MessageMetadata {
+  // T-DELIVERY: stable, opaque id for one client send intent. The server binds
+  // it to the authenticated sender session and stores an atomic receipt, so a
+  // retry after response loss returns the original outcome without appending a
+  // duplicate. Optional for legacy clients; new clients use 32 lowercase hex.
+  clientSendId?: string;
   // T-49: server-derived identity of the SESSION that sent this message. Stable
   // across display-name changes, distinct for two participants sharing a name, and
   // distinct again for a session that left and rejoined. Never a credential — it is

@@ -24,6 +24,10 @@ describe('statusForError', () => {
     expect(statusForError(named('ViewerError'))).toBe(403);
   });
 
+  it('maps a reused send id with changed content to 409', () => {
+    expect(statusForError(named('MessageOperationConflictError'))).toBe(409);
+  });
+
   it('falls back to 500 only for genuinely unknown errors', () => {
     expect(statusForError(new Error('kaboom'))).toBe(500);
   });

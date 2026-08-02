@@ -82,4 +82,27 @@ describe('T-48 send -> listen cursor continuity', () => {
     expect(merged.rooms.room?.cursor).toBe(11);
     expect(merged.rooms.room?.pendingOwnMessageIds).toEqual([80, 110]);
   });
+
+  it('persists one exact send intent until its matching token is acknowledged', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'agent-room-durable-send-'));
+    vi.stubEnv('AGENT_ROOM_STATE_DIR', dir);
+    vi.stubEnv('AGENT_ROOM_STATE_FILE', join(dir, 'durable.json'));
+    const state = await import('../src/state.js');
+    const pending = {
+      ...message(90, 'Agent A', 'survive response loss'),
+      metadata: { clientSendId: 'a'.repeat(32) },
+    };
+
+    await state.setRoom('room', { name: 'Agent A', cursor: 7, joinedAt: 1 });
+    await state.prepareDurableSend('room', 'intent-a', pending);
+    expect(await state.readPendingSend('room')).toMatchObject({
+      intentHash: 'intent-a',
+      message: pending,
+    });
+
+    await state.clearDurableSend('room', 'b'.repeat(32));
+    expect(await state.readPendingSend('room')).not.toBeUndefined();
+    await state.clearDurableSend('room', 'a'.repeat(32));
+    expect(await state.readPendingSend('room')).toBeUndefined();
+  });
 });

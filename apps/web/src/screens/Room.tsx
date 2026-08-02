@@ -35,7 +35,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { ACTION_ID_RE, STRUCTURED_VIEW_VERSION, artifactLabel, templateInfo, type ArtifactKind, type ViewAction, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
-import { appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomOutputInstructionsAction, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
+import { ApiError, appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomOutputInstructionsAction, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
@@ -64,6 +64,13 @@ import { armArrivalFlash } from '../lib/arrivalFlash.js';
 import { presenceView, canRecover, recoveryPrompt, indexHealth, healthKey, personGroup, behindLabel, clientNeedsRestart, clientOutdated, type ParticipantHealth } from '../lib/presence.js';
 import { deliveredAgents } from '../lib/delivered.js';
 import { startsMessageDay } from '../lib/messageDays.js';
+import {
+  browserSendIntent,
+  clearPendingBrowserSend,
+  newClientSendId,
+  readPendingBrowserSend,
+  writePendingBrowserSend,
+} from '../lib/sendOutbox.js';
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
@@ -754,6 +761,7 @@ export function Room() {
   useEffect(() => startReadingHeartbeat(code), [code]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
+  const replayedSendRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -834,6 +842,47 @@ export function Room() {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastMsgTimeRef = useRef(Date.now());
+
+  // A browser may disappear after the server commits but before fetch returns.
+  // Replaying the exact persisted message is safe because clientSendId is
+  // sender-scoped and atomically receipted server-side.
+  useEffect(() => {
+    if (!room || !self || ended || sendingRef.current) return;
+    const pending = readPendingBrowserSend(code, self.name);
+    const token = pending?.message.metadata?.clientSendId;
+    if (!pending || !token || replayedSendRef.current === token) return;
+    replayedSendRef.current = token;
+    sendingRef.current = true;
+    markSelfMessageSeen(code, self.name);
+    void sendMessage(pending.message)
+      .then(() => {
+        clearPendingBrowserSend(code, self.name, token);
+        void forceRefresh();
+      })
+      .catch(async (e) => {
+        unmarkSelfMessageSeen(code, self.name);
+        const authoritativeFailure = e instanceof ApiError && e.status < 500;
+        if (authoritativeFailure) clearPendingBrowserSend(code, self.name, token);
+        // Reload recovery must never turn a server refusal or ambiguous response
+        // into a vanished draft. Put the exact persisted intent back in the
+        // composer; ambiguous retries will still reuse this message/token.
+        setText(pending.message.text ?? '');
+        setAttachments(pending.message.attachments ?? []);
+        setReplyingTo(pending.message.replyTo ?? null);
+        setDictationDraft(Boolean(pending.message.metadata?.dictated));
+        setDictationPaused(false);
+        const { showToast } = await import('../components/Toast.js');
+        showToast(
+          authoritativeFailure
+            ? `Message was not sent: ${e.message}`
+            : 'Delivery is still unconfirmed. Retry will reuse the same message without duplicating it.',
+          'error',
+        );
+      })
+      .finally(() => {
+        sendingRef.current = false;
+      });
+  }, [code, ended, forceRefresh, room, self, sendMessage]);
 
   // Sync ended state from room — both directions, so a server-side reactivation
   // (or another client reactivating) flips us back to active too.
@@ -1878,28 +1927,55 @@ export function Room() {
       return;
     }
 
-    sendingRef.current = true;
     // T-131: the app send-chime. Waqas asked for a cue at record-start and at
     // send, nothing in between — so it fires only for a dictated message, the
     // subtle app tone that replaces the OS one.
     const wasDictation = dictationDraft;
-    const msg: Message = {
-      id: Date.now(),
-      type: 'msg',
-      name: me.name,
-      role: me.role,
-      initials: initialsFor(me.name),
-      color: colorForName(me.name),
-      client: 'web',
+    const replyAtSend = replyingTo;
+    const attachmentsAtSend = attachments;
+    const intent = browserSendIntent({
       text: body,
-      time: Date.now(),
-      attachments: attachments.length ? attachments : undefined,
-      // T-54: quote-reply reference; the server sanitizes/truncates name+snippet.
-      replyTo: replyingTo ?? undefined,
-      // Voice-dictated sends are tagged so recipients (and agents, who see
-      // this in the payload) read transcription artifacts charitably.
-      metadata: wasDictation ? { dictated: true } : undefined,
-    };
+      attachments: attachmentsAtSend.length ? attachmentsAtSend : undefined,
+      replyTo: replyAtSend ?? undefined,
+      dictated: wasDictation,
+    });
+    const pending = readPendingBrowserSend(code, me.name);
+    if (pending && pending.intent !== intent) {
+      const { showToast } = await import('../components/Toast.js');
+      showToast(
+        'A previous delivery is still unconfirmed. Retry that exact message before sending changed content.',
+        'error',
+      );
+      return;
+    }
+    const msg: Message = pending?.message ?? {
+        id: Date.now(),
+        type: 'msg',
+        name: me.name,
+        role: me.role,
+        initials: initialsFor(me.name),
+        color: colorForName(me.name),
+        client: 'web',
+        text: body,
+        time: Date.now(),
+        attachments: attachmentsAtSend.length ? attachmentsAtSend : undefined,
+        // T-54: quote-reply reference; the server sanitizes/truncates name+snippet.
+        replyTo: replyAtSend ?? undefined,
+        // Voice-dictated sends are tagged so recipients (and agents, who see
+        // this in the payload) read transcription artifacts charitably.
+        metadata: {
+          ...(wasDictation ? { dictated: true } : {}),
+          clientSendId: newClientSendId(),
+        },
+      };
+    try {
+      if (!pending) writePendingBrowserSend(code, me.name, intent, msg);
+    } catch (e) {
+      const { showToast } = await import('../components/Toast.js');
+      showToast(e instanceof Error ? e.message : 'Could not safely queue this message.', 'error');
+      return;
+    }
+    sendingRef.current = true;
     setText('');
     setDictationDraft(false);
     setDictationPaused(false);
@@ -1910,13 +1986,25 @@ export function Room() {
     markSelfMessageSeen(code, me.name);
     try {
       await sendMessage(msg);
+      clearPendingBrowserSend(code, me.name, msg.metadata!.clientSendId!);
       if (wasDictation) void import('../lib/audioCue.js').then((m) => m.playSendCue()).catch(() => {});
     } catch (e) {
       unmarkSelfMessageSeen(code, me.name);
+      const authoritativeFailure = e instanceof ApiError && e.status < 500;
+      if (authoritativeFailure) {
+        clearPendingBrowserSend(code, me.name, msg.metadata!.clientSendId!);
+      }
       const { showToast } = await import('../components/Toast.js');
-      showToast(e instanceof Error ? `Send failed: ${e.message}` : 'Send failed', 'error');
+      showToast(
+        authoritativeFailure
+          ? `Message was not sent: ${e.message}`
+          : 'Delivery is unconfirmed. Retry will reuse this exact message without duplicating it.',
+        'error',
+      );
       setText(body); // restore draft
-      setAttachments(attachments);
+      setAttachments(attachmentsAtSend);
+      setReplyingTo(replyAtSend);
+      if (wasDictation) setDictationDraft(true);
     } finally {
       sendingRef.current = false;
     }

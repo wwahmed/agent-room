@@ -2,8 +2,8 @@ import type { Message, MessageMetadata, MessageReaction, MessageReactionKind, Me
 import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS, extractArtifacts } from '@agent-room/shared';
 import { artifactAppendCommands } from './artifactStore.js';
 import type { UpstashClient } from './client.js';
-import { findSpeaker, MutedError, NotYourTurnError, ViewerError, getRoom } from './rooms.js';
-import type { TurnSpokenEntry } from './turnState.js';
+import { findSpeaker, MutedError, NotYourTurnError, ViewerError, getRoom, sha256Hex } from './rooms.js';
+import type { TurnSpokenEntry, TurnState } from './turnState.js';
 import {
   advanceOnTimeout,
   advanceTurn,
@@ -32,6 +32,183 @@ function msgsKey(code: string): string { return `room-msgs:${code}`; }
 // returns the second new message). The counter key is INCRed in the same
 // pipeline as RPUSH/LTRIM so it can never drift relative to the list.
 function msgCountKey(code: string): string { return `room-msg-count:${code}`; }
+function turnStateKey(code: string): string { return `turn-state:${code}`; }
+function sendReceiptKey(code: string, sender: string, clientSendId: string): string {
+  return `room-send-receipt:${code}:${sender}:${clientSendId}`;
+}
+
+export class MessageOperationConflictError extends Error {
+  constructor() {
+    super('This send id is already bound to different message content.');
+    this.name = 'MessageOperationConflictError';
+  }
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : 'null';
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const row = value as Record<string, unknown>;
+    return `{${Object.keys(row).filter(k => row[k] !== undefined).sort()
+      .map(k => `${JSON.stringify(k)}:${canonicalJson(row[k])}`).join(',')}}`;
+  }
+  return 'null';
+}
+
+interface SendReceipt {
+  v: 1;
+  payloadHash: string;
+  outcome: AppendResult;
+}
+
+async function sendProof(
+  code: string,
+  sender: string,
+  message: Message,
+): Promise<{ key: string; payloadHash: string } | null> {
+  const clientSendId = message.metadata?.clientSendId;
+  if (clientSendId === undefined) return null;
+  if (!/^[a-f0-9]{32}$/.test(clientSendId)) {
+    const err = new Error('metadata.clientSendId must be 32 lowercase hex characters.');
+    err.name = 'BadRequestError';
+    throw err;
+  }
+  const payloadHash = await sha256Hex(canonicalJson({ ...message, text: message.text ?? '' }));
+  return { key: sendReceiptKey(code, sender, clientSendId), payloadHash };
+}
+
+function parseReceipt(raw: unknown, payloadHash: string): AppendResult {
+  let receipt: SendReceipt;
+  try { receipt = JSON.parse(String(raw)) as SendReceipt; }
+  catch { throw new MessageOperationConflictError(); }
+  if (receipt.v !== 1 || receipt.payloadHash !== payloadHash || !receipt.outcome) {
+    throw new MessageOperationConflictError();
+  }
+  return receipt.outcome;
+}
+
+async function existingReceipt(
+  client: UpstashClient,
+  proof: { key: string; payloadHash: string } | null,
+): Promise<AppendResult | null> {
+  if (!proof) return null;
+  const raw = await client.command<string | null>(['GET', proof.key]);
+  return raw === null || raw === undefined ? null : parseReceipt(raw, proof.payloadHash);
+}
+
+async function appendWithReceipt(
+  client: UpstashClient,
+  code: string,
+  message: Message,
+  proof: { key: string; payloadHash: string },
+  outcome: AppendResult,
+): Promise<AppendResult> {
+  const normalized: Message = { ...message, text: message.text ?? '' };
+  const artifacts = extractArtifacts([normalized]);
+  const receipt = canonicalJson({ v: 1, payloadHash: proof.payloadHash, outcome } satisfies SendReceipt);
+  const script = [
+    'local prior = redis.call("GET", KEYS[3])',
+    'if prior then',
+    '  local ok, row = pcall(cjson.decode, prior)',
+    '  if not ok or type(row) ~= "table" or row.payloadHash ~= ARGV[1] then return {4} end',
+    '  return {2, prior}',
+    'end',
+    'local msgType = redis.call("TYPE", KEYS[1])["ok"]',
+    'local countType = redis.call("TYPE", KEYS[2])["ok"]',
+    'local artifactType = redis.call("TYPE", KEYS[4])["ok"]',
+    'if (msgType ~= "none" and msgType ~= "list")',
+    '  or (countType ~= "none" and countType ~= "string")',
+    '  or (artifactType ~= "none" and artifactType ~= "list") then return {0} end',
+    'redis.call("SET", KEYS[3], ARGV[2], "EX", ARGV[5])',
+    'redis.call("RPUSH", KEYS[1], ARGV[3])',
+    'redis.call("INCR", KEYS[2])',
+    'redis.call("LTRIM", KEYS[1], -tonumber(ARGV[4]), -1)',
+    'for i = 1, tonumber(ARGV[6]) do redis.call("RPUSH", KEYS[4], ARGV[6 + i]) end',
+    'redis.call("EXPIRE", KEYS[1], ARGV[5])',
+    'redis.call("EXPIRE", KEYS[2], ARGV[5])',
+    'redis.call("EXPIRE", KEYS[4], ARGV[5])',
+    'return {1}',
+  ].join('\n');
+  const raw = await client.command<unknown>([
+    'EVAL', script, '4',
+    msgsKey(code), msgCountKey(code), proof.key, `room-artifacts-v2:${code}`,
+    proof.payloadHash, receipt, JSON.stringify(normalized),
+    String(MAX_MESSAGES_PER_ROOM), String(ROOM_TTL_SECONDS),
+    String(artifacts.length), ...artifacts.map(a => JSON.stringify(a)),
+  ]);
+  const result = Array.isArray(raw) ? raw : [];
+  if (Number(result[0]) === 1) return outcome;
+  if (Number(result[0]) === 2) return parseReceipt(result[1], proof.payloadHash);
+  if (Number(result[0]) === 4) throw new MessageOperationConflictError();
+  throw new Error('Atomic message append refused unreadable Redis state.');
+}
+
+async function commitTurnWithReceipt(
+  client: UpstashClient,
+  code: string,
+  input: {
+    expectedTurnRaw: string | null;
+    nextTurnRaw: string | null;
+    message: Message | null;
+    proof: { key: string; payloadHash: string };
+    outcome: AppendResult;
+  },
+): Promise<'committed' | 'retry' | AppendResult> {
+  const NIL = '__agent_room_nil__';
+  const normalized = input.message ? { ...input.message, text: input.message.text ?? '' } : null;
+  const artifacts = normalized ? extractArtifacts([normalized]) : [];
+  const receipt = canonicalJson({
+    v: 1, payloadHash: input.proof.payloadHash, outcome: input.outcome,
+  } satisfies SendReceipt);
+  const script = [
+    'local prior = redis.call("GET", KEYS[4])',
+    'if prior then',
+    '  local ok, row = pcall(cjson.decode, prior)',
+    '  if not ok or type(row) ~= "table" or row.payloadHash ~= ARGV[1] then return {4} end',
+    '  return {2, prior}',
+    'end',
+    'local current = redis.call("GET", KEYS[1])',
+    'if ARGV[3] == ARGV[9] then',
+    '  if current then return {3} end',
+    'elseif current ~= ARGV[3] then return {3} end',
+    'local msgType = redis.call("TYPE", KEYS[2])["ok"]',
+    'local countType = redis.call("TYPE", KEYS[3])["ok"]',
+    'local artifactType = redis.call("TYPE", KEYS[5])["ok"]',
+    'if (msgType ~= "none" and msgType ~= "list")',
+    '  or (countType ~= "none" and countType ~= "string")',
+    '  or (artifactType ~= "none" and artifactType ~= "list") then return {0} end',
+    'redis.call("SET", KEYS[4], ARGV[2], "EX", ARGV[8])',
+    'if ARGV[4] == ARGV[9] then redis.call("DEL", KEYS[1])',
+    'else redis.call("SET", KEYS[1], ARGV[4], "EX", ARGV[8]) end',
+    'if ARGV[5] ~= "" then',
+    '  redis.call("RPUSH", KEYS[2], ARGV[5])',
+    '  redis.call("INCR", KEYS[3])',
+    '  redis.call("LTRIM", KEYS[2], -tonumber(ARGV[7]), -1)',
+    '  for i = 1, tonumber(ARGV[6]) do redis.call("RPUSH", KEYS[5], ARGV[9 + i]) end',
+    '  redis.call("EXPIRE", KEYS[2], ARGV[8])',
+    '  redis.call("EXPIRE", KEYS[3], ARGV[8])',
+    '  redis.call("EXPIRE", KEYS[5], ARGV[8])',
+    'end',
+    'return {1}',
+  ].join('\n');
+  const raw = await client.command<unknown>([
+    'EVAL', script, '5',
+    turnStateKey(code), msgsKey(code), msgCountKey(code), input.proof.key,
+    `room-artifacts-v2:${code}`,
+    input.proof.payloadHash, receipt,
+    input.expectedTurnRaw ?? NIL, input.nextTurnRaw ?? NIL,
+    normalized ? JSON.stringify(normalized) : '',
+    String(artifacts.length), String(MAX_MESSAGES_PER_ROOM), String(ROOM_TTL_SECONDS),
+    NIL, ...artifacts.map(a => JSON.stringify(a)),
+  ]);
+  const result = Array.isArray(raw) ? raw : [];
+  if (Number(result[0]) === 1) return 'committed';
+  if (Number(result[0]) === 2) return parseReceipt(result[1], input.proof.payloadHash);
+  if (Number(result[0]) === 3) return 'retry';
+  if (Number(result[0]) === 4) throw new MessageOperationConflictError();
+  throw new Error('Atomic turn/message append refused unreadable Redis state.');
+}
 
 /** Next poll cursor after a full `listMessages(..., 0)` when the room has a counter key; `null` = legacy room. */
 export async function getMessageTotalCount(client: UpstashClient, code: string): Promise<number | null> {
@@ -124,6 +301,24 @@ export async function appendMessage(
   // Sanitize the quote once at the funnel so every store path carries the
   // server-truncated version (both the open fast-path and the turn-gated path).
   message = { ...message, replyTo: normalizeReplyTo(message.replyTo) };
+  // Scope receipts to the strongest stable, server-owned identity available.
+  // Do not hash every row field together: member keys rotate on rejoin, so that
+  // would silently change the receipt namespace precisely during the recovery
+  // window this protocol exists to make safe. lineageId is designed to survive
+  // a credential-proved reconnect while remaining distinct for a replacement.
+  const senderAnchor =
+    row?.lineageId ? { kind: 'lineage', value: row.lineageId }
+      : row?.agentIdHash ? { kind: 'agent', value: row.agentIdHash }
+        : row?.authIdHash ? { kind: 'auth', value: row.authIdHash }
+          : row?.memberKeyHash ? { kind: 'member', value: row.memberKeyHash }
+            : {
+                kind: 'legacy',
+                name: row?.name ?? message.name,
+                client: row?.client ?? message.client,
+                joinedAt: row?.joinedAt,
+              };
+  const senderIdentity = await sha256Hex(canonicalJson(senderAnchor));
+  const proof = await sendProof(code, senderIdentity, message);
   const mode = room.replyMode ?? 'open';
 
   // Fast path: open mode. No turn machinery — preserves the legacy hot
@@ -136,8 +331,10 @@ export async function appendMessage(
       invocationType: message.metadata?.invocationType ?? 'normal_turn',
     };
     const enriched: Message = { ...message, metadata };
+    const outcome: AppendResult = { appended: true, metadata };
+    if (proof) return appendWithReceipt(client, code, enriched, proof, outcome);
     await rpushMessage(client, code, enriched);
-    return { appended: true, metadata };
+    return outcome;
   }
 
   // Non-open mode: validate and advance turn state atomically.
@@ -159,9 +356,13 @@ export async function appendMessage(
     skipMessage: false,
   };
 
-  await casTurnState(client, code, (prev) => {
+  const mutateTurn = (prev: TurnState | null): TurnState | null => {
     // Reset per-attempt decision state so a CAS retry doesn't carry over
-    // leadSkipped from a stale earlier attempt.
+    // metadata or leadSkipped from a stale earlier attempt.
+    decision.roleAtSend = 'open';
+    decision.invocationType = 'normal_turn';
+    decision.turnId = undefined;
+    decision.skipMessage = false;
     decision.leadSkipped = undefined;
     // Lazy cleanup: skip any expired speakers before evaluating this
     // sender. Skipped sys messages are emitted by the listen poll, not
@@ -251,9 +452,9 @@ export async function appendMessage(
       }
     }
     throw new NotYourTurnError(message.name, mode);
-  });
+  };
 
-  if (decision.skipMessage) {
+  const outcomeForDecision = (): { outcome: AppendResult; enriched: Message | null } => {
     const metadata: MessageMetadata = {
       ...(message.metadata ?? {}),
       modeAtSend: mode,
@@ -261,28 +462,59 @@ export async function appendMessage(
       invocationType: decision.invocationType,
       ...(decision.turnId !== undefined ? { turnId: decision.turnId } : {}),
     };
+    if (decision.skipMessage) {
+      return {
+        enriched: null,
+        outcome: {
+          appended: false,
+          reason: 'no_addition',
+          metadata,
+          ...(decision.leadSkipped ? { leadSkipped: decision.leadSkipped } : {}),
+        },
+      };
+    }
     return {
-      appended: false,
-      reason: 'no_addition',
-      metadata,
-      ...(decision.leadSkipped ? { leadSkipped: decision.leadSkipped } : {}),
+      enriched: { ...message, metadata },
+      outcome: {
+        appended: true,
+        metadata,
+        ...(decision.leadSkipped ? { leadSkipped: decision.leadSkipped } : {}),
+      },
     };
+  };
+
+  if (proof) {
+    // A retry after a committed-but-lost response must return the original
+    // result before re-evaluating the now-advanced turn state.
+    const prior = await existingReceipt(client, proof);
+    if (prior) return prior;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const expectedTurnRaw = await client.command<string | null>(['GET', turnStateKey(code)]);
+      let current: TurnState | null = null;
+      if (expectedTurnRaw !== null && expectedTurnRaw !== undefined) {
+        try { current = JSON.parse(expectedTurnRaw) as TurnState; }
+        catch { throw new Error('Turn state is unreadable; refusing an ambiguous send.'); }
+      }
+      const next = mutateTurn(current);
+      const { outcome, enriched } = outcomeForDecision();
+      const committed = await commitTurnWithReceipt(client, code, {
+        expectedTurnRaw,
+        nextTurnRaw: next ? JSON.stringify(next) : null,
+        message: enriched,
+        proof,
+        outcome,
+      });
+      if (committed === 'committed') return outcome;
+      if (committed !== 'retry') return committed;
+    }
+    throw new Error('Turn state changed concurrently; retry the send.');
   }
 
-  const metadata: MessageMetadata = {
-    ...(message.metadata ?? {}),
-    modeAtSend: mode,
-    roleAtSend: decision.roleAtSend,
-    invocationType: decision.invocationType,
-    ...(decision.turnId !== undefined ? { turnId: decision.turnId } : {}),
-  };
-  const enriched: Message = { ...message, metadata };
-  await rpushMessage(client, code, enriched);
-  return {
-    appended: true,
-    metadata,
-    ...(decision.leadSkipped ? { leadSkipped: decision.leadSkipped } : {}),
-  };
+  await casTurnState(client, code, mutateTurn);
+  const { outcome, enriched } = outcomeForDecision();
+  if (enriched) await rpushMessage(client, code, enriched);
+  return outcome;
 }
 
 // Internal helper: write a message to the Redis list, refreshing TTL and

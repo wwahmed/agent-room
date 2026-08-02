@@ -25,6 +25,9 @@ export function statusForError(err: Error): number {
     // 409, not 400: the request is well-formed and will succeed once that exact
     // session resumes, so the client must offer a retry rather than retire the card.
     case 'ViewActionUnavailableError':
+    // A clientSendId may be replayed only for the exact original payload.
+    // Reusing it for changed content is a deterministic operation conflict.
+    case 'MessageOperationConflictError':
       return 409;
     case 'InvalidModeConfigError':
     case 'ModeNotSupportedError':

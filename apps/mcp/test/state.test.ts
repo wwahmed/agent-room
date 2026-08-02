@@ -78,6 +78,42 @@ describe('mergeStates', () => {
       },
     });
   });
+
+  it('keeps the newest unresolved durable send across state-file merge', () => {
+    const base = {
+      id: 1, type: 'msg' as const, name: 'Codex', role: '', initials: 'CO',
+      color: '#000', client: 'cc' as const, text: 'retry me', time: 1,
+    };
+    const merged = mergeStates([
+      {
+        version: 1,
+        rooms: {
+          room: {
+            name: 'Codex', cursor: 1, joinedAt: 1,
+            pendingSend: {
+              intentHash: 'old',
+              message: { ...base, metadata: { clientSendId: 'a'.repeat(32) } },
+              preparedAt: 10,
+            },
+          },
+        },
+      },
+      {
+        version: 1,
+        rooms: {
+          room: {
+            name: 'Codex', cursor: 2, joinedAt: 2,
+            pendingSend: {
+              intentHash: 'new',
+              message: { ...base, metadata: { clientSendId: 'b'.repeat(32) } },
+              preparedAt: 20,
+            },
+          },
+        },
+      },
+    ]);
+    expect(merged.rooms.room?.pendingSend?.intentHash).toBe('new');
+  });
 });
 
 describe('state harness files', () => {

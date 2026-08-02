@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message, Room } from '@agent-room/shared';
 import { MAX_MESSAGES_PER_ROOM, ROOM_TTL_SECONDS } from '@agent-room/shared';
-import { createClient, appendMessage, listMessages, NotApprovedError } from '../src/index.js';
+import {
+  createClient,
+  appendMessage,
+  listMessages,
+  MessageOperationConflictError,
+  NotApprovedError,
+} from '../src/index.js';
 
 const ENV = { url: 'https://example.upstash.io', token: 't' };
 function mockResp(body: unknown) { return new Response(JSON.stringify(body)); }
@@ -87,6 +93,115 @@ describe('appendMessage', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResp({ result: JSON.stringify(emptyRoom) })));
     const client = createClient(ENV);
     await expect(appendMessage(client, 'ABC-DEF-GHJ', MSG)).rejects.toBeInstanceOf(NotApprovedError);
+  });
+
+  it('atomically appends a tokenized send and its receipt in one Redis script', async () => {
+    const tokenized: Message = {
+      ...MSG,
+      metadata: { clientSendId: 'a'.repeat(32) },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(APPROVED_ROOM) }))
+      .mockResolvedValueOnce(mockResp({ result: [1] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    await expect(appendMessage(client, 'ABC-DEF-GHJ', tokenized)).resolves.toMatchObject({
+      appended: true,
+      metadata: { clientSendId: 'a'.repeat(32), modeAtSend: 'open' },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [, init] = fetchMock.mock.calls[1]!;
+    const command = JSON.parse((init as any).body) as string[];
+    expect(command[0]).toBe('EVAL');
+    expect(command[2]).toBe('4');
+    expect(command).toContain('room-msgs:ABC-DEF-GHJ');
+    expect(command.some(v => String(v).startsWith('room-send-receipt:ABC-DEF-GHJ:'))).toBe(true);
+  });
+
+  it('returns the original outcome when the same send token is replayed', async () => {
+    const tokenized: Message = {
+      ...MSG,
+      metadata: { clientSendId: 'b'.repeat(32) },
+    };
+    const expected = {
+      appended: true,
+      metadata: {
+        clientSendId: 'b'.repeat(32),
+        modeAtSend: 'open',
+        roleAtSend: 'open',
+        invocationType: 'normal_turn',
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(APPROVED_ROOM) }))
+      .mockImplementationOnce(async (_url, init) => {
+        const command = JSON.parse((init as RequestInit).body as string) as string[];
+        const payloadHash = command[7]!;
+        return mockResp({
+          result: [2, JSON.stringify({ v: 1, payloadHash, outcome: expected })],
+        });
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    await expect(appendMessage(client, 'ABC-DEF-GHJ', tokenized)).resolves.toEqual(expected);
+  });
+
+  it('keeps the receipt scope stable when a reconnect rotates the member key', async () => {
+    const tokenized: Message = {
+      ...MSG,
+      metadata: { clientSendId: 'd'.repeat(32) },
+    };
+    const beforeReconnect: Room = {
+      ...APPROVED_ROOM,
+      participants: [{
+        ...APPROVED_ROOM.participants[0]!,
+        lineageId: 'stable-session-lineage',
+        memberKeyHash: 'old-member-key',
+        joinedAt: 100,
+      }],
+    };
+    const afterReconnect: Room = {
+      ...APPROVED_ROOM,
+      participants: [{
+        ...APPROVED_ROOM.participants[0]!,
+        lineageId: 'stable-session-lineage',
+        memberKeyHash: 'rotated-member-key',
+        joinedAt: 200,
+      }],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(beforeReconnect) }))
+      .mockResolvedValueOnce(mockResp({ result: [1] }))
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(afterReconnect) }))
+      .mockResolvedValueOnce(mockResp({ result: [1] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    await appendMessage(client, 'ABC-DEF-GHJ', tokenized);
+    await appendMessage(client, 'ABC-DEF-GHJ', tokenized);
+
+    const firstEval = JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string) as string[];
+    const secondEval = JSON.parse((fetchMock.mock.calls[3]![1] as RequestInit).body as string) as string[];
+    expect(firstEval[5]).toMatch(/^room-send-receipt:ABC-DEF-GHJ:/);
+    expect(secondEval[5]).toBe(firstEval[5]);
+  });
+
+  it('rejects changed content that reuses an existing send token', async () => {
+    const tokenized: Message = {
+      ...MSG,
+      metadata: { clientSendId: 'c'.repeat(32) },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResp({ result: JSON.stringify(APPROVED_ROOM) }))
+      .mockResolvedValueOnce(mockResp({ result: [4] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient(ENV);
+    await expect(appendMessage(client, 'ABC-DEF-GHJ', tokenized))
+      .rejects.toBeInstanceOf(MessageOperationConflictError);
   });
 });
 

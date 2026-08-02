@@ -1,5 +1,6 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { createHash, randomBytes } from 'node:crypto';
 import { myRoleInTurn } from '@agent-room/upstash-client';
 import {
   createRoomApiClient,
@@ -33,6 +34,7 @@ import {
   NotHostError,
   InvalidModeConfigError,
   ModeNotSupportedError,
+  RoomApiError,
   type RoomApiClient,
 } from './roomApi.js';
 import { ROOM_ATTACHMENT_DOWNLOAD_TOOL, downloadRoomAttachment } from './attachmentDownloadTool.js';
@@ -47,7 +49,20 @@ import type {
   ClientKind,
   Room,
 } from '@agent-room/shared';
-import { advanceListenAndConsumeOwn, finishPreparedSend, prepareSend, setRoom, removeRoom, updateCursor, readState, readMergedState, readRoomStateForJoin } from './state.js';
+import {
+  advanceListenAndConsumeOwn,
+  clearDurableSend,
+  finishPreparedSend,
+  prepareDurableSend,
+  prepareSend,
+  readPendingSend,
+  setRoom,
+  removeRoom,
+  updateCursor,
+  readState,
+  readMergedState,
+  readRoomStateForJoin,
+} from './state.js';
 import {
   detectHarness,
   defaultListenAfterJoin,
@@ -1169,6 +1184,7 @@ export function registerTools(server: Server) {
       await setRoom(a.code, {
         name: finalName, cursor: msgs.length, joinedAt: Date.now(),
         memberKey: updated.memberKey ?? storedStateRoom?.memberKey,
+        ...(storedStateRoom?.pendingSend ? { pendingSend: storedStateRoom.pendingSend } : {}),
       });
       const recentMessages = msgs.slice(-20).map((m: Message) => ({
         name: m.name,
@@ -1299,46 +1315,64 @@ export function registerTools(server: Server) {
       // explaining a regex inside a multi-paragraph message) survive.
       const text = normalizeEscapedWhitespace(a.text);
 
-      // Optional attachments: upload each to /api/upload (R2-backed) and
-      // collect MessageAttachment records to embed in the message. Done
-      // BEFORE appendMessage so a failed upload aborts cleanly without
-      // leaving an attachment-less stub in the transcript. We surface
-      // upload errors as sent=false rather than throwing — agents can
-      // then retry with smaller files / different MIMEs without an
-      // exception cascading up the MCP transport.
-      let attachments: MessageAttachment[] = [];
-      if (Array.isArray(a.attachments) && a.attachments.length > 0) {
-        try {
-          attachments = await uploadAgentAttachments(
-            a.attachments as AgentAttachmentInput[],
-            a.code,
-            { name: a.name, memberKey: await readMemberKey(a.code) },
-          );
-        } catch (e) {
-          if (e instanceof AttachmentUploadError) {
-            return ok({
-              sent: false,
-              error: 'attachment_upload_failed',
-              code: e.code,
-              hint: `${e.message} Fix the failing attachment and retry room_send. Then call room_listen.`,
-            });
-          }
-          throw e;
-        }
-      }
-
-      const msg: Message = {
-        id: Date.now(),
-        type: 'msg',
+      const intentHash = createHash('sha256').update(JSON.stringify({
         name: a.name,
-        initials: speaker?.initials ?? initialsFor(a.name),
-        color: speaker?.color ?? colorForName(a.name),
         role,
         text,
-        client: 'cc',
-        time: Date.now(),
-        ...(attachments.length > 0 ? { attachments } : {}),
-      };
+        attachments: Array.isArray(a.attachments) ? a.attachments : [],
+      })).digest('hex');
+      const pendingSend = await readPendingSend(a.code);
+      if (pendingSend && pendingSend.intentHash !== intentHash) {
+        return ok({
+          sent: false,
+          error: 'pending_send_conflict',
+          hint: 'A previous room_send is still unconfirmed. Retry that exact text/attachments first; changed content would create an ambiguous second operation.',
+        });
+      }
+
+      let msg: Message;
+      if (pendingSend) {
+        msg = pendingSend.message;
+      } else {
+        // Optional attachments upload before the durable send intent is stored.
+        // Once stored, a retry reuses these exact attachment references instead
+        // of uploading another copy.
+        let attachments: MessageAttachment[] = [];
+        if (Array.isArray(a.attachments) && a.attachments.length > 0) {
+          try {
+            attachments = await uploadAgentAttachments(
+              a.attachments as AgentAttachmentInput[],
+              a.code,
+              { name: a.name, memberKey: await readMemberKey(a.code) },
+            );
+          } catch (e) {
+            if (e instanceof AttachmentUploadError) {
+              return ok({
+                sent: false,
+                error: 'attachment_upload_failed',
+                code: e.code,
+                hint: `${e.message} Fix the failing attachment and retry room_send. Then call room_listen.`,
+              });
+            }
+            throw e;
+          }
+        }
+
+        msg = {
+          id: Date.now(),
+          type: 'msg',
+          name: a.name,
+          initials: speaker?.initials ?? initialsFor(a.name),
+          color: speaker?.color ?? colorForName(a.name),
+          role,
+          text,
+          client: 'cc',
+          time: Date.now(),
+          ...(attachments.length > 0 ? { attachments } : {}),
+          metadata: { clientSendId: randomBytes(16).toString('hex') },
+        };
+        await prepareDurableSend(a.code, intentHash, msg);
+      }
       let appendResult: Awaited<ReturnType<typeof appendMessage>>;
       // T-48: capture what this session had ACTUALLY consumed before append.
       // Returning the post-send room length skips anything another participant
@@ -1353,8 +1387,12 @@ export function registerTools(server: Server) {
         appendResult = await appendMessage(
           client, a.code, msg, await readHostKey(a.code), 'message', await readMemberKey(a.code));
       } catch (e) {
-        await finishPreparedSend(a.code, Number(msg.id), false, Date.now());
+        const clearRejectedIntent = async () => {
+          await finishPreparedSend(a.code, Number(msg.id), false, Date.now());
+          await clearDurableSend(a.code, String(msg.metadata?.clientSendId ?? ''));
+        };
         if (e instanceof ViewerError) {
+          await clearRejectedIntent();
           // T-05: this identity joined read-only by its own choice.
           return ok({
             sent: false,
@@ -1363,6 +1401,7 @@ export function registerTools(server: Server) {
           });
         }
         if (e instanceof MutedError) {
+          await clearRejectedIntent();
           // The host has muted this participant. Tell the user explicitly
           // — retrying without unmute will fail again.
           return ok({
@@ -1372,6 +1411,7 @@ export function registerTools(server: Server) {
           });
         }
         if (e instanceof NotYourTurnError) {
+          await clearRejectedIntent();
           // Room is in 'sequential' / 'moderator' reply-mode and this agent
           // is not the current turn-holder. Wait — the next room_listen
           // result will surface the current speaker / your role so you can
@@ -1382,8 +1422,16 @@ export function registerTools(server: Server) {
             hint: `${e.message} Call room_listen and wait for your turn — the listen response will include the current speaker. Do NOT retry room_send until you see myRoleInTurn set and you're the current turn-holder.`,
           });
         }
+        // A concrete 4xx means the server authoritatively refused the write.
+        // Network failures and 5xx are ambiguous: retain both the durable
+        // message and its own-id suppression so the next retry uses the same
+        // id/token and cannot duplicate a commit whose response was lost.
+        if (e instanceof RoomApiError && e.status >= 400 && e.status < 500) {
+          await clearRejectedIntent();
+        }
         throw e;
       }
+      await clearDurableSend(a.code, String(msg.metadata?.clientSendId ?? ''));
       await finishPreparedSend(a.code, Number(msg.id), appendResult.appended, Date.now());
       // Supplement-skip token (`__no_addition__`) is consumed by the turn
       // machinery — the message is NOT in the chat, but the turn did
