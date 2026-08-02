@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Message, MessageReaction, PinnedMessage, Room } from '@agent-room/shared';
 import { applyReactionEvents } from '../lib/reactions.js';
 import { mergeMessages } from '../lib/messageMerge.js';
-import { syncReadMarkers } from '../lib/readSync.js';
+import { syncReadMarker } from '../lib/readSync.js';
 import {
   HEARTBEAT_MS,
   MESSAGE_POLL_MS,
@@ -228,11 +228,11 @@ export function useRoom(code: string, selfName: string) {
     generationRef.current += 1;
     cursor.current = 0;
     try {
-      // T-126: fold the ACCOUNT's read markers in before the first-unread
-      // landing is computed — the whole point is that entering on desktop
-      // lands where you actually left off on your phone. Never throws; a
-      // failed sync just falls back to the device-local marker.
-      await syncReadMarkers();
+      // T-126/T-UNREAD-ISOLATION: fold only THIS room's account marker in
+      // before first-unread landing. Pulling the whole account here meant
+      // opening A could advance B/C local markers and clear their badges.
+      // Never throws; a failed sync falls back to the device-local marker.
+      await syncReadMarker(code);
       // T-04: bounded bootstrap — total count first, then only the most recent
       // page instead of the room's whole history. Legacy rooms without the
       // counter (total === null) still load from 0.

@@ -4,7 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './router.js';
 import { watchSystemTheme } from './lib/theme.js';
 import { installBadgeClearing, registerServiceWorker } from './lib/push.js';
-import { installReadMarkerSync, syncReadMarkers } from './lib/readSync.js';
+import { installReadMarkerSync } from './lib/readSync.js';
 import { installHomeBackstop } from './lib/historyBackstop.js';
 import './index.css';
 
@@ -18,10 +18,10 @@ watchSystemTheme();
 void registerServiceWorker();
 installBadgeClearing();
 // T-126: READ-STATE IS USER-STATE — push local marker advances to the
-// account, and pull the account's map at boot so Home badges reflect what
-// was read on other devices.
+// account. Home pulls the full account map; Room pulls only its own marker.
+// A route-agnostic boot pull would mutate unrelated B/C markers when a cold
+// start opens room A directly.
 installReadMarkerSync();
-void syncReadMarkers();
 // Phone back button: a cold start that lands anywhere but Home (notification
 // tap, invite link, PWA URL restore) has no history to pop, so hardware back
 // minimizes the app. Seed a Home entry underneath the entry route.

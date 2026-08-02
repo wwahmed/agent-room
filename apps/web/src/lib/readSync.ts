@@ -4,7 +4,8 @@
 //
 //   - pull: fetch the account's server-side marker map and fold any HIGHER
 //     server counts into localStorage (your phone read further → desktop
-//     catches up). Called when Home or a Room mounts.
+//     catches up). Home pulls the account map; a Room applies only its own
+//     marker so opening A cannot mutate B/C unread state.
 //   - push: when markRoomRead advances a local marker it dispatches a
 //     'wakichat:read-marker' event; we debounce and POST the new count.
 //     Writes are monotonic server-side, so racing devices converge on max.
@@ -59,6 +60,26 @@ export async function syncReadMarkers(): Promise<string[]> {
     }
   }
   return advanced;
+}
+
+/** Pull account state but apply only the room being opened. The server returns
+ *  one compact account map; filtering before any localStorage mutation is the
+ *  isolation boundary that prevents opening A from clearing B/C badges. */
+export async function syncReadMarker(code: string): Promise<string[]> {
+  if (!code) return [];
+  const out = await call({ action: 'readMarkerList' });
+  const markers = (out as { result?: { markers?: Record<string, number> } } | null)?.result?.markers;
+  if (!markers) return [];
+  const serverCount = markers[code];
+  if (typeof serverCount === 'number') {
+    if (mergeServerReadMarker(code, serverCount)) return [code];
+    const local = getReadCount(code);
+    if (local !== null && local > serverCount) void pushReadMarker(code, local);
+    return [];
+  }
+  const local = getReadCount(code);
+  if (local !== null) void pushReadMarker(code, local);
+  return [];
 }
 
 export async function pushReadMarker(code: string, count: number): Promise<void> {

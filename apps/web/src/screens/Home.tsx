@@ -12,6 +12,7 @@ import { unreadCount } from '../lib/unread.js';
 import { useLiveRooms } from '../hooks/useLiveRooms.js';
 import { createClient, unarchiveRoomAction } from '../lib/api.js';
 import { RoomContextMenu, useRoomCardMenu } from '../components/RoomContextMenu.js';
+import { syncReadMarkers } from '../lib/readSync.js';
 
 function normalize(raw: string): string {
   const bare = raw.replace(/-/g, '').trim().toUpperCase();
@@ -77,12 +78,20 @@ export function Home() {
       setIdentity(me);
       setChecked(true);
       if (!me) { setRoomsLoading(false); return; }
+      // Home owns the account-wide pull because it is the one surface that
+      // renders every room badge. Individual Room routes sync only their own
+      // code so opening A never mutates B/C unread state. Do not make room
+      // discovery wait on this convergence layer: render the list as soon as
+      // fetchRooms resolves, then repaint only if account markers advanced.
+      const markerSync = syncReadMarkers();
       const page = await fetchRooms();
       if (!cancelled) {
         setRooms(page.rooms);
         setNextRoomCursor(page.nextCursor);
         setRoomsLoading(false);
       }
+      const advanced = await markerSync;
+      if (!cancelled && advanced.length > 0) setRooms(current => [...current]);
     })();
     return () => { cancelled = true; };
   }, []);
