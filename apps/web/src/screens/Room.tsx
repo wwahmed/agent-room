@@ -3116,7 +3116,7 @@ export function Room() {
                     type="button"
                     onClick={() => setPinsOpen(v => !v)}
                     aria-expanded={pinsOpen}
-                    className="mx-auto flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink-soft shadow-md transition hover:text-ink"
+                    className="mx-auto flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-semibold text-ink-soft shadow-md transition hover:text-ink"
                   >
                     <span aria-hidden="true">📌</span>
                     Pinned · {pinnedList.length}
@@ -3133,8 +3133,8 @@ export function Room() {
                             onClick={() => { setPinsOpen(false); jumpToPin(p.id); }}
                             className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition hover:bg-surface-softer"
                           >
-                            <span className="block text-[12px] font-semibold text-accent-deep">{p.name || 'Earlier message'}</span>
-                            <span className="line-clamp-2 block text-[13px] leading-snug text-ink-soft [overflow-wrap:anywhere]">{p.text || '…'}</span>
+                            <span className="block text-sm font-semibold text-accent-deep">{p.name || 'Earlier message'}</span>
+                            <span className="line-clamp-2 block text-sm leading-snug text-ink-soft [overflow-wrap:anywhere]">{p.text || '…'}</span>
                           </button>
                           {/* T-23: one tap turns a transient pin into a durable
                               DECISIONS.md entry (room data root + repo overlay). */}
@@ -3150,7 +3150,7 @@ export function Room() {
                             }}
                             aria-label={`Promote ${p.name || 'this'} message to the decision log`}
                             title="Promote to the decision log"
-                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-softer hover:text-ink"
+                            className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-softer hover:text-ink"
                           >
                             <span aria-hidden="true">📖</span>
                           </button>
@@ -3158,7 +3158,7 @@ export function Room() {
                             type="button"
                             onClick={() => void togglePinById(p.id, false)}
                             aria-label={`Unpin ${p.name || 'this'} message`}
-                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-softer hover:text-ink"
+                            className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-softer hover:text-ink"
                           >
                             <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
                               <path d="m4 4 8 8M12 4l-8 8" />
@@ -3181,7 +3181,12 @@ export function Room() {
                   pixels, and hiding them exposes reading canvas, no reflow. */}
               <div
                 className="mx-auto w-full max-w-[1280px]"
-                style={isPhone ? { paddingTop: 104, paddingBottom: composerH + 16 + (unseenCount > 0 || !atBottom || unseenMentions > 0 || mentionSeeking ? 56 : 0) } : { paddingBottom: composerH + 16 }}
+                style={isPhone ? {
+                  // The collapsed pin pill sits below the visible phone header.
+                  // Reserve its own row so it never paints over the first message.
+                  paddingTop: 104 + (pinnedList.length > 0 && !ended && !chromeHidden ? 52 : 0),
+                  paddingBottom: composerH + 16 + (unseenCount > 0 || !atBottom || unseenMentions > 0 || mentionSeeking ? 56 : 0),
+                } : { paddingBottom: composerH + 16 }}
               >
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
@@ -3342,12 +3347,15 @@ export function Room() {
                       type="button"
                       onClick={scrollToBottom}
                       aria-label={unseenCount > 0 ? `Jump to ${unseenCount} new messages` : 'Jump to latest messages'}
-                      className="pointer-events-auto flex min-h-11 w-fit items-center gap-1.5 rounded-full bg-accent px-4 text-[12px] font-semibold text-white shadow-lg transition hover:opacity-90"
+                      className="pointer-events-auto flex min-h-11 w-fit items-center justify-center gap-1.5 rounded-full bg-accent px-4 text-sm font-semibold text-white shadow-lg transition hover:opacity-90 max-sm:w-11 max-sm:px-0"
                     >
                       <span aria-hidden="true">↓</span>
-                      {unseenCount > 0
-                        ? `${unseenCount} new message${unseenCount === 1 ? '' : 's'}`
-                        : 'Latest'}
+                      <span className="hidden sm:inline">
+                        {unseenCount > 0
+                          ? `${unseenCount} new message${unseenCount === 1 ? '' : 's'}`
+                          : 'Latest'}
+                      </span>
+                      {unseenCount > 0 && <span className="tabular-nums sm:hidden" aria-hidden="true">{unseenCount}</span>}
                     </button>
                   )}
                   {/* T-18 rev2 per UX: the mention pill appears ONLY when
