@@ -71,6 +71,36 @@ describe('updatePresence — keyed + self-healing (T-37)', () => {
     expect(retried[retried.length - 1].memberKey).toBe('FRESH'); // retry used the fresh key
   });
 
+  it('migrates a legacy name/role-only self without creating a clientless suffix row', async () => {
+    store.set(`room:${CODE}:memberKey`, 'STALE');
+    store.set(`room:${CODE}:self`, JSON.stringify({ name: 'Waqas', role: 'Host' }));
+    let presenceCalls = 0;
+    const recovered: Participant = {
+      ...SELF,
+      role: 'Host',
+      lineageId: 'stable-lineage',
+      joinedAt: 10,
+      lastSeenAt: 20,
+    };
+    const { calls } = installFetch({
+      updatePresence: () => (++presenceCalls === 1 ? memberAuth : { json: {} }),
+      join: () => ({ json: { participant: recovered, memberKey: 'FRESH' } }),
+    });
+
+    await updatePresence(client, CODE, 'Waqas', 123);
+
+    const join = calls.find(c => c.action === 'join');
+    expect(join.participant).toMatchObject({
+      name: 'Waqas',
+      role: 'Host',
+      client: 'web',
+      color: expect.any(String),
+      initials: 'WA',
+    });
+    expect(join.priorIdentity).toEqual({ name: 'Waqas', client: 'web' });
+    expect(JSON.parse(store.get(`room:${CODE}:self`)!)).toEqual(recovered);
+  });
+
   it('recovers when the memberKey is ABSENT (not just wrong) but self is captured', async () => {
     // no :memberKey at all → first presence presents undefined → server need-key
     store.set(`room:${CODE}:self`, JSON.stringify(SELF));

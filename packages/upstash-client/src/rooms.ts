@@ -391,6 +391,16 @@ function uniqueColorForRoom(
   return AVATAR_PALETTE.find(color => !used.has(color)) ?? desiredColor;
 }
 
+// Auto-collision suffixes can compound when a broken rejoin feeds the assigned
+// name back as the next desired name ("Agent (2)" -> "Agent (2) (2)").
+// Durable reclaim is allowed to collapse only this generated tail; ordinary
+// first-time joins still keep the caller's name verbatim.
+function identityNameRoot(name: string): string {
+  let root = name.trim();
+  while (/ \(\d+\)$/.test(root)) root = root.replace(/ \(\d+\)$/, '');
+  return root || name.trim();
+}
+
 export async function joinRoom(
   client: UpstashClient,
   code: string,
@@ -445,6 +455,48 @@ export async function joinRoom(
       joinerName: participant.name,
       now: Date.now(),
     });
+    const durableReclaim = Boolean(
+      reclaim && (
+        (agentIdHash && reclaim.agentIdHash === agentIdHash)
+        || (authIdHash && reclaim.authIdHash === authIdHash)
+      ),
+    );
+    const desiredRoot = identityNameRoot(participant.name);
+    const hasGeneratedNameFamily = current.participants.some(
+      row => row !== reclaim && identityNameRoot(row.name) === desiredRoot,
+    );
+    const canonicalName = durableReclaim && hasGeneratedNameFamily
+      ? desiredRoot
+      : participant.name;
+    const canonicalRoot = identityNameRoot(canonicalName);
+    // Repair rows created by the old web remint bug and stale suffix chains
+    // left by earlier credential-loss recovery. Cleanup is intentionally
+    // narrow: only a durable, server-verified reclaim may do it; live valid
+    // siblings and rows carrying a different durable anchor are never touched.
+    const identityArtifacts = new Set<Participant>();
+    if (durableReclaim) {
+      for (const row of current.participants) {
+        if (row === reclaim) continue;
+        if (identityNameRoot(row.name) !== canonicalRoot) continue;
+        if (row.client !== undefined && row.client !== reclaim!.client) continue;
+        const conflictingDurableAnchor =
+          Boolean(row.agentIdHash && row.agentIdHash !== agentIdHash)
+          || Boolean(row.authIdHash && row.authIdHash !== authIdHash);
+        if (conflictingDurableAnchor) continue;
+        // client===undefined is the exact malformed row emitted by the legacy
+        // name/role-only remint loop; it is never a valid participant. Other
+        // siblings must be stale before cleanup can reclaim the canonical name.
+        if (row.client === undefined || !rowIsLive(row, Date.now())) {
+          identityArtifacts.add(row);
+        }
+      }
+    }
+    const namingRoom = identityArtifacts.size > 0
+      ? {
+          ...current,
+          participants: current.participants.filter(row => !identityArtifacts.has(row)),
+        }
+      : current;
 
     // T-66: decide whether this join may BIND its agent anchor to the reclaimed
     // row. Binding is what makes a row recoverable later, so the rule has to be
@@ -508,7 +560,11 @@ export async function joinRoom(
     }
 
     // Never trust a client-supplied hash on the incoming participant row.
-    let next = { ...participant, memberKeyHash: undefined as string | undefined };
+    let next = {
+      ...participant,
+      name: canonicalName,
+      memberKeyHash: undefined as string | undefined,
+    };
     const isClaimingHost = participant.name === current.createdBy;
 
     if (isClaimingHost) {
@@ -523,12 +579,12 @@ export async function joinRoom(
       // them unique across client kinds too (web Robin vs agent Robin). The
       // reclaimed row is excluded from the collision set so updating your own
       // row never suffixes you against yourself.
-      next = { ...next, name: uniqueNameForRoom(participant.name, current, reclaim) };
+      next = { ...next, name: uniqueNameForRoom(canonicalName, namingRoom, reclaim) };
     }
 
     next = {
       ...next,
-      color: uniqueColorForRoom(next.color, current, reclaim),
+      color: uniqueColorForRoom(next.color, namingRoom, reclaim),
       // T-49: identity continuity follows the session credential. Reclaiming the
       // same row (proved by anchor / member key / verified identity) KEEPS its
       // lineage, so a reconnect revives the cards that session posted. A genuinely
@@ -587,6 +643,7 @@ export async function joinRoom(
     // (re)joins idempotent and lets a reclaim collapse a stale duplicate
     // that happens to sit on the final name.
     const keep = current.participants.filter(p => {
+      if (identityArtifacts.has(p)) return false;
       if (reclaim && p === reclaim) return false;
       return !(p.name === next.name && p.client === next.client);
     });

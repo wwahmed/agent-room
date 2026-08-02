@@ -70,7 +70,7 @@ export function Join() {
         initials: initialsFor(hostName), client: 'web' as const, joinedAt: Date.now(), lastSeenAt: Date.now(),
       };
       const result = await joinRoom(client, room.code, participant, { priorIdentity: { name: hostName, client: 'web' } });
-      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify({ name: result.participant.name, role: 'Host' }));
+      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify(result.participant));
       rememberRole(role);
       navigate(`/r/${room.code}`);
     } catch (e) {
@@ -112,8 +112,7 @@ export function Join() {
       });
       // joinRoom may have suffixed the name on collision (e.g. "Robin (2)").
       // Persist whatever the server actually assigned so future writes use it.
-      const finalName = result.participant.name;
-      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify({ name: finalName, role: role.trim() }));
+      sessionStorage.setItem(`room:${room.code}:self`, JSON.stringify(result.participant));
       rememberRole(role);
       navigate(`/r/${room.code}`);
     } catch (e) {

@@ -105,6 +105,78 @@ describe('T-66 durable agent anchor — lost-key recovery', () => {
     }
   });
 
+  it('collapses stale generated suffix chains when the durable owner returns', async () => {
+    await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-for-builder',
+    });
+    await joinRoom(client, code, agent('Builder'), { issueMemberKey: true });
+    await joinRoom(client, code, agent('Builder (2)'), { issueMemberKey: true });
+
+    const back = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-for-builder',
+    });
+
+    expect(back.participant.name).toBe('Builder');
+    expect(back.participants.map(p => p.name)).toEqual(['Builder']);
+  });
+
+  it('does not delete a live valid same-name sibling during suffix cleanup', async () => {
+    await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-for-builder',
+    });
+    await joinRoom(client, code, { ...agent('Builder'), lastSeenAt: Date.now() }, {
+      issueMemberKey: true,
+    });
+
+    const back = await joinRoom(client, code, agent('Builder'), {
+      issueMemberKey: true,
+      agentId: 'anchor-for-builder',
+    });
+
+    expect(back.participants.map(p => p.name).sort()).toEqual(['Builder', 'Builder (2)']);
+  });
+
+  it('does not strip an intentional numeric suffix without duplicate-family evidence', async () => {
+    await joinRoom(client, code, agent('Builder (2026)'), {
+      issueMemberKey: true,
+      agentId: 'anchor-for-builder',
+    });
+    const back = await joinRoom(client, code, agent('Builder (2026)'), {
+      issueMemberKey: true,
+      agentId: 'anchor-for-builder',
+    });
+    expect(back.participant.name).toBe('Builder (2026)');
+  });
+
+  it('removes the live clientless suffix emitted by the legacy web remint bug', async () => {
+    const human = {
+      ...agent('Waqas'),
+      client: 'web' as const,
+      role: 'Host',
+    };
+    await joinRoom(client, code, human, {
+      issueMemberKey: true,
+      authId: 'waqas@example.com',
+    });
+    await joinRoom(client, code, {
+      ...human,
+      client: undefined,
+      lastSeenAt: Date.now(),
+    } as any, {
+      issueMemberKey: true,
+    });
+
+    const back = await joinRoom(client, code, human, {
+      issueMemberKey: true,
+      authId: 'waqas@example.com',
+    });
+
+    expect(back.participants.map(p => p.name)).toEqual(['Waqas']);
+  });
+
   it('binds the anchor to an EXISTING keyed row when the caller proves the key', async () => {
     // Migration path for rows that predate T-66: they have a key but no anchor.
     const first = await joinRoom(client, code, agent('Builder'), { issueMemberKey: true });

@@ -244,7 +244,7 @@ export function Room() {
         }, { priorIdentity: { name: identity.name, client: 'web' } });
         if (cancelled) return;
         const assigned: SelfIdentity = { name: joined.participant.name, role };
-        sessionStorage.setItem(`room:${code}:self`, JSON.stringify(assigned));
+        sessionStorage.setItem(`room:${code}:self`, JSON.stringify(joined.participant));
         rememberRole(role);
         _setSelf(assigned);
       } catch {

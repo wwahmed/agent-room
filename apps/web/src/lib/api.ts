@@ -1,4 +1,5 @@
 import type { ParticipantHealth } from './presence.js';
+import { colorForName, initialsFor } from './colors.js';
 import type {
   ClientKind,
   Message,
@@ -185,7 +186,27 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
 function storedSelf(code: string): Participant | undefined {
   try {
     const raw = sessionStorage.getItem(`room:${code}:self`);
-    return raw ? (JSON.parse(raw) as Participant) : undefined;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as Partial<Participant>;
+    if (typeof parsed.name !== 'string' || !parsed.name) return undefined;
+    // Older screens overwrote joinRoom's full participant with {name, role}.
+    // Reminting that incomplete object omitted client='web', so the server
+    // could not attach the verified authId and minted a new "(N)" row on every
+    // heartbeat. Materialize a complete web participant for migration.
+    return {
+      ...parsed,
+      name: parsed.name,
+      role: typeof parsed.role === 'string' ? parsed.role : '',
+      client: 'web',
+      color: typeof parsed.color === 'string' && parsed.color
+        ? parsed.color
+        : colorForName(parsed.name),
+      initials: typeof parsed.initials === 'string' && parsed.initials
+        ? parsed.initials
+        : initialsFor(parsed.name),
+      joinedAt: Number(parsed.joinedAt) || Date.now(),
+      lastSeenAt: Number(parsed.lastSeenAt) || Date.now(),
+    };
   } catch {
     return undefined;
   }
@@ -212,7 +233,7 @@ function remintMemberKey(code: string): Promise<boolean> {
     const self = storedSelf(code);
     if (!self) return false; // no captured identity → can't re-mint; fail closed
     try {
-      const out = await call<{ memberKey?: string }>({
+      const out = await call<{ memberKey?: string; participant?: Participant }>({
         action: 'join',
         code,
         participant: self,
@@ -222,6 +243,7 @@ function remintMemberKey(code: string): Promise<boolean> {
       });
       if (out.memberKey) {
         storeMemberKey(code, out.memberKey);
+        if (out.participant) storeSelf(code, out.participant);
         return true;
       }
       return false;

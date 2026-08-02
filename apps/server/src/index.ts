@@ -163,6 +163,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   verifyHostKey,
   type UpstashClient,
 } from '@agent-room/upstash-client';
+import { validateJoinParticipant } from './joinParticipant.js';
 
 const PORT = Number(process.env.PORT || 8210);
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
@@ -975,7 +976,8 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       return { sync: await syncProjectForRoom(code, Boolean(payload.force)) };
     }
     case 'join': {
-      const participant = payload.participant as Participant;
+      validateJoinParticipant(payload.participant);
+      const participant = payload.participant;
       // T-145 (completes T-143): a joining participant is present NOW. The cc
       // join path (MCP) does not stamp joinedAt/lastSeenAt, which left a fresh
       // agent reading "unknown"/1969 until its first message. Stamp presence
