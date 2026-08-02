@@ -35,23 +35,23 @@ describe('Nobody is listening', () => {
     })).toBe(true);
   });
 
-  it('warns unless an actual room_listen lease is armed', () => {
+  it('does not false-alarm while an agent is listening, online, or working', () => {
     const listening = p('Listener', { listenUntil: NOW + 45_000 });
     expect(canStillAnswer(listening, NOW)).toBe(true);
     expect(shouldWarnNobodyListening({
       senderClient: 'web', participants: [listening], now: NOW,
     })).toBe(false);
 
-    // Process life is not delivery. These rows may answer later, but none can
-    // receive the message until it starts listening again.
+    // A working agent often answers seconds later. The alert is for abandoned
+    // rooms, not the ordinary gap while an agent handles the previous turn.
     const online = p('Online', { lastSeenAt: NOW - 1_000 });
     const working = p('Working', { workingUntil: NOW + WORKING_WINDOW_MS });
     const stale = p('OpusCoder', { lastSeenAt: NOW - 90_000 });
-    expect(canStillAnswer(online, NOW)).toBe(false);
-    expect(canStillAnswer(working, NOW)).toBe(false);
+    expect(canStillAnswer(online, NOW)).toBe(true);
+    expect(canStillAnswer(working, NOW)).toBe(true);
     expect(canStillAnswer(stale, NOW)).toBe(false);
-    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [online], now: NOW })).toBe(true);
-    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [working], now: NOW })).toBe(true);
+    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [online], now: NOW })).toBe(false);
+    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [working], now: NOW })).toBe(false);
     expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [stale], now: NOW })).toBe(true);
 
     // A live listener alongside non-listeners is enough.
@@ -93,11 +93,9 @@ describe('Nobody is listening', () => {
   it('names who is missing and states the consequence, without guessing the cure', () => {
     expect(nobodyListeningText([dead('CustService')], NOW)).toContain('CustService was disconnected');
     expect(nobodyListeningText([dead('A'), dead('B')], NOW)).toContain('A, B were not listening');
-    expect(nobodyListeningText([p('Worker', { workingUntil: NOW + WORKING_WINDOW_MS })], NOW))
-      .toContain('Worker was working, but not listening');
     const text = nobodyListeningText([dead('A')], NOW);
     // The consequence is the part the host did not know.
-    expect(text).toContain('will be delivered when an agent starts listening');
+    expect(text).toContain('will be delivered when an agent returns');
     // No instructions: the fix depends on how that agent was started, and a wrong
     // instruction is worse than none.
     expect(text).not.toMatch(/restart|rejoin the room|run |tmux/i);

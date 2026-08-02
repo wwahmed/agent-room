@@ -19,17 +19,18 @@ import type { Participant } from '@agent-room/shared';
 
 import { presenceState } from './health.js';
 
-/** Whether this exact row has a live delivery path right now.
+/** Whether this exact row is still an agent expected to answer.
  *
- * Process life and message delivery are deliberately different facts:
- * `online`, `working`, and `stale` can all describe an agent whose model or
- * terminal is alive while no room_listen request is parked. Calling any of
- * those states "able to answer" suppressed the one warning this module exists
- * to provide. Only the server-owned listen lease proves that a message can be
- * delivered now. */
+ * The warning is an abandonment alarm, not a transport diagnostic. A joined
+ * agent commonly moves from `listening` to `working` while it handles the
+ * previous request, and `online` is the brief handoff between listen calls.
+ * Warning during either state produces the exact false alarm this surface must
+ * avoid: the agent answers seconds later. The UI separately exposes the exact
+ * active-listener count; this alarm is reserved for stale/disconnected rows. */
 export function canStillAnswer(p: Participant, now: number): boolean {
   if (p.client !== 'cc' || p.viewer === true) return false;
-  return presenceState(p, now) === 'listening';
+  const state = presenceState(p, now);
+  return state === 'listening' || state === 'online' || state === 'working';
 }
 
 /**
@@ -80,9 +81,8 @@ export function nobodyListeningText(participants: readonly Participant[], now: n
         })()
       : `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} were not listening.`;
   // This is an event receipt, not a sticky current-state banner: past tense
-  // keeps it truthful after an agent returns. "Starts listening" is also the
-  // exact recovery boundary — a working process need not rejoin.
-  return `⚠ ${NOBODY_LISTENING_MARKER} — ${who} Your message is saved and will be delivered when an agent starts listening.`;
+  // keeps it truthful after an agent returns.
+  return `⚠ ${NOBODY_LISTENING_MARKER} — ${who} Your message is saved and will be delivered when an agent returns.`;
 }
 
 /**
