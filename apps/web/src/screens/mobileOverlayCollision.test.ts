@@ -18,8 +18,10 @@ describe('phone chat overlays do not obscure conversation content', () => {
     expect(room.match(/className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('places the 44px phone Latest control in a real layout lane', () => {
+  it('places Latest in a real layout lane at every breakpoint', () => {
     expect(room).toContain('room-latest-lane z-[25] flex w-full flex-shrink-0');
+    expect(room).toContain('style={!isPhone ? { marginBottom: composerH } : undefined}');
+    expect(room).not.toContain('sm:absolute sm:inset-x-0 sm:z-[25]');
     expect(room).toContain('max-sm:w-11 max-sm:px-0');
     expect(room).toContain('className="hidden sm:inline"');
     expect(room).toContain('className="tabular-nums sm:hidden"');

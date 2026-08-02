@@ -3108,15 +3108,15 @@ export function Room() {
                 the room record's DENORMALIZED pins, so they render even after
                 the original message paged out or was trimmed. Phone chrome gets
                 real layout clearance: neither the fixed command bar nor this
-                strip may paint over message text. Desktop keeps the compact
-                floating treatment. */}
+                strip may paint over message text. The same structural rule
+                applies at every breakpoint. */}
             {isPhone && !chromeHidden && (
               <div data-gate="mobile-header-clearance" className="h-[104px] flex-shrink-0" aria-hidden="true" />
             )}
             {pinnedList.length > 0 && !ended && (
               <div
                 data-gate="pinned-strip"
-                className="pointer-events-none z-30 flex flex-shrink-0 justify-center px-3 py-1.5 sm:absolute sm:inset-x-0 sm:top-2 sm:py-0"
+                className="pointer-events-none z-30 flex flex-shrink-0 justify-center px-3 py-1.5"
               >
                 <div className="pointer-events-auto w-full max-w-[620px]">
                   <button
@@ -3194,7 +3194,12 @@ export function Room() {
                   // need heuristic padding to dodge floating controls.
                   paddingTop: 0,
                   paddingBottom: 16,
-                } : { paddingBottom: composerH + 16 }}
+                } : {
+                  // When the navigation lane exists, its external composer
+                  // clearance already shrinks the feed. Without it, retain
+                  // internal clearance for the floating composer.
+                  paddingBottom: (unseenCount > 0 || !atBottom || selfMentionIds.length > 0) ? 16 : composerH + 16,
+                }}
               >
               {/* T-04: history is windowed; this strip marks the top of the
                   loaded window and doubles as the fetch indicator. */}
@@ -3333,18 +3338,15 @@ export function Room() {
 
               {/* T-48/T-65: jump-to-latest, one tap back to live whenever he's
                   scrolled up, with the count when there's something new. */}
-              {/* T-72: on phones this is a dedicated layout lane between feed
-                  and composer — a message structurally cannot sit behind it.
-                  Desktop retains the compact floating treatment. */}
-              {/* T-45 (owner ruling): on >=sm the lane no longer reserves a
-                  band — it OVERLAYS the canvas just above the floating
-                  composer, so its appearance reflows nothing. The wrapper is
-                  click-transparent; only the pills take pointer events. */}
+              {/* T-72: this is a dedicated layout lane between feed and
+                  composer at every width — a message structurally cannot sit
+                  behind it. Where the composer itself remains floating, the
+                  lane reserves its measured height below. */}
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
                 <div
                   data-gate="floating"
-                  className="room-latest-lane z-[25] flex w-full flex-shrink-0 items-center justify-end gap-2 px-3 py-1.5 sm:pointer-events-none sm:absolute sm:inset-x-0 sm:justify-center sm:px-4 sm:py-0"
-                  style={!isPhone ? { bottom: composerH + 12 } : undefined}
+                  className="room-latest-lane z-[25] flex w-full flex-shrink-0 items-center justify-end gap-2 px-3 py-1.5 sm:justify-center sm:px-4"
+                  style={!isPhone ? { marginBottom: composerH } : undefined}
                 >
                   {(unseenCount > 0 || !atBottom) && (
                     <button
