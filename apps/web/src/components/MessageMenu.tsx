@@ -103,7 +103,9 @@ export function MessageMenu({ message, onReply, onReact, onPin, pinned, selfName
   }
 
   const mine = ownReaction(message, selfName);
-  const itemClass = 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-ink transition hover:bg-surface-softer';
+  // This menu is the phone action surface too. A readable 13px label does not
+  // compensate for a ~32px row that is easy to miss with a thumb.
+  const itemClass = 'flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-ink transition hover:bg-surface-softer';
 
   return (
     <div ref={ref} className="relative flex-shrink-0">

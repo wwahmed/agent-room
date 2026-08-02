@@ -3512,7 +3512,7 @@ export function Room() {
                       type="button"
                       onClick={() => setReplyingTo(null)}
                       aria-label="Cancel reply"
-                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-ink-soft transition hover:bg-surface hover:text-ink"
+                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-md text-ink-soft transition hover:bg-surface hover:text-ink"
                     >
                       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
                     </button>
@@ -4203,11 +4203,13 @@ function PendingAttachment({ attachment, onRemove }: { attachment: MessageAttach
         <div className="text-[12px] text-ink-soft">{formatBytes(attachment.size)}</div>
       </div>
       <button
+        type="button"
         onClick={onRemove}
-        className="h-6 w-6 rounded text-xs font-bold text-ink-soft hover:bg-surface"
+        aria-label={`Remove ${attachment.name}`}
+        className="flex min-h-11 min-w-11 items-center justify-center rounded text-sm font-bold text-ink-soft transition hover:bg-surface hover:text-ink"
         title={`Remove ${attachment.name}`}
       >
-        x
+        <span aria-hidden="true">×</span>
       </button>
     </div>
   );
