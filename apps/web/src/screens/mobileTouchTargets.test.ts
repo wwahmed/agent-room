@@ -11,6 +11,11 @@ describe('phone action targets', () => {
     );
   });
 
+  it('does not create a phone-width overflow with a negative-margin hit box', () => {
+    expect(messageMenu).toContain('className={`flex h-11 w-11 items-center');
+    expect(messageMenu).not.toContain('-m-2.5 flex min-h-11 min-w-11');
+  });
+
   it('gives reply cancellation and attachment removal 44px hit boxes', () => {
     expect(room).toContain('aria-label="Cancel reply"');
     expect(room).toContain(

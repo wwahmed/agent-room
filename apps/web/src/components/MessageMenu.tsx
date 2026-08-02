@@ -116,10 +116,12 @@ export function MessageMenu({ message, onReply, onReact, onPin, pinned, selfName
         aria-label="Message actions"
         aria-haspopup="menu"
         aria-expanded={open}
-        // 44px hit box, quiet 24px visual inside (gate finding: 24x24).
+        // The control itself owns the 44px box. The old 24px wrapper +
+        // negative margin made the invisible hit area widen the phone feed by
+        // 8px and exposed a horizontal scrollbar at 390px.
         // T-121: persistent anchor — faint on desktop until hover, full on
         // phone. Never opacity-0: the affordance must be discoverable.
-        className={`-m-2.5 flex min-h-11 min-w-11 items-center justify-center focus:opacity-100 focus:outline-none ${open ? 'opacity-100' : 'opacity-60 group-hover:opacity-100 sm:opacity-40'}`}
+        className={`flex h-11 w-11 items-center justify-center focus:opacity-100 focus:outline-none ${open ? 'opacity-100' : 'opacity-60 group-hover:opacity-100 sm:opacity-40'}`}
       >
         <span className="flex h-6 w-6 items-center justify-center rounded text-ink-faint transition hover:bg-surface-softer hover:text-ink">
           <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
