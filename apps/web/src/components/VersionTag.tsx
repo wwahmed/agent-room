@@ -4,14 +4,16 @@ import { useEffect, useState } from 'react';
 // in-product. Same /api/version the update banner polls. Unobtrusive: a muted
 // mono line; renders nothing when the server can't name a build (dev / offline).
 export function VersionTag({ className }: { className?: string }) {
-  const [bundle, setBundle] = useState<string | null>(null);
+  const [version, setVersion] = useState<{ bundle: string; release: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetch('/api/version', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((b: { bundle?: string } | null) => {
-        if (!cancelled && b?.bundle && b.bundle !== 'unknown') setBundle(b.bundle);
+      .then((b: { bundle?: string; release?: string } | null) => {
+        if (!cancelled && b?.bundle && b.bundle !== 'unknown') {
+          setVersion({ bundle: b.bundle, release: b.release || b.bundle });
+        }
       })
       .catch(() => {
         /* offline or dev server without /api/version: show nothing */
@@ -21,14 +23,14 @@ export function VersionTag({ className }: { className?: string }) {
     };
   }, []);
 
-  if (!bundle) return null;
-  const short = bundle.length > 12 ? bundle.slice(0, 12) : bundle;
+  if (!version) return null;
+  const short = version.release.length > 12 ? version.release.slice(0, 12) : version.release;
   return (
     <span
       className={className ?? 'font-mono text-[12px] tabular-nums text-ink-faint'}
-      title={`Build ${bundle}`}
+      title={`Immutable release ${version.release} · web bundle ${version.bundle}`}
     >
-      build {short}
+      release {short}
     </span>
   );
 }

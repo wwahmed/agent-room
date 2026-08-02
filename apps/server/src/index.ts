@@ -30,11 +30,10 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
-import { extname, join, normalize, resolve, dirname } from 'node:path';
+import { extname, join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Redis from 'ioredis';
 import { generateRoomCode, canonicalizeCode, normalizeRoomTopic, normalizeRoomOutputInstructions, ROOM_CONVENTIONS, ROOM_TEMPLATES_SHARED, ROOM_TTL_SECONDS, isKnownTemplateId, roomTopicIssue, buildOwnerBrief, briefToSpeech, composeBrief, templateInfo } from '@agent-room/shared';
@@ -83,7 +82,8 @@ import {
 } from './roomlist.js';
 import { redactRoomPayload } from './redact.js';
 import { searchMessages, searchRooms, searchTasks, SEARCH_MIN_QUERY, SEARCH_MESSAGE_WINDOW } from './search.js';
-import { SERVER_BUILD_AT } from './buildStamp.js';
+import { SERVER_BUILD_AT, SERVER_BUILD_ID } from './buildStamp.js';
+import { loadWebReleaseSnapshot } from './webReleaseSnapshot.js';
 
 // T-36: ceiling on a supervisor-vouched work window. Short on purpose — it is
 // re-armed on every summoner sample (45s), so a frozen or crashed harness stops
@@ -184,6 +184,7 @@ if (!KV_TOKEN) {
   process.exit(1);
 }
 
+const WEB_RELEASE = loadWebReleaseSnapshot(WEB_DIST, SERVER_BUILD_ID);
 const redis = new Redis(REDIS_URL);
 
 // T-118: owner push channel — enabled only when VAPID keys are configured.
@@ -2445,34 +2446,22 @@ const MIME: Record<string, string> = {
 };
 
 async function handleStatic(res: ServerResponse, urlPath: string): Promise<void> {
-  const safePath = normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
-  let filePath = join(WEB_DIST, safePath);
-  if (!filePath.startsWith(WEB_DIST)) filePath = join(WEB_DIST, 'index.html');
-  if (safePath === '/' || safePath === '' || extname(filePath) === '') {
-    // Extension-less paths are SPA navigation routes: serve the app shell.
-    filePath = join(WEB_DIST, 'index.html');
-  } else if (!existsSync(filePath)) {
-    // T-115: a missing FILE must 404. The old fallback served index.html for
-    // ANY missing path, so a stale /assets/*.js or an unregistered /sw.js got
-    // an HTML body under a script URL: the browser executes it, dies on '<'
-    // as a syntax error, and the user sees a traceless white screen (this bit
-    // the first T-118 deploy). 404 is loud, cacheable-safe, and honest.
+  const asset = WEB_RELEASE.asset(urlPath);
+  if (!asset) {
+    // T-115: a missing FILE must 404. Returning index.html under a stale
+    // script URL turns a release mismatch into a traceless white screen.
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('not found');
     return;
   }
-  try {
-    const data = await readFile(filePath);
-    const ext = extname(filePath);
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400',
-    });
-    res.end(data);
-  } catch {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('not found');
-  }
+  const ext = extname(urlPath) || '.html';
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=86400',
+    ETag: `"${asset.sha256}"`,
+    'X-WakiChat-Release': WEB_RELEASE.release,
+  });
+  res.end(asset.bytes);
 }
 
 // ---------- server ----------
@@ -3053,16 +3042,14 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/api/version' && req.method === 'GET') {
-      // The bundle filename hash changes on every web deploy; clients poll
-      // this to show the update banner. Read from disk each time (cheap,
-      // and always reflects what bin/deploy-web just wrote).
-      try {
-        const html = await readFile(join(WEB_DIST, 'index.html'), 'utf8');
-        const match = html.match(/assets\/index-([A-Za-z0-9_-]+)\.js/);
-        return sendJson(res, 200, { bundle: match?.[1] ?? 'unknown' });
-      } catch {
-        return sendJson(res, 200, { bundle: 'unknown' });
-      }
+      // This must describe the bytes this process is actually serving, never
+      // whatever a deploy happened to write into WEB_DIST after boot.
+      return sendJson(res, 200, {
+        bundle: WEB_RELEASE.bundle,
+        release: WEB_RELEASE.release,
+        server: WEB_RELEASE.server,
+        immutable: true,
+      });
     }
 
     if (path === '/login') {
@@ -3076,7 +3063,15 @@ const server = createServer(async (req, res) => {
     if (path === '/healthz') {
       const pong = await redis.ping();
       const healthy = pong === 'PONG';
-      return sendJson(res, healthy ? 200 : 500, lifecycleDiscovery(PUBLIC_ORIGIN, healthy));
+      return sendJson(res, healthy ? 200 : 500, {
+        ...lifecycleDiscovery(PUBLIC_ORIGIN, healthy),
+        release: {
+          id: WEB_RELEASE.release,
+          server: WEB_RELEASE.server,
+          bundle: WEB_RELEASE.bundle,
+          immutable: true,
+        },
+      });
     }
 
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -3092,7 +3087,8 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[server] agent-room self-host listening on http://127.0.0.1:${PORT}`);
-  console.log(`[server] web dist: ${WEB_DIST}`);
+  console.log(`[server] web release: ${WEB_RELEASE.release} (${WEB_RELEASE.fileCount} files, ${WEB_RELEASE.totalBytes} bytes)`);
+  console.log(`[server] web dist snapshot: ${WEB_RELEASE.root}`);
   console.log(`[server] redis: ${REDIS_URL}`);
   validateRegistryAtStartup();
 });

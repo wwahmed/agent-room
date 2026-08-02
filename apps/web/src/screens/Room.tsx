@@ -28,6 +28,7 @@ import { VoiceButton, type VoiceButtonHandle } from '../components/VoiceButton.j
 import { AttachmentSheet } from '../components/AttachmentSheet.js';
 import { MeetingCodePill } from '../components/MeetingCodePill.js';
 import { OutputInstructionsEditor } from '../components/OutputInstructionsEditor.js';
+import { VersionTag } from '../components/VersionTag.js';
 import { Avatar } from '../components/Avatar.js';
 import { AgentAvatar } from '../components/AgentAvatar.js';
 import { brandForSender, participantKindLabel } from '../lib/agentBrand.js';
@@ -2304,6 +2305,9 @@ export function Room() {
                   <RecoverHostButton code={code} />
                 </div>
               )}
+              <div className="mt-3 border-t border-border-faint pt-3">
+                <VersionTag />
+              </div>
             </>
           );
         })()}

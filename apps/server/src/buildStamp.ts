@@ -8,17 +8,23 @@
 // can serve as the reference point. 0 means unknown; callers drop it from the
 // watermark rather than treating it as an ancient build.
 
-import { statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-function readBuildStamp(): number {
+function readBuildIdentity(): { at: number; id: string } {
   try {
     const self = fileURLToPath(import.meta.url);
     const stamp = statSync(self).mtimeMs;
-    return Number.isFinite(stamp) && stamp > 0 ? Math.floor(stamp) : 0;
+    const at = Number.isFinite(stamp) && stamp > 0 ? Math.floor(stamp) : 0;
+    const id = createHash('sha256').update(readFileSync(self)).digest('hex');
+    return { at, id };
   } catch {
-    return 0;
+    return { at: 0, id: 'unknown' };
   }
 }
 
-export const SERVER_BUILD_AT: number = readBuildStamp();
+const SERVER_BUILD = readBuildIdentity();
+
+export const SERVER_BUILD_AT: number = SERVER_BUILD.at;
+export const SERVER_BUILD_ID: string = SERVER_BUILD.id;
