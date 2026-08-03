@@ -3431,7 +3431,7 @@ export function Room() {
             {/* T-82: the bottom block is visually fixed on phones, while the
                 measured clearance above keeps it out of the message viewport.
                 It slides away in immersive reading; >=sm is unchanged. */}
-            <div ref={composerWrapRef} className="room-bottom-chrome relative sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
+            <div ref={composerWrapRef} className="room-bottom-chrome sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
             {/* Urgent-ask: a summoned agent stopped on a permission dialog
                 is blocked until a human answers. That answer used to exist
                 only inside the Agent details sheet; pinned here it is where

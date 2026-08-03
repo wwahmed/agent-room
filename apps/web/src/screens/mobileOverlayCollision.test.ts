@@ -48,7 +48,13 @@ describe('phone chat overlays do not obscure conversation content', () => {
     expect(room).toContain('room-latest-lane pointer-events-none');
     // Anchored to the composer itself (bottom-full), so it tracks the chrome
     // through the immersive slide instead of guessing an offset from state.
-    expect(room).toContain('room-bottom-chrome relative sm:absolute');
+    // NOTE: no `relative` utility here. .room-bottom-chrome is position:absolute
+    // on phones via CSS; adding `relative` overrode it, dropped the composer into
+    // normal flow, and turned the existing composer-clearance spacer into 122px
+    // of dead band between the last message and the composer. position:absolute
+    // is itself a containing block, so bottom-full anchoring still works.
+    expect(room).toContain('room-bottom-chrome sm:absolute');
+    expect(room).not.toContain('room-bottom-chrome relative');
     expect(room).toContain('className="pointer-events-auto flex min-h-11 w-fit items-center');
   });
 
