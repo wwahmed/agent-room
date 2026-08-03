@@ -2485,8 +2485,14 @@ export function Room() {
                       key={`${p.name}-${p.client}`}
                       role="group"
                       aria-label={rowLabel}
-                      className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition ${rowFade} ${isMuted ? 'border-amber-400/40 bg-amber-500/10' : 'border-border-faint bg-surface-softer'}`}
+                      className={`flex flex-col gap-2 rounded-lg border px-2.5 py-2 transition sm:flex-row sm:items-start sm:gap-2.5 ${rowFade} ${isMuted ? 'border-amber-400/40 bg-amber-500/10' : 'border-border-faint bg-surface-softer'}`}
                     >
+                      {/* Avatar + identity are one shrinkable unit. They used to be
+                          two flex siblings competing with the action cluster for
+                          width, so on a phone the status text was squeezed into
+                          narrow columns that wrapped around the buttons — the
+                          ransom-note row the host screenshotted. */}
+                      <div className="flex min-w-0 flex-1 items-start gap-2.5">
                       <AgentAvatar participant={p} size="lg" />
                       <div className="min-w-0 flex-1">
                         <div className="msg-author flex flex-wrap items-center gap-1 truncate">
@@ -2504,7 +2510,7 @@ export function Room() {
                             recently — they stay distinct, because collapsing them is
                             what let presence lie. */}
                         {presence && (
-                          <div className={`msg-meta mt-0.5 flex items-center gap-1 font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
+                          <div className={`msg-meta mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 font-medium ${STATE_TONE_PRESENCE[presence.state].text}`}>
                             {presenceGlyph(STATE_TONE_PRESENCE[presence.state].glyph)}
                             <span>{presence.label}</span>
                             {presence.detail && <span className="text-ink-faint">· {presence.detail}</span>}
@@ -2607,9 +2613,14 @@ export function Room() {
                         but always discoverable, and only render at all when
                         the viewer is actually the host.
                       */}
+                      </div>
+
                       {/* Details (ⓘ) is always available; host controls (Ask/
                           Mute/Remove) render only for the host. */}
-                      <div className="flex items-center gap-1.5">
+                      {/* Its own full-width row on phones, right-aligned and
+                          never shrunk, so the targets sit in one predictable
+                          place instead of floating mid-paragraph. */}
+                      <div className="flex items-center justify-end gap-1.5 border-t border-border-faint pt-2 sm:flex-shrink-0 sm:border-0 sm:pt-0">
                           <button
                             onClick={() => setDetailsFor(p)}
                             title={`Details for ${p.name}`}
