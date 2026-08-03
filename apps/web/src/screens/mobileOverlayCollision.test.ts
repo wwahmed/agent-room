@@ -64,13 +64,18 @@ describe('phone chat overlays do not obscure conversation content', () => {
     expect(room).toContain('{(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (');
   });
 
-  it('reserves the measured phone composer height outside the message scrollport', () => {
-    expect(room).toContain('data-gate="mobile-composer-clearance"');
-    expect(room).toContain('style={{ height: composerH }}');
+  // Reservation moved INSIDE the scrollport. A sibling spacer had only bad
+  // options: unmount it on chrome-hide and the conversation jerks; keep it and
+  // immersive mode shows a dead band. Padding below the last message does
+  // neither — it cannot move content above it, and it collapses with the chrome.
+  it('reserves the composer height as padding inside the scrollport', () => {
+    expect(room).toContain('paddingBottom: chromeHidden ? 16 : composerH + 16');
+    expect(room).not.toContain('data-gate="mobile-composer-clearance"');
   });
 
   it('never changes feed geometry from the at-bottom state', () => {
     expect(room).toContain('paddingBottom: 16');
+    // Still never a function of atBottom — that caused the grow/shrink loop.
     expect(room).not.toContain('paddingBottom: (unseenCount > 0 || !atBottom');
   });
 });

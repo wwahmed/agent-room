@@ -3252,11 +3252,20 @@ export function Room() {
               <div
                 className="mx-auto w-full max-w-[1280px]"
                 style={isPhone ? {
-                  // Phone command, pin, latest, and composer chrome each own
-                  // layout rows outside the scrollport. Message pixels never
-                  // need heuristic padding to dodge floating controls.
+                  // The composer's clearance lives HERE, as padding below the
+                  // last message, rather than as a sibling spacer outside the
+                  // scrollport. Both of the host's complaints come from that
+                  // spacer: unmounting it on chrome-hide shifted the whole
+                  // conversation (a jerk), and keeping it mounted left a dead
+                  // band under the feed in immersive mode (wasted space).
+                  //
+                  // Bottom padding has neither failure. It sits BELOW all
+                  // content, so growing or shrinking it cannot move a single
+                  // message the reader is looking at — only scrollHeight
+                  // changes — and when the chrome slides away the padding goes
+                  // with it, so the text runs to the bottom of the screen.
                   paddingTop: 0,
-                  paddingBottom: 16,
+                  paddingBottom: chromeHidden ? 16 : composerH + 16,
                 } : {
                   // The composer and Latest control own permanent layout rows
                   // below this scrollport. Never change feed geometry from
@@ -3427,14 +3436,7 @@ export function Room() {
                 compositor-only and costs no layout; the reserved space must
                 therefore stay put. Content position must never be a function
                 of whether chrome happens to be showing. */}
-            {isPhone && (
-              <div
-                data-gate="mobile-composer-clearance"
-                className="flex-shrink-0"
-                style={{ height: composerH }}
-                aria-hidden="true"
-              />
-            )}
+
 
             {/* T-82: the bottom block is visually fixed on phones, while the
                 measured clearance above keeps it out of the message viewport.
