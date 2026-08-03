@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { AGENT_MODES, AGENT_MODE_COPY, defaultAgentMode, setDefaultAgentMode, type AgentMode } from '../lib/agentDefaults.js';
 import { useEffect, useState } from 'react';
 import { fetchIdentity, type WhoAmI } from '../lib/identity.js';
 import { colorForName, initialsFor } from '../lib/colors.js';
@@ -15,6 +16,36 @@ import { getTranscribeModel, setTranscribeModel, type TranscribeModelOption } fr
 
 function sectionHead(label: string) {
   return <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-faint">{label}</h2>;
+}
+
+function AgentPermissionChoices() {
+  const [mode, setMode] = useState<AgentMode>(defaultAgentMode);
+  return (
+    <>
+      <p className="mb-2 text-[13px] text-ink-soft">
+        What a newly summoned agent may do before you change anything. Higher levels
+        interrupt you less — a Build agent runs commands without asking, so it also has
+        the widest reach in whatever workspace you point it at.
+      </p>
+      <div role="radiogroup" aria-label="Default agent permissions" className="grid grid-cols-3 gap-2">
+        {AGENT_MODES.map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={mode === value}
+            data-agent-mode={value}
+            onClick={() => { setMode(value); setDefaultAgentMode(value); }}
+            className={`min-h-11 rounded-xl border px-2 py-2 text-[13px] transition ${mode === value ? 'border-accent bg-accent/10 text-ink' : 'border-border text-ink-soft hover:border-border-strong'}`}
+          >
+            <div className="font-semibold">{AGENT_MODE_COPY[value].title}</div>
+            <div className="text-[11px] text-ink-soft">{AGENT_MODE_COPY[value].short}</div>
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[12px] text-ink-soft">{AGENT_MODE_COPY[mode].detail}</p>
+    </>
+  );
 }
 
 export function Settings() {
@@ -94,6 +125,11 @@ export function Settings() {
         <section aria-label="Appearance" className="rounded-xl border border-border-faint bg-surface p-4">
           {sectionHead('Appearance')}
           <AppearanceChoices />
+        </section>
+
+        <section aria-label="Agent permissions" className="rounded-xl border border-border-faint bg-surface p-4">
+          {sectionHead('Agent permissions')}
+          <AgentPermissionChoices />
         </section>
 
         <section aria-label="Reading scale" className="rounded-xl border border-border-faint bg-surface p-4">

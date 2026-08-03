@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AGENT_MODE_COPY, defaultAgentMode, type AgentMode } from '../lib/agentDefaults.js';
 import {
   summonProviders, summonWorkspaces, listSummonedAgents, summonAgent, dismissSummonedAgent,
   removeAgentFromRoom, getRoom, setRoomWorkspaceAction, createClient,
@@ -33,7 +34,10 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
   const client = useRef(createClient()).current;
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-  const [mode, setMode] = useState<'chat' | 'edit' | 'build'>('chat');
+  // Starts at the owner's configured default (maximum unless he lowered it
+  // in Settings), so a summon does not have to be re-permissioned before it
+  // can do the work it was summoned for.
+  const [mode, setMode] = useState<AgentMode>(defaultAgentMode);
   const [persistent, setPersistent] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -373,9 +377,9 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
               </div>
               <div className="mb-1 grid grid-cols-3 gap-2">
                 {([
-                  ['chat', 'Chat', 'Room only'],
-                  ['edit', 'Edit', 'Edit files'],
-                  ['build', 'Build', 'Edit + run cmds'],
+                  ['chat', AGENT_MODE_COPY.chat.title, AGENT_MODE_COPY.chat.short],
+                  ['edit', AGENT_MODE_COPY.edit.title, AGENT_MODE_COPY.edit.short],
+                  ['build', AGENT_MODE_COPY.build.title, AGENT_MODE_COPY.build.short],
                 ] as const).map(([val, title, sub]) => (
                   <button key={val} type="button" onClick={() => setMode(val)}
                     className={`rounded-xl border px-2 py-2 text-[13px] transition ${mode === val ? 'border-accent bg-accent/10 text-ink' : 'border-border text-ink-soft hover:border-border-strong'}`}>
@@ -384,9 +388,7 @@ export function SummonAgentSheet({ code, onClose, selfName }: Props) {
                 ))}
               </div>
               <div className="mb-4 text-[11px] text-ink-soft">
-                {mode === 'build' ? 'Full autonomy in the workspace — edits files and runs commands (git, tests, builds) without prompting. For agents that ship changes.'
-                  : mode === 'edit' ? 'Can create and modify files in the workspace (auto-accepted). No shell commands.'
-                  : 'Discusses and advises in the room. No file access.'}
+                {AGENT_MODE_COPY[mode].detail}
               </div>
 
               {/* Persistent session — resumable + shows in your CLI/app session list. */}
