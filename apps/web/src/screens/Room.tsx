@@ -3386,14 +3386,45 @@ export function Room() {
 
               {/* T-48/T-65: jump-to-latest, one tap back to live whenever he's
                   scrolled up, with the count when there's something new. */}
-              {/* T-72: this is a dedicated layout lane between feed and
-                  composer at every width — a message structurally cannot sit
-                  behind it. Where the composer itself remains floating, the
-                  lane reserves its measured height below. */}
+
+
+            {!isPhone && (
+              <div
+                data-gate="desktop-composer-clearance"
+                className="flex-shrink-0"
+                style={{ height: composerH }}
+                aria-hidden="true"
+              />
+            )}
+
+            {isPhone && !chromeHidden && (
+              <div
+                data-gate="mobile-composer-clearance"
+                className="flex-shrink-0"
+                style={{ height: composerH }}
+                aria-hidden="true"
+              />
+            )}
+
+            {/* T-82: the bottom block is visually fixed on phones, while the
+                measured clearance above keeps it out of the message viewport.
+                It slides away in immersive reading; >=sm is unchanged. */}
+            <div ref={composerWrapRef} className="room-bottom-chrome relative sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
+              {/* T-72 reserved a full-width layout lane here so a message could
+                  not sit behind the control. Reverted per the host: on a phone
+                  that lane costs a band of conversation on every screen where
+                  the button appears, which is most of them while reading back.
+                  It FLOATS now, centred, and reserves nothing.
+                  The invariant T-72 protected still holds by construction:
+                  Latest only renders while you are away from the bottom, so it
+                  can never cover the newest message you are actually reading —
+                  and tapping it removes it. Container is pointer-events-none so
+                  the covered text stays selectable and scrollable; only the
+                  pills themselves take input. */}
               {(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (
                 <div
                   data-gate="floating"
-                  className="room-latest-lane z-[25] flex w-full flex-shrink-0 items-center justify-end gap-2 px-3 py-1.5 sm:justify-center sm:px-4"
+                  className="room-latest-lane pointer-events-none absolute inset-x-0 bottom-full z-[25] mb-2 flex items-center justify-center gap-2 px-3 sm:px-4"
                 >
                   {(unseenCount > 0 || !atBottom) && (
                     <button
@@ -3444,28 +3475,6 @@ export function Room() {
                 </div>
               )}
 
-            {!isPhone && (
-              <div
-                data-gate="desktop-composer-clearance"
-                className="flex-shrink-0"
-                style={{ height: composerH }}
-                aria-hidden="true"
-              />
-            )}
-
-            {isPhone && !chromeHidden && (
-              <div
-                data-gate="mobile-composer-clearance"
-                className="flex-shrink-0"
-                style={{ height: composerH }}
-                aria-hidden="true"
-              />
-            )}
-
-            {/* T-82: the bottom block is visually fixed on phones, while the
-                measured clearance above keeps it out of the message viewport.
-                It slides away in immersive reading; >=sm is unchanged. */}
-            <div ref={composerWrapRef} className="room-bottom-chrome sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
             {ended ? (
               // A1: ended-room CTA pivots from "Reactivate-only" to a primary
               // "Save & Share" call-to-action. Once the meeting wraps, the most
