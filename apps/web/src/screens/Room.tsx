@@ -3419,7 +3419,15 @@ export function Room() {
               />
             )}
 
-            {isPhone && !chromeHidden && (
+            {/* CONSTANT GEOMETRY. This spacer used to unmount whenever the
+                chrome hid, which removed ~122px from the column and shoved the
+                whole conversation down under the reader's eyes — a jerk on
+                every single chrome toggle, i.e. constantly while reading.
+                The chrome itself slides with a transform, which is
+                compositor-only and costs no layout; the reserved space must
+                therefore stay put. Content position must never be a function
+                of whether chrome happens to be showing. */}
+            {isPhone && (
               <div
                 data-gate="mobile-composer-clearance"
                 className="flex-shrink-0"
