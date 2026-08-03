@@ -36,6 +36,7 @@ import { colorForName, initialsFor } from '../lib/colors.js';
 import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, textMentionsSelf } from '../lib/mentions.js';
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { ACTION_ID_RE, STRUCTURED_VIEW_VERSION, artifactLabel, templateInfo, type ArtifactKind, type ViewAction, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
+import { AgentPromptFooter, blockedAgents } from '../components/AgentPromptFooter.js';
 import { ApiError, appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomOutputInstructionsAction, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
@@ -606,6 +607,16 @@ export function Room() {
   // above. Advisory: the endpoint is owner-gated, so a non-owner session just
   // gets nothing and the UI omits process badges. null = not loaded yet.
   const [summonerAgents, setSummonerAgents] = useState<SummonedAgent[] | null>(null);
+  const refreshSummonerAgents = useCallback(async () => {
+    if (!code) return;
+    try { setSummonerAgents(await listRoomAgentHistory(code)); }
+    catch { /* advisory; never break the room over it */ }
+  }, [code]);
+  // A blocked agent is not advisory — it is stopped until someone answers, and
+  // the pinned footer is only as useful as it is prompt. Poll fast while one is
+  // waiting (so the card appears and, once answered, clears), and fall back to
+  // the slow cadence when nothing is blocked.
+  const anyAgentBlocked = blockedAgents(summonerAgents).length > 0;
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
@@ -616,9 +627,9 @@ export function Room() {
       } catch { /* advisory; never break the room over it */ }
     };
     void pull();
-    const id = window.setInterval(() => { void pull(); }, 30000);
+    const id = window.setInterval(() => { void pull(); }, anyAgentBlocked ? 5000 : 15000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [code]);
+  }, [code, anyAgentBlocked]);
   const [composerExpanded, setComposerExpanded] = useState(false);
   // T-53/T-54: the message being quote-replied to (composer chip + send payload).
   const [replyingTo, setReplyingTo] = useState<MessageReplyRef | null>(null);
@@ -3410,6 +3421,11 @@ export function Room() {
                 measured clearance above keeps it out of the message viewport.
                 It slides away in immersive reading; >=sm is unchanged. */}
             <div ref={composerWrapRef} className="room-bottom-chrome relative sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
+            {/* Urgent-ask: a summoned agent stopped on a permission dialog
+                is blocked until a human answers. That answer used to exist
+                only inside the Agent details sheet; pinned here it is where
+                the owner is already looking. */}
+            <AgentPromptFooter agents={summonerAgents} onAnswered={() => { void refreshSummonerAgents(); }} />
               {/* T-72 reserved a full-width layout lane here so a message could
                   not sit behind the control. Reverted per the host: on a phone
                   that lane costs a band of conversation on every screen where
