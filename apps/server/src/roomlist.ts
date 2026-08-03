@@ -35,6 +35,15 @@ export interface RoomSummary {
    *  plus the stale count so severity can be worded ("1 of 2 needs attention"). */
   agentStaleCount: number;
   agents: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'working' | 'stale' | 'disconnected' }>;
+  /** Owner questions still awaiting an answer.
+   *
+   *  A room BLOCKED on the owner used to look identical to an idle one: the
+   *  question artifact surfaced only inside the room, and the unread badge
+   *  cannot stand in for it — the question pops up while the owner is looking
+   *  at the room, and being in the room marks it read, so the count is already
+   *  zero by the time he navigates away. This is the one room state that is
+   *  waiting on the human rather than on an agent. */
+  openQuestionCount: number;
 }
 
 /** Facepile payload cap — 3 visible faces + the "+N" overflow chip's worth. */
@@ -57,6 +66,12 @@ export interface RoomIndexEntry {
 export interface RoomIndexRecord {
   raw: string | null;
   messageCountRaw: string | number | null;
+  /** Counter of unanswered owner questions. `null` on a room that has not
+   *  created or answered one since the counter existed — read as zero, never
+   *  as "unknown", so a missing key can only under-report a badge and never
+   *  invent one. It self-heals the next time that room's questions are listed
+   *  or answered. */
+  openQuestionsRaw?: string | number | null;
 }
 
 export interface RoomListStore {
@@ -64,6 +79,19 @@ export interface RoomListStore {
   range(start: number, stop: number): Promise<RoomIndexEntry[]>;
   read(entries: RoomIndexEntry[]): Promise<RoomIndexRecord[]>;
   remove(codes: string[]): Promise<void>;
+}
+
+/**
+ * Read the open-question counter defensively. A badge that says "1 waiting"
+ * when nothing is waiting trains the owner to ignore it, so anything that is
+ * not a clean non-negative integer reads as zero: missing key, empty string,
+ * a non-numeric value, a negative left by a double-decrement.
+ */
+export function openQuestionCount(raw: string | number | null | undefined): number {
+  if (raw === null || raw === undefined || raw === '') return 0;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value);
 }
 
 export function roomListLimit(raw: string | null): number {
@@ -137,6 +165,7 @@ function summary(entry: RoomIndexEntry, record: RoomIndexRecord, now: number): R
       agentListeningCount,
       agentStaleCount,
       agents: facepile,
+      openQuestionCount: openQuestionCount(record.openQuestionsRaw),
     };
   } catch {
     return null;

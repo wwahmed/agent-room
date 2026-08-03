@@ -418,6 +418,7 @@ export function Home() {
                     code={r.code}
                     messageCount={r.messageCount}
                     selfName={identity.name}
+                    openQuestionCount={r.openQuestionCount}
                   />
                   {/* T-40 R1: the whole card is the link; a quiet chevron is the
                       only affordance. Accent stays reserved for attention. */}

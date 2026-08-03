@@ -388,16 +388,23 @@ const roomListStore: RoomListStore = {
     return entries;
   },
   async read(entries) {
+    // Three keys per room in ONE pipeline. The open-question count is a
+    // counter rather than a read of the questions list itself: a question
+    // carries up to 2.5 KB of prompt+context, and pulling every room's
+    // questions to render a badge would put megabytes on the room-list path.
+    const FIELDS = 3;
     const reads = redis.pipeline();
     for (const entry of entries) {
       reads.get(`room:${entry.code}`);
       reads.get(`room-msg-count:${entry.code}`);
+      reads.get(roomOpenQuestionsKey(entry.code));
     }
     const rows = await reads.exec();
     if (!rows) throw new Error('room list pipeline aborted');
     return entries.map((_, i) => ({
-      raw: typeof rows[i * 2]?.[1] === 'string' ? rows[i * 2]![1] as string : null,
-      messageCountRaw: rows[i * 2 + 1]?.[1] as string | number | null,
+      raw: typeof rows[i * FIELDS]?.[1] === 'string' ? rows[i * FIELDS]![1] as string : null,
+      messageCountRaw: rows[i * FIELDS + 1]?.[1] as string | number | null,
+      openQuestionsRaw: rows[i * FIELDS + 2]?.[1] as string | number | null,
     }));
   },
   async remove(codes) {
@@ -1915,7 +1922,11 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       } else {
         requireQuestionAgent(room.participants, String(payload.name || ''));
       }
-      return { questions: await listRoomQuestions(code) };
+      const questions = await listRoomQuestions(code);
+      // The list is already loaded — reconcile the badge counter off it. This
+      // is what backfills rooms whose questions predate the counter.
+      await syncOpenQuestionCount(code, questions);
+      return { questions };
     }
     case 'questionCreate': {
       if (caller.kind !== 'local') {
@@ -2279,6 +2290,42 @@ function roomQuestionsKey(code: string): string {
   return `room-questions:${code}`;
 }
 
+/** Cheap counter behind the room card's "needs your answer" badge. The
+ *  questions list is the authority; this is a projection of it, and every
+ *  path that already holds the full list rewrites it exactly (see
+ *  syncOpenQuestionCount) so drift cannot accumulate. */
+function roomOpenQuestionsKey(code: string): string {
+  return `room-open-questions:${code}`;
+}
+
+/** A question is answered when it HAS an answer — there is no status field.
+ *  Anything without a well-formed answer is still waiting on the owner. */
+function countUnanswered(questions: RoomQuestion[]): number {
+  return questions.filter(q => q && !q.answer).length;
+}
+
+/**
+ * Rewrite the counter from the authoritative list. Called wherever the list is
+ * already in hand — answering a question, and listing them — which makes the
+ * badge self-healing: a room whose questions predate this counter gets an
+ * accurate value the first time anything touches it, and an INCR that raced or
+ * a key that expired early is corrected rather than left to drift.
+ */
+async function syncOpenQuestionCount(code: string, questions: RoomQuestion[]): Promise<number> {
+  const open = countUnanswered(questions);
+  try {
+    const key = roomOpenQuestionsKey(code);
+    if (open > 0) {
+      await redis.set(key, String(open), 'EX', ROOM_TTL_SECONDS);
+    } else {
+      // Nothing waiting: drop the key rather than store a 0, so an idle room
+      // holds no state and the badge can only be absent.
+      await redis.del(key);
+    }
+  } catch { /* the badge is not worth failing a question read over */ }
+  return open;
+}
+
 async function listRoomQuestions(code: string): Promise<RoomQuestion[]> {
   const rows = await redis.lrange(roomQuestionsKey(code), 0, -1);
   return rows.flatMap((row) => {
@@ -2294,6 +2341,14 @@ async function appendRoomQuestion(code: string, question: RoomQuestion): Promise
   const key = roomQuestionsKey(code);
   await redis.rpush(key, JSON.stringify(question));
   await redis.expire(key, ROOM_TTL_SECONDS);
+  // INCR, not a list re-read: creation is the hot path and the answer/list
+  // paths reconcile the exact value. A counter that briefly over-reports is
+  // still pointing the owner at a room that genuinely has a question.
+  try {
+    const counter = roomOpenQuestionsKey(code);
+    await redis.incr(counter);
+    await redis.expire(counter, ROOM_TTL_SECONDS);
+  } catch { /* badge only — never block creating the question */ }
 }
 
 async function answerStoredRoomQuestion(
@@ -2309,6 +2364,11 @@ async function answerStoredRoomQuestion(
   const answered = answerRoomQuestion(questions[index]!, value, answeredBy, nowMs());
   await redis.lset(key, index, JSON.stringify(answered));
   await redis.expire(key, ROOM_TTL_SECONDS);
+  // Reconcile from the list WITH this answer applied, so the badge clears the
+  // moment the last open question is answered — and reflects the true state
+  // rather than a decrement that assumed one.
+  questions[index] = answered;
+  await syncOpenQuestionCount(code, questions);
   return answered;
 }
 

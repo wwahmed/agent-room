@@ -31,6 +31,10 @@ export interface RoomSummary {
    *  so the facepile can word severity, not just color it. */
   agentStaleCount?: number;
   agents?: Array<{ name: string; color: string; initials: string; harness?: string; state: 'listening' | 'online' | 'working' | 'stale' | 'disconnected' }>;
+  /** Owner questions still waiting on an answer. The room card had no signal
+   *  for this at all, and unread cannot substitute: the question appears while
+   *  the owner is in the room, and being in the room marks it read. */
+  openQuestionCount?: number;
 }
 
 export interface RoomPage {

@@ -28,6 +28,9 @@ interface RoomSummary {
   // server-side) and message count; list arrives sorted recent-activity-first.
   lastActivityAt?: number;
   messageCount?: number;
+  /** Owner questions still awaiting an answer — the rail must carry the same
+   *  "needs your answer" signal Home does, or the badge is only half shipped. */
+  openQuestionCount?: number;
   // T-25: agent attachment + server health verdict for the card pill.
   agentCount?: number;
   agentsAllHealthy?: boolean;
@@ -179,6 +182,7 @@ export function RoomListPane({ activeCode, selfName }: { activeCode: string; sel
                     selfName={selfName}
                     active={active}
                     compact
+                    openQuestionCount={r.openQuestionCount}
                   />
                   {r.lastActivityAt != null && (
                     <span className="flex-shrink-0 text-[12px] tabular-nums text-ink-faint" title={new Date(r.lastActivityAt).toLocaleString()}>
