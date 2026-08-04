@@ -225,9 +225,16 @@ body {
      deeper; a deliberate reverse gesture restores both. Latest stays in a
      real layout lane so controls never cover message text. */
   @media (max-width: 639px) {
+    /* Host order: the chrome must "move away slowly to not cause disruption."
+       160ms ease-out started at full speed, so a bar leaving the edge of the
+       eye registered as a snap even though nothing under it moved. The curve
+       matters more than the duration here: easing IN means the first frames
+       barely move, so the motion is noticed after it has begun rather than as
+       an event. 320ms is long enough to read as a slide and short enough that
+       reaching for the composer never feels gated on an animation. */
     .app-command-bar,
     .room-bottom-chrome {
-      transition: transform 160ms ease-out;
+      transition: transform 320ms cubic-bezier(0.33, 0, 0.2, 1);
     }
     .room-bottom-chrome {
       position: absolute;

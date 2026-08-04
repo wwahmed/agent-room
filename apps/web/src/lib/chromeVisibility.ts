@@ -28,11 +28,34 @@ export function initialChromeVis(top = 0): ChromeVis {
   return { hidden: false, accum: 0, lastTop: top };
 }
 
-/** Preserve the reader's distance from the tail when mobile chrome changes the
- * feed viewport height. Without this compensation the browser clamp itself is
- * misread as a new gesture, creating an infinite hide/show loop at the tail. */
-export function anchoredScrollTop(scrollHeight: number, clientHeight: number, distanceFromBottom: number): number {
-  return Math.max(0, scrollHeight - clientHeight - Math.max(0, distanceFromBottom));
+/**
+ * Where the feed must be scrolled to after a chrome toggle, so that the text
+ * under the reader's eyes does not move.
+ *
+ * What actually moves the reader is the feed's own top edge. The feed is the
+ * flex child that absorbs the column's spare height, so when a clearance row
+ * above it unmounts, the feed grows by that much AND starts that much higher.
+ * Content drawn at a given scroll offset therefore rides up the screen by the
+ * clientHeight delta, and the compensation is to scroll back down by it.
+ *
+ * Deliberately expressed as a delta rather than as a preserved distance from
+ * the tail. The two agree only while `scrollHeight` is constant; the tail form
+ * silently folds any scrollHeight change into the reader's position, which is
+ * how a collapsing bottom padding turned into a composer-sized jump. This form
+ * ignores scrollHeight except to clamp, so it stays correct either way.
+ *
+ * Measured on the live phone layout: hiding the chrome grows the feed 708 ->
+ * 812, and the tracked message moves 104px up the screen with no compensation.
+ */
+export function chromeAnchoredTop(
+  previousTop: number,
+  previousClientHeight: number,
+  scrollHeight: number,
+  clientHeight: number,
+): number {
+  const grewBy = clientHeight - previousClientHeight;
+  const maxTop = Math.max(0, scrollHeight - clientHeight);
+  return Math.min(Math.max(0, previousTop - grewBy), maxTop);
 }
 
 /**

@@ -69,8 +69,29 @@ describe('phone chat overlays do not obscure conversation content', () => {
   // immersive mode shows a dead band. Padding below the last message does
   // neither — it cannot move content above it, and it collapses with the chrome.
   it('reserves the composer height as padding inside the scrollport', () => {
-    expect(room).toContain('paddingBottom: chromeHidden ? 16 : composerH + 16');
+    expect(room).toContain('paddingBottom: composerH + 16');
     expect(room).not.toContain('data-gate="mobile-composer-clearance"');
+  });
+
+  // Host order: "if the header and footer move away, they should NOT move the
+  // reading position." Feed geometry must be identical in both chrome states,
+  // so nothing downstream has a change to react to. Collapsing the padding
+  // with the chrome looks free and is not: it moves scrollHeight, which the
+  // tail anchor turned into a composer-sized jump and which reads a
+  // mid-history reader as "at bottom", forcing the chrome straight back.
+  it('keeps feed geometry identical whether or not the chrome is showing', () => {
+    expect(room).not.toContain('paddingBottom: chromeHidden');
+    expect(room).not.toContain('chromeHidden ? 16');
+    // The clearance ABOVE the feed still unmounts, so the anchor has to carry
+    // clientHeight too — that delta is the 104px the reader would otherwise
+    // lose on every toggle. Position is compensated, never re-derived.
+    expect(room).toContain('chromeTopAnchorRef.current = { top: feed.scrollTop, clientHeight: feed.clientHeight }');
+    // Captured at the sample, never as a side effect inside a setState
+    // updater — React may run an updater eagerly, twice, or not at all.
+    expect(room).toContain('if (next.hidden !== wasHidden) {');
+    expect(room).not.toContain('setChromeHidden(prev => {');
+    expect(room).toContain('chromeAnchoredTop(anchor.top, anchor.clientHeight, el.scrollHeight, el.clientHeight)');
+    expect(room).not.toContain('anchoredScrollTop(');
   });
 
   it('never changes feed geometry from the at-bottom state', () => {

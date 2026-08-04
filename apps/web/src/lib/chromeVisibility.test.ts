@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHROME_HYSTERESIS, anchoredScrollTop, chromeStep, initialChromeVis } from './chromeVisibility.js';
+import { CHROME_HYSTERESIS, chromeAnchoredTop, chromeStep, initialChromeVis } from './chromeVisibility.js';
 
 // T-82: the chrome state machine. Direction + hysteresis, pinning, top and
 // bottom reveals — every transition the phone gesture contract depends on.
@@ -79,12 +79,39 @@ describe('chromeStep', () => {
     expect(v.hidden).toBe(true);
   });
 
-  it('preserves distance from the tail when chrome changes the viewport height', () => {
-    // Live P0 trace: clearances changed clientHeight by 182px and oscillated
-    // forever. The anchored top absorbs that exact geometry change.
-    expect(anchoredScrollTop(28_799, 732, 140)).toBe(27_927);
-    expect(28_799 - anchoredScrollTop(28_799, 732, 140) - 732).toBe(140);
-    expect(anchoredScrollTop(28_799, 550, 0)).toBe(28_249);
-    expect(28_799 - anchoredScrollTop(28_799, 550, 0) - 550).toBe(0);
+  // Host order: "if the header and footer move away, they should NOT move the
+  // reading position." Tail-anchoring was the old answer and is now the bug —
+  // these pin the replacement in both directions.
+  it('absorbs the feed growing when the header clearance unmounts', () => {
+    // Measured live at 375px: hiding the chrome takes the feed 708 -> 812, and
+    // uncompensated the tracked message rode 104px up the screen. Scrolling
+    // back down by the same 104 is what keeps it still.
+    expect(chromeAnchoredTop(8_030, 708, 16_944, 812)).toBe(8_030 - 104);
+    // And the reverse leg, restoring the chrome.
+    expect(chromeAnchoredTop(7_926, 812, 16_944, 708)).toBe(7_926 + 104);
+  });
+
+  it('holds position exactly when only scrollHeight moved', () => {
+    // A scrollHeight change is content below the reader; it is not the reader
+    // moving. This is the case the tail form got wrong.
+    expect(chromeAnchoredTop(11_025, 562, 27_377, 562)).toBe(11_025);
+    expect(chromeAnchoredTop(11_025, 562, 27_377 - 122, 562)).toBe(11_025);
+    expect(chromeAnchoredTop(11_025, 562, 27_377 + 122, 562)).toBe(11_025);
+  });
+
+  it('does not reintroduce the composer-sized jump of the tail form', () => {
+    // The defect, stated as arithmetic: preserving distance-from-tail across a
+    // 122px scrollHeight shrink moves the reader by exactly 122px.
+    const top = 11_025, height = 27_377, client = 562;
+    const tailDistance = height - top - client;
+    expect((height - 122) - client - tailDistance).toBe(top - 122);
+    expect(chromeAnchoredTop(top, client, height - 122, client)).toBe(top);
+  });
+
+  it('yields to a real clamp rather than fighting it', () => {
+    expect(chromeAnchoredTop(27_000, 562, 27_377, 562)).toBe(26_815);
+    expect(chromeAnchoredTop(-5, 562, 27_377, 562)).toBe(0);
+    // Content shorter than the viewport: the only valid position is 0.
+    expect(chromeAnchoredTop(400, 812, 500, 812)).toBe(0);
   });
 });

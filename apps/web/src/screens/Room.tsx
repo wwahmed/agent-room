@@ -5,7 +5,7 @@ import { MessageRow, isSameGroup, hasRenderableContent } from '../components/Mes
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
-import { anchoredScrollTop, chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
+import { chromeAnchoredTop, chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { SummonAgentSheet } from '../components/SummonAgentSheet.js';
@@ -677,7 +677,10 @@ export function Room() {
   const [chromeHidden, setChromeHidden] = useState(false);
   const chromeVisRef = useRef(initialChromeVis());
   const chromeRafRef = useRef(0);
-  const chromeDistanceAnchorRef = useRef<number | null>(null);
+  // The feed's scrollTop AND clientHeight as they were at the instant the
+  // chrome flipped. Both are needed: the clearance row above the feed
+  // unmounts, so the feed's own top edge moves and scrollTop must absorb it.
+  const chromeTopAnchorRef = useRef<{ top: number; clientHeight: number } | null>(null);
   const chromeProgrammaticTopRef = useRef<number | null>(null);
   const chromePinnedRef = useRef(false);
   const [composerFocused, setComposerFocused] = useState(false);
@@ -707,19 +710,26 @@ export function Room() {
     return () => ro.disconnect();
     // The wrapper element persists across ended/muted/composer swaps.
   }, [mainTab, roomReady]);
-  // Mobile chrome visibility changes the feed's clientHeight by the exact
-  // header/composer clearance rows. Preserve the reader's tail distance
-  // across that layout transition and reset gesture hysteresis at the new
-  // scrollTop, so geometry can never masquerade as another finger gesture.
+  // Host order: "if the header and footer move away, they should NOT move the
+  // reading position." Two separate things had to be true for that, and only
+  // one of them was: the bottom reservation is now a constant so scrollHeight
+  // no longer moves, and this effect absorbs the one change that remains —
+  // the header clearance unmounting, which grows the feed and lifts its top
+  // edge by 104px. Measured, not assumed: without the compensation below the
+  // tracked message rides 104px up the screen on every single toggle.
+  //
+  // The other half is the part that was always necessary: restart gesture
+  // hysteresis at the resulting position, so the toggle cannot be read back
+  // as another finger gesture and immediately flip the chrome again.
   useLayoutEffect(() => {
-    if (!isPhone || chromeDistanceAnchorRef.current === null) return;
+    if (!isPhone || chromeTopAnchorRef.current === null) return;
     const el = feedRef.current;
     if (!el) return;
-    const distance = chromeDistanceAnchorRef.current;
-    chromeDistanceAnchorRef.current = null;
-    const targetTop = anchoredScrollTop(el.scrollHeight, el.clientHeight, distance);
+    const anchor = chromeTopAnchorRef.current;
+    chromeTopAnchorRef.current = null;
+    const targetTop = chromeAnchoredTop(anchor.top, anchor.clientHeight, el.scrollHeight, el.clientHeight);
     chromeProgrammaticTopRef.current = targetTop;
-    el.scrollTop = targetTop;
+    if (el.scrollTop !== targetTop) el.scrollTop = targetTop;
     const actualDistance = Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
     const bottom = actualDistance < 80;
     atBottomRef.current = bottom;
@@ -1258,13 +1268,18 @@ export function Room() {
             return;
           }
         }
+        const wasHidden = chromeVisRef.current.hidden;
         const next = chromeStep(chromeVisRef.current, feed.scrollTop, chromePinnedRef.current, atBottomRef.current);
         chromeVisRef.current = next;
-        setChromeHidden(prev => {
-          if (prev === next.hidden) return prev;
-          chromeDistanceAnchorRef.current = Math.max(0, feed.scrollHeight - feed.scrollTop - feed.clientHeight);
-          return next.hidden;
-        });
+        if (next.hidden !== wasHidden) {
+          // Captured HERE, not inside the setState updater. React may invoke an
+          // updater eagerly, twice, or discard its result, so a side effect in
+          // there records the geometry at an arbitrary moment. The anchor must
+          // be the geometry this sample actually decided on, or the layout
+          // effect compensates against a position that was never observed.
+          chromeTopAnchorRef.current = { top: feed.scrollTop, clientHeight: feed.clientHeight };
+          setChromeHidden(next.hidden);
+        }
       });
     }
     // T-04: nearing the top pulls the previous history page. Anchor the current
@@ -3254,18 +3269,28 @@ export function Room() {
                 style={isPhone ? {
                   // The composer's clearance lives HERE, as padding below the
                   // last message, rather than as a sibling spacer outside the
-                  // scrollport. Both of the host's complaints come from that
+                  // scrollport. Both of the host's complaints came from that
                   // spacer: unmounting it on chrome-hide shifted the whole
                   // conversation (a jerk), and keeping it mounted left a dead
                   // band under the feed in immersive mode (wasted space).
                   //
-                  // Bottom padding has neither failure. It sits BELOW all
-                  // content, so growing or shrinking it cannot move a single
-                  // message the reader is looking at — only scrollHeight
-                  // changes — and when the chrome slides away the padding goes
-                  // with it, so the text runs to the bottom of the screen.
+                  // It is a CONSTANT, deliberately. Collapsing it with the
+                  // chrome looked free — padding below all content cannot move
+                  // a message above it — but it changes `scrollHeight`, and
+                  // two things downstream read that as the reader moving:
+                  // the tail anchor recomputed scrollTop from it (a jump the
+                  // size of the composer), and `atBottom` is a tail distance,
+                  // so shrinking the padding teleported a mid-history reader
+                  // to "at bottom", which forces chrome back, which restores
+                  // the padding — the oscillation this file has fought twice.
+                  //
+                  // Held constant, feed geometry is identical in both states,
+                  // so there is nothing for either to react to. The padding is
+                  // only ever visible at the tail, and at the tail chromeStep
+                  // always shows the chrome — so the composer is standing in
+                  // that space whenever the reader can see it.
                   paddingTop: 0,
-                  paddingBottom: chromeHidden ? 16 : composerH + 16,
+                  paddingBottom: composerH + 16,
                 } : {
                   // The composer and Latest control own permanent layout rows
                   // below this scrollport. Never change feed geometry from
