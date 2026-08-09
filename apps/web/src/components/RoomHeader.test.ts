@@ -33,8 +33,8 @@ describe('room command bar composition', () => {
     // T-71: in-room mobile chrome is the 96px two-row header shell
     // (52px identity + 44px workspace switcher), one row at lg+; the
     // full-screen mobile Settings page returns chrome to 52px.
-    // T-82: the phone CHAT tab is full-bleed (pt-0) — chrome overlays the
-    // feed and slides away in immersive reading; other tabs keep the shell.
+    // Phone CHAT is full-bleed beneath floating chrome; other tabs reserve the
+    // shell here. Showing/hiding chrome must not resize the chat viewport.
     expect(room).toContain("mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'");
     expect(header).toContain('workspaceNav');
     expect(header).toContain('mobileNavHidden');

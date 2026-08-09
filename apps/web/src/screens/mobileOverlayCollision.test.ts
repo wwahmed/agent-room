@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const room = readFileSync(new URL('./Room.tsx', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
 
 describe('phone chat overlays do not obscure conversation content', () => {
-  it('gives the phone header and pinned control real non-scrolling layout rows', () => {
-    expect(room).toContain('data-gate="mobile-header-clearance"');
-    expect(room).toContain('h-[104px] flex-shrink-0');
+  it('keeps the phone header out of the feed layout', () => {
+    expect(room).not.toContain('data-gate="mobile-header-clearance"');
     expect(room).toContain('data-gate="pinned-strip"');
     expect(room).toContain('flex flex-shrink-0 justify-center');
-    expect(room).toContain('paddingTop: 0');
+    expect(room).toContain('paddingTop: 104');
     expect(room).toContain('data-gate="feed" className="relative min-h-0 flex-1 overflow-y-auto');
     expect(room).toContain('className="mx-auto flex min-h-11 items-center');
   });
@@ -46,8 +46,8 @@ describe('phone chat overlays do not obscure conversation content', () => {
     // Container off, pills on. Without this the overlay would block scrolling
     // and text selection across the full width of the conversation.
     expect(room).toContain('room-latest-lane pointer-events-none');
-    // Anchored to the composer itself (bottom-full), so it tracks the chrome
-    // through the immersive slide instead of guessing an offset from state.
+    // Anchored to the composer itself (bottom-full), so it tracks any measured
+    // composer growth instead of guessing an offset from state.
     // NOTE: no `relative` utility here. .room-bottom-chrome is position:absolute
     // on phones via CSS; adding `relative` overrode it, dropped the composer into
     // normal flow, and turned the existing composer-clearance spacer into 122px
@@ -64,34 +64,31 @@ describe('phone chat overlays do not obscure conversation content', () => {
     expect(room).toContain('{(unseenCount > 0 || !atBottom || selfMentionIds.length > 0) && (');
   });
 
-  // Reservation moved INSIDE the scrollport. A sibling spacer had only bad
-  // options: unmount it on chrome-hide and the conversation jerks; keep it and
-  // immersive mode shows a dead band. Padding below the last message does
-  // neither — it cannot move content above it, and it collapses with the chrome.
+  // Reservation lives inside the scrollport so the composer never covers the
+  // final message and never changes the height of the reading viewport.
   it('reserves the composer height as padding inside the scrollport', () => {
     expect(room).toContain('paddingBottom: composerH + 16');
     expect(room).not.toContain('data-gate="mobile-composer-clearance"');
   });
 
-  // Host order: "if the header and footer move away, they should NOT move the
-  // reading position." Feed geometry must be identical in both chrome states,
-  // so nothing downstream has a change to react to. Collapsing the padding
-  // with the chrome looks free and is not: it moves scrollHeight, which the
-  // tail anchor turned into a composer-sized jump and which reads a
-  // mid-history reader as "at bottom", forcing the chrome straight back.
-  it('keeps feed geometry identical whether or not the chrome is showing', () => {
+  it('changes only compositor transforms when mobile chrome visibility changes', () => {
+    expect(room).toContain("chromeHidden && mainTab === 'chat' ? 'chrome-hidden' : ''");
+    expect(room).toContain('const next = chromeStep(');
+    expect(room).not.toContain('chromeAnchoredTop');
+    expect(room).not.toContain('chromeTopAnchorRef');
+    expect(room).not.toContain('chromeProgrammaticTopRef');
+    expect(styles).toContain('.chrome-hidden .app-command-bar');
+    expect(styles).toContain('.chrome-hidden .room-bottom-chrome');
+    expect(styles).toContain('translate3d(0, -102%, 0)');
+    expect(styles).toContain('translate3d(0, 102%, 0)');
+  });
+
+  it('never makes feed geometry conditional on chrome visibility', () => {
     expect(room).not.toContain('paddingBottom: chromeHidden');
-    expect(room).not.toContain('chromeHidden ? 16');
-    // The clearance ABOVE the feed still unmounts, so the anchor has to carry
-    // clientHeight too — that delta is the 104px the reader would otherwise
-    // lose on every toggle. Position is compensated, never re-derived.
-    expect(room).toContain('chromeTopAnchorRef.current = { top: feed.scrollTop, clientHeight: feed.clientHeight }');
-    // Captured at the sample, never as a side effect inside a setState
-    // updater — React may run an updater eagerly, twice, or not at all.
-    expect(room).toContain('if (next.hidden !== wasHidden) {');
-    expect(room).not.toContain('setChromeHidden(prev => {');
-    expect(room).toContain('chromeAnchoredTop(anchor.top, anchor.clientHeight, el.scrollHeight, el.clientHeight)');
-    expect(room).not.toContain('anchoredScrollTop(');
+    expect(room).not.toContain('paddingTop: chromeHidden');
+    expect(room).not.toContain('!chromeHidden && (');
+    expect(room).not.toContain('chromeTopAnchorRef');
+    expect(room).not.toContain('chromeProgrammaticTopRef');
   });
 
   it('never changes feed geometry from the at-bottom state', () => {

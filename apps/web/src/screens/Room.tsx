@@ -5,7 +5,7 @@ import { MessageRow, isSameGroup, hasRenderableContent } from '../components/Mes
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher.js';
 import { ActivityNote, ClampedNoteBody } from '../components/ActivityNote.js';
 import { collapseStatusRuns } from '../lib/statusRuns.js';
-import { chromeAnchoredTop, chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
+import { chromeStep, initialChromeVis } from '../lib/chromeVisibility.js';
 import { MessageDayDivider } from '../components/MessageDayDivider.js';
 import { RoomHeader } from '../components/RoomHeader.js';
 import { SummonAgentSheet } from '../components/SummonAgentSheet.js';
@@ -671,17 +671,11 @@ export function Room() {
   // jump-to-bottom button's visibility.)
   const [atBottom, setAtBottom] = useState(true);
 
-  // T-82: contextual phone chrome. Reading deeper slides the command bar and
-  // idle composer out of the viewport; a deliberate reverse gesture, the
-  // history top, the newest message, or any pinned state restores them.
+  // Floating phone chrome is visual-only state. It may transform the header
+  // and composer, but it must never alter the feed's layout or scrollTop.
   const [chromeHidden, setChromeHidden] = useState(false);
   const chromeVisRef = useRef(initialChromeVis());
   const chromeRafRef = useRef(0);
-  // The feed's scrollTop AND clientHeight as they were at the instant the
-  // chrome flipped. Both are needed: the clearance row above the feed
-  // unmounts, so the feed's own top edge moves and scrollTop must absorb it.
-  const chromeTopAnchorRef = useRef<{ top: number; clientHeight: number } | null>(null);
-  const chromeProgrammaticTopRef = useRef<number | null>(null);
   const chromePinnedRef = useRef(false);
   const [composerFocused, setComposerFocused] = useState(false);
   // Measured bottom-chrome height feeds the floating Latest pill offset and
@@ -694,6 +688,9 @@ export function Room() {
     const onChange = () => setIsPhone(mq.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => () => {
+    if (chromeRafRef.current) cancelAnimationFrame(chromeRafRef.current);
   }, []);
   // Gate finding (T-83 aftermath): on a COLD load this effect first runs
   // during bootstrap, when the chat column (and wrapper) does not exist yet;
@@ -710,32 +707,6 @@ export function Room() {
     return () => ro.disconnect();
     // The wrapper element persists across ended/muted/composer swaps.
   }, [mainTab, roomReady]);
-  // Host order: "if the header and footer move away, they should NOT move the
-  // reading position." Two separate things had to be true for that, and only
-  // one of them was: the bottom reservation is now a constant so scrollHeight
-  // no longer moves, and this effect absorbs the one change that remains —
-  // the header clearance unmounting, which grows the feed and lifts its top
-  // edge by 104px. Measured, not assumed: without the compensation below the
-  // tracked message rides 104px up the screen on every single toggle.
-  //
-  // The other half is the part that was always necessary: restart gesture
-  // hysteresis at the resulting position, so the toggle cannot be read back
-  // as another finger gesture and immediately flip the chrome again.
-  useLayoutEffect(() => {
-    if (!isPhone || chromeTopAnchorRef.current === null) return;
-    const el = feedRef.current;
-    if (!el) return;
-    const anchor = chromeTopAnchorRef.current;
-    chromeTopAnchorRef.current = null;
-    const targetTop = chromeAnchoredTop(anchor.top, anchor.clientHeight, el.scrollHeight, el.clientHeight);
-    chromeProgrammaticTopRef.current = targetTop;
-    if (el.scrollTop !== targetTop) el.scrollTop = targetTop;
-    const actualDistance = Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
-    const bottom = actualDistance < 80;
-    atBottomRef.current = bottom;
-    setAtBottom(bottom);
-    chromeVisRef.current = { hidden: chromeHidden, accum: 0, lastTop: el.scrollTop };
-  }, [chromeHidden, isPhone]);
   // T-84: when the bottom stack GROWS while the reader sits at the newest
   // message (reply chip added, attachment chip lands, voice draft expands),
   // re-anchor so the final line moves fully above the stack instead of
@@ -1254,32 +1225,21 @@ export function Room() {
       );
       if (count !== null) markRoomRead(code, count, self?.name);
     }
-    // T-82: one rAF per frame samples direction for the contextual chrome.
+    // Sample at most once per frame. The resulting state controls transforms
+    // only: no spacer, padding, height, or scroll mutation depends on it.
     if (!chromeRafRef.current) {
       chromeRafRef.current = requestAnimationFrame(() => {
         chromeRafRef.current = 0;
         const feed = feedRef.current;
         if (!feed) return;
-        const programmaticTop = chromeProgrammaticTopRef.current;
-        if (programmaticTop !== null) {
-          chromeProgrammaticTopRef.current = null;
-          if (Math.abs(feed.scrollTop - programmaticTop) < 1) {
-            chromeVisRef.current = { hidden: chromeVisRef.current.hidden, accum: 0, lastTop: feed.scrollTop };
-            return;
-          }
-        }
-        const wasHidden = chromeVisRef.current.hidden;
-        const next = chromeStep(chromeVisRef.current, feed.scrollTop, chromePinnedRef.current, atBottomRef.current);
+        const next = chromeStep(
+          chromeVisRef.current,
+          feed.scrollTop,
+          chromePinnedRef.current,
+          atBottomRef.current,
+        );
+        if (next.hidden !== chromeVisRef.current.hidden) setChromeHidden(next.hidden);
         chromeVisRef.current = next;
-        if (next.hidden !== wasHidden) {
-          // Captured HERE, not inside the setState updater. React may invoke an
-          // updater eagerly, twice, or discard its result, so a side effect in
-          // there records the geometry at an arbitrary moment. The anchor must
-          // be the geometry this sample actually decided on, or the layout
-          // effect compensates against a position that was never observed.
-          chromeTopAnchorRef.current = { top: feed.scrollTop, clientHeight: feed.clientHeight };
-          setChromeHidden(next.hidden);
-        }
       });
     }
     // T-04: nearing the top pulls the previous history page. Anchor the current
@@ -1539,11 +1499,8 @@ export function Room() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachmentJobs]);
 
-  // T-82: hook topology must remain stable through bootstrap/error/join
-  // transitions. Derive the pinning state defensively before every early
-  // return, then run the restoring effect unconditionally. Keeping this hook
-  // below the guards makes loading -> loaded render one additional hook and
-  // crashes production with React invariant #310.
+  // Keep controls present whenever the composer or another bottom action is
+  // active. This hook remains above all early returns to preserve hook order.
   const preGuardIsHost = Boolean(room && self && room.createdBy === self.name);
   const preGuardParticipant = room && self
     ? room.participants.find(p => p.name === self.name && p.client === 'web')
@@ -3036,9 +2993,8 @@ export function Room() {
   const paletteActive = paletteCommands.length > 0 ? paletteIndex % paletteCommands.length : 0;
 
   return (
-    // T-82: on phones the CHAT tab is full-bleed (pt-0) — the feed's top
-    // clearance lives inside its scroll content, so hiding chrome reveals
-    // feed pixels instead of a blank placeholder strip.
+    // Phone chat stays full-bleed. Its chrome floats over one permanent feed
+    // viewport, so showing or hiding controls never changes reading geometry.
     <div className={`flex h-[100dvh] w-full overflow-hidden bg-surface-sunken lg:pt-14 ${mainTab === 'chat' ? 'pt-0 sm:pt-[96px]' : 'pt-[96px]'} ${chromeHidden && mainTab === 'chat' ? 'chrome-hidden' : ''}`}>
       <WorkspaceRail />
       <RoomListPane activeCode={code} selfName={me.name} />
@@ -3188,9 +3144,6 @@ export function Room() {
                 real layout clearance: neither the fixed command bar nor this
                 strip may paint over message text. The same structural rule
                 applies at every breakpoint. */}
-            {isPhone && !chromeHidden && (
-              <div data-gate="mobile-header-clearance" className="h-[104px] flex-shrink-0" aria-hidden="true" />
-            )}
             {pinnedList.length > 0 && !ended && (
               <div
                 data-gate="pinned-strip"
@@ -3261,35 +3214,17 @@ export function Room() {
               {/* T-48: center a generous conversation rail on wide desktops.
                   MessageRow caps prose at 80ch while images/artifacts can use
                   the extra canvas without creating edge-to-edge text.
-                  T-82: on phones the top/bottom clearances are CONTENT
-                  padding — the fixed bar and overlay composer sit above feed
-                  pixels, and hiding them exposes reading canvas, no reflow. */}
+                  On phones the fixed bar and overlay composer float above one
+                  full-height feed. Constant scroll-content padding provides
+                  landing runway without ever resizing the viewport. */}
               <div
                 className="mx-auto w-full max-w-[1280px]"
                 style={isPhone ? {
-                  // The composer's clearance lives HERE, as padding below the
-                  // last message, rather than as a sibling spacer outside the
-                  // scrollport. Both of the host's complaints came from that
-                  // spacer: unmounting it on chrome-hide shifted the whole
-                  // conversation (a jerk), and keeping it mounted left a dead
-                  // band under the feed in immersive mode (wasted space).
-                  //
-                  // It is a CONSTANT, deliberately. Collapsing it with the
-                  // chrome looked free — padding below all content cannot move
-                  // a message above it — but it changes `scrollHeight`, and
-                  // two things downstream read that as the reader moving:
-                  // the tail anchor recomputed scrollTop from it (a jump the
-                  // size of the composer), and `atBottom` is a tail distance,
-                  // so shrinking the padding teleported a mid-history reader
-                  // to "at bottom", which forces chrome back, which restores
-                  // the padding — the oscillation this file has fought twice.
-                  //
-                  // Held constant, feed geometry is identical in both states,
-                  // so there is nothing for either to react to. The padding is
-                  // only ever visible at the tail, and at the tail chromeStep
-                  // always shows the chrome — so the composer is standing in
-                  // that space whenever the reader can see it.
-                  paddingTop: 0,
+                  // Keep the measured composer clearance inside the scrollport.
+                  // It is constant during reading and changes only when the
+                  // composer itself grows, so feed scroll can never hide chrome
+                  // or alter the text position under the reader's eyes.
+                  paddingTop: 104,
                   paddingBottom: composerH + 16,
                 } : {
                   // The composer and Latest control own permanent layout rows
@@ -3453,19 +3388,9 @@ export function Room() {
               />
             )}
 
-            {/* CONSTANT GEOMETRY. This spacer used to unmount whenever the
-                chrome hid, which removed ~122px from the column and shoved the
-                whole conversation down under the reader's eyes — a jerk on
-                every single chrome toggle, i.e. constantly while reading.
-                The chrome itself slides with a transform, which is
-                compositor-only and costs no layout; the reserved space must
-                therefore stay put. Content position must never be a function
-                of whether chrome happens to be showing. */}
-
-
-            {/* T-82: the bottom block is visually fixed on phones, while the
-                measured clearance above keeps it out of the message viewport.
-                It slides away in immersive reading; >=sm is unchanged. */}
+            {/* The bottom block is permanently anchored on phones. The measured
+                padding inside the feed keeps the last message readable above it;
+                feed scroll never changes this element's visibility or position. */}
             <div ref={composerWrapRef} className="room-bottom-chrome sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20">
             {/* Urgent-ask: a summoned agent stopped on a permission dialog
                 is blocked until a human answers. That answer used to exist

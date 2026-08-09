@@ -220,21 +220,13 @@ body {
     :root[data-reading-scale='compact'] .msg-meta { font-size: 14px; }
   }
 
-  /* T-82: contextual phone chrome. The command bar slides above the
-     viewport and the bottom chrome (composer/CTA) below it while reading
-     deeper; a deliberate reverse gesture restores both. Latest stays in a
-     real layout lane so controls never cover message text. */
+  /* Phone room chrome floats over a feed whose geometry never changes. These
+     compositor-only transforms cannot resize the scrollport or move scrollTop. */
   @media (max-width: 639px) {
-    /* Host order: the chrome must "move away slowly to not cause disruption."
-       160ms ease-out started at full speed, so a bar leaving the edge of the
-       eye registered as a snap even though nothing under it moved. The curve
-       matters more than the duration here: easing IN means the first frames
-       barely move, so the motion is noticed after it has begun rather than as
-       an event. 320ms is long enough to read as a slide and short enough that
-       reaching for the composer never feels gated on an animation. */
     .app-command-bar,
     .room-bottom-chrome {
-      transition: transform 320ms cubic-bezier(0.33, 0, 0.2, 1);
+      transition: transform 240ms cubic-bezier(0.33, 0, 0.2, 1);
+      will-change: transform;
     }
     .room-bottom-chrome {
       position: absolute;
@@ -244,10 +236,10 @@ body {
       z-index: 20;
     }
     .chrome-hidden .app-command-bar {
-      transform: translateY(-102%);
+      transform: translate3d(0, -102%, 0);
     }
     .chrome-hidden .room-bottom-chrome {
-      transform: translateY(102%);
+      transform: translate3d(0, 102%, 0);
     }
   }
   @media (prefers-reduced-motion: reduce) {
