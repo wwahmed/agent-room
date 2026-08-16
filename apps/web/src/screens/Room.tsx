@@ -37,7 +37,7 @@ import { filterMentionCandidates, insertMention, mentionQueryAt, mentionToken, t
 import { composerEnterAction } from '../lib/composerKeys.js';
 import { ACTION_ID_RE, STRUCTURED_VIEW_VERSION, artifactLabel, templateInfo, type ArtifactKind, type ViewAction, type Message, type MessageAttachment, type MessageReplyRef, type Participant, type ReplyMode, type ReplyModeConfig, type RoomArtifact, type RoomQuestion, type SystemEventType } from '@agent-room/shared';
 import { AgentPromptFooter, blockedAgents } from '../components/AgentPromptFooter.js';
-import { ApiError, appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomOutputInstructionsAction, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
+import { ApiError, appendSystemMessage, directInvoke, getRoom, getRoomArtifacts, getTaskBoard, getTurnState, hostSkipCurrent, joinRoom, listOwnerQuestions, reactToMessage, setMessagePinned, promotePinnedDecision, setMuted, setReplyMode, createClient, createRoomReport, endRoom as endRoomApi, reactivateRoom as reactivateRoomApi, removeParticipant, verifyHostKey, archiveRoomAction, bringAgentBack, listSummonedAgents, listRoomAgentHistory, dismissSummonedAgent, removeAgentFromRoom, resummonRoomAgents, setRoomOutputInstructionsAction, setRoomTemplateAction, type BoardTask, type SummonedAgent, type TurnState } from '../lib/api.js';
 import { copyText } from '../lib/copy.js';
 import { agentInvitePrompt } from '../lib/invite.js';
 import { ROOM_TEMPLATES, templateById } from '../lib/templates.js';
@@ -57,7 +57,9 @@ import {
 } from '../lib/unread.js';
 import { withinAnchoredMutation } from '../lib/readingAnchor.js';
 import { scrollReadCount } from '../lib/scrollRead.js';
-import { processBadge, removalPlan, staleAgentRows } from '../lib/removal.js';
+import { newestAgentFor, processBadge, removalPlan, staleAgentRows } from '../lib/removal.js';
+import { AgentContextMenu, useAgentRowMenu } from '../components/AgentContextMenu.js';
+import { reviveCapability } from '../lib/agentRecovery.js';
 import { startReadingHeartbeat } from '../lib/readSync.js';
 import { fetchHealth, requestAdminHelp, sweepGhostAgents } from '../lib/api.js';
 import { messageTime, relativeTime } from '../lib/relativeTime.js';
@@ -574,6 +576,10 @@ export function Room() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [summonOpen, setSummonOpen] = useState(false);
   const [detailsFor, setDetailsFor] = useState<Participant | null>(null);
+  // Right-click / long-press on an agent row. Same gesture contract as the
+  // room cards on Home, from the same shared hook.
+  const { menu: agentMenu, closeMenu: closeAgentMenu, bind: bindAgentMenu } = useAgentRowMenu();
+  const [revivingName, setRevivingName] = useState<string | null>(null);
   useEffect(() => {
     const openSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
@@ -612,6 +618,24 @@ export function Room() {
     try { setSummonerAgents(await listRoomAgentHistory(code)); }
     catch { /* advisory; never break the room over it */ }
   }, [code]);
+  // Bring one stopped agent back. Relaunch at its existing level, so the revive
+  // cannot change what the agent is allowed to do, and the summoner treats a
+  // same-level relaunch of a LIVE session as a no-op — a mis-aimed click on a
+  // healthy agent costs nothing.
+  const bringBackFromRow = useCallback(async (name: string, agentId: string, mode: string) => {
+    setRevivingName(name);
+    const { showToast } = await import('../components/Toast.js');
+    try {
+      await bringAgentBack(agentId, mode);
+      showToast(`Bringing ${name} back — it should rejoin in a few seconds.`);
+      await refreshSummonerAgents();
+    } catch (e) {
+      // The summoner's refusal is more specific than anything invented here.
+      showToast(e instanceof Error ? e.message : `Could not bring ${name} back`, 'error');
+    } finally {
+      setRevivingName(null);
+    }
+  }, [refreshSummonerAgents]);
   // A blocked agent is not advisory — it is stopped until someone answers, and
   // the pinned footer is only as useful as it is prompt. Poll fast while one is
   // waiting (so the card appears and, once answered, clears), and fall back to
@@ -2452,11 +2476,18 @@ export function Room() {
                     isMuted ? 'muted' : null,
                     presence ? presence.label : null,
                   ].filter(Boolean).join(', ');
+                  // Agents only: a browser row has no process to bring back, and
+                  // a read-only viewer is nobody's recovery problem.
+                  const menuBinding = p.client === 'cc' && p.viewer !== true
+                    ? bindAgentMenu({ name: p.name, role: p.role, client: p.client })
+                    : {};
                   return (
                     <div
                       key={`${p.name}-${p.client}`}
                       role="group"
                       aria-label={rowLabel}
+                      data-gate={p.client === 'cc' && p.viewer !== true ? 'agent-row' : undefined}
+                      {...menuBinding}
                       className={`flex flex-col gap-2 rounded-lg border px-2.5 py-2 transition sm:flex-row sm:items-start sm:gap-2.5 ${rowFade} ${isMuted ? 'border-amber-400/40 bg-amber-500/10' : 'border-border-faint bg-surface-softer'}`}
                     >
                       {/* Avatar + identity are one shrinkable unit. They used to be
@@ -2561,20 +2592,40 @@ export function Room() {
                             : 'text-ink-faint';
                           return <div className={`msg-meta mt-0.5 font-medium ${tone}`}>⚙ {proc.label}</div>;
                         })()}
-                        {h && canRecover(h, ended) && (
-                          <button
-                            type="button"
-                            onClick={() => copyText(
-                              recoveryPrompt(code, p.name, p.role),
-                              'Recovery prompt copied — paste it into that agent\'s terminal',
-                            )}
-                            aria-label={`Copy the prompt to bring ${p.name} back into the room`}
-                            title={`${p.name} is not listening. Copy a prompt to paste into its terminal.`}
-                            className="mt-1.5 flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                          >
-                            Copy recovery prompt
-                          </button>
-                        )}
+                        {h && canRecover(h, ended) && (() => {
+                          // One button, and it does the thing the host wants
+                          // rather than handing them homework. Copy-a-prompt
+                          // survives only where the app genuinely cannot act:
+                          // an adopted or invite-code agent we never launched.
+                          const cap = reviveCapability(newestAgentFor(summonerAgents ?? [], p.name));
+                          return cap.ok ? (
+                            <button
+                              type="button"
+                              data-gate="row-bring-back"
+                              disabled={revivingName === p.name}
+                              onClick={() => { void bringBackFromRow(p.name, cap.agentId, cap.mode); }}
+                              aria-label={`Bring ${p.name} back into the room`}
+                              title={`${p.name} has stopped. Start it again with the same settings.`}
+                              className="mt-1.5 flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+                            >
+                              {revivingName === p.name ? 'Bringing it back…' : 'Bring it back'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              data-gate="row-wake-message"
+                              onClick={() => copyText(
+                                recoveryPrompt(code, p.name, p.role),
+                                'Message copied — paste it into that agent\'s terminal',
+                              )}
+                              aria-label={`Copy the message to bring ${p.name} back into the room`}
+                              title={`${p.name} runs outside this app, so it has to be restarted in its own terminal.`}
+                              className="mt-1.5 flex min-h-11 w-full items-center justify-center rounded-lg border border-border px-3 text-[13px] font-semibold text-ink-soft transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                              Copy wake message
+                            </button>
+                          );
+                        })()}
                       </div>
                       {/*
                         Host controls — always visible (no hover-to-reveal).
@@ -4009,6 +4060,25 @@ export function Room() {
           onRemove={isHost && !ended && !(detailsFor.name === self.name && detailsFor.client === 'web')
             ? () => { const p = detailsFor; setDetailsFor(null); void handleRemove({ name: p.name, client: p.client as 'web' | 'cc' }); }
             : undefined}
+        />
+      )}
+      {agentMenu && (
+        <AgentContextMenu
+          menu={agentMenu}
+          code={code}
+          health={healthById.get(healthKey(agentMenu.name, agentMenu.client)) ?? null}
+          agent={newestAgentFor(summonerAgents ?? [], agentMenu.name)}
+          isHost={isHost}
+          ended={ended}
+          onClose={closeAgentMenu}
+          onOpenDetails={() => {
+            const p = room.participants.find(x => x.name === agentMenu.name && x.client === agentMenu.client);
+            if (p) setDetailsFor(p);
+          }}
+          onRemove={isHost && !ended
+            ? () => { void handleRemove({ name: agentMenu.name, client: agentMenu.client as 'web' | 'cc' }); }
+            : undefined}
+          onChanged={() => { void refreshSummonerAgents(); }}
         />
       )}
       <CommandSearch
