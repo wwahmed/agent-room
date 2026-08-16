@@ -170,17 +170,73 @@ describe('AgentDetailsSheet — terminal access + recovery (T-02)', () => {
     expect(writeText).toHaveBeenLastCalledWith('TMUX_TMPDIR=/x tmux attach -t sm-x\ncd /tmp/ws && claude --resume abc-123');
   });
 
-  it('offers the recovery prompt when the presence verdict says stale/disconnected', async () => {
+  it('leads with the app bringing the agent back, and keeps the manual path as fallback', async () => {
     const writeText = vi.fn(async () => {});
     mockAgentsResponse([summoned({ access: ACCESS })]);
     vi.stubGlobal('navigator', { ...window.navigator, clipboard: { writeText } });
-    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health()} ended={false} onClose={() => {}} />);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health({ state: 'disconnected' })} ended={false} onClose={() => {}} />);
     await waitLoaded();
     const banner = document.querySelector('[data-gate="recovery-banner"]')!;
     expect(banner).not.toBeNull();
-    expect(banner.textContent).toContain('usage limits'); // names the failure mode the host actually hits
-    fireEvent.click([...banner.querySelectorAll('button')].find(b => b.textContent === 'Copy recovery prompt')!);
+    // The old copy told the host "the app can't restart a CLI process". It can,
+    // for anything the summoner launched, and that claim must not come back.
+    expect(banner.textContent).not.toContain("can't restart");
+    expect(banner.querySelector('[data-gate="recovery-bring-back"]')).not.toBeNull();
+    // The terminal prompt is still one click away, just no longer the headline.
+    const manual = banner.querySelector('[data-gate="recovery-manual"]')!;
+    expect(manual).not.toBeNull();
+    fireEvent.click([...manual.querySelectorAll('button')].find(b => b.textContent === 'Copy wake message')!);
     expect(writeText).toHaveBeenCalledWith(recoveryPrompt('abc-def-ghj', 'ClaudeBuilder', 'AI Agent'));
+  });
+
+  it('tells the host to wait before offering to restart a merely quiet agent', async () => {
+    mockAgentsResponse([summoned({ access: ACCESS })]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health({ state: 'stale' })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    const banner = document.querySelector('[data-gate="recovery-banner"]')!;
+    // A long turn reads exactly like a dead loop; restarting there discards work.
+    expect(banner.querySelector('[data-gate="recovery-wait"]')!.textContent).toContain('long task');
+    expect(banner.querySelector('[data-gate="recovery-bring-back"]')).not.toBeNull();
+  });
+
+  it('bring-back relaunches at the level the agent already had', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/api/summon/agents')) {
+        return { ok: true, status: 200, json: async () => ({ agents: [summoned({ accessLevel: 'edit' })] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ agent: summoned({ accessLevel: 'edit' }) }) } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health({ state: 'disconnected' })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    fireEvent.click(document.querySelector('[data-gate="recovery-bring-back"]') as HTMLButtonElement);
+    await waitFor(() => {
+      const call = (fetchMock.mock.calls as unknown as [string, RequestInit?][]).find(c => String(c[0]).includes('/api/summon/relaunch'));
+      if (!call) throw new Error('no relaunch yet');
+      // Never a defaulted level: reviving must not re-permission the agent.
+      expect(JSON.parse(String(call[1]?.body))).toEqual({ agentId: 'room-claude-abc123', mode: 'edit' });
+    });
+  });
+
+  it('offers no bring-back for an adopted agent, and explains instead', async () => {
+    mockAgentsResponse([summoned({ access: ACCESS, adopted: true })]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} health={health({ state: 'disconnected' })} ended={false} onClose={() => {}} />);
+    await waitLoaded();
+    const banner = document.querySelector('[data-gate="recovery-banner"]')!;
+    expect(banner.querySelector('[data-gate="recovery-bring-back"]')).toBeNull();
+    expect(banner.querySelector('[data-gate="recovery-blocked"]')!.textContent).toContain('already running when the app attached');
+  });
+
+  it('keeps diagnostics out of the way until asked for', async () => {
+    mockAgentsResponse([summoned({ access: ACCESS })]);
+    render(<AgentDetailsSheet code="abc-def-ghj" participant={participant} onClose={() => {}} />);
+    await waitLoaded();
+    // Who and where the agent is stays visible; the debug rows fold away.
+    const technical = document.querySelector('[data-gate="technical-details"]') as HTMLDetailsElement;
+    expect(technical).not.toBeNull();
+    expect(technical.open).toBe(false);
+    expect(technical.textContent).toContain('Persistent');
+    expect((document.querySelector('[data-gate="terminal-access"]') as HTMLDetailsElement).open).toBe(false);
   });
 
   it('shows NO recovery banner while listening, and none after the room ended', async () => {

@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { listRoomAgentHistory, relaunchAgentWithMode, respondToAgentPrompt, type PromptRespondVerb, type SummonedAgent } from '../lib/api.js';
+import { bringAgentBack, listRoomAgentHistory, relaunchAgentWithMode, respondToAgentPrompt, type PromptRespondVerb, type SummonedAgent } from '../lib/api.js';
 import { brandFor } from '../lib/agentBrand.js';
+import { agentStatusView, recoveryLadder, reviveCapability } from '../lib/agentRecovery.js';
 import {
   behindLabel,
-  canRecover,
   clientBuildUnknown,
   clientNeedsRestart,
   clientOutdated,
@@ -95,6 +95,11 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
   // permission dialog; the banner shows it and relays a human tap as a verb.
   const [responding, setResponding] = useState(false);
   const [promptNote, setPromptNote] = useState<string | null>(null);
+  // Bring-back flow, kept separate from the permission relaunch above: same
+  // underlying call, different intent, and mixing their busy flags would let
+  // one spinner describe the other's work.
+  const [reviving, setReviving] = useState(false);
+  const [reviveNote, setReviveNote] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -131,6 +136,25 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
       setRelaunching(false);
     }
   }
+  // Bring-back is deliberately NOT the permission flow: it re-runs the launch
+  // spec at whatever level the agent already had, so nobody quietly gains or
+  // loses access by being revived.
+  async function onBringBack() {
+    const cap = reviveCapability(agent);
+    if (!cap.ok || reviving) return;
+    setReviving(true);
+    setReviveNote(null);
+    try {
+      const next = await bringAgentBack(cap.agentId, cap.mode);
+      setAgent(next);
+      setReviveNote(`Bringing ${participant.name} back — it should rejoin in a few seconds.`);
+    } catch (e) {
+      // The summoner's refusal is more specific than anything invented here.
+      setReviveNote(e instanceof Error ? e.message : 'Could not bring the agent back.');
+    } finally {
+      setReviving(false);
+    }
+  }
   async function onRespond(verb: PromptRespondVerb) {
     if (!agent || responding) return;
     setResponding(true);
@@ -154,10 +178,17 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
   // hints like "(detach: Ctrl-b then d)" stay out of the clipboard. Fact lines
   // (provider/model, workspace) are dropped — the identity column owns those.
   const commands = (agent?.access ?? []).map(parseAccessLine).filter((c): c is AccessCommand => c !== null);
-  // The one action that works when a CLI agent stops listening (usage limits,
-  // crashed harness, closed terminal): paste the recovery prompt into its
-  // terminal. Same contract as the People-row button.
-  const offline = Boolean(health && canRecover(health, ended ?? false));
+  // Recovery, ranked. This sheet used to open with "the app can't restart a CLI
+  // process, but you can" and a prompt to paste into a terminal. For a
+  // summoned agent that is simply no longer true: the summoner holds the
+  // launch spec. The ladder decides what to lead with, so this surface and the
+  // agent context menu can never give contradictory advice.
+  const ladder = recoveryLadder({ health, agent, ended, isHost: Boolean(onRemove) });
+  const offline = ladder.needed;
+  const status = health ? agentStatusView(health) : null;
+  const capability = reviveCapability(agent);
+  const waitStep = ladder.steps.find(s => s.id === 'wait');
+  const manualStep = ladder.steps.find(s => s.id === 'manual');
   const recoveryText = recoveryPrompt(code, participant.name, participant.role);
   // T-30 (client-build): running code, not shipped code. A session started
   // before a deploy keeps executing the bundle it loaded at boot, so the fix can
@@ -181,14 +212,19 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
     : (participant.capabilities || '—');
   const presence = health ? presenceView(health) : null;
 
+  // Split by the question each row answers. "Who and where is this agent" is
+  // what a host opens this sheet for; the rest is diagnostic, and eleven rows
+  // of it in one column is what made the sheet feel like a debug dump.
   const rows: Array<[string, ReactNode]> = [
     ['Provider', agent ? agent.provider : (brand?.label ?? participant.harness ?? 'Agent')],
     ['Model', agent ? (agent.model || 'account-default') : (participant.model || '—')],
     ['Account', agent?.account || participant.account || '—'],
     ['Workspace', agent?.workspace || participant.workspace || '—'],
-    ['Persistent', agent ? (agent.persistent ? 'Yes — resumable' : 'No — one-shot') : '—'],
     ['Role', participant.role || agent?.role || '—'],
     ['Joined', fmt(agent?.createdAt ?? participant.joinedAt)],
+  ];
+  const technicalRows: Array<[string, ReactNode]> = [
+    ['Persistent', agent ? (agent.persistent ? 'Yes — resumable' : 'No — one-shot') : '—'],
     ['Left', agent?.dismissedAt ? fmt(agent.dismissedAt) : (agent?.status === 'active' || !agent ? 'Still here' : '—')],
     ['Health', agent?.health || (brand ? 'in room' : '—')],
     // T-30 (client-build): a fact, not an alarm — the banner above handles the
@@ -201,6 +237,12 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
         : []),
     ['Source', agent ? 'Summoned in-app' : 'Joined via invite link / code'],
   ];
+  const factRow = ([k, v]: [string, ReactNode]) => (
+    <div key={k} className="flex items-start justify-between gap-4 py-2 lg:py-2.5">
+      <dt className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint lg:text-[13px]">{k}</dt>
+      <dd className="min-w-0 break-words text-right text-[13px] text-ink lg:text-[15px]">{v}</dd>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="agent-detail-title">
@@ -265,27 +307,87 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                 <p role="status" className="mb-3 rounded-lg bg-surface-softer px-3 py-2 text-[13px] text-ink-soft">{promptNote}</p>
               )}
               {offline && (
-                <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/10 p-3" data-gate="recovery-banner" role="alert">
-                  <div className="text-[13px] font-bold text-red-300">
-                    {health?.state === 'disconnected' ? 'Disconnected' : 'Not listening'} — needs a nudge to come back
+                <div
+                  className={`mb-4 rounded-xl border p-3 ${health?.state === 'stale' ? 'border-amber-400/40 bg-amber-500/10' : 'border-red-400/40 bg-red-500/10'}`}
+                  data-gate="recovery-banner"
+                  role="alert"
+                >
+                  <div className={`text-[13px] font-bold ${health?.state === 'stale' ? 'text-amber-300' : 'text-red-300'}`}>
+                    {status?.label}
                   </div>
                   <p className="mt-1 text-[13px] leading-relaxed text-ink-soft lg:text-[14px]">
-                    {participant.name} isn't in its room-listen loop. This happens when the model hits its
-                    usage limits, the harness exits, or its terminal closes. The app can't restart a CLI
-                    process, but you can: copy the recovery prompt and paste it into the agent's terminal
-                    {commands.length > 0 ? ' — the commands below reach that terminal' : ''}.
+                    {participant.name}: {status?.detail}
                   </p>
-                  <code className="mt-2 block break-words rounded-lg bg-black/30 p-2.5 font-mono text-[12px] leading-relaxed text-ink-soft lg:text-[13px]">{recoveryText}</code>
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => copy(recoveryText, 'recovery')}
-                      className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90"
-                    >
-                      Copy recovery prompt
-                    </button>
-                    {copiedWhat === 'recovery' && <span role="status" className="text-[12px] font-semibold text-accent">Copied</span>}
-                  </div>
+
+                  {/* Gentlest option first. For a quiet agent that is doing
+                      nothing at all, because the silence is usually a long
+                      task and reviving would throw the work away. */}
+                  {waitStep && (
+                    <p className="mt-2 rounded-lg bg-black/20 px-2.5 py-2 text-[13px] leading-relaxed text-ink-soft" data-gate="recovery-wait">
+                      <span className="font-semibold text-ink">{waitStep.title}.</span> {waitStep.detail}
+                    </p>
+                  )}
+
+                  {capability.ok ? (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        data-gate="recovery-bring-back"
+                        disabled={reviving}
+                        onClick={() => { void onBringBack(); }}
+                        className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                      >
+                        {reviving ? 'Bringing it back…' : 'Bring it back'}
+                      </button>
+                      <span className="text-[12px] text-ink-faint">Starts it again with the same settings.</span>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[13px] leading-relaxed text-ink-soft" data-gate="recovery-blocked">
+                      {manualStep?.detail}
+                    </p>
+                  )}
+
+                  {reviveNote && (
+                    <p role="status" className="mt-2 rounded-lg bg-black/20 px-2.5 py-2 text-[13px] text-ink-soft" data-gate="recovery-note">{reviveNote}</p>
+                  )}
+
+                  {/* The old headline instruction, now correctly filed as the
+                      fallback: only interesting if you would rather wake the
+                      agent in its own terminal than restart it. */}
+                  {capability.ok && (
+                    <details className="mt-2.5" data-gate="recovery-manual">
+                      <summary className="cursor-pointer list-none text-[12px] font-semibold text-ink-faint transition hover:text-ink-soft">
+                        {manualStep?.title ?? 'Wake it yourself instead'}
+                      </summary>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{manualStep?.detail}</p>
+                      <code className="mt-2 block break-words rounded-lg bg-black/30 p-2.5 font-mono text-[12px] leading-relaxed text-ink-soft lg:text-[13px]">{recoveryText}</code>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => copy(recoveryText, 'recovery')}
+                          className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-accent hover:text-accent"
+                        >
+                          Copy wake message
+                        </button>
+                        {copiedWhat === 'recovery' && <span role="status" className="text-[12px] font-semibold text-accent">Copied</span>}
+                      </div>
+                    </details>
+                  )}
+                  {!capability.ok && (
+                    <div className="mt-2.5">
+                      <code className="block break-words rounded-lg bg-black/30 p-2.5 font-mono text-[12px] leading-relaxed text-ink-soft lg:text-[13px]">{recoveryText}</code>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => copy(recoveryText, 'recovery')}
+                          className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                        >
+                          Copy wake message
+                        </button>
+                        {copiedWhat === 'recovery' && <span role="status" className="text-[12px] font-semibold text-accent">Copied</span>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {staleClient && (
@@ -320,13 +422,16 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
               <section aria-label="Identity" data-gate="identity-col">
                 <h3 className="mb-1 hidden text-[12px] font-semibold uppercase tracking-wide text-accent lg:block">Identity</h3>
                 <dl className="divide-y divide-border-faint">
-                  {rows.map(([k, v]) => (
-                    <div key={k} className="flex items-start justify-between gap-4 py-2 lg:py-2.5">
-                      <dt className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint lg:text-[13px]">{k}</dt>
-                      <dd className="min-w-0 break-words text-right text-[13px] text-ink lg:text-[15px]">{v}</dd>
-                    </div>
-                  ))}
+                  {rows.map(factRow)}
                 </dl>
+                <details className="mt-3" data-gate="technical-details">
+                  <summary className="cursor-pointer list-none text-[12px] font-semibold uppercase tracking-wide text-ink-faint transition hover:text-ink-soft">
+                    Technical details
+                  </summary>
+                  <dl className="mt-1 divide-y divide-border-faint">
+                    {technicalRows.map(factRow)}
+                  </dl>
+                </details>
               </section>
 
               {/* The action surfaces — permissions, terminal access, removal —
@@ -413,9 +518,14 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                   agent can be located and reached from here long after the
                   summon sheet is gone. Join-code agents get an honest
                   explanation instead of a false-empty. */}
-              <div className="mt-4" data-gate="terminal-access">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-faint">Reach it from a terminal</div>
+              {/* Collapsed by default. These commands matter when something has
+                  gone wrong and you want the agent's own terminal; leaving them
+                  open put a wall of shell in front of every routine visit. */}
+              <details className="mt-4" data-gate="terminal-access">
+                <summary className="mb-2 cursor-pointer list-none text-[12px] font-semibold uppercase tracking-wide text-ink-faint transition hover:text-ink-soft">
+                  Reach it from a terminal
+                </summary>
+                <div className="mb-2 flex items-center justify-end gap-2">
                   {commands.length > 1 && (
                     <button
                       type="button"
@@ -460,10 +570,10 @@ export function AgentDetailsSheet({ code, participant, onClose, onRemove, health
                     Joined via invite code — its process runs wherever it was started
                     {participant.workspace ? <> (workspace <code className="rounded bg-surface-softer px-1.5 py-0.5 font-mono text-[12px]">{participant.workspace}</code>)</> : null},
                     so there are no app-managed terminal commands for it. To interact with it directly, use
-                    the terminal it was launched from{offline ? ' — and paste the recovery prompt above to bring it back into the room' : ''}.
+                    the terminal it was launched from{offline ? ' — and paste the wake message above to bring it back into the room' : ''}.
                   </p>
                 )}
-              </div>
+              </details>
 
               {onRemove && (
                 <div className="mt-4 border-t border-border-faint pt-4" data-gate="remove-from-room">
