@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { copyText } from '../lib/copy.js';
+import { menuPosition, useContextMenuTrigger, useDismissOnOutside } from '../lib/contextMenuTrigger.js';
 import { ROOM_TEMPLATES } from '../lib/templates.js';
 import {
   archiveRoomAction, unarchiveRoomAction, reactivateRoom, setRoomTemplateAction,
@@ -21,63 +22,13 @@ export interface RoomMenuTarget {
   y: number;
 }
 
-const LONG_PRESS_MS = 450;
-const MOVE_TOLERANCE_PX = 12;
-
-/** Press handling for a room card. Android (and desktop) deliver both paths
- *  through `contextmenu` — long-press fires it natively — so that is the
- *  primary opener; the touch timer is the iOS fallback, scroll-guarded (a
- *  finger that moves is scrolling, not pressing). After a synthetic open, the
- *  card's next click is swallowed in the capture phase so the T-34 stretched
- *  Link doesn't ALSO navigate; plain taps/clicks are untouched, and nothing
- *  here alters keyboard order. */
+/** Press handling for a room card. The gesture logic itself (native
+ *  contextmenu, the iOS long-press timer, the scroll guard, and swallowing the
+ *  next click so the T-34 stretched Link doesn't ALSO navigate) is shared with
+ *  the agent-row menu in `lib/contextMenuTrigger.ts`. This wrapper keeps the
+ *  room-card call sites unchanged. */
 export function useRoomCardMenu() {
-  const [menu, setMenu] = useState<RoomMenuTarget | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const startRef = useRef<{ x: number; y: number } | null>(null);
-  const suppressUntilRef = useRef(0);
-
-  const clearTimer = () => {
-    if (timerRef.current != null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
-  };
-  useEffect(() => clearTimer, []);
-
-  function bind(room: Omit<RoomMenuTarget, 'x' | 'y'>) {
-    return {
-      onContextMenu: (e: React.MouseEvent) => {
-        // Suppress the NATIVE menu only on the card itself (the assignment's
-        // explicit boundary — the rest of the page keeps browser behavior).
-        e.preventDefault();
-        clearTimer();
-        suppressUntilRef.current = Date.now() + 400;
-        setMenu({ ...room, x: e.clientX, y: e.clientY });
-      },
-      onTouchStart: (e: React.TouchEvent) => {
-        const t = e.touches[0];
-        if (!t || e.touches.length > 1) return;
-        startRef.current = { x: t.clientX, y: t.clientY };
-        clearTimer();
-        timerRef.current = window.setTimeout(() => {
-          timerRef.current = null;
-          suppressUntilRef.current = Date.now() + 700;
-          setMenu({ ...room, x: startRef.current?.x ?? t.clientX, y: startRef.current?.y ?? t.clientY });
-        }, LONG_PRESS_MS);
-      },
-      onTouchMove: (e: React.TouchEvent) => {
-        const t = e.touches[0];
-        const s = startRef.current;
-        if (!t || !s) return;
-        if (Math.abs(t.clientX - s.x) > MOVE_TOLERANCE_PX || Math.abs(t.clientY - s.y) > MOVE_TOLERANCE_PX) clearTimer();
-      },
-      onTouchEnd: clearTimer,
-      onTouchCancel: clearTimer,
-      onClickCapture: (e: React.MouseEvent) => {
-        if (Date.now() < suppressUntilRef.current) { e.preventDefault(); e.stopPropagation(); }
-      },
-    };
-  }
-
-  return { menu, closeMenu: () => setMenu(null), bind };
+  return useContextMenuTrigger<Omit<RoomMenuTarget, 'x' | 'y'>>();
 }
 
 export function RoomContextMenu({ menu, selfName, onClose, onChanged }: {
@@ -97,18 +48,7 @@ export function RoomContextMenu({ menu, selfName, onClose, onChanged }: {
   const canHost = hasHostKey(menu.code);
   const ended = menu.status === 'ended';
 
-  useEffect(() => {
-    const close = () => onClose();
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('click', close);
-    window.addEventListener('keydown', key);
-    window.addEventListener('scroll', close, true);
-    return () => {
-      window.removeEventListener('click', close);
-      window.removeEventListener('keydown', key);
-      window.removeEventListener('scroll', close, true);
-    };
-  }, [onClose]);
+  useDismissOnOutside(onClose);
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(label);
@@ -150,10 +90,7 @@ export function RoomContextMenu({ menu, selfName, onClose, onChanged }: {
       aria-label={`Actions for ${menu.topic}`}
       data-gate="room-context-menu"
       className="fixed z-50 w-[230px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-2xl"
-      style={{
-        top: Math.max(8, Math.min(menu.y, window.innerHeight - 330)),
-        left: Math.max(8, Math.min(menu.x, window.innerWidth - 238)),
-      }}
+      style={menuPosition(menu, 238, 330)}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >

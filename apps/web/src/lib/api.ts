@@ -838,6 +838,11 @@ export interface SummonedAgent {
   account?: string; sessionId?: string; dismissedAt?: number; persistent?: boolean;
   /** Permission level (chat|edit|build) + a human label — what the agent can do. */
   accessLevel?: string; accessLabel?: string; native?: boolean;
+  /** The summoner attached to a session someone else started, so it holds no
+   *  launch spec for it. The summoner has always reported this (T-37); the web
+   *  type simply never declared it, which is why the app could not tell in
+   *  advance that a bring-back would be rejected. */
+  adopted?: boolean;
   /** When health is 'blocked-on-prompt': the dialog text the harness is stuck
    *  on, so the sheet can show WHAT is being asked before approve/deny. */
   promptPreview?: string;
@@ -904,6 +909,29 @@ export async function relaunchAgentWithMode(agentId: string, mode: 'chat' | 'edi
   const j = (await res.json().catch(() => ({}))) as { agent?: SummonedAgent; error?: string; message?: string };
   if (!res.ok || !j.agent) {
     throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Relaunch failed (${res.status})`), res.status);
+  }
+  return j.agent;
+}
+
+// Bring one stopped agent back, from the app, with no terminal step.
+//
+// This is relaunch at the agent's CURRENT level, and that detail is the whole
+// safety story. The summoner treats "same level + process still alive" as a
+// no-op and returns `unchanged`, so firing this at an agent that turned out to
+// be healthy cannot interrupt it; only a genuinely dead session gets
+// dismissed and re-summoned. That is why the caller passes the level it read
+// off the agent rather than a default — a default would silently re-permission
+// the agent every time someone revived it.
+export async function bringAgentBack(agentId: string, mode: string): Promise<SummonedAgent> {
+  const res = await fetch('/api/summon/relaunch', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ agentId, mode }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { agent?: SummonedAgent; error?: string; message?: string };
+  if (!res.ok || !j.agent) {
+    // The summoner's rejection prose (e.g. the adopted-agent case) is better
+    // than anything we could invent here, so it reaches the user verbatim.
+    throw new ApiError(String(j.error || 'ApiError'), String(j.message || `Could not bring the agent back (${res.status})`), res.status);
   }
   return j.agent;
 }

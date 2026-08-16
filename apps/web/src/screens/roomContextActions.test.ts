@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 const menu = readFileSync(new URL('../components/RoomContextMenu.tsx', import.meta.url), 'utf8');
 const home = readFileSync(new URL('./Home.tsx', import.meta.url), 'utf8');
 const pane = readFileSync(new URL('../components/RoomListPane.tsx', import.meta.url), 'utf8');
+// The gesture handling itself is shared with the agent-row menu.
+const trigger = readFileSync(new URL('../lib/contextMenuTrigger.ts', import.meta.url), 'utf8');
+const agentMenu = readFileSync(new URL('../components/AgentContextMenu.tsx', import.meta.url), 'utf8');
 
 // Host order: room actions where the rooms are listed — long-press on touch,
 // right-click on desktop, one shared menu on every card surface.
@@ -16,15 +19,25 @@ describe('room-card context actions', () => {
   });
 
   it('long-press is scroll-guarded and a synthetic open swallows the stretched-link click', () => {
-    expect(menu).toContain('MOVE_TOLERANCE_PX');
-    expect(menu).toContain('onTouchMove');
-    expect(menu).toContain('onClickCapture');
-    expect(menu).toContain('suppressUntilRef');
+    expect(trigger).toContain('MOVE_TOLERANCE_PX');
+    expect(trigger).toContain('onTouchMove');
+    expect(trigger).toContain('onClickCapture');
+    expect(trigger).toContain('suppressUntilRef');
   });
 
-  it('suppresses the native context menu only on the card', () => {
-    expect(menu).toContain('onContextMenu: (e: React.MouseEvent) => {');
-    expect(menu).toContain('e.preventDefault();');
+  it('suppresses the native context menu only on the element that owns the trigger', () => {
+    expect(trigger).toContain('onContextMenu: (e: React.MouseEvent) => {');
+    expect(trigger).toContain('e.preventDefault();');
+  });
+
+  it('room cards and agent rows share ONE gesture implementation', () => {
+    // Two copies of this interaction is how the surfaces quietly drift apart:
+    // a scroll guard fixed on one menu and not the other is invisible until a
+    // phone user complains. Both must delegate to the shared hook.
+    expect(menu).toContain('useContextMenuTrigger');
+    expect(agentMenu).toContain('useContextMenuTrigger');
+    expect(menu).not.toContain('MOVE_TOLERANCE_PX');
+    expect(agentMenu).not.toContain('MOVE_TOLERANCE_PX');
   });
 
   it('offers the sensible action set, host-gated where the server requires host authority', () => {
