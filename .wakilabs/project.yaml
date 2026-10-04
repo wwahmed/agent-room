@@ -1,0 +1,8 @@
+id: agent-room
+name: agent-room
+displayName: "Agent Room (WakiChat)"
+archetype: web-dynamic
+family: intelligence
+conventionsVersion: 1
+foundationPin: null
+registry: ~/workspaces/wakilabs/registry/projects.json
