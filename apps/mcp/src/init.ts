@@ -12,6 +12,8 @@ const MCP_ENTRY = {
 const HOOK_COMMAND = 'npx -y agent-room-mcp hook';
 const CODEX_HOOK_COMMAND = `AGENT_ROOM_HARNESS=codex ${HOOK_COMMAND}`;
 const HOOK_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart'] as const;
+const CLAUDE_SYNC_EVENTS = ['UserPromptSubmit', 'SessionStart'] as const;
+const CLAUDE_REWAKE_EVENTS = ['Stop', 'SubagentStop', 'TeammateIdle'] as const;
 
 // Markers used to make the rules-injection idempotent. We only rewrite the
 // section if it's missing, and we only ever touch content between these
@@ -94,6 +96,53 @@ function ensureHookEntry(arr: unknown, command: string): unknown[] {
   if (exists) return list;
   list.push({ hooks: [{ type: 'command', command }] });
   return list;
+}
+
+function managedAgentRoomHook(command: unknown): boolean {
+  return typeof command === 'string' && /(?:agent-room-mcp|agent-room-mcp-launch\.sh)\s+hook(?:\s|$)/.test(command);
+}
+
+function stripManagedHooks(arr: unknown): unknown[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.flatMap((group: any) => {
+    if (!Array.isArray(group?.hooks)) return [group];
+    const remaining = group.hooks.filter((hook: any) => !managedAgentRoomHook(hook?.command));
+    return remaining.length > 0 ? [{ ...group, hooks: remaining }] : [];
+  });
+}
+
+/** Normalize Claude hooks to one cheap context hook and one background watcher.
+ * Existing custom launchers are preserved, while duplicate legacy Stop hooks
+ * are removed. Exported so installer behavior stays unit-testable. */
+export function ensureClaudeHookConfig(
+  hooksInput: Record<string, unknown>,
+  fallbackCommand = HOOK_COMMAND,
+): Record<string, unknown> {
+  const hooks: Record<string, unknown> = { ...hooksInput };
+  const events = [...CLAUDE_SYNC_EVENTS, ...CLAUDE_REWAKE_EVENTS];
+  const existingCommands = events.flatMap((event) => {
+    const rows = Array.isArray(hooks[event]) ? hooks[event] as any[] : [];
+    return rows.flatMap((group) => Array.isArray(group?.hooks) ? group.hooks : [])
+      .map((hook: any) => hook?.command)
+      .filter(managedAgentRoomHook) as string[];
+  });
+  const preferred = existingCommands.find((command) => command.includes('agent-room-mcp-launch.sh'))
+    ?? existingCommands[0]
+    ?? fallbackCommand;
+  const base = preferred.replace(/\s+hook(?:\s+--rewake)?\s*$/, '');
+  const syncCommand = `${base} hook`;
+  const rewakeCommand = `${base} hook --rewake`;
+
+  for (const event of events) hooks[event] = stripManagedHooks(hooks[event]);
+  for (const event of CLAUDE_SYNC_EVENTS) {
+    hooks[event] = [...hooks[event] as unknown[], { hooks: [{ type: 'command', command: syncCommand }] }];
+  }
+  for (const event of CLAUDE_REWAKE_EVENTS) {
+    hooks[event] = [...hooks[event] as unknown[], {
+      hooks: [{ type: 'command', command: rewakeCommand, asyncRewake: true, timeout: 604_800 }],
+    }];
+  }
+  return hooks;
 }
 
 interface InstallResult {
@@ -184,16 +233,12 @@ async function installClaudeCode(opts: { hooks: boolean }): Promise<InstallResul
     const settingsPath = join(homedir(), '.claude', 'settings.json');
     const settings = (await readJson(settingsPath)) ?? {};
     const hooks = ((settings.hooks as Record<string, unknown>) ?? {});
-    let changed = false;
-    for (const event of HOOK_EVENTS) {
-      const before = JSON.stringify(hooks[event] ?? []);
-      hooks[event] = ensureHookEntry(hooks[event], HOOK_COMMAND);
-      if (JSON.stringify(hooks[event]) !== before) changed = true;
-    }
-    settings.hooks = hooks;
+    const nextHooks = ensureClaudeHookConfig(hooks);
+    const changed = JSON.stringify(nextHooks) !== JSON.stringify(hooks);
+    settings.hooks = nextHooks;
     if (changed) {
       await writeJsonAtomic(settingsPath, settings);
-      result.changes.push(`wrote ${settingsPath} (Stop / UserPromptSubmit / SessionStart hooks)`);
+      result.changes.push(`wrote ${settingsPath} (context hooks + model-free Claude rewake hooks)`);
     } else {
       result.unchanged.push(`${settingsPath} (hooks already installed)`);
     }

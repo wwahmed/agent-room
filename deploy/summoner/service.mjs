@@ -20,7 +20,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { listGrouped, isValidWorkspace } from './workspaces.mjs';
-import { catalog, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, ensureAgentConfigReady, AUG_PATH } from './providers.mjs';
+import { catalog, refreshCatalogInBackground, providerById, accessInstructions, nativeLaunchSpec, normalizeAccess, accessLabel, ensureAgentConfigReady, AUG_PATH } from './providers.mjs';
 import { leave } from './roomcli.mjs';
 import { shouldNudge, recoveryPromptFor, presenceOf } from './nudge.mjs';
 import { adoptionRejection, dismissPlan, relaunchRejection } from './adoption.mjs';
@@ -191,7 +191,10 @@ function doAgentEvent(body) {
 
 // ---------- core actions ----------
 function doListWorkspaces() { return { groups: listGrouped() }; }
-function doListProviders(force = false) { return { providers: catalog(force) }; }
+async function doListProviders(force = false) {
+  if (force) await refreshCatalogInBackground();
+  return { providers: catalog() };
+}
 
 function doListAgents() {
   const r = loadRegistry();
@@ -246,6 +249,8 @@ function doSummon(body) {
   // Providers not yet wired for native return null and take the headless driver
   // (summoner-owned loop) instead.
   const mcpConfigPath = join(agentHome, 'agent-room.mcp.json');
+  const stateFile = join(agentHome, 'room-state.json');
+  const settingsPath = join(agentHome, 'claude-settings.json');
   // Native summon (the harness joins via MCP and runs the room loop itself) is
   // the DEFAULT — join AND reply are verified reliable now that the MCP mints +
   // presents a member credential on every send (the missing-key bug that made
@@ -255,7 +260,7 @@ function doSummon(body) {
     ? null
     : nativeLaunchSpec({
         provider: provider.id, model, workspace, mode, name, role, code: room,
-        sessionId, account, mcpConfigPath,
+        sessionId, account, mcpConfigPath, stateFile, settingsPath,
       });
 
   let launchLines;
@@ -522,7 +527,7 @@ async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true });
     if (req.method === 'GET' && url.pathname === '/workspaces') return json(res, 200, doListWorkspaces());
-    if (req.method === 'GET' && url.pathname === '/providers') return json(res, 200, doListProviders(url.searchParams.get('refresh') === '1'));
+    if (req.method === 'GET' && url.pathname === '/providers') return json(res, 200, await doListProviders(url.searchParams.get('refresh') === '1'));
     if (req.method === 'GET' && url.pathname === '/agents') return json(res, 200, doListAgents());
     if (req.method === 'POST' && url.pathname === '/summon') {
       const body = JSON.parse((await readBody(req)) || '{}');
@@ -563,7 +568,7 @@ const verb = process.argv[2];
 if (verb) {
   try {
     if (verb === 'workspaces') console.log(JSON.stringify(doListWorkspaces(), null, 2));
-    else if (verb === 'providers') console.log(JSON.stringify(doListProviders(), null, 2));
+    else if (verb === 'providers') console.log(JSON.stringify(await doListProviders(), null, 2));
     else if (verb === 'agents') console.log(JSON.stringify(doListAgents(), null, 2));
     else if (verb === 'summon') console.log(JSON.stringify(doSummon(JSON.parse(process.argv[3] || '{}')), null, 2));
     else if (verb === 'dismiss') console.log(JSON.stringify(await doDismiss({ agentId: process.argv[3] }), null, 2));

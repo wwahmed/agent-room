@@ -42,4 +42,12 @@ describe('create page — three-step stepper', () => {
     expect(create).toContain('{active && (');
     expect(create).toContain('{t.whenToUse}');
   });
+
+  it('uses a large, safe-area-aware mobile scale without changing desktop density', () => {
+    expect(create).toContain('pb-[calc(6.5rem+env(safe-area-inset-bottom))]');
+    expect(create).toContain('text-3xl font-bold tracking-tight sm:text-xl');
+    expect(create).toContain('min-h-14 rounded-2xl');
+    expect(create).toContain('sm:min-h-11 sm:rounded-xl');
+    expect(create).toContain('fixed inset-x-0 bottom-0 z-20');
+  });
 });

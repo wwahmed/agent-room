@@ -1,16 +1,16 @@
 import { promises as fs } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
+import { execFileSync } from 'child_process';
 import { detectHarness } from './harness.js';
 import type { Message } from '@agent-room/shared';
 
 const STATE_DIR = process.env.AGENT_ROOM_STATE_DIR || join(homedir(), '.agent-room');
 
-// Scope state per Claude Code session. The MCP server and the hook command are
-// both spawned directly by Claude Code, so they share a parent PID. Two parallel
-// sessions on the same machine end up with distinct files — without this, the
-// later writer's `name` would clobber the earlier one's, and each session's
-// hook would filter the *other* agent's messages as "own" by mistake.
+// The immediate PPID is only a fallback. Claude's MCP server and lifecycle hook
+// can sit under different wrapper processes, so writes are also mirrored to a
+// stable nearest-Claude-ancestor file below. Summoned sessions avoid inference
+// entirely by receiving an explicit AGENT_ROOM_STATE_FILE.
 //
 // Override with AGENT_ROOM_STATE_FILE to share state across sessions on purpose
 // (e.g. integration tests).
@@ -18,9 +18,34 @@ const STATE_FILE =
   process.env.AGENT_ROOM_STATE_FILE ||
   join(STATE_DIR, `state-${process.ppid ?? process.pid}.json`);
 
+function nearestClaudeAncestorPid(): number | null {
+  let pid = process.ppid;
+  for (let depth = 0; pid > 1 && depth < 16; depth += 1) {
+    try {
+      const line = execFileSync('ps', ['-o', 'ppid=', '-o', 'command=', '-p', String(pid)], {
+        encoding: 'utf8',
+        timeout: 1_000,
+      }).trim();
+      const match = line.match(/^(\d+)\s+(.+)$/s);
+      if (!match) return null;
+      const parent = Number(match[1]);
+      const command = match[2] ?? '';
+      if (/\bclaude\b|Claude\.app/i.test(command) && !/agent-room-mcp/i.test(command)) return pid;
+      pid = parent;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function currentHarnessStateFile(): string | null {
   if (process.env.AGENT_ROOM_STATE_FILE) return null;
   const kind = detectHarness().kind;
+  if (kind === 'claude-code' || kind === 'claude-desktop') {
+    const ancestor = nearestClaudeAncestorPid();
+    return ancestor ? join(STATE_DIR, `state-harness-claude-${ancestor}.json`) : null;
+  }
   if (kind !== 'cursor' && kind !== 'codex') return null;
   return join(STATE_DIR, `state-harness-${kind}.json`);
 }
@@ -145,7 +170,7 @@ async function listStateFiles(): Promise<string[]> {
   try {
     const entries = await fs.readdir(STATE_DIR);
     files = entries
-      .filter((name) => /^state-(?:\d+|harness-[a-z-]+)\.json$/.test(name))
+      .filter((name) => /^state-(?:\d+|harness-[a-z-]+(?:-\d+)?)\.json$/.test(name))
       .map((name) => join(STATE_DIR, name));
   } catch {
     files = [];

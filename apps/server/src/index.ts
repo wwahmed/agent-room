@@ -90,12 +90,13 @@ import { loadWebReleaseSnapshot } from './webReleaseSnapshot.js';
 // reading as working within about two minutes instead of indefinitely.
 const TERMINAL_WORKING_MAX_MS = 120_000;
 import { clampWorkingUntil, ghostRows, roomHealth } from './health.js';
-import { departureEmptiedRoom, lastAgentLeftText, nobodyListeningText, shouldWarnNobodyListening } from './nobodyListening.js';
+import { departureEmptiedRoom, lastAgentLeftText } from './nobodyListening.js';
 import { ADMIN_AGENT_NAME, ADMIN_HQ_ROOM, adminHelpPage, helpConfirmation } from './helpdesk.js';
 import { statusForError } from './httpstatus.js';
 import { lifecycleDiscovery } from './lifecycle.js';
 import { validateMessageAttachments, validateMessageBody } from './messageAttachments.js';
 import { stampMessageEnvelope } from './envelope.js';
+import { stampRequestAuthority } from './requestAuthority.js';
 import { getReadMarkerState, listReadMarkers, resolveMarkerAccount, setReadMarker, stampReadMarkerTime } from './readmarkers.js';
 import {
   selectAttachment, storageKeyFor, verifyIntegrity,
@@ -153,6 +154,7 @@ import { ensureArtifactIndex, listRoomArtifacts,
   removeParticipant,
   RoomNotFoundError,
   setListenUntil,
+  setWakeUntil,
   setMuted,
   setWorkingUntil,
   setTerminalWorking,
@@ -1238,7 +1240,19 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       void updatePresence(client, code, String(message.name), Date.now()).catch(() => {});
       // T-113: server-authoritative envelope — id/time stamped when missing,
       // type normalized to 'msg' (only server code authors 'sys' rows).
-      const stamped = stampMessageEnvelope(message);
+      let stamped = stampMessageEnvelope(message);
+      // An authority marker is useful only if it is unforgeable. The browser
+      // cannot opt into this field: derive it from the Access identity verified
+      // on THIS request, the authenticated participant row, and room ownership.
+      // Code-only joins, agents, authenticated guests, status pings, and forged
+      // metadata all remain untrusted for destructive/account-touching asks.
+      const authorityRoom = await getRoom(client, code);
+      stamped = stampRequestAuthority(stamped, {
+        verifiedAccessEmail: caller.kind === 'user' ? caller.email : undefined,
+        senderRow,
+        roomCreatedBy: authorityRoom.createdBy,
+        actionable: kind === 'message',
+      });
       if (kind === 'status') {
         // Status updates append without touching the turn machinery.
         // T-20: stamp the persisted message so every reader can classify it —
@@ -1433,35 +1447,6 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
         )
           .catch(() => undefined);
       }
-      // T-39: a person just spoke into a room where no agent can answer. Three
-      // agents went silent in one day and the expensive part was never the death
-      // — it was the wait: 90 minutes in the Customer Service room, 14 hours in
-      // WakiDrive, both spent believing someone was reading. Checked here rather
-      // than on a timer because a vanished agent leaves no row to poll, and the
-      // notice is only useful in the same second as the message.
-      void (async () => {
-        try {
-          if (!appendResult.appended) return;
-          const roomNow = await getRoom(client, code);
-          // Read only the tail: the message just appended is last, and the one
-          // before it is what suppresses a repeat warning.
-          // Null when the counter key is absent (a room predating it); fall back
-          // to reading from the start rather than skipping the check.
-          const total = Number(await getMessageTotalCount(client, code) ?? 0);
-          const prev = await listMessages(client, code, Math.max(0, total - 3));
-          const priorText = prev.length > 1 ? String(prev[prev.length - 2]?.text ?? '') : '';
-          if (!shouldWarnNobodyListening({
-            senderClient: String(stamped.client || 'cc'),
-            participants: roomNow.participants,
-            now: Date.now(),
-            lastMessageText: priorText,
-          })) return;
-          await appendSystemMessage(client, code, sysMessage(
-            nobodyListeningText(roomNow.participants, Date.now()),
-            { eventType: 'nobody_listening' },
-          ));
-        } catch { /* advisory only — never fail a send over the warning */ }
-      })();
       // T-118: a message that @mentions the owner taps them on the shoulder —
       // app badge + push on every registered device. Fire-and-forget. At the
       // 'all' notify level, ordinary teammate messages push too (suppressed
@@ -1725,7 +1710,13 @@ async function handleRoomAction(payload: Record<string, unknown>, caller: Caller
       return {};
     }
     case 'presence': {
+      await authenticateSender(code, String(payload.name || ''), 'cc', payload.memberKey as string | undefined, caller);
       await setListenUntil(client, code, String(payload.name || ''), Number(payload.until || 0));
+      return {};
+    }
+    case 'wakePresence': {
+      await authenticateSender(code, String(payload.name || ''), 'cc', payload.memberKey as string | undefined, caller);
+      await setWakeUntil(client, code, String(payload.name || ''), Number(payload.until || 0));
       return {};
     }
     case 'turnState': {

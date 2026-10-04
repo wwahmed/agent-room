@@ -45,7 +45,7 @@ describe('T-66 presence health — stop presence from lying', () => {
     expect(out).not.toContain('a'.repeat(64));
     expect(out).not.toContain('g'.repeat(64));
     expect(Object.keys(participantHealth(row, NOW)).sort()).toEqual(
-      ['client', 'lastSeenAgoMs', 'listenRemainingMs', 'name', 'role', 'state'],
+      ['client', 'lastSeenAgoMs', 'listenRemainingMs', 'name', 'role', 'state', 'wakeRemainingMs'],
     );
   });
 
@@ -53,6 +53,14 @@ describe('T-66 presence health — stop presence from lying', () => {
     const h = participantHealth(p({ lastSeenAt: NOW + 5_000, listenUntil: NOW - 5_000 }), NOW);
     expect(h.lastSeenAgoMs).toBe(0);
     expect(h.listenRemainingMs).toBe(0);
+    expect(h.wakeRemainingMs).toBe(0);
+  });
+
+  it('reports a wake lease separately without claiming the model is listening', () => {
+    const h = participantHealth(p({ lastSeenAt: NOW - 600_000, wakeUntil: NOW + 30_000 }), NOW);
+    expect(h.state).toBe('disconnected');
+    expect(h.listenRemainingMs).toBe(0);
+    expect(h.wakeRemainingMs).toBe(30_000);
   });
 
   it('classifies a whole room in one pass', () => {

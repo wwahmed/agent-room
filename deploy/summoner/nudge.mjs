@@ -58,5 +58,9 @@ export function recoveryPromptFor(room, name, role) {
 /** Pull one agent's presence verdict out of a room-health payload. */
 export function presenceOf(health, name) {
   const row = (health || []).find((h) => h && h.name === name && h.client === 'cc');
+  // Prefer the model-free watcher over injecting another model turn. If the
+  // watcher dies, its short lease expires and the ordinary disconnected
+  // fallback becomes eligible again automatically.
+  if (row && Number(row.wakeRemainingMs) > 0) return 'wake-ready';
   return row ? row.state : undefined;
 }

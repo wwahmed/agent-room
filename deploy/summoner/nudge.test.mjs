@@ -86,3 +86,12 @@ test('presenceOf finds the cc row by exact name and tolerates junk', () => {
   assert.equal(presenceOf(health, 'Waqas'), undefined); // web row never matches
   assert.equal(presenceOf(undefined, 'Builder'), undefined);
 });
+
+test('an armed model-free watcher suppresses the fallback model nudge', () => {
+  const health = [{
+    name: 'Claude', client: 'cc', state: 'disconnected', wakeRemainingMs: 30_000,
+  }];
+  const state = presenceOf(health, 'Claude');
+  assert.equal(state, 'wake-ready');
+  assert.equal(shouldNudge({ presenceState: state, paneBlocked: false, now: NOW }), false);
+});

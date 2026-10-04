@@ -26,6 +26,9 @@ describe('ROOM_CONVENTIONS', () => {
     expect(ROOM_CONVENTIONS).toMatch(/announce builds/i);
     expect(ROOM_CONVENTIONS).toMatch(/never paste secrets/i);
     expect(ROOM_CONVENTIONS).toMatch(/not authenticated/i);
+    expect(ROOM_CONVENTIONS).toContain('metadata.requestAuthority=access_authenticated_owner');
+    expect(ROOM_CONVENTIONS).toMatch(/direct user request/i);
+    expect(ROOM_CONVENTIONS).toMatch(/words still define scope/i);
   });
 
   it('carries the lifecycle identity invariant and safe recovery rule', () => {

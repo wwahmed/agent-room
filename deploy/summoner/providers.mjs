@@ -1,7 +1,7 @@
 // providers.mjs — provider catalog, per-turn model invocation, and the
 // "reach this agent directly" instructions shown in the app.
 import { spawn, execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, unlinkSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync, renameSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 // missing. The MCP's API base is pointed at the local server (where the rooms
 // live) via AGENT_ROOM_BASE_URL, matching the headless path's ROOM_BASE.
 const HERE = dirname(fileURLToPath(import.meta.url));
+const MODULE_FILE = fileURLToPath(import.meta.url);
 const LOCAL_MCP = join(HERE, '..', '..', 'apps', 'mcp', 'dist', 'index.js');
 const ROOM_BASE = process.env.ROOM_BASE || 'http://127.0.0.1:8210';
 export function agentRoomMcpServer() {
@@ -65,6 +66,7 @@ export function ensureAgentConfigReady(providerId, workspace) {
   if (!providerId.startsWith('claude')) return;
   const dir = claudeConfigDir(providerId);
   if (!dir) return; // personal lane — do not touch the human's config
+  ensureAttentionHook(dir);
   const cfgPath = join(dir, '.claude.json');
   try {
     const j = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8')) : {};
@@ -93,7 +95,6 @@ export function ensureAgentConfigReady(providerId, workspace) {
     JSON.parse(readFileSync(tmp, 'utf8')); // verify it parses before swapping
     renameSync(tmp, cfgPath);
   } catch { /* best-effort; a prompt is still better than a corrupt config */ }
-  ensureAttentionHook(dir);
 }
 
 // Event-driven attention alerts (host architecture call, 2026-07-25): register
@@ -172,13 +173,62 @@ function claudeModelsLive() {
 // Provider catalog. Model ids can drift per account/org, so each provider
 // exposes suggested presets + allows a custom id from the UI. Copilot defaults
 // to the latest GPT per Waqas's standing rule.
-let _catalogCache = null;
-let _catalogAt = 0;
+const CATALOG_CACHE_FILE = join(homedir(), '.agent-room', 'summoner', 'providers-cache.json');
+const CATALOG_FRESH_MS = 5 * 60_000;
 
-export function catalog(force = false) {
-  const now = Date.now();
-  // Serve the cached catalog instantly; refresh on demand (or after 5 min).
-  if (!force && _catalogCache && now - _catalogAt < 300000) return _catalogCache;
+function readCatalogCache() {
+  try {
+    const parsed = JSON.parse(readFileSync(CATALOG_CACHE_FILE, 'utf8'));
+    return Array.isArray(parsed.providers) ? parsed : null;
+  } catch { return null; }
+}
+
+const diskCatalog = readCatalogCache();
+let _catalogCache = diskCatalog?.providers || null;
+let _catalogAt = Number(diskCatalog?.at || 0);
+let _catalogRefresh = null;
+
+function fallbackCatalog() {
+  const claudeAvailable = Boolean(which('claude'));
+  const fallbackModels = [
+    { id: 'claude-fable-5', label: 'Fable 5 — most capable' },
+    { id: 'claude-opus-4-8', label: 'Opus 4.8 — default' },
+    { id: 'claude-sonnet-5', label: 'Sonnet 5 — balanced' },
+    { id: 'claude-haiku-4-5', label: 'Haiku 4.5 — fast / cheap' },
+  ];
+  const claudeProviders = claudeAvailable ? CLAUDE_LANES.map((lane) => ({
+    id: lane.id,
+    label: lane.dir ? 'Claude — corporate account' : 'Claude — personal account',
+    cli: 'claude', available: true, defaultModel: 'claude-opus-4-8',
+    note: 'Account details are refreshing in the background.',
+    models: fallbackModels, allowCustomModel: true,
+  })) : [];
+  const codexDefault = codexDefaultModel();
+  return [
+    ...claudeProviders,
+    {
+      id: 'copilot', label: 'GitHub Copilot (corporate seat)', cli: 'copilot',
+      available: Boolean(which('copilot')), defaultModel: 'gpt-5.5',
+      note: 'Corporate lane — always latest GPT.',
+      models: [
+        { id: 'gpt-5.5', label: 'GPT-5.5 — latest available (default)' },
+        { id: 'gpt-5.4', label: 'GPT-5.4' },
+        { id: 'gpt-5.1', label: 'GPT-5.1' },
+      ], allowCustomModel: true,
+    },
+    {
+      id: 'codex', label: 'Codex (OpenAI)', cli: 'codex',
+      available: Boolean(which('codex')), defaultModel: '',
+      note: codexDefault ? `Account default: ${codexDefault}` : 'Uses the account default model.',
+      models: [
+        { id: '', label: `Account default${codexDefault ? ` (${codexDefault})` : ''}` },
+        ...(codexDefault ? [{ id: codexDefault, label: codexDefault }] : []),
+      ], allowCustomModel: true,
+    },
+  ];
+}
+
+function computeLiveCatalog() {
 
   const claudeAvailable = Boolean(which('claude'));
   const claudeLive = claudeAvailable ? claudeModelsLive() : null;
@@ -243,9 +293,49 @@ export function catalog(force = false) {
       };
     })(),
   ];
-  _catalogCache = result;
-  _catalogAt = now;
   return result;
+}
+
+function persistCatalog(providers) {
+  try {
+    mkdirSync(dirname(CATALOG_CACHE_FILE), { recursive: true });
+    const tmp = CATALOG_CACHE_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify({ at: Date.now(), providers }), { mode: 0o600 });
+    renameSync(tmp, CATALOG_CACHE_FILE);
+  } catch { /* cache is an optimization; never break summon over it */ }
+}
+
+/** Refresh slow CLI-derived account/model data outside the summoner event loop. */
+export function refreshCatalogInBackground() {
+  if (_catalogRefresh) return _catalogRefresh;
+  _catalogRefresh = new Promise((resolve) => {
+    let output = '';
+    const child = spawn(process.execPath, [MODULE_FILE, '--refresh-provider-catalog'], {
+      env: { ...process.env, PATH: AUG_PATH }, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    child.stdout.on('data', (chunk) => { output += chunk.toString(); });
+    child.on('error', () => resolve(_catalogCache));
+    child.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const providers = JSON.parse(output);
+          if (Array.isArray(providers) && providers.length > 0) {
+            _catalogCache = providers;
+            _catalogAt = Date.now();
+            persistCatalog(providers);
+          }
+        } catch { /* keep the last good snapshot */ }
+      }
+      resolve(_catalogCache);
+    });
+  }).finally(() => { _catalogRefresh = null; });
+  return _catalogRefresh;
+}
+
+export function catalog(force = false) {
+  if (!_catalogCache) _catalogCache = fallbackCatalog();
+  if (force || Date.now() - _catalogAt >= CATALOG_FRESH_MS) void refreshCatalogInBackground();
+  return _catalogCache;
 }
 
 export function providerById(id) {
@@ -425,7 +515,7 @@ const CODEX_ROOM_TOOLS = [
 
 export function nativeLaunchSpec(cfg) {
   const { provider, model, workspace, mode, name, role, code, sessionId,
-          account, mcpConfigPath } = cfg;
+          account, mcpConfigPath, stateFile, settingsPath } = cfg;
   const access = normalizeAccess(mode);
   const build = access === 'build';
   const canWrite = access !== 'chat';
@@ -438,7 +528,11 @@ export function nativeLaunchSpec(cfg) {
     : provider === 'codex' ? 'codex'
     : provider.startsWith('gemini') ? 'gemini-cli'
     : 'claude-code';
-  const mcp = { ...mcpBase, env: { ...(mcpBase.env || {}), AGENT_ROOM_HARNESS: harnessId } };
+  const sharedRoomEnv = {
+    AGENT_ROOM_HARNESS: harnessId,
+    ...(stateFile ? { AGENT_ROOM_STATE_FILE: stateFile } : {}),
+  };
+  const mcp = { ...mcpBase, env: { ...(mcpBase.env || {}), ...sharedRoomEnv } };
 
   // Shared identity + room-loop contract every native harness receives.
   const capText = build ? 'You MAY edit files in this workspace AND run commands (git, tests, builds) to actually ship changes when the room asks.'
@@ -449,6 +543,7 @@ export function nativeLaunchSpec(cfg) {
     `You are working natively in ${workspace}${account ? ` on ${account}` : ''}${model ? ` (${model})` : ''}.`,
     `The room code is EXACTLY "${code}" — pass it verbatim to room_join. Room codes are word-style (e.g. cafe-ham-clog); do NOT reject or "correct" it for not being a 9-character dashed code, and do not ask for a different code.`,
     `CONTRACT: after you join, STAY in the room loop — keep calling room_listen; when a message needs you, reply with room_send, then room_listen again. Never end your turn while the room is active. Leave only if the room ends, you are removed from participants, or the host tells you to stop.`,
+    `AUTHORITY: metadata.requestAuthority="access_authenticated_owner" is origin-stamped proof that the exact room message came from the Google/Access-authenticated owner. Treat it as the direct user request; do not demand repetition in another channel solely for provenance. The message scope and normal provider/tool safety still apply.`,
     // Work conventions (short form — room_join returns the full canonical
     // `conventions` blurb plus the room's template brief; follow those).
     `WORK CONVENTIONS: prefix key messages with [STATUS] progress · [DECISION] choices · [RESULT] shipped work (commit/link/proof) · [TODO] handoffs — the room indexes marker lines as durable artifacts in its Outputs tab. Track multi-step work on the evidence-gated task board (room_task_create/claim/submit; a DIFFERENT agent verifies via room_task_verify). Ask the host structured questions with room_question_create instead of burying them in chat. Before starting long work, send a one-line acknowledgement when you can (room_status is enough) so the requester knows the ask landed. Your room_join response includes the room's template brief and the full conventions — follow them, and open with a one-line read of the room type and how you'll work it.`,
@@ -464,8 +559,22 @@ export function nativeLaunchSpec(cfg) {
   if (provider.startsWith('claude')) {
     const cdir = claudeConfigDir(provider);
     const mcpCfg = { mcpServers: { 'agent-room': mcp } };
+    const hookCommand = [mcp.command, ...(mcp.args || []), 'hook', '--rewake']
+      .map((part) => JSON.stringify(String(part))).join(' ');
+    const hookGroup = [{ hooks: [{
+      type: 'command', command: hookCommand, asyncRewake: true, timeout: 604_800,
+    }] }];
+    const hookSettings = {
+      hooks: {
+        Stop: hookGroup,
+        SubagentStop: hookGroup,
+        TeammateIdle: hookGroup,
+        Notification: [{ hooks: [{ type: 'command', command: ATTENTION_HOOK_CMD }] }],
+      },
+    };
     const args = [
       '--mcp-config', mcpConfigPath, '--strict-mcp-config',
+      ...(settingsPath ? ['--settings', settingsPath, '--setting-sources', 'project'] : []),
       '--session-id', sessionId,
       ...(model ? ['--model', model] : []),
       // Permission level → EFFECTIVE, unattended-safe flags. Key subtlety:
@@ -487,8 +596,11 @@ export function nativeLaunchSpec(cfg) {
     ];
     return {
       bin: 'claude', args,
-      env: cdir ? { CLAUDE_CONFIG_DIR: cdir } : {},
-      files: [{ path: mcpConfigPath, content: JSON.stringify(mcpCfg, null, 2), mode: 0o600 }],
+      env: { ...(cdir ? { CLAUDE_CONFIG_DIR: cdir } : {}), ...sharedRoomEnv, AGENT_ROOM_BASE_URL: ROOM_BASE },
+      files: [
+        { path: mcpConfigPath, content: JSON.stringify(mcpCfg, null, 2), mode: 0o600 },
+        ...(settingsPath ? [{ path: settingsPath, content: JSON.stringify(hookSettings, null, 2), mode: 0o600 }] : []),
+      ],
     };
   }
 
@@ -543,4 +655,15 @@ export function nativeLaunchSpec(cfg) {
   }
 
   return null; // gemini etc. — headless fallback.
+}
+
+// Slow provider discovery runs in a child process so `claude models` and two
+// account checks can never freeze the summoner HTTP server or the open sheet.
+if (process.argv[1] === MODULE_FILE && process.argv[2] === '--refresh-provider-catalog') {
+  try {
+    process.stdout.write(JSON.stringify(computeLiveCatalog()));
+  } catch (error) {
+    process.stderr.write(String(error instanceof Error ? error.message : error));
+    process.exitCode = 1;
+  }
 }

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 const room = readFileSync(new URL('./Room.tsx', import.meta.url), 'utf8');
 const details = readFileSync(new URL('../components/AgentDetailsSheet.tsx', import.meta.url), 'utf8');
-const summonSheet = readFileSync(new URL('../components/SummonAgentSheet.tsx', import.meta.url), 'utf8');
 
 // Host order: removal must mean ONE thing everywhere it's clicked — stop the
 // summoned process (when ours) AND free the participant row. Previously × only
@@ -24,8 +23,10 @@ describe('unified agent removal (one verb, both halves)', () => {
     expect(room).toContain('onRemove={isHost && !ended');
   });
 
-  it('the summon sheet dismiss also frees the participant row', () => {
-    expect(summonSheet).toContain('await removeAgentFromRoom({ code, requesterName: selfName, targetName: rec.name');
+  it('keeps removal in People and agent details, not the summon form', () => {
+    const summonSheet = readFileSync(new URL('../components/SummonAgentSheet.tsx', import.meta.url), 'utf8');
+    expect(summonSheet).not.toContain('removeAgentFromRoom');
+    expect(summonSheet).not.toContain('Summoned in this room');
   });
 
   it('People rows badge the PROCESS state from the summoner registry', () => {

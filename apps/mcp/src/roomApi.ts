@@ -270,6 +270,16 @@ export async function setListenUntil(
   await client.post({ action: 'presence', code, name, until, ...(memberKey ? { memberKey } : {}) });
 }
 
+export async function setWakeUntil(
+  client: RoomApiClient,
+  code: string,
+  name: string,
+  until: number,
+  memberKey?: string,
+): Promise<void> {
+  await client.post({ action: 'wakePresence', code, name, until, ...(memberKey ? { memberKey } : {}) });
+}
+
 export async function getTurnState(client: RoomApiClient, code: string): Promise<TurnState | null> {
   const body = await client.post<{ turnState: TurnState | null }>({ action: 'turnState', code });
   return body.turnState;

@@ -12,7 +12,7 @@ import { runHook } from './hook.js';
 // passivity fix (wantMemberKey), the merged evidence-gated task board, and
 // attachment text-extraction. The env-guarded reference keeps the string in the
 // minified bundle (not tree-shaken).
-const WAKICHAT_RUNTIME_CAPS = 'WAKICHAT_WORD_CODE_ATTACHMENT_PATCH WAKICHAT_OWNER_QUESTIONS_PATCH';
+const WAKICHAT_RUNTIME_CAPS = 'WAKICHAT_WORD_CODE_ATTACHMENT_PATCH WAKICHAT_OWNER_QUESTIONS_PATCH WAKICHAT_CLAUDE_REWAKE_PATCH';
 if (process.env.WAKICHAT_PRINT_CAPS) process.stderr.write(WAKICHAT_RUNTIME_CAPS + '\n');
 
 // The MCP server talks to the hosted agent-room backend over HTTP

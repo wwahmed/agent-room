@@ -1,4 +1,8 @@
-import { createRoomApiClient, getRoom, listMessages } from './roomApi.js';
+import { createHash } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { createRoomApiClient, getRoom, listMessages, setWakeUntil } from './roomApi.js';
 import type { Message } from '@agent-room/shared';
 import {
   readState,
@@ -59,6 +63,8 @@ interface HookInput {
   status?: 'completed' | 'aborted' | 'error';
   loop_count?: number;
   conversation_id?: string;
+  session_id?: string;
+  transcript_path?: string;
 }
 
 function isCursorStopInput(input: HookInput): boolean {
@@ -187,8 +193,100 @@ async function readStdin(): Promise<HookInput> {
   });
 }
 
+const REWAKE_POLL_MS = 5_000;
+const REWAKE_LEASE_MS = 45_000;
+const REWAKE_RENEW_MS = 15_000;
+
+function rewakeLockPath(input: HookInput): string {
+  const identity = input.session_id || input.transcript_path || `${process.ppid}`;
+  const key = createHash('sha256').update(identity).digest('hex').slice(0, 20);
+  return join(process.env.AGENT_ROOM_STATE_DIR || join(homedir(), '.agent-room'), `rewake-${key}.lock`);
+}
+
+async function acquireRewakeLock(path: string): Promise<boolean> {
+  await fs.mkdir(dirname(path), { recursive: true });
+  try {
+    const handle = await fs.open(path, 'wx', 0o600);
+    await handle.writeFile(String(process.pid));
+    await handle.close();
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return false;
+    try {
+      const owner = Number(await fs.readFile(path, 'utf8'));
+      if (owner > 0) process.kill(owner, 0);
+      return false;
+    } catch {
+      await fs.unlink(path).catch(() => undefined);
+      return acquireRewakeLock(path);
+    }
+  }
+}
+
+/**
+ * Claude asyncRewake watcher. It runs outside the model turn, so a quiet room
+ * consumes neither tokens nor context. It never advances cursors: the actual
+ * room_listen call remains the only delivery/consumption boundary.
+ */
+export async function runRewakeHook(input: HookInput): Promise<void> {
+  const lockPath = rewakeLockPath(input);
+  if (!(await acquireRewakeLock(lockPath))) return;
+  const api = createRoomApiClient();
+  const scope: StateScope = 'harness';
+  let lastRenewedAt = 0;
+
+  try {
+    while (true) {
+      const state = await readHookState(scope);
+      const entries = Object.entries(state.rooms);
+      if (entries.length === 0) return;
+
+      let active = entries;
+      const now = Date.now();
+      if (now - lastRenewedAt >= REWAKE_RENEW_MS) {
+        active = [];
+        for (const [code, roomState] of entries) {
+          try {
+            const room = await getRoom(api, code);
+            const stillIn = room.status === 'active' && room.participants.some(
+              (p) => p.client === 'cc' && p.name === roomState.name,
+            );
+            if (stillIn) active.push([code, roomState]);
+            else await removeRoomEverywhere(code).catch(() => undefined);
+          } catch {
+            await removeRoomEverywhere(code).catch(() => undefined);
+          }
+        }
+        if (active.length === 0) return;
+        await Promise.all(active.map(([code, roomState]) =>
+          setWakeUntil(api, code, roomState.name, now + REWAKE_LEASE_MS, roomState.memberKey)
+            .catch(() => undefined),
+        ));
+        lastRenewedAt = now;
+      }
+
+      const pending = await fetchPending(scope).catch(() => []);
+      if (pending.some((room) => room.messages.length > 0)) {
+        await Promise.all(active.map(([code, roomState]) =>
+          setWakeUntil(api, code, roomState.name, 0, roomState.memberKey).catch(() => undefined),
+        ));
+        process.stderr.write('[agent-room] A new room message is waiting. Call room_listen now, respond if useful, then return to room_listen.\n');
+        process.exitCode = 2;
+        return;
+      }
+      await sleep(REWAKE_POLL_MS);
+    }
+  } finally {
+    await fs.unlink(lockPath).catch(() => undefined);
+  }
+}
+
 export async function runHook(): Promise<void> {
   const input = await readStdin();
+  if (process.argv.includes('--rewake')) {
+    await runRewakeHook(input);
+    return;
+  }
   // Normalize the event name across clients. Cursor only fires the stop
   // hook (no UserPromptSubmit / SessionStart equivalent today). Older
   // Cursor hook docs/examples showed `{ status, loop_count }` without a
@@ -204,13 +302,12 @@ export async function runHook(): Promise<void> {
     process.exit(0);
   }
   const { event, cursorMode } = classified;
-  // Cursor and Codex may start the MCP server and Stop hook under different
+  // Harnesses may start the MCP server and lifecycle hook under different
   // wrapper processes, so their PPID-scoped state files do not always match.
-  // Those hooks read a stable harness state file first and fall back to merged
-  // state for old pre-fix installs. Claude keeps scoped state to preserve
-  // parallel-session isolation.
+  // Their hooks read a stable harness/session state file first and fall back to
+  // merged state for old pre-fix installs.
   const harnessKind = detectHarness().kind;
-  const stateScope: StateScope = cursorMode || harnessKind === 'codex' ? 'harness' : 'scoped';
+  const stateScope: StateScope = cursorMode || harnessKind === 'codex' || harnessKind.startsWith('claude') ? 'harness' : 'scoped';
 
   // User typed something — fresh turn cycle. Reset the block streak so the
   // next Stop hook can block fresh up to MAX_BLOCKS_PER_CYCLE times.

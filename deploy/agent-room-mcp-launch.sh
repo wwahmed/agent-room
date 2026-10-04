@@ -63,6 +63,19 @@ export AGENT_ROOM_BASE_URL="$URL"
 # Fall back to the exact registry pin if the local runtime is absent/unpatched.
 RUNTIME_ROOT=${AGENT_ROOM_MCP_RUNTIME_ROOT:-"$HOME/.local/share/wakichat/agent-room-mcp"}
 RUNTIME_FILE="$RUNTIME_ROOT/node_modules/agent-room-mcp/dist/index.js"
+# Claude asyncRewake depends on exit code 2. The normal stdout redaction pipe
+# below intentionally masks child exit codes, so this one lifecycle command
+# must exec directly. Prefer the current workspace build until the pinned
+# registry runtime carries the same capability; this branch emits no endpoint.
+REPO_RUNTIME_FILE=${AGENT_ROOM_MCP_REPO_RUNTIME:-"$HOME/workspaces/agent-room/apps/mcp/dist/index.js"}
+if [ "${1:-}" = "hook" ] && [ "${2:-}" = "--rewake" ]; then
+  if [ -f "$REPO_RUNTIME_FILE" ] && grep -q 'WAKICHAT_CLAUDE_REWAKE_PATCH' "$REPO_RUNTIME_FILE"; then
+    exec node "$REPO_RUNTIME_FILE" "$@"
+  fi
+  if [ -f "$RUNTIME_FILE" ] && grep -q 'WAKICHAT_CLAUDE_REWAKE_PATCH' "$RUNTIME_FILE"; then
+    exec node "$RUNTIME_FILE" "$@"
+  fi
+fi
 #
 # Defense-in-depth token redaction: the closed 0.25.x client echoes
 # AGENT_ROOM_BASE_URL (which carries /t/<token>) inside fetch-error messages,

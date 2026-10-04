@@ -43,6 +43,8 @@ export interface ParticipantHealth {
   lastSeenAgoMs: number;
   /** ms of listen window still parked; 0 when no loop is armed. */
   listenRemainingMs: number;
+  /** ms for which a model-free watcher can wake this idle harness. */
+  wakeRemainingMs: number;
   /** T-30 (client-build): build stamp of the MCP bundle this row's process loaded; omitted
    *  when the row never reported one (web rows, legacy rows). */
   clientBuildAt?: number;
@@ -125,6 +127,7 @@ export function participantHealth(
     // rather than a wall-clock (now - 0 -> the epoch -> "1969"). Real ages are >= 0.
     lastSeenAgoMs: seen > 0 ? Math.max(0, now - seen) : -1,
     listenRemainingMs: Math.max(0, Number(p.listenUntil || 0) - now),
+    wakeRemainingMs: Math.max(0, Number(p.wakeUntil || 0) - now),
   };
 }
 

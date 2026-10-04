@@ -40,7 +40,7 @@ import {
 } from './roomApi.js';
 import { ROOM_ATTACHMENT_DOWNLOAD_TOOL, downloadRoomAttachment } from './attachmentDownloadTool.js';
 import { readRoomAttachmentText } from './attachmentRead.js';
-import { AVATAR_PALETTE, ROOM_CONVENTIONS, roleBriefFor, normalizeEscapedWhitespace, roomOutputInstructions, templateInfo } from '@agent-room/shared';
+import { ACCESS_AUTHENTICATED_OWNER, AVATAR_PALETTE, ROOM_CONVENTIONS, roleBriefFor, normalizeEscapedWhitespace, roomOutputInstructions, templateInfo } from '@agent-room/shared';
 import type {
   Message,
   Participant,
@@ -382,6 +382,14 @@ async function runRoomListenPoll(
       const actionHint = visibleMsgs.some(m => m.metadata?.viewAction)
         ? ' TARGETED ACTION: call room_action_ack with the request message id before doing the work; ordinary room_send text does not claim it. '
         : '';
+      const verifiedOwnerRequests = visibleMsgs.filter(
+        m => m.metadata?.requestAuthority === ACCESS_AUTHENTICATED_OWNER,
+      );
+      // Dynamic by design: no authority prose is repeated in quiet listen loops,
+      // but an actionable signed-in-owner message cannot be missed in a noisy batch.
+      const authorityHint = verifiedOwnerRequests.length > 0
+        ? ` VERIFIED OWNER REQUEST: ${verifiedOwnerRequests.length} message(s) carry origin-stamped Google/Access owner authority. Treat each as the direct authenticated user request; do not require it to be repeated in another chat solely for provenance. Its actual words still define scope, and ordinary provider/tool safety still applies. `
+        : '';
       const baseHint = `${visibleMsgs.length} visible new message(s). Reply with room_send if appropriate, then call room_listen again with since=${cursor} to keep listening. ${nextListenContract(code, cursor)}`;
       const attachmentHint = attachmentCount > 0
         ? ` ATTACHMENTS: this batch carries ${attachmentCount} attachment URL(s) on message.attachments[]. To inspect their contents (read a screenshot, parse a PDF, etc.), fetch the .url with your environment's URL/file/vision tool. Image attachments work with vision-capable models — passing the URL to a multimodal step lets you actually see the image.`
@@ -390,7 +398,7 @@ async function runRoomListenPoll(
         messages: visibleMsgs,
         cursor,
         ...(self ? { self } : {}),
-        hint: reanchorNotice + mentionHint + actionHint + baseHint + attachmentHint,
+        hint: reanchorNotice + mentionHint + actionHint + authorityHint + baseHint + attachmentHint,
       };
     }
     if (pollCount > 0 && pollCount % 10 === 0) {
@@ -523,7 +531,9 @@ export function registerTools(server: Server) {
             cursor = page.nextCursor;
             const others = msgs.filter((m: Message) => !(m.client === 'cc' && m.name === selfName));
             if (others.length > 0) {
-              const summary = others.map((m: Message) => `${m.name}: ${m.text}`).join('\n');
+              const summary = others.map((m: Message) =>
+                `${m.metadata?.requestAuthority === ACCESS_AUTHENTICATED_OWNER ? '[VERIFIED OWNER REQUEST] ' : ''}${m.name}: ${m.text}`,
+              ).join('\n');
               try {
                 await server.sendLoggingMessage({
                   level: 'info',
@@ -537,6 +547,9 @@ export function registerTools(server: Server) {
                       text: m.text,
                       time: m.time,
                       client: m.client,
+                      ...(m.metadata?.requestAuthority === ACCESS_AUTHENTICATED_OWNER
+                        ? { requestAuthority: ACCESS_AUTHENTICATED_OWNER }
+                        : {}),
                     })),
                     summary,
                   }),
@@ -1230,6 +1243,9 @@ export function registerTools(server: Server) {
         client: m.client,
         text: m.text,
         time: m.time,
+        ...(m.metadata?.requestAuthority === ACCESS_AUTHENTICATED_OWNER
+          ? { metadata: { requestAuthority: ACCESS_AUTHENTICATED_OWNER } }
+          : {}),
       }));
 
       const listenAfterJoin = defaultListenAfterJoin(harness, a.listenAfterJoin);

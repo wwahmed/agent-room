@@ -3,14 +3,7 @@ import type { Participant } from '@agent-room/shared';
 import { describe, expect, it } from 'vitest';
 
 import { PRESENCE_DISCONNECTED_MS, WORKING_WINDOW_MS } from './health.js';
-import {
-  NOBODY_LISTENING_MARKER,
-  canStillAnswer,
-  departureEmptiedRoom,
-  lastAgentLeftText,
-  nobodyListeningText,
-  shouldWarnNobodyListening,
-} from './nobodyListening.js';
+import { canStillAnswer, departureEmptiedRoom, lastAgentLeftText } from './nobodyListening.js';
 
 const serverIndex = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
@@ -24,117 +17,43 @@ function p(name: string, over: Partial<Participant> = {}): Participant {
 }
 const dead = (name: string) => p(name, { lastSeenAt: NOW - PRESENCE_DISCONNECTED_MS - 1 });
 
-// T-39: Waqas asked the Customer Service room a question and waited 90 MINUTES
-// before paging an admin to discover the agent had vanished 21 hours earlier —
-// no row, no registry entry, no terminal. WakiDrive was the same shape over 14
-// hours. Nothing could poll for it; the detectable moment is the send itself.
-describe('Nobody is listening', () => {
-  it('warns a human who speaks into a room where every agent is disconnected', () => {
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants: [dead('CustService'), p('Waqas', { client: 'web' })], now: NOW,
-    })).toBe(true);
-  });
-
-  it('does not false-alarm while an agent is listening, online, or working', () => {
+describe('explicit agent departure notices', () => {
+  it('treats every non-disconnected or wake-ready agent as able to answer', () => {
     const listening = p('Listener', { listenUntil: NOW + 45_000 });
-    expect(canStillAnswer(listening, NOW)).toBe(true);
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants: [listening], now: NOW,
-    })).toBe(false);
-
-    // A working agent often answers seconds later. The alert is for abandoned
-    // rooms, not the ordinary gap while an agent handles the previous turn.
     const online = p('Online', { lastSeenAt: NOW - 1_000 });
     const working = p('Working', { workingUntil: NOW + WORKING_WINDOW_MS });
-    const stale = p('OpusCoder', { lastSeenAt: NOW - 90_000 });
-    expect(canStillAnswer(online, NOW)).toBe(true);
-    expect(canStillAnswer(working, NOW)).toBe(true);
-    expect(canStillAnswer(stale, NOW)).toBe(false);
-    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [online], now: NOW })).toBe(false);
-    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [working], now: NOW })).toBe(false);
-    expect(shouldWarnNobodyListening({ senderClient: 'web', participants: [stale], now: NOW })).toBe(true);
+    const stale = p('Stale', { lastSeenAt: NOW - 90_000 });
+    const wakeReady = dead('WakeReady');
+    wakeReady.wakeUntil = NOW + 45_000;
 
-    // A live listener alongside non-listeners is enough.
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants: [dead('A'), working, listening], now: NOW,
-    })).toBe(false);
+    for (const participant of [listening, online, working, stale, wakeReady]) {
+      expect(canStillAnswer(participant, NOW)).toBe(true);
+    }
+    expect(canStillAnswer(dead('Gone'), NOW)).toBe(false);
+    expect(canStillAnswer(p('Viewer', { viewer: true }), NOW)).toBe(false);
   });
 
-  it('never nags an agent, and never a room that has no agents by design', () => {
-    // An agent posting a result into a quiet room does not need telling.
-    expect(shouldWarnNobodyListening({ senderClient: 'cc', participants: [dead('A')], now: NOW })).toBe(false);
-    // A solo notes room was never expecting an agent.
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants: [p('Waqas', { client: 'web' })], now: NOW,
-    })).toBe(false);
-  });
-
-  it('a read-only viewer does not count as someone who can answer', () => {
-    const viewer = p('AuditorDemo', { viewer: true });
-    expect(canStillAnswer(viewer, NOW)).toBe(false);
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants: [dead('Dev'), viewer], now: NOW,
-    })).toBe(true);
-  });
-
-  it('warns once, not on every line typed into the silence', () => {
-    const participants = [dead('CustService')];
-    const first = nobodyListeningText(participants, NOW);
-    expect(first).toContain(NOBODY_LISTENING_MARKER);
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants, now: NOW, lastMessageText: first,
-    })).toBe(false);
-    // A normal previous message does not suppress it.
-    expect(shouldWarnNobodyListening({
-      senderClient: 'web', participants, now: NOW, lastMessageText: 'any other message',
-    })).toBe(true);
-  });
-
-  it('names who is missing and states the consequence, without guessing the cure', () => {
-    expect(nobodyListeningText([dead('CustService')], NOW)).toContain('CustService was disconnected');
-    expect(nobodyListeningText([dead('A'), dead('B')], NOW)).toContain('A, B were not listening');
-    const text = nobodyListeningText([dead('A')], NOW);
-    // The consequence is the part the host did not know.
-    expect(text).toContain('will be delivered when an agent returns');
-    // No instructions: the fix depends on how that agent was started, and a wrong
-    // instruction is worse than none.
-    expect(text).not.toMatch(/restart|rejoin the room|run |tmux/i);
-  });
-
-  // T-40: the room lost its only agent to a SILENT self-leave — no removal line, no
-  // sweep line, nothing. T-32 keeps self-leaves quiet on the reasoning that they are
-  // voluntary and narrated by the agent; that agent narrated nothing, and the host
-  // talked to an empty room for 21 hours.
-  it('announces a departure that empties the room, and stays quiet otherwise', () => {
-    // The last agent leaving is the case that must speak up.
-    expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [p('Waqas', { client: 'web' })], now: NOW })).toBe(true);
-    // Another actual listener remains: T-32's quiet-leave reasoning still holds.
+  it('announces only an explicit departure that empties the room', () => {
     expect(departureEmptiedRoom({
-      departedClient: 'cc',
-      remaining: [p('OpusCoder', { listenUntil: NOW + 45_000 })],
-      now: NOW,
+      departedClient: 'cc', remaining: [p('Waqas', { client: 'web' })], now: NOW,
+    })).toBe(true);
+    expect(departureEmptiedRoom({
+      departedClient: 'cc', remaining: [p('Listener', { listenUntil: NOW + 45_000 })], now: NOW,
     })).toBe(false);
-    // Only DEAD agents remain — still an empty room in practice.
     expect(departureEmptiedRoom({ departedClient: 'cc', remaining: [dead('X')], now: NOW })).toBe(true);
-    // A human closing a tab is not an agent outage.
     expect(departureEmptiedRoom({ departedClient: 'web', remaining: [dead('X')], now: NOW })).toBe(false);
   });
 
-  it('the departure notice names who left and what it means', () => {
-    expect(lastAgentLeftText('CustService Dev Fresh', [])).toContain('CustService Dev Fresh left the room');
-    expect(lastAgentLeftText('A', [])).toContain('No agents are left in this room');
-    expect(lastAgentLeftText('A', [dead('B')])).toContain('other agent');
+  it('keeps the explicit-departure receipt useful', () => {
+    expect(lastAgentLeftText('CustService', [])).toContain('CustService left the room');
+    expect(lastAgentLeftText('CustService', [])).toContain('No agents are left in this room');
     expect(lastAgentLeftText('A', [dead('B'), dead('C')])).toContain('other 2 agents');
     expect(lastAgentLeftText('A', [])).toContain('Messages will wait here');
   });
 
-  it('is wired into the send path as advisory-only, after a real append', () => {
-    const hook = serverIndex.slice(serverIndex.indexOf('shouldWarnNobodyListening') - 1400);
-    expect(hook).toContain('if (!appendResult.appended) return;');
-    expect(hook).toContain("eventType: 'nobody_listening'");
-    // Must never break a send: the whole block is fire-and-forget and swallows.
-    expect(hook).toContain('advisory only — never fail a send over the warning');
-    // T-40 fires on the removal path for BOTH a self-leave and a host kick.
+  it('never emits a durable send-time nobody-listening event', () => {
+    expect(serverIndex).not.toContain("eventType: 'nobody_listening'");
+    expect(serverIndex).not.toContain('shouldWarnNobodyListening');
     expect(serverIndex).toContain('departureEmptiedRoom({');
     expect(serverIndex).toContain("eventType: 'last_agent_left'");
   });

@@ -36,7 +36,8 @@ function Surfaces({
   return (
     <MemoryRouter>
       <RoomHeader
-        room={ROOM} ended={false} listeningCount={0} presentCount={1}
+        room={ROOM} ended={false} listeningCount={0} wakeReadyCount={0}
+        deliveryState="quiet" presentCount={1}
         inspectorOpen={false} onShare={() => {}} onToggleInspector={() => {}}
         onSearch={() => {}} onOpenRoom={() => {}}
         endRoom={endRoomState}

@@ -118,7 +118,7 @@ export function CreateMeeting() {
     }
   }
 
-  const fieldClass = 'w-full min-h-11 px-3 py-2 bg-surface-softer border border-border rounded-xl outline-none text-base focus:border-accent focus:ring-4 focus:ring-accent-tint';
+  const fieldClass = 'w-full min-h-14 rounded-2xl border border-border bg-surface-softer px-4 py-3 text-base outline-none focus:border-accent focus:ring-4 focus:ring-accent-tint sm:min-h-11 sm:rounded-xl sm:px-3 sm:py-2';
 
   const suggestion = templateId === 'blank' ? suggestTemplateForTopic(topic) : undefined;
 
@@ -131,21 +131,21 @@ export function CreateMeeting() {
 
   return (
     <div className="min-h-[100dvh] bg-surface-sunken">
-      <div className="flex h-[52px] items-center border-b border-border-faint bg-surface px-3">
+      <div className="flex h-16 items-center border-b border-border-faint bg-surface px-4 sm:h-[52px] sm:px-3">
         <div className="mx-auto flex h-full w-full max-w-[720px] items-center gap-2">
           <Link to="/" aria-label="WakiChat home" className="flex min-h-11 items-center gap-2 transition hover:opacity-85">
-            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-8 w-8" />
-            <span className="text-[15px] font-bold tracking-tight">WakiChat</span>
+            <img src="/brand/wakichat/wakichat-icon-192.png" alt="" className="h-9 w-9 sm:h-8 sm:w-8" />
+            <span className="text-lg font-bold tracking-tight sm:text-[15px]">WakiChat</span>
           </Link>
-          <span className="text-[13px] text-ink-faint">/ new room</span>
+          <span className="text-sm text-ink-faint sm:text-[13px]">/ new room</span>
         </div>
       </div>
 
-      <form onSubmit={submit} className="mx-auto w-full max-w-[720px] px-4 py-6">
-        <h1 className="text-xl font-bold tracking-tight">Start a room</h1>
+      <form onSubmit={submit} className="mx-auto w-full max-w-[720px] px-5 py-7 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-xl">Start a room</h1>
 
         {/* Stepper rail: tappable for completed steps, worded — never dots-only. */}
-        <ol data-gate="create-stepper" className="mb-6 mt-4 flex items-center gap-2" aria-label={`Step ${step} of 3`}>
+        <ol data-gate="create-stepper" className="mb-8 mt-6 flex items-center gap-2 sm:mb-6 sm:mt-4" aria-label={`Step ${step} of 3`}>
           {STEPS.map(s => {
             const done = s.n < step;
             const current = s.n === step;
@@ -156,10 +156,10 @@ export function CreateMeeting() {
                   onClick={() => s.n < step && goTo(s.n)}
                   disabled={s.n > step}
                   aria-current={current ? 'step' : undefined}
-                  className={`w-full rounded-lg px-1 py-1.5 text-center transition ${done ? 'cursor-pointer' : ''}`}
+                  className={`min-h-12 w-full rounded-lg px-1 py-1.5 text-center transition sm:min-h-0 ${done ? 'cursor-pointer' : ''}`}
                 >
-                  <span className={`block h-1.5 rounded-full ${current || done ? 'bg-accent' : 'bg-border'}`} aria-hidden="true" />
-                  <span className={`mt-1.5 block text-[12px] font-semibold ${current ? 'text-ink' : done ? 'text-accent' : 'text-ink-faint'}`}>
+                  <span className={`block h-2 rounded-full sm:h-1.5 ${current || done ? 'bg-accent' : 'bg-border'}`} aria-hidden="true" />
+                  <span className={`mt-2 block text-sm font-semibold sm:mt-1.5 sm:text-[12px] ${current ? 'text-ink' : done ? 'text-accent' : 'text-ink-faint'}`}>
                     {done ? '✓ ' : ''}{s.label}
                   </span>
                 </button>
@@ -168,7 +168,7 @@ export function CreateMeeting() {
           })}
         </ol>
 
-        {error && <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">{error}</div>}
+        {error && <div className="mb-5 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 sm:mb-4 sm:rounded-lg sm:px-3 sm:py-2 sm:text-xs">{error}</div>}
 
         {/* STEP 1 — the room TYPE leads (teaching moment): compact cards, the
             when-to-use line only where it's needed (the selected card), and
@@ -176,8 +176,8 @@ export function CreateMeeting() {
             structure is the default posture. */}
         {step === 1 && (
           <section data-gate="step-type">
-            <span className="mb-2 block text-sm font-semibold text-ink">What kind of room?</span>
-            <div className="grid grid-cols-2 gap-2">
+            <span className="mb-3 block text-lg font-semibold text-ink sm:mb-2 sm:text-sm">What kind of room?</span>
+            <div className="grid grid-cols-2 gap-3 sm:gap-2">
               {ROOM_TEMPLATES.filter(t => t.id !== 'blank').map(t => {
                 const active = t.id === templateId;
                 return (
@@ -186,18 +186,18 @@ export function CreateMeeting() {
                     key={t.id}
                     onClick={() => pickTemplate(t.id)}
                     aria-pressed={active}
-                    className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                    className={`min-h-16 rounded-2xl border px-4 py-3.5 text-left transition sm:min-h-0 sm:rounded-xl sm:px-3 sm:py-2.5 ${
                       active
                         ? 'border-accent bg-accent-tint'
                         : 'border-border bg-surface hover:border-accent/40'
                     }`}
                   >
-                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                    <span className="flex items-center gap-2 text-base font-semibold text-ink sm:gap-1.5 sm:text-[13px]">
                       <span aria-hidden="true">{t.emoji}</span>
                       <span>{t.label}</span>
                     </span>
                     {active && (
-                      <span className="mt-1 block text-[12px] leading-snug text-ink-soft">{t.whenToUse}</span>
+                      <span className="mt-1.5 block text-sm leading-snug text-ink-soft sm:mt-1 sm:text-[12px]">{t.whenToUse}</span>
                     )}
                   </button>
                 );
@@ -207,19 +207,19 @@ export function CreateMeeting() {
               type="button"
               onClick={() => { pickTemplate('blank'); goTo(2); }}
               aria-pressed={templateId === 'blank'}
-              className={`mt-3 text-[12px] font-semibold transition ${templateId === 'blank' ? 'text-accent' : 'text-ink-faint hover:text-ink'}`}
+              className={`mt-4 min-h-11 text-sm font-semibold transition sm:mt-3 sm:min-h-0 sm:text-[12px] ${templateId === 'blank' ? 'text-accent' : 'text-ink-faint hover:text-ink'}`}
             >
               Skip — just a topic, no structure
             </button>
             {template && template.id !== 'blank' && (
-              <div className="mt-3 rounded-xl border border-border-faint bg-surface p-3" data-gate="template-preview">
-                <p className="text-[12px] leading-relaxed text-ink-soft">{template.description}</p>
+              <div className="mt-4 rounded-2xl border border-border-faint bg-surface p-4 sm:mt-3 sm:rounded-xl sm:p-3" data-gate="template-preview">
+                <p className="text-sm leading-relaxed text-ink-soft sm:text-[12px]">{template.description}</p>
                 {template.suggestedRoleIds.length > 0 && (
-                  <p className="mt-1 text-[12px] text-ink-faint">
+                  <p className="mt-2 text-sm text-ink-faint sm:mt-1 sm:text-[12px]">
                     Suggested crew: {template.suggestedRoleIds.map(roleLabelFor).join(' · ')}
                   </p>
                 )}
-                <p className="mt-1 text-[12px] text-ink-faint">
+                <p className="mt-2 text-sm text-ink-faint sm:mt-1 sm:text-[12px]">
                   Its opening message teaches the room the [DECISION] / [TODO] / [STATUS] / [RESULT] markers, and agents get this room type in their briefing.
                 </p>
               </div>
@@ -231,13 +231,13 @@ export function CreateMeeting() {
         {step === 2 && (
           <section data-gate="step-details">
             <label className="mb-1 block">
-              <span className="mb-1.5 block text-sm font-semibold text-ink">Room name</span>
+              <span className="mb-2 block text-base font-semibold text-ink sm:mb-1.5 sm:text-sm">Room name</span>
               <input value={topic} onChange={e => { setTopic(e.target.value); setError(null); }} required autoFocus
                 aria-invalid={Boolean(topic && topicIssue)}
                 placeholder={template?.topicSeed || 'What are we working on?'}
                 className={fieldClass} />
               {template && template.id !== 'blank' && (
-                <span className="mt-1 block text-[12px] text-ink-faint">
+                <span className="mt-2 block text-sm text-ink-faint sm:mt-1 sm:text-[12px]">
                   The example stays placeholder text—type the specific name you want people to see.
                 </span>
               )}
@@ -247,7 +247,7 @@ export function CreateMeeting() {
                 type="button"
                 data-gate="template-suggestion"
                 onClick={() => pickTemplate(suggestion.id)}
-                className="mb-2 mt-1 inline-flex min-h-9 items-center gap-1.5 rounded-full border border-accent/40 bg-accent-tint px-3 text-[12px] font-semibold text-accent transition hover:border-accent"
+                className="mb-3 mt-2 inline-flex min-h-11 items-center gap-2 rounded-full border border-accent/40 bg-accent-tint px-4 text-sm font-semibold text-accent transition hover:border-accent sm:mb-2 sm:mt-1 sm:min-h-9 sm:gap-1.5 sm:px-3 sm:text-[12px]"
               >
                 <span aria-hidden="true">{suggestion.emoji}</span>
                 Looks like a {suggestion.label} room — use that type?
@@ -257,7 +257,7 @@ export function CreateMeeting() {
 
             {wsGroups.length > 0 && (
               <label className="mb-4 block">
-                <span className="mb-1.5 block text-sm font-semibold text-ink">Workspace</span>
+                <span className="mb-2 block text-base font-semibold text-ink sm:mb-1.5 sm:text-sm">Workspace</span>
                 <select value={workspace} onChange={e => setWorkspace(e.target.value)} className={fieldClass}>
                   {wsGroups.map(g => (
                     <optgroup key={g.group} label={g.group}>
@@ -265,7 +265,7 @@ export function CreateMeeting() {
                     </optgroup>
                   ))}
                 </select>
-                <span className="mt-1 block text-[12px] text-ink-faint">
+                <span className="mt-2 block text-sm text-ink-faint sm:mt-1 sm:text-[12px]">
                   The local workspace this room is based in. Agents you summon here inherit it.
                 </span>
               </label>
@@ -277,13 +277,13 @@ export function CreateMeeting() {
             confirmed last, one unambiguous commit button. */}
         {step === 3 && (
           <section data-gate="step-review">
-            <span className="mb-2 block text-sm font-semibold text-ink">Ready to go?</span>
-            <div className="mb-4 divide-y divide-border-faint rounded-xl border border-border-faint bg-surface">
+            <span className="mb-3 block text-lg font-semibold text-ink sm:mb-2 sm:text-sm">Ready to go?</span>
+            <div className="mb-5 divide-y divide-border-faint rounded-2xl border border-border-faint bg-surface sm:mb-4 sm:rounded-xl">
               {reviewRows.map(r => (
-                <div key={r.label} className="flex items-center gap-3 px-3 py-2.5">
-                  <span className="w-24 flex-shrink-0 text-[12px] font-semibold text-ink-faint">{r.label}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{r.value}</span>
-                  <button type="button" onClick={() => goTo(r.step)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-accent transition hover:bg-accent-tint">
+                <div key={r.label} className="flex min-h-14 items-center gap-3 px-4 py-3 sm:min-h-0 sm:px-3 sm:py-2.5">
+                  <span className="w-24 flex-shrink-0 text-sm font-semibold text-ink-faint sm:text-[12px]">{r.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-base font-semibold text-ink sm:text-sm">{r.value}</span>
+                  <button type="button" onClick={() => goTo(r.step)} className="min-h-11 rounded-lg px-2 text-sm font-semibold text-accent transition hover:bg-accent-tint sm:min-h-9 sm:text-xs">
                     Edit
                   </button>
                 </div>
@@ -291,26 +291,26 @@ export function CreateMeeting() {
             </div>
 
             {identityKnown && !editIdentity ? (
-              <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-border-faint bg-surface p-3">
+              <div className="mb-6 flex items-center gap-3 rounded-2xl border border-border-faint bg-surface p-4 sm:mb-5 sm:gap-2.5 sm:rounded-xl sm:p-3">
                 <div
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
+                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white sm:h-9 sm:w-9 sm:text-[12px]"
                   style={{ backgroundColor: colorForName(name) }}
                   aria-hidden="true"
                 >
                   {initialsFor(name)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">Creating as {name}</div>
-                  <div className="text-[12px] text-ink-faint">{role || 'no role set'} · from your Google sign-in</div>
+                  <div className="text-base font-semibold sm:text-sm">Creating as {name}</div>
+                  <div className="text-sm text-ink-faint sm:text-[12px]">{role || 'no role set'} · from your Google sign-in</div>
                 </div>
-                <button type="button" onClick={() => setEditIdentity(true)} className="min-h-11 rounded-lg px-3 text-xs font-semibold text-accent transition hover:bg-accent-tint">
+                <button type="button" onClick={() => setEditIdentity(true)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-accent transition hover:bg-accent-tint sm:text-xs">
                   Edit
                 </button>
               </div>
             ) : (
               <div className="mb-5 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-ink-muted">Your name</span>
+                  <span className="mb-2 block text-sm font-semibold text-ink-muted sm:mb-1.5 sm:text-xs">Your name</span>
                   <input value={name} onChange={e => setName(e.target.value)} required className={fieldClass} />
                 </label>
                 <RolePicker value={role} onChange={setRole} fieldClass={fieldClass} />
@@ -320,9 +320,9 @@ export function CreateMeeting() {
         )}
 
         {/* Footer nav: Back is quiet, forward is the single loud action. */}
-        <div className="mt-6 flex items-center gap-3">
+        <div className="fixed inset-x-0 bottom-0 z-20 flex items-center gap-3 border-t border-border-faint bg-surface px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_30px_rgba(0,0,0,0.12)] sm:static sm:mt-6 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none">
           {step > 1 && (
-            <button type="button" onClick={() => goTo((step - 1) as StepN)} className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink">
+            <button type="button" onClick={() => goTo((step - 1) as StepN)} className="min-h-14 rounded-2xl border border-border px-5 text-base font-semibold text-ink-soft transition hover:border-border-strong hover:text-ink sm:min-h-11 sm:rounded-xl sm:px-4 sm:text-sm">
               ← Back
             </button>
           )}
@@ -338,12 +338,12 @@ export function CreateMeeting() {
               type="button"
               onClick={() => goTo((step + 1) as StepN)}
               disabled={step === 2 && !detailsOk}
-              className="min-h-11 flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+              className="min-h-14 flex-1 rounded-2xl bg-accent py-3 text-base font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 sm:min-h-11 sm:rounded-xl sm:py-2.5 sm:text-sm"
             >
               Next →
             </button>
           ) : (
-            <button key="step-create" disabled={busy || Boolean(topicIssue)} type="submit" className="min-h-11 flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50">
+            <button key="step-create" disabled={busy || Boolean(topicIssue)} type="submit" className="min-h-14 flex-1 rounded-2xl bg-accent py-3 text-base font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 sm:min-h-11 sm:rounded-xl sm:py-2.5 sm:text-sm">
               {busy ? 'Creating…' : 'Create room →'}
             </button>
           )}

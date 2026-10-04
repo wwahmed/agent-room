@@ -1102,6 +1102,23 @@ export async function setListenUntil(
   }));
 }
 
+// Stamp a short renewable lease for a model-free harness watcher. Unlike a
+// listen window this does not advance delivery or claim that the model is
+// running; it only proves the idle session has an external path back in.
+export async function setWakeUntil(
+  client: UpstashClient,
+  code: string,
+  name: string,
+  until: number
+): Promise<void> {
+  await casRoom(client, code, (current) => ({
+    ...current,
+    participants: current.participants.map(p =>
+      p.name === name ? { ...p, wakeUntil: until } : p
+    ),
+  }));
+}
+
 // T-04: stamp a declared work window (see Participant.workingUntil). Written
 // on room_status pings and task claims so a heads-down agent reads as
 // `working` instead of decaying to stale while it runs a long job.

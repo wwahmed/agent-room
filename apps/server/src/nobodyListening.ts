@@ -1,19 +1,7 @@
-// T-39: tell a human when they are talking to an empty room.
-//
-// Three agents went silent in one day and the costly one was not the agent that
-// died — it was the silence afterwards. The Customer Service room lost its agent
-// entirely: no participant row, no registry entry, no terminal session. Waqas
-// asked it a question, waited **90 minutes**, and then had to page an admin to
-// find out that nobody had been there to read it. WakiDrive was the same shape
-// stretched over 14 hours.
-//
-// Presence alarms cannot catch that case. A watchdog needs a row to watch and a
-// terminal to sniff, and a vanished agent has neither. But the room knows the one
-// thing that matters at the moment it matters: a person just spoke, and there is
-// nobody here who can answer.
-//
-// So the check runs on send, not on a timer. No polling, no new sampler, and the
-// warning lands in the same second as the message that deserved it.
+// Agent departure notices are based on an explicit lifecycle event, never on a
+// point-in-time delivery guess. A send-time presence sample proved too weak for
+// a durable transcript entry: an idle or wake-ready harness could be labelled
+// disconnected and then answer the same message seconds later.
 
 import type { Participant } from '@agent-room/shared';
 
@@ -24,65 +12,15 @@ import { presenceState } from './health.js';
  * The warning is an abandonment alarm, not a transport diagnostic. A joined
  * agent commonly moves from `listening` to `working` while it handles the
  * previous request, and `online` is the brief handoff between listen calls.
- * Warning during either state produces the exact false alarm this surface must
- * avoid: the agent answers seconds later. The UI separately exposes the exact
- * active-listener count; this alarm is reserved for stale/disconnected rows. */
+ * Warning during any non-disconnected state produces the exact false alarm
+ * this surface must avoid: a quiet harness often answers seconds later. An
+ * unexpired wake lease is stronger still: it proves an idle session has a
+ * model-free path back into the room. */
 export function canStillAnswer(p: Participant, now: number): boolean {
   if (p.client !== 'cc' || p.viewer === true) return false;
+  if (Number(p.wakeUntil || 0) > now) return true;
   const state = presenceState(p, now);
-  return state === 'listening' || state === 'online' || state === 'working';
-}
-
-/**
- * Should this send be followed by a "nobody is listening" notice?
- *
- * Only for a HUMAN's message: an agent posting into a quiet room is usually
- * reporting a result, and does not need to be told the room is quiet.
- *
- * `lastMessageText` suppresses repeats — a person typing three messages into an
- * empty room should get one warning, not a wall of them. Checked against the
- * previous message rather than kept in memory so a server restart cannot
- * resurrect the warning.
- */
-export function shouldWarnNobodyListening(args: {
-  senderClient: string;
-  participants: readonly Participant[];
-  now: number;
-  lastMessageText?: string;
-  /** A room with no agents at all was never expecting one — a solo notes room
-   *  should not nag its owner on every line. */
-  requireAtLeastOneAgentRow?: boolean;
-}): boolean {
-  const { senderClient, participants, now, lastMessageText } = args;
-  if (senderClient !== 'web') return false;
-  const agentRows = participants.filter(p => p.client === 'cc' && p.viewer !== true);
-  if (agentRows.length === 0 && args.requireAtLeastOneAgentRow !== false) return false;
-  if (agentRows.some(p => canStillAnswer(p, now))) return false;
-  if (lastMessageText && lastMessageText.includes(NOBODY_LISTENING_MARKER)) return false;
-  return true;
-}
-
-/** Marker used both to render the notice and to detect that the previous message
- *  already was one. Kept as a distinct constant so the two can never drift. */
-export const NOBODY_LISTENING_MARKER = 'No agent was listening when this message was sent';
-
-export function nobodyListeningText(participants: readonly Participant[], now: number): string {
-  const agentRows = participants.filter(p => p.client === 'cc' && p.viewer !== true);
-  const names = agentRows.map(p => p.name);
-  const who = names.length === 0
-    ? 'There are no agents in this room.'
-    : names.length === 1
-      ? (() => {
-          const state = presenceState(agentRows[0]!, now);
-          if (state === 'working') return `${names[0]} was working, but not listening.`;
-          if (state === 'online') return `${names[0]} was online, but not listening.`;
-          if (state === 'stale') return `${names[0]} was stale and not listening.`;
-          return `${names[0]} was disconnected.`;
-        })()
-      : `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} were not listening.`;
-  // This is an event receipt, not a sticky current-state banner: past tense
-  // keeps it truthful after an agent returns.
-  return `⚠ ${NOBODY_LISTENING_MARKER} — ${who} Your message is saved and will be delivered when an agent returns.`;
+  return state !== 'disconnected';
 }
 
 /**

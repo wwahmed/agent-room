@@ -21,8 +21,10 @@ describe('room command bar composition', () => {
     expect(header).toContain('{agentStatus}');
     expect(header).not.toContain("agentCount === 1 ? 'agent' : 'agents'");
     expect(header).toContain('header-room-presence');
-    expect(header).toContain('0 listening');
-    expect(header).toContain('nobodyListening ?');
+    expect(header).toContain("'room quiet'");
+    expect(header).toContain("'agents offline'");
+    expect(header).toContain('wake-ready');
+    expect(header).not.toContain('nobodyListening');
     expect(header).not.toContain('listeningCount > 0 &&');
     expect(header).toContain('header-search-field');
     expect(header).toContain('header-glass-control');

@@ -24,6 +24,8 @@ export interface ParticipantHealth {
   lastSeenAgoMs: number;
   /** ms of listen window still parked; 0 when no loop is armed. */
   listenRemainingMs: number;
+  /** ms for which a model-free watcher can wake this idle harness. */
+  wakeRemainingMs?: number;
   /** T-30 (client-build): build stamp of the bundle this agent's PROCESS loaded. */
   clientBuildAt?: number;
   /** T-30 (client-build): ms that running code trails the newest build the room

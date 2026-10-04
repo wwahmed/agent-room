@@ -32,6 +32,10 @@ export interface Participant {
   joinedAt: number;      // epoch ms
   lastSeenAt: number;    // epoch ms
   listenUntil?: number;  // epoch ms — set by room_listen, expires naturally
+  // A model-free lifecycle watcher is armed and can wake the harness when a
+  // new room message arrives. This is deliberately separate from listenUntil:
+  // nobody should be shown as actively listening while their model is idle.
+  wakeUntil?: number;
   // T-20: when this participant LAST ARMED a listen window. Arming a listen
   // drains the room up to that instant, so every message older than this
   // timestamp has verifiably been handed to the participant's session — the
@@ -333,6 +337,13 @@ export interface RoomQuestion {
 
 export type MessageKind = 'msg' | 'sys';
 
+// Server-stamped provenance for an actionable user request. This value is
+// deliberately narrow: it says the room owner authenticated through
+// Cloudflare Access for THIS send. It does not broaden the words in the
+// message or override provider/tool safety policy.
+export const ACCESS_AUTHENTICATED_OWNER = 'access_authenticated_owner' as const;
+export type RequestAuthority = typeof ACCESS_AUTHENTICATED_OWNER;
+
 // Optional per-message tagging for reply-mode turns. All fields optional —
 // messages stored before this field existed have no metadata, and even in a
 // reply-mode-enabled room, an 'open'-mode message has metadata=undefined
@@ -352,6 +363,12 @@ export interface MessageMetadata {
   // published per message. Absent on messages predating this ('unbound'), whose
   // structured actions are disabled rather than attributed by guesswork.
   senderLineage?: string;
+  // Set only by the origin after it verifies all three links: Access identity,
+  // the authenticated web participant row, and that row being room.createdBy.
+  // Client-supplied values are discarded. Agents may therefore treat a marked
+  // message as a direct request from the signed-in owner instead of asking for
+  // the same request again in another chat/backend channel.
+  requestAuthority?: RequestAuthority;
   // T-46: a button inside an agent's structured view was pressed. Carried as
   // METADATA rather than in the message text, because the label is agent-authored
   // and message text is host-authored prose — the first version interpolated both

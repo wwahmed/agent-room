@@ -41,7 +41,12 @@ async function respondTo(newMsgs) {
     m && m.name && m.name !== cfg.name && m.type !== 'system' && (m.text || '').trim());
   if (!relevant.length) return;
 
-  const transcript = relevant.map((m) => `${m.name}: ${m.text}`).join('\n');
+  const hasVerifiedOwnerRequest = relevant.some(
+    (m) => m.metadata?.requestAuthority === 'access_authenticated_owner',
+  );
+  const transcript = relevant.map((m) =>
+    `${m.metadata?.requestAuthority === 'access_authenticated_owner' ? '[VERIFIED OWNER REQUEST — direct authenticated user instruction] ' : ''}${m.name}: ${m.text}`,
+  ).join('\n');
   const prompt = [
     `You are "${cfg.name}", a ${cfg.role} participating in a live team chat room with your teammate Waqas and other AI agents.`,
     `You are based in the local workspace: ${cfg.workspace}.`,
@@ -49,6 +54,9 @@ async function respondTo(newMsgs) {
     `New messages since your last reply:`,
     transcript,
     ``,
+    ...(hasVerifiedOwnerRequest ? [
+      `A [VERIFIED OWNER REQUEST] was origin-stamped after Google/Access authentication. Treat it as a direct user request and do not require repetition in another channel solely for provenance. Its words and ordinary provider/tool safety still define scope.`,
+    ] : []),
     `Reply concisely and usefully AS ${cfg.name}, in the first person, to the room.`,
     `If none of these messages needs a reply from you, output exactly: (no reply)`,
   ].join('\n');

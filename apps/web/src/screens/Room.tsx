@@ -76,6 +76,15 @@ import {
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — long enough that humans + agents discussing intermittently don't trip it
 const AUTO_CLOSE_COUNTDOWN = 5;          // seconds
+type DeliveryState = 'live' | 'ready' | 'quiet' | 'offline';
+
+function agentStatusLabel(state: DeliveryState, listening: number, wakeReady: number): string {
+  if (state === 'live') return `${listening} listening`;
+  if (state === 'ready') return `${wakeReady} wake-ready`;
+  if (state === 'offline') return 'Agents offline';
+  return 'Room quiet';
+}
+
 interface SelfIdentity { name: string; role: string }
 interface AttachmentUploadJob {
   id: string;
@@ -2186,6 +2195,21 @@ export function Room() {
     const h = health.find(x => x.name === p.name && x.client === p.client);
     return h ? h.state === 'listening' : (p.listenUntil ?? 0) > now;
   }).length;
+  const agentRows = activeRoom.participants.filter(p => p.client === 'cc' && p.viewer !== true);
+  const wakeReadyCount = agentRows.filter(p => {
+    const h = health.find(x => x.name === p.name && x.client === p.client);
+    return h ? Number(h.wakeRemainingMs) > 0 : (p.wakeUntil ?? 0) > now;
+  }).length;
+  const allAgentsProvenOffline = agentRows.length > 0 && agentRows.every(p =>
+    health.find(x => x.name === p.name && x.client === p.client)?.state === 'disconnected'
+  );
+  const deliveryState: DeliveryState = listeningCount > 0
+    ? 'live'
+    : wakeReadyCount > 0
+      ? 'ready'
+      : allAgentsProvenOffline
+        ? 'offline'
+        : 'quiet';
   // T-34b: who is actually HERE. Uses the server's own verdict (never a second
   // classification computed in the client) and excludes exactly the rows the
   // host's ghost sweep would remove, so the count and the sweep always agree.
@@ -2313,9 +2337,13 @@ export function Room() {
         {(() => {
           const lifecycle = ended
             ? { label: 'Room ended', tone: 'text-red-400', dot: 'bg-red-400', consequence: 'The meeting is over. Messages are preserved; the room can be reactivated from Home.' }
-            : listeningCount === 0
-              ? { label: 'No live listener', tone: 'text-amber-400', dot: 'bg-amber-400', consequence: 'Agents may still be working, but messages wait here until one starts listening.' }
-              : { label: 'Room active', tone: 'text-emerald-400', dot: 'bg-emerald-400', consequence: `${listeningCount} agent${listeningCount === 1 ? ' is' : 's are'} listening; messages are delivered live.` };
+            : deliveryState === 'live'
+              ? { label: 'Room active', tone: 'text-emerald-400', dot: 'bg-emerald-400', consequence: `${listeningCount} agent${listeningCount === 1 ? ' is' : 's are'} listening; messages are delivered live.` }
+              : deliveryState === 'ready'
+                ? { label: 'Wake-ready', tone: 'text-emerald-400', dot: 'bg-emerald-400', consequence: `${wakeReadyCount} idle agent${wakeReadyCount === 1 ? ' has' : 's have'} a background watcher armed; a new message will wake the session without an idle model turn.` }
+                : deliveryState === 'offline'
+                  ? { label: 'Agents offline', tone: 'text-amber-400', dot: 'bg-amber-400', consequence: 'Every agent is disconnected. New messages are saved until one reconnects.' }
+                  : { label: 'Room quiet', tone: 'text-ink-soft', dot: 'bg-ink-faint', consequence: 'No active listen window is visible. Agents are still present, and messages remain saved during the pause.' };
           return (
             <>
               <div className={`flex items-center gap-2 text-[15px] font-semibold ${lifecycle.tone}`}>
@@ -2741,7 +2769,7 @@ export function Room() {
         title="People"
         purpose="Everyone in the room and how alive their connection is."
         summary={<>
-          <SummaryChip tone={listeningCount > 0 ? 'ok' : 'warn'}>{listeningCount} listening</SummaryChip>
+          <SummaryChip tone={deliveryState === 'offline' ? 'warn' : deliveryState === 'live' || deliveryState === 'ready' ? 'ok' : 'quiet'}>{agentStatusLabel(deliveryState, listeningCount, wakeReadyCount)}</SummaryChip>
           <SummaryChip tone="quiet">{peopleGroups.active.length} connected</SummaryChip>
           {peopleGroups.attention.length > 0 && <SummaryChip tone="warn">{peopleGroups.attention.length} need attention</SummaryChip>}
           {peopleGroups.offline.length > 0 && <SummaryChip tone="quiet">{peopleGroups.offline.length} offline</SummaryChip>}
@@ -2890,7 +2918,10 @@ export function Room() {
       state: healthById.get(healthKey(participant.name, participant.client))?.state
         ?? ((participant.listenUntil ?? 0) > now ? 'listening' as const : 'online' as const),
     }));
-  const headerAgentStaleCount = headerAgents.filter(agent => agent.state === 'stale' || agent.state === 'disconnected').length;
+  // Global chrome only alarms on proven disconnection. The People page still
+  // exposes stale rows as a granular diagnostic without turning a normal lull
+  // into a room-wide delivery failure.
+  const headerAgentStaleCount = headerAgents.filter(agent => agent.state === 'disconnected').length;
 
   // T-71 (rev16 item 6): the contextual rail is a WORKSPACE surface — it
   // pairs with chat AND the destination pages at >=1440, earning its column
@@ -3035,6 +3066,8 @@ export function Room() {
             onBack: () => selectTab(prevTabRef.current),
           } : undefined}
           listeningCount={listeningCount}
+          wakeReadyCount={wakeReadyCount}
+          deliveryState={deliveryState}
           presentCount={presentCount}
           inspectorOpen={inspectorOpen}
           onShare={() => copyText(joinUrl, 'Invite link copied')}
@@ -3257,7 +3290,16 @@ export function Room() {
                 // dividers and grouping so the visible feed reads coherently.
                 // T-121: reaction event rows are transport for the chip patch,
                 // not reading material — the chips on the target message are the UI.
-                const visibleMessages = messages.filter(m => hasRenderableContent(m) && !isReactionEvent(m));
+                // Legacy send-time `nobody_listening` notices were generated
+                // from a transient presence sample and could be contradicted by
+                // an immediate agent reply. Keep them out of the reading flow;
+                // current delivery state belongs on the message/People UI, not
+                // in a permanent system bubble.
+                const visibleMessages = messages.filter(m =>
+                  hasRenderableContent(m)
+                  && !isReactionEvent(m)
+                  && m.metadata?.eventType !== 'nobody_listening'
+                );
                 // T-72: consecutive same-agent heartbeats render as ONE
                 // Activity Note ("N updates") anchored at the newest ping.
                 const statusView = collapseStatusRuns(visibleMessages);
@@ -3278,13 +3320,7 @@ export function Room() {
                       <div className="h-px flex-1 bg-accent/40" />
                     </div>
                   )}
-                  {m.metadata?.eventType === 'nobody_listening' ? (
-                    <ActivityNote
-                      message={m}
-                      now={now}
-                      resolved={listeningCount > 0}
-                    />
-                  ) : m.metadata?.brief ? (
+                  {m.metadata?.brief ? (
                     <BriefCard
                       text={m.text ?? ''}
                       speech={m.metadata.briefSpeech}
@@ -3994,7 +4030,7 @@ export function Room() {
           On desktop the same panels are peers of the chat inside <main>, so the
           Inspector's desktop column is gone (T-64). */}
       <Inspector open={inspectorOpen} onClose={() => setInspectorOpen(false)} renderTab={renderPanel} />
-      {summonOpen && <SummonAgentSheet code={code} selfName={self.name} onClose={() => setSummonOpen(false)} />}
+      {summonOpen && <SummonAgentSheet code={code} onClose={() => setSummonOpen(false)} />}
       {detailsFor && (
         <AgentDetailsSheet
           code={code}
